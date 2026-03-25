@@ -1,0 +1,72 @@
+body {
+    margin: 0;
+    padding: 0;
+}
+
+#main-canvas {
+    height: 100vh;
+    width: 100vw;
+    position: fixed;
+    top: 0;
+    left: 0;
+}
+
+.toolbar-outer {
+    height: 40px;
+    z-index: 10;
+    box-sizing: border-box;
+}
+
+label {
+    margin-right: 5px;
+}
+
+select, input {
+    min-width: 100px;
+}
+
+#searchbox {
+    margin-right: 0px;
+}
+
+span.divider {
+    margin-right: 10px;
+}
+
+.group {
+    display: inline-block;
+    margin-right: 10px;
+}
+
+.gourp.hidden {
+    display: none;
+}
+
+#warnings-container {
+    height: 100vh;
+    width: 40vw;
+    position: fixed;
+    top: 0;
+    left: 0;
+    padding-top: 40px;
+    background: var(--vscode-editor-background);
+    box-sizing: border-box;
+    display: none;
+}
+
+#warnings {
+    height: 100%;
+    width: 100%;
+    font-family: 'Consolas', monospace;
+    resize: none;
+    background: var(--vscode-editor-background);
+    padding: 10px;
+    border-top: none;
+    border-left: none;
+    border-bottom: none;
+    box-sizing: border-box;
+}
+
+#warnings:focus {
+    outline: none;
+}
