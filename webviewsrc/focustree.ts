@@ -59,6 +59,22 @@ let selectedFocusTreeIndex: number = Math.min(focusTrees.length - 1, getState().
 let allowBranches: DivDropdown | undefined = undefined;
 let conditions: DivDropdown | undefined = undefined;
 let checkedFocuses: Record<string, Checkbox> = {};
+let customTitlebarsCheckbox: Checkbox | undefined = undefined;
+
+function showCustomTitlebars() {
+    return getState().showCustomTitlebars ?? true;
+}
+
+function applyCustomTitlebarVisibility() {
+    const visible = showCustomTitlebars();
+    const elements = document.getElementsByClassName('focus-titlebar-layer');
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i] as HTMLDivElement;
+        if (element.dataset.hasCustomTitlebar === 'true') {
+            element.style.display = visible ? 'block' : 'none';
+        }
+    }
+}
 
 async function buildContent() {
     const focusCheckState = getState().checkedFocuses ?? {};
@@ -115,6 +131,7 @@ async function buildContent() {
 
     subscribeNavigators();
     setupCheckedFocuses(focuses, focusTree);
+    applyCustomTitlebarVisibility();
 }
 
 function calculateFocusAllowed(focusTree: FocusTree, allowBranchOptionsValue: Record<string, boolean>) {
@@ -365,6 +382,18 @@ function setupCheckedFocuses(focuses: Focus[], focusTree: FocusTree) {
 let retriggerSearch: () => void = () => {};
 
 window.addEventListener('load', tryRun(async function() {
+    // Custom titlebars
+    const showCustomTitlebarsElement = document.getElementById('show-custom-titlebars') as HTMLInputElement | null;
+    if (showCustomTitlebarsElement) {
+        showCustomTitlebarsElement.checked = showCustomTitlebars();
+        customTitlebarsCheckbox?.dispose();
+        customTitlebarsCheckbox = new Checkbox(showCustomTitlebarsElement, feLocalize('TODO', 'Custom titlebars'));
+        showCustomTitlebarsElement.addEventListener('change', () => {
+            setState({ showCustomTitlebars: showCustomTitlebarsElement.checked });
+            applyCustomTitlebarVisibility();
+        });
+    }
+
     // Focuses
     const focusesElement = document.getElementById('focuses') as HTMLSelectElement | null;
     if (focusesElement) {

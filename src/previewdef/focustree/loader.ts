@@ -6,6 +6,7 @@ import { uniq, flatten, chain } from "lodash";
 import { getGfxContainerFiles } from "../../util/gfxindex";
 import { sharedFocusIndex } from "../../util/featureflags";
 import { findFileByFocusKey } from "../../util/sharedFocusIndex";
+import { focusTitlebarStylesFile, nationalFocusViewGfxFile } from "./titlebar";
 
 export interface FocusTreeLoaderResult {
     focusTrees: FocusTree[];
@@ -67,6 +68,8 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
             dependencies: uniq([
                 this.file,
                 focusesGFX,
+                focusTitlebarStylesFile,
+                nationalFocusViewGfxFile,
                 ...gfxDependencies,
                 ...focusTreeDependencies,
                 ...mergeInLoadResult(focusTreeDepFiles, 'dependencies')

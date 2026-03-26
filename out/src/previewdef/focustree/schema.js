@@ -26,6 +26,7 @@ const focusSchema = {
         _innerType: 'raw',
         _type: 'array',
     },
+    text_icon: "string",
     x: "number",
     y: "number",
     prerequisite: {
@@ -227,6 +228,7 @@ function getFocus(hoiFocus, conditionExprs, filePath, warnings, constants) {
     const prerequisite = hoiFocus.prerequisite
         .map(p => p.focus.concat(p.OR).filter((s) => s !== undefined));
     const icon = parseFocusIcon(hoiFocus.icon.filter((v) => v !== undefined).map(v => v._raw), constants, conditionExprs);
+    const textIcon = hoiFocus.text_icon;
     const hasAllowBranch = hoiFocus.allow_branch.length > 0;
     const allowBranchCondition = (0, condition_1.extractConditionValues)(hoiFocus.allow_branch.filter((v) => v !== undefined).map(v => v._raw.value), scope_1.countryScope, conditionExprs).condition;
     const offset = hoiFocus.offset.map(o => {
@@ -241,6 +243,7 @@ function getFocus(hoiFocus, conditionExprs, filePath, warnings, constants) {
     return {
         id,
         icon,
+        textIcon,
         x,
         y,
         relativePositionId,

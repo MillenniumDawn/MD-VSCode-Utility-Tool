@@ -76,6 +76,21 @@ let selectedFocusTreeIndex = Math.min(focusTrees.length - 1, (_b = (0,_util_comm
 let allowBranches = undefined;
 let conditions = undefined;
 let checkedFocuses = {};
+let customTitlebarsCheckbox = undefined;
+function showCustomTitlebars() {
+    var _a;
+    return (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().showCustomTitlebars) !== null && _a !== void 0 ? _a : true;
+}
+function applyCustomTitlebarVisibility() {
+    const visible = showCustomTitlebars();
+    const elements = document.getElementsByClassName('focus-titlebar-layer');
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        if (element.dataset.hasCustomTitlebar === 'true') {
+            element.style.display = visible ? 'block' : 'none';
+        }
+    }
+}
 function buildContent() {
     var _a, _b, _c;
     return (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
@@ -121,6 +136,7 @@ function buildContent() {
         focustreeplaceholder.innerHTML = focusTreeContent + styleTable.toStyleElement(window.styleNonce);
         (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.subscribeNavigators)();
         setupCheckedFocuses(focuses, focusTree);
+        applyCustomTitlebarVisibility();
     });
 }
 function calculateFocusAllowed(focusTree, allowBranchOptionsValue) {
@@ -332,6 +348,17 @@ function setupCheckedFocuses(focuses, focusTree) {
 let retriggerSearch = () => { };
 window.addEventListener('load', (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.tryRun)(function () {
     return (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+        // Custom titlebars
+        const showCustomTitlebarsElement = document.getElementById('show-custom-titlebars');
+        if (showCustomTitlebarsElement) {
+            showCustomTitlebarsElement.checked = showCustomTitlebars();
+            customTitlebarsCheckbox === null || customTitlebarsCheckbox === void 0 ? void 0 : customTitlebarsCheckbox.dispose();
+            customTitlebarsCheckbox = new _util_checkbox__WEBPACK_IMPORTED_MODULE_8__.Checkbox(showCustomTitlebarsElement, (0,_util_i18n__WEBPACK_IMPORTED_MODULE_7__.feLocalize)('TODO', 'Custom titlebars'));
+            showCustomTitlebarsElement.addEventListener('change', () => {
+                (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ showCustomTitlebars: showCustomTitlebarsElement.checked });
+                applyCustomTitlebarVisibility();
+            });
+        }
         // Focuses
         const focusesElement = document.getElementById('focuses');
         if (focusesElement) {

@@ -56,6 +56,21 @@ let selectedFocusTreeIndex = Math.min(focusTrees.length - 1, (_b = (0, common_1.
 let allowBranches = undefined;
 let conditions = undefined;
 let checkedFocuses = {};
+let customTitlebarsCheckbox = undefined;
+function showCustomTitlebars() {
+    var _a;
+    return (_a = (0, common_1.getState)().showCustomTitlebars) !== null && _a !== void 0 ? _a : true;
+}
+function applyCustomTitlebarVisibility() {
+    const visible = showCustomTitlebars();
+    const elements = document.getElementsByClassName('focus-titlebar-layer');
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        if (element.dataset.hasCustomTitlebar === 'true') {
+            element.style.display = visible ? 'block' : 'none';
+        }
+    }
+}
 function buildContent() {
     var _a, _b, _c;
     return tslib_1.__awaiter(this, void 0, void 0, function* () {
@@ -101,6 +116,7 @@ function buildContent() {
         focustreeplaceholder.innerHTML = focusTreeContent + styleTable.toStyleElement(window.styleNonce);
         (0, common_1.subscribeNavigators)();
         setupCheckedFocuses(focuses, focusTree);
+        applyCustomTitlebarVisibility();
     });
 }
 function calculateFocusAllowed(focusTree, allowBranchOptionsValue) {
@@ -312,6 +328,17 @@ function setupCheckedFocuses(focuses, focusTree) {
 let retriggerSearch = () => { };
 window.addEventListener('load', (0, common_1.tryRun)(function () {
     return tslib_1.__awaiter(this, void 0, void 0, function* () {
+        // Custom titlebars
+        const showCustomTitlebarsElement = document.getElementById('show-custom-titlebars');
+        if (showCustomTitlebarsElement) {
+            showCustomTitlebarsElement.checked = showCustomTitlebars();
+            customTitlebarsCheckbox === null || customTitlebarsCheckbox === void 0 ? void 0 : customTitlebarsCheckbox.dispose();
+            customTitlebarsCheckbox = new checkbox_1.Checkbox(showCustomTitlebarsElement);
+            showCustomTitlebarsElement.addEventListener('change', () => {
+                (0, common_1.setState)({ showCustomTitlebars: showCustomTitlebarsElement.checked });
+                applyCustomTitlebarVisibility();
+            });
+        }
         // Focuses
         const focusesElement = document.getElementById('focuses');
         if (focusesElement) {

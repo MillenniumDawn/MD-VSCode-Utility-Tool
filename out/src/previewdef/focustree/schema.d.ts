@@ -21,6 +21,7 @@ export interface Focus {
     y: number;
     id: string;
     icon: FocusIconWithCondition[];
+    textIcon?: string;
     prerequisite: string[][];
     exclusive: string[];
     hasAllowBranch: boolean;
@@ -53,6 +54,7 @@ interface FocusTreeDef {
 interface FocusDef {
     id: string;
     icon: Raw[];
+    text_icon: string;
     x: number;
     y: number;
     prerequisite: FocusOrORList[];

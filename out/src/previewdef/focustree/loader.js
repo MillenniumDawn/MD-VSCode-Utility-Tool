@@ -10,6 +10,7 @@ const lodash_1 = require("lodash");
 const gfxindex_1 = require("../../util/gfxindex");
 const featureflags_1 = require("../../util/featureflags");
 const sharedFocusIndex_1 = require("../../util/sharedFocusIndex");
+const titlebar_1 = require("./titlebar");
 const focusesGFX = 'interface/goals.gfx';
 class FocusTreeLoader extends loader_1.ContentLoader {
     postLoad(content, dependencies, error, session) {
@@ -56,6 +57,8 @@ class FocusTreeLoader extends loader_1.ContentLoader {
                 dependencies: (0, lodash_1.uniq)([
                     this.file,
                     focusesGFX,
+                    titlebar_1.focusTitlebarStylesFile,
+                    titlebar_1.nationalFocusViewGfxFile,
                     ...gfxDependencies,
                     ...focusTreeDependencies,
                     ...(0, loader_1.mergeInLoadResult)(focusTreeDepFiles, 'dependencies')

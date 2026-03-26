@@ -14,6 +14,7 @@ const featureflags_1 = require("../../util/featureflags");
 const lodash_1 = require("lodash");
 const localisationIndex_1 = require("../../util/localisationIndex");
 const featureflags_2 = require("../../util/featureflags");
+const titlebar_1 = require("./titlebar");
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
 function renderFocusTreeFile(loader, uri, webview) {
     return tslib_1.__awaiter(this, void 0, void 0, function* () {
@@ -66,8 +67,9 @@ function renderFocusTrees(focusTrees, styleTable, gfxFiles, jsCodes, styleNonce,
             size: { width: (0, schema_1.toNumberLike)(xGridSize), height: undefined },
             slotsize: { width: (0, schema_1.toNumberLike)(xGridSize), height: (0, schema_1.toNumberLike)(yGridSize) },
         };
+        const titlebarStyles = yield (0, titlebar_1.loadFocusTitlebarStyles)();
         const renderedFocus = {};
-        yield Promise.all((0, lodash_1.flatMap)(focusTrees, tree => Object.values(tree.focuses)).map((focus) => tslib_1.__awaiter(this, void 0, void 0, function* () { return renderedFocus[focus.id] = (yield renderFocus(focus, styleTable, gfxFiles, file)).replace(/\s\s+/g, ' '); })));
+        yield Promise.all((0, lodash_1.flatMap)(focusTrees, tree => Object.values(tree.focuses)).map((focus) => tslib_1.__awaiter(this, void 0, void 0, function* () { return renderedFocus[focus.id] = (yield renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles)).replace(/\s\s+/g, ' '); })));
         jsCodes.push('window.focusTrees = ' + JSON.stringify(focusTrees));
         jsCodes.push('window.renderedFocus = ' + JSON.stringify(renderedFocus));
         jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
@@ -141,6 +143,12 @@ function renderToolBar(focusTrees, styleTable) {
             id="searchbox"
             type="text"
         />`;
+    const customTitlebars = `
+        <label for="show-custom-titlebars">${(0, i18n_1.localize)('TODO', 'Custom titlebars')}</label>
+        <input
+            id="show-custom-titlebars"
+            type="checkbox"
+        />`;
     const allowbranch = `
         <div id="allowbranch-container">
             <label for="allowbranch" class="${styleTable.style('allowbranchLabel', () => `margin-right:5px`)}">${(0, i18n_1.localize)('focustree.allowbranch', 'Allow branch: ')}</label>
@@ -167,13 +175,14 @@ function renderToolBar(focusTrees, styleTable) {
         <div class="toolbar">
             ${focuses}
             ${searchbox}
+            ${customTitlebars}
             ${featureflags_1.useConditionInFocus ? conditions : allowbranch}
             ${warningsButton}
         </div>
     </div>`;
 }
-function renderFocus(focus, styleTable, gfxFiles, file) {
-    var _a, _b;
+function renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles) {
+    var _a, _b, _c;
     return tslib_1.__awaiter(this, void 0, void 0, function* () {
         for (const focusIcon of focus.icon) {
             const iconName = focusIcon.icon;
@@ -182,6 +191,16 @@ function renderFocus(focus, styleTable, gfxFiles, file) {
             background-size: ${iconObject ? iconObject.width : 0}px;`);
         }
         styleTable.style('focus-icon-' + (0, styletable_1.normalizeForStyle)('-empty'), () => 'background: grey;');
+        const titlebarObject = yield (0, titlebar_1.getFocusTitlebarImage)(focus.textIcon, titlebarStyles);
+        const titlebarClass = 'focus-titlebar-' + (0, styletable_1.normalizeForStyle)((_a = focus.textIcon) !== null && _a !== void 0 ? _a : '-empty');
+        styleTable.style(titlebarClass, () => titlebarObject ? `
+            background-image: url(${titlebarObject.uri});
+            width: ${titlebarObject.width}px;
+            height: ${titlebarObject.height}px;
+            background-size: ${titlebarObject.width}px ${titlebarObject.height}px;
+        ` : `
+            display: none;
+        `);
         let textContent = focus.id;
         if (featureflags_2.localisationIndex) {
             let localizedText = yield (0, localisationIndex_1.getLocalisedTextQuick)(focus.id);
@@ -202,6 +221,7 @@ function renderFocus(focus, styleTable, gfxFiles, file) {
         navigator
         {{iconClass}}
         ${styleTable.style('focus-common', () => `
+            position: relative;
             background-position-x: center;
             background-position-y: calc(50% - 18px);
             background-repeat: no-repeat;
@@ -211,15 +231,28 @@ function renderFocus(focus, styleTable, gfxFiles, file) {
             cursor: pointer;
         `)}
     "
-    start="${(_a = focus.token) === null || _a === void 0 ? void 0 : _a.start}"
-    end="${(_b = focus.token) === null || _b === void 0 ? void 0 : _b.end}"
+    start="${(_b = focus.token) === null || _b === void 0 ? void 0 : _b.start}"
+    end="${(_c = focus.token) === null || _c === void 0 ? void 0 : _c.end}"
     ${file === focus.file ? '' : `file="${focus.file}"`}
     title="${focus.id}\n({{position}})">
+        <div
+        class="focus-titlebar-layer ${titlebarClass} ${styleTable.style('focus-titlebar-layer', () => `
+            position: absolute;
+            left: 50%;
+            top: 61px;
+            transform: translateX(-50%);
+            background-repeat: no-repeat;
+            pointer-events: none;
+            z-index: 0;
+        `)}"
+        data-has-custom-titlebar="${titlebarObject ? 'true' : 'false'}"></div>
         <div class="focus-checkbox ${styleTable.style('focus-checkbox', () => `position: absolute; top: 1px;`)}">
             <input id="checkbox-${(0, styletable_1.normalizeForStyle)(focus.id)}" type="checkbox"/>
         </div>
         <span
         class="${styleTable.style('focus-span', () => `
+            position: relative;
+            z-index: 1;
             margin: 10px -400px;
             margin-top: 85px;
             text-align: center;

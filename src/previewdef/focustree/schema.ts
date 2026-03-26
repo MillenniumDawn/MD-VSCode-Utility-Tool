@@ -30,6 +30,7 @@ export interface Focus {
     y: number;
     id: string;
     icon: FocusIconWithCondition[];
+    textIcon?: string;
     prerequisite: string[][];
     exclusive: string[];
     hasAllowBranch: boolean;
@@ -62,6 +63,7 @@ interface FocusTreeDef {
 interface FocusDef {
     id: string;
     icon: Raw[];
+    text_icon: string;
     x: number;
     y: number;
     prerequisite: FocusOrORList[];
@@ -112,6 +114,7 @@ const focusSchema: SchemaDef<FocusDef> = {
         _innerType: 'raw',
         _type: 'array',
     },
+    text_icon: "string",
     x: "number",
     y: "number",
     prerequisite: {
@@ -332,6 +335,7 @@ function getFocus(hoiFocus: HOIPartial<FocusDef>, conditionExprs: ConditionItem[
     const prerequisite = hoiFocus.prerequisite
         .map(p => p.focus.concat(p.OR).filter((s): s is string => s !== undefined));
     const icon = parseFocusIcon(hoiFocus.icon.filter((v): v is Raw => v !== undefined).map(v => v._raw), constants, conditionExprs);
+    const textIcon = hoiFocus.text_icon;
     const hasAllowBranch = hoiFocus.allow_branch.length > 0;
     const allowBranchCondition = extractConditionValues(hoiFocus.allow_branch.filter((v): v is Raw => v !== undefined).map(v => v._raw.value), countryScope, conditionExprs).condition;
     const offset: Offset[] = hoiFocus.offset.map(o => ({
@@ -345,6 +349,7 @@ function getFocus(hoiFocus: HOIPartial<FocusDef>, conditionExprs: ConditionItem[
     return {
         id,
         icon,
+        textIcon,
         x,
         y,
         relativePositionId,
