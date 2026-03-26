@@ -8,6 +8,7 @@ import { localize } from './i18n';
 import { sendEvent } from './telemetry';
 import { Logger } from "./logger";
 import { YAMLException } from "js-yaml";
+import { ConfigurationKey } from '../constants';
 
 type LocalisationData = Record<string, Record<string, string>>;
 
@@ -65,7 +66,7 @@ export function registerLocalisationIndex(): vscode.Disposable {
 }
 
 export async function getLocalisedTextQuick(localisationKey: string | undefined): Promise<string | undefined> {
-    const previewLocalisation = vscode.workspace.getConfiguration('hoi4ModUtilities').previewLocalisation;
+    const previewLocalisation = vscode.workspace.getConfiguration(ConfigurationKey).previewLocalisation;
     if (previewLocalisation){
         return getLocalisedText(localisationKey, localeISOMapping[previewLocalisation]?? vscode.env.language);
     }

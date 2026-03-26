@@ -30,7 +30,7 @@ export interface TelemetryMessage {
 export function registerTelemetryReporter() {
     const isDev = process.env.NODE_ENV !== 'production';
     if (!isDev) {
-        telemetryReporter = new TelemetryReporter(EXTENSION_ID, VERSION, '41a5f5b6-f4f0-4707-96ba-c895a2dabf17');
+        telemetryReporter = new TelemetryReporter(EXTENSION_ID, VERSION, 'a1b2c3d4-e5f6-7890-abcd-ef1234567890');
     } else {
         telemetryReporter = new DevTelemetryReporter();
     }

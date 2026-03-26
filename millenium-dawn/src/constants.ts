@@ -1,30 +1,31 @@
 // This file contains constants that may be used in package.json
 
-export const ConfigurationKey = 'hoi4ModUtilities';
+export const ConfigurationKey = 'mdHoi4Utilities';
 export const Hoi4FsSchema = 'hoi4installpath';
 
 export namespace ViewType {
-    export const DDS = 'hoi4modutilities.dds';
-    export const TGA = 'hoi4modutilities.tga';
+    export const DDS = 'mdhoi4utilities.dds';
+    export const TGA = 'mdhoi4utilities.tga';
 }
 
 export namespace ContextName {
-    export const ShouldHideHoi4Preview = 'shouldHideHoi4Preview';
-    export const ShouldShowHoi4Preview = 'shouldShowHoi4Preview';
-    export const Hoi4PreviewType = 'hoi4PreviewType';
-    export const Hoi4MUInDev = 'hoi4MUInDev';
-    export const Hoi4MULoaded = 'hoi4MULoaded';
+    export const ShouldHideHoi4Preview = 'shouldHideMdHoi4Preview';
+    export const ShouldShowHoi4Preview = 'shouldShowMdHoi4Preview';
+    export const Hoi4PreviewType = 'mdHoi4PreviewType';
+    export const Hoi4MUInDev = 'mdHoi4MUInDev';
+    export const Hoi4MULoaded = 'mdHoi4MULoaded';
 }
 
 export namespace Commands {
-    export const Preview = 'hoi4modutilities.preview';
-    export const PreviewWorld = 'hoi4modutilities.previewworld';
-    export const ScanReferences = 'hoi4modutilities.scanreferences';
-    export const SelectModFile = 'hoi4modutilities.selectmodfile';
-    export const SelectHoiFolder = 'hoi4modutilities.selecthoifolder';
+    export const Preview = 'mdhoi4utilities.preview';
+    export const PreviewWorld = 'mdhoi4utilities.previewworld';
+    export const ScanReferences = 'mdhoi4utilities.scanreferences';
+    export const SelectModFile = 'mdhoi4utilities.selectmodfile';
+    export const SelectHoiFolder = 'mdhoi4utilities.selecthoifolder';
+    export const Test = 'mdhoi4utilities.test';
 }
 
 export namespace WebviewType {
-    export const Preview = 'hoi4ftpreview';
-    export const PreviewWorldMap = 'hoi4worldmappreview';
+    export const Preview = 'mdftpreview';
+    export const PreviewWorldMap = 'mdworldmappreview';
 }

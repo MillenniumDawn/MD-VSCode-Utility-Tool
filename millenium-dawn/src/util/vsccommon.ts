@@ -140,5 +140,5 @@ const languageYmlDict = {
 };
 
 export function getLanguageIdInYml(): string {
-    return languageYmlDict[vscode.workspace.getConfiguration('hoi4ModUtilities').previewLocalisation ?? 'English'] ?? languageYmlDict['English'];
+    return languageYmlDict[vscode.workspace.getConfiguration(ConfigurationKey).previewLocalisation ?? 'English'] ?? languageYmlDict['English'];
 }

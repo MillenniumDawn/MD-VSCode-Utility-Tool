@@ -1,6 +1,6 @@
-# HOI4 Mod Utilities
+# Millennium Dawn HOI4 Utilities
 
-This extension add tools for Heart of Iron IV modding. Some of the tools may work on other Paradox games.
+This extension add tools for Heart of Iron IV Millennium Dawn modding. Some of the tools may work on other Paradox games.
 
 > I'm disappointed by Paradox because of the Silk Road thing. I'll pause this project until they fix it.
 
@@ -15,14 +15,14 @@ This extension add tools for Heart of Iron IV modding. Some of the tools may wor
 * `.gfx` file preview (sprites used by HOI4 are defined here)
 * `.dds`, `.tga` file preview (images files used by HOI4)
 
-For feature details and user manual, please refer to [HOI4 Mod Utilities Wiki](https://github.com/herbix/hoi4modutilities/wiki).
+For feature details and user manual, please refer to [Millennium Dawn HOI4 Utilities Wiki](https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool/wiki).
 
 ## Steps to start
 
 1. Install and enable this extension in VSCode.
 2. Set Heart of Iron IV install path. You can:
     * (Since v0.7.0, or on [vscode web](https://vscode.dev)) Open command palette using `Ctrl+Shift+P`. Use command `Select HOI4 install path` to browse the folder that installed Heart of Iron IV.
-    * Update setting `hoi4ModUtilities.installPath` (you can open settings page of VSCode using `Ctrl+,`) to the folder that installed Heart of Iron IV.
+    * Update setting `mdHoi4Utilities.installPath` (you can open settings page of VSCode using `Ctrl+,`) to the folder that installed Heart of Iron IV.
 3. Open your mod develop folder.
 4. (*Optional*) Open command palette using `Ctrl+Shift+P`. Use command `Select mod file` to set working mod descriptor (the `.mod` file).
 5. Use these entries:

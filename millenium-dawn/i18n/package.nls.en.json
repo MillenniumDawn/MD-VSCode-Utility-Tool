@@ -1,9 +1,9 @@
 {
     "hoi4modutilities.locale": "en",
-    "hoi4modutilities.category": "HOI4 Mod Utilities",
+    "hoi4modutilities.category": "Millennium Dawn HOI4 Utilities",
     "hoi4modutilities.dds.editorName": "Preview DDS",
     "hoi4modutilities.tga.editorName": "Preview TGA",
-    "hoi4modutilities.displayName": "HOI4 Mod Utilities",
+    "hoi4modutilities.displayName": "Millennium Dawn HOI4 Utilities",
     "hoi4modutilities.featureFlags.title": "Feature Flags",
     "hoi4modutilities.featureFlags.desc": "Feature flags are used to disable or enable features. Reloading is required after changing this. Please refer to Wiki on Github for details.",
     "hoi4modutilities.installPath.title": "Install Path",
