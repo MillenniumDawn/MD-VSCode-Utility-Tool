@@ -58,13 +58,11 @@ function fillFocusItems(focusFile, focusIndex, options, estimatedSize) {
         try {
             const sharedFocusTrees = [];
             const focusTrees = (0, schema_1.getFocusTree)((0, hoiparser_1.parseHoi4File)(fileContent, (0, i18n_1.localize)('infile', 'In file {0}:\n', focusFile)), sharedFocusTrees, focusFile);
-            // Only store focus trees where isSharedFocues is true
+            const focusKeysSet = new Set();
             focusTrees.forEach(tree => {
-                if (tree.isSharedFocues) {
-                    const focusKeys = Object.keys(tree.focuses);
-                    focusIndex[focusFile] = focusKeys;
-                }
+                Object.keys(tree.focuses).forEach(key => focusKeysSet.add(key));
             });
+            focusIndex[focusFile] = Array.from(focusKeysSet);
             if (estimatedSize) {
                 estimatedSize[0] += fileBuffer.length;
             }

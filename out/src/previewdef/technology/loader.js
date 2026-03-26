@@ -8,10 +8,18 @@ const hoiparser_1 = require("../../hoiformat/hoiparser");
 const i18n_1 = require("../../util/i18n");
 const lodash_1 = require("lodash");
 const loader_2 = require("../gui/loader");
-const technologyUIGfxFiles = ['interface/countrytechtreeview.gfx', 'interface/countrytechnologyview.gfx'];
+const technologyUIGfxFiles = [
+    'interface/countrytechtreeview.gfx',
+    'interface/countrytechnologyview.gfx',
+    'interface/nationalfocusview.gfx',
+];
 const technologiesGFX = 'interface/technologies.gfx';
 const relatedGfxFiles = [...technologyUIGfxFiles, technologiesGFX];
-const guiFilePath = ['interface/countrytechtreeview.gui', 'interface/countrydoctrinetreeview.gui'];
+const guiFilePath = [
+    'interface/countrytechtreeview.gui',
+    'interface/countrydoctrinetreeview.gui',
+    'interface/nationalfocusview.gui',
+];
 class TechnologyTreeLoader extends loader_1.ContentLoader {
     postLoad(content, dependencies, error, session) {
         return tslib_1.__awaiter(this, void 0, void 0, function* () {

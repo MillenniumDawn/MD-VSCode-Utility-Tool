@@ -104,19 +104,38 @@ export function basename(uri: vscode.Uri, ext?: string): string {
 }
 
 export function fileOrUriStringToUri(path: string): vscode.Uri | undefined {
-    if (path.trim() === '') {
+    const normalizedPath = normalizeFileOrUriString(path);
+
+    if (normalizedPath === '') {
         return undefined;
     }
 
     try {
-        if (path.indexOf(':') > 2) { // try to avoid prefix like "D:\"
-            return vscode.Uri.parse(path);
+        if (/^[a-zA-Z]:[\\/]/.test(normalizedPath) || /^\\\\/.test(normalizedPath)) {
+            return vscode.Uri.file(normalizedPath);
+        }
+
+        if (normalizedPath.indexOf(':') > 2) { // try to avoid prefix like "D:\"
+            return vscode.Uri.parse(normalizedPath);
         } else {
-            return vscode.Uri.file(path);
+            return vscode.Uri.file(normalizedPath);
         }
     } catch (e) {
         return undefined;
     }
+}
+
+function normalizeFileOrUriString(path: string): string {
+    const trimmedPath = path.trim();
+    if (trimmedPath.length >= 2) {
+        const startsWithDoubleQuote = trimmedPath.startsWith('"') && trimmedPath.endsWith('"');
+        const startsWithSingleQuote = trimmedPath.startsWith("'") && trimmedPath.endsWith("'");
+        if (startsWithDoubleQuote || startsWithSingleQuote) {
+            return trimmedPath.slice(1, -1).trim();
+        }
+    }
+
+    return trimmedPath;
 }
 
 export function uriToFilePathWhenPossible(uri: vscode.Uri): string {

@@ -2,6 +2,7 @@ import { Node, Token } from "../../hoiformat/hoiparser";
 import { HOIPartial, Position, Raw } from "../../hoiformat/schema";
 import { ConditionItem, ConditionComplexExpr } from "../../hoiformat/condition";
 import { Warning } from "../../util/common";
+import { ContainerWindowType } from "../../hoiformat/gui";
 export interface FocusTree {
     id: string;
     focuses: Record<string, Focus>;
@@ -58,6 +59,8 @@ export interface FocusTreeInlay {
     file: string;
     token: Token | undefined;
     windowName?: string;
+    guiFile?: string;
+    guiWindow?: HOIPartial<ContainerWindowType>;
     internal: boolean;
     visible: ConditionComplexExpr;
     position: {

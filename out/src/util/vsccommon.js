@@ -130,15 +130,19 @@ function basename(uri, ext) {
 }
 exports.basename = basename;
 function fileOrUriStringToUri(path) {
-    if (path.trim() === '') {
+    const normalizedPath = normalizeFileOrUriString(path);
+    if (normalizedPath === '') {
         return undefined;
     }
     try {
-        if (path.indexOf(':') > 2) { // try to avoid prefix like "D:\"
-            return vscode.Uri.parse(path);
+        if (/^[a-zA-Z]:[\\/]/.test(normalizedPath) || /^\\\\/.test(normalizedPath)) {
+            return vscode.Uri.file(normalizedPath);
+        }
+        if (normalizedPath.indexOf(':') > 2) { // try to avoid prefix like "D:\"
+            return vscode.Uri.parse(normalizedPath);
         }
         else {
-            return vscode.Uri.file(path);
+            return vscode.Uri.file(normalizedPath);
         }
     }
     catch (e) {
@@ -146,6 +150,17 @@ function fileOrUriStringToUri(path) {
     }
 }
 exports.fileOrUriStringToUri = fileOrUriStringToUri;
+function normalizeFileOrUriString(path) {
+    const trimmedPath = path.trim();
+    if (trimmedPath.length >= 2) {
+        const startsWithDoubleQuote = trimmedPath.startsWith('"') && trimmedPath.endsWith('"');
+        const startsWithSingleQuote = trimmedPath.startsWith("'") && trimmedPath.endsWith("'");
+        if (startsWithDoubleQuote || startsWithSingleQuote) {
+            return trimmedPath.slice(1, -1).trim();
+        }
+    }
+    return trimmedPath;
+}
 function uriToFilePathWhenPossible(uri) {
     if (isFileScheme(uri)) {
         return uri.fsPath;

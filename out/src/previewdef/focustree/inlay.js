@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseInlayWindowRef = exports.addInlayGfxWarnings = exports.resolveInlayGfxFiles = exports.resolveInlaysForTree = exports.loadFocusInlayWindows = void 0;
+exports.parseInlayWindowRef = exports.addInlayGfxWarnings = exports.resolveInlayGfxFiles = exports.resolveInlayGuiWindows = exports.resolveInlaysForTree = exports.loadFocusInlayWindows = void 0;
 const tslib_1 = require("tslib");
+const gui_1 = require("../../hoiformat/gui");
 const condition_1 = require("../../hoiformat/condition");
 const hoiparser_1 = require("../../hoiformat/hoiparser");
 const scope_1 = require("../../hoiformat/scope");
@@ -11,6 +12,7 @@ const fileloader_1 = require("../../util/fileloader");
 const vsccommon_1 = require("../../util/vsccommon");
 const spritetype_1 = require("../../hoiformat/spritetype");
 const focusInlayWindowsFolder = "common/focus_inlay_windows";
+const scriptedGuiFolder = "interface/scripted_gui";
 function loadFocusInlayWindows() {
     return tslib_1.__awaiter(this, void 0, void 0, function* () {
         const files = yield (0, fileloader_1.listFilesFromModOrHOI4)(focusInlayWindowsFolder);
@@ -154,8 +156,8 @@ function isAlwaysYes(node) {
     }
     return false;
 }
-function resolveInlaysForTree(refs, allInlays, sharedWarnings) {
-    const warnings = [...sharedWarnings];
+function resolveInlaysForTree(refs, allInlays) {
+    const warnings = [];
     const conditionExprs = [];
     const inlayWindows = [];
     for (const ref of refs) {
@@ -179,6 +181,86 @@ function resolveInlaysForTree(refs, allInlays, sharedWarnings) {
     return { inlayWindows, inlayConditionExprs: conditionExprs, warnings };
 }
 exports.resolveInlaysForTree = resolveInlaysForTree;
+function resolveInlayGuiWindows(inlays) {
+    return tslib_1.__awaiter(this, void 0, void 0, function* () {
+        const warnings = [];
+        const guiFiles = yield listGuiFiles();
+        const gfxFiles = yield listGuiGfxFiles();
+        const parsedGuiFiles = [];
+        for (const guiFile of guiFiles) {
+            try {
+                const [buffer, uri] = yield (0, fileloader_1.readFileFromModOrHOI4)(guiFile);
+                const guiNode = (0, hoiparser_1.parseHoi4File)(buffer.toString().replace(/^\uFEFF/, ""), (0, i18n_1.localize)("infile", "In file {0}:\n", uri.toString()));
+                const guiFileData = (0, schema_1.convertNodeToJson)(guiNode, gui_1.guiFileSchema);
+                const windows = collectContainerWindows(guiFileData);
+                parsedGuiFiles.push({ file: guiFile, windows });
+            }
+            catch (e) {
+            }
+        }
+        for (const inlay of inlays) {
+            if (!inlay.windowName) {
+                continue;
+            }
+            const matched = parsedGuiFiles.find(gui => gui.windows[inlay.windowName] !== undefined);
+            if (!matched) {
+                warnings.push({
+                    text: (0, i18n_1.localize)("TODO", "Can't resolve scripted GUI window {0} for inlay {1}.", inlay.windowName, inlay.id),
+                    source: inlay.id,
+                    navigations: inlay.token ? [{ file: inlay.file, start: inlay.token.start, end: inlay.token.end }] : undefined,
+                });
+                continue;
+            }
+            inlay.guiFile = matched.file;
+            inlay.guiWindow = matched.windows[inlay.windowName];
+        }
+        return { guiFiles, gfxFiles, warnings };
+    });
+}
+exports.resolveInlayGuiWindows = resolveInlayGuiWindows;
+function listGuiFiles() {
+    return tslib_1.__awaiter(this, void 0, void 0, function* () {
+        try {
+            const files = yield (0, fileloader_1.listFilesFromModOrHOI4)(scriptedGuiFolder, { recursively: true });
+            return files
+                .filter(file => file.toLowerCase().endsWith(".gui"))
+                .map(file => `${scriptedGuiFolder}/${file}`.replace(/\/+/g, "/"));
+        }
+        catch (e) {
+            return [];
+        }
+    });
+}
+function listGuiGfxFiles() {
+    return tslib_1.__awaiter(this, void 0, void 0, function* () {
+        try {
+            const files = yield (0, fileloader_1.listFilesFromModOrHOI4)(scriptedGuiFolder, { recursively: true });
+            return files
+                .filter(file => file.toLowerCase().endsWith(".gfx"))
+                .map(file => `${scriptedGuiFolder}/${file}`.replace(/\/+/g, "/"));
+        }
+        catch (e) {
+            return [];
+        }
+    });
+}
+function collectContainerWindows(guiFile) {
+    const result = {};
+    for (const guiTypes of guiFile.guitypes) {
+        for (const containerWindow of [...guiTypes.containerwindowtype, ...guiTypes.windowtype]) {
+            collectContainerWindowRecursive(containerWindow, result);
+        }
+    }
+    return result;
+}
+function collectContainerWindowRecursive(containerWindow, result) {
+    if (containerWindow.name && !(containerWindow.name in result)) {
+        result[containerWindow.name] = containerWindow;
+    }
+    for (const child of [...containerWindow.containerwindowtype, ...containerWindow.windowtype]) {
+        collectContainerWindowRecursive(child, result);
+    }
+}
 function resolveInlayGfxFiles(inlays) {
     var _a;
     return tslib_1.__awaiter(this, void 0, void 0, function* () {
@@ -224,7 +306,6 @@ function resolveInlayGfxFiles(inlays) {
         }
         return {
             resolvedFiles: Array.from(resolvedFiles),
-            gfxFileByName,
         };
     });
 }

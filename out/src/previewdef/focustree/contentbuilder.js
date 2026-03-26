@@ -15,6 +15,10 @@ const lodash_1 = require("lodash");
 const localisationIndex_1 = require("../../util/localisationIndex");
 const featureflags_2 = require("../../util/featureflags");
 const titlebar_1 = require("./titlebar");
+const containerwindow_1 = require("../../util/hoi4gui/containerwindow");
+const common_2 = require("../../util/hoi4gui/common");
+const instanttextbox_1 = require("../../util/hoi4gui/instanttextbox");
+const nodecommon_1 = require("../../util/hoi4gui/nodecommon");
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
 function renderFocusTreeFile(loader, uri, webview) {
     return tslib_1.__awaiter(this, void 0, void 0, function* () {
@@ -69,9 +73,15 @@ function renderFocusTrees(focusTrees, styleTable, gfxFiles, jsCodes, styleNonce,
         };
         const titlebarStyles = yield (0, titlebar_1.loadFocusTitlebarStyles)();
         const renderedFocus = {};
+        const renderedInlayWindows = {};
         yield Promise.all((0, lodash_1.flatMap)(focusTrees, tree => Object.values(tree.focuses)).map((focus) => tslib_1.__awaiter(this, void 0, void 0, function* () { return renderedFocus[focus.id] = (yield renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles)).replace(/\s\s+/g, ' '); })));
+        yield prepareInlayGfxStyles(focusTrees, styleTable);
+        yield Promise.all((0, lodash_1.flatMap)(focusTrees, tree => tree.inlayWindows).map((inlay) => tslib_1.__awaiter(this, void 0, void 0, function* () {
+            renderedInlayWindows[inlay.id] = (yield renderInlayWindow(inlay, styleTable, gfxFiles)).replace(/\s\s+/g, ' ');
+        })));
         jsCodes.push('window.focusTrees = ' + JSON.stringify(focusTrees));
         jsCodes.push('window.renderedFocus = ' + JSON.stringify(renderedFocus));
+        jsCodes.push('window.renderedInlayWindows = ' + JSON.stringify(renderedInlayWindows));
         jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
         jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
         jsCodes.push('window.useConditionInFocus = ' + featureflags_1.useConditionInFocus);
@@ -97,7 +107,6 @@ function renderFocusTrees(focusTrees, styleTable, gfxFiles, jsCodes, styleNonce,
             <div id="inlaywindowplaceholder"></div>
             ${continuousFocusContent}
         </div>` +
-            renderInlayInspectorContainer(styleTable) +
             renderWarningContainer(styleTable) +
             renderToolBar(focusTrees, styleTable));
     });
@@ -129,23 +138,6 @@ function renderWarningContainer(styleTable) {
             box-sizing: border-box;
         `)}"></textarea>
     </div>`;
-}
-function renderInlayInspectorContainer(styleTable) {
-    return `
-    <div id="inlay-inspector" class="${styleTable.style('inlay-inspector', () => `
-        position: fixed;
-        top: 40px;
-        right: 0;
-        width: 420px;
-        height: calc(100vh - 40px);
-        overflow: auto;
-        box-sizing: border-box;
-        padding: 12px;
-        background: var(--vscode-editor-background);
-        border-left: 1px solid var(--vscode-panel-border);
-        display: none;
-        z-index: 11;
-    `)}"></div>`;
 }
 function renderToolBar(focusTrees, styleTable) {
     const focuses = focusTrees.length <= 1 ? '' : `
@@ -179,7 +171,7 @@ function renderToolBar(focusTrees, styleTable) {
             />
         </div>`;
     const inlayWindowsToggle = `
-        <div class="${styleTable.style('inlayWindowsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
+        <div id="show-inlay-windows-container" class="${styleTable.style('inlayWindowsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
             <label for="show-inlay-windows">${(0, i18n_1.localize)('TODO', 'Inlay windows')}</label>
             <input
                 id="show-inlay-windows"
@@ -204,9 +196,18 @@ function renderToolBar(focusTrees, styleTable) {
         </div>`;
     const conditions = `
         <div id="condition-container">
-            <label for="conditions" class="${styleTable.style('conditionsLabel', () => `margin-right:5px`)}">${(0, i18n_1.localize)('focustree.conditions', 'Conditions: ')}</label>
+            <label for="conditions" class="${styleTable.style('conditionsLabel', () => `margin-right:5px`)}">${(0, i18n_1.localize)('TODO', 'Focus conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
                 <div id="conditions" class="select multiple-select" tabindex="0" role="combobox" class="${styleTable.style('conditionsLabel', () => `max-width:400px`)}">
+                    <span class="value"></span>
+                </div>
+            </div>
+        </div>`;
+    const inlayConditions = `
+        <div id="inlay-condition-container">
+            <label for="inlay-conditions" class="${styleTable.style('inlayConditionsLabel', () => `margin-right:5px`)}">${(0, i18n_1.localize)('TODO', 'Inlay conditions: ')}</label>
+            <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
+                <div id="inlay-conditions" class="select multiple-select" tabindex="0" role="combobox">
                     <span class="value"></span>
                 </div>
             </div>
@@ -223,10 +224,132 @@ function renderToolBar(focusTrees, styleTable) {
             ${focusOverlays}
             ${inlayWindowsToggle}
             ${inlayWindows}
-            ${featureflags_1.useConditionInFocus ? conditions : allowbranch}
+            ${featureflags_1.useConditionInFocus ? conditions + inlayConditions : allowbranch}
             ${warningsButton}
         </div>
     </div>`;
+}
+function getInlayGfxStyleKey(gfxName, gfxFile) {
+    return 'inlay-gfx-' + (0, styletable_1.normalizeForStyle)((gfxFile !== null && gfxFile !== void 0 ? gfxFile : 'missing') + '-' + gfxName);
+}
+function prepareInlayGfxStyles(focusTrees, styleTable) {
+    return tslib_1.__awaiter(this, void 0, void 0, function* () {
+        const processed = new Set();
+        for (const focusTree of focusTrees) {
+            for (const inlay of focusTree.inlayWindows) {
+                for (const slot of inlay.scriptedImages) {
+                    for (const option of slot.gfxOptions) {
+                        const key = getInlayGfxStyleKey(option.gfxName, option.gfxFile);
+                        if (processed.has(key)) {
+                            continue;
+                        }
+                        processed.add(key);
+                        if (!option.gfxFile) {
+                            styleTable.style(key, () => `
+                            width: 96px;
+                            height: 96px;
+                            background: rgba(127, 127, 127, 0.35);
+                            border: 1px dashed var(--vscode-panel-border);
+                        `);
+                            continue;
+                        }
+                        const sprite = yield (0, imagecache_1.getSpriteByGfxName)(option.gfxName, option.gfxFile);
+                        const frame = sprite === null || sprite === void 0 ? void 0 : sprite.frames[0];
+                        if (!frame) {
+                            styleTable.style(key, () => `
+                            width: 96px;
+                            height: 96px;
+                            background: rgba(127, 127, 127, 0.35);
+                            border: 1px dashed var(--vscode-panel-border);
+                        `);
+                            continue;
+                        }
+                        styleTable.style(key, () => `
+                        width: ${Math.min(frame.width, 144)}px;
+                        height: ${Math.min(frame.height, 144)}px;
+                        background-image: url(${frame.uri});
+                        background-repeat: no-repeat;
+                        background-position: center;
+                        background-size: contain;
+                    `);
+                    }
+                }
+            }
+        }
+    });
+}
+function renderInlayWindow(inlay, styleTable, gfxFiles) {
+    var _a, _b;
+    return tslib_1.__awaiter(this, void 0, void 0, function* () {
+        if (!inlay.guiWindow) {
+            return '';
+        }
+        const parentInfo = {
+            size: {
+                width: 1920,
+                height: 1080,
+            },
+            orientation: 'upper_left',
+        };
+        const content = yield (0, containerwindow_1.renderContainerWindow)(Object.assign(Object.assign({}, inlay.guiWindow), { position: { x: (0, schema_1.toNumberLike)(0), y: (0, schema_1.toNumberLike)(0) } }), parentInfo, {
+            styleTable,
+            enableNavigator: true,
+            classNames: 'focus-inlay-window navigator',
+            getSprite: (sprite) => (0, imagecache_1.getSpriteByGfxName)(sprite, gfxFiles),
+            onRenderChild: (type, child, parent) => tslib_1.__awaiter(this, void 0, void 0, function* () { return renderInlayOverrideChild(type, child, parent, inlay, styleTable, gfxFiles); }),
+        });
+        return `<div class="${styleTable.style('focus-inlay-window-root', () => `
+        position: absolute;
+        left: ${inlay.position.x}px;
+        top: ${inlay.position.y}px;
+        z-index: 5;
+    `)}" start="${(_a = inlay.token) === null || _a === void 0 ? void 0 : _a.start}" end="${(_b = inlay.token) === null || _b === void 0 ? void 0 : _b.end}" file="${inlay.file}">${content}</div>`;
+    });
+}
+function renderInlayOverrideChild(type, child, parentInfo, inlay, styleTable, gfxFiles) {
+    var _a, _b, _c, _d, _e;
+    return tslib_1.__awaiter(this, void 0, void 0, function* () {
+        if ((type !== 'icon' && type !== 'button') || !child.name) {
+            return undefined;
+        }
+        const slot = inlay.scriptedImages.find(scriptedImage => scriptedImage.id === child.name);
+        if (!slot) {
+            return undefined;
+        }
+        const spriteOption = (_a = slot.gfxOptions.find(option => option.gfxFile)) !== null && _a !== void 0 ? _a : slot.gfxOptions[0];
+        if (!spriteOption) {
+            return undefined;
+        }
+        const sprite = spriteOption.gfxFile ? yield (0, imagecache_1.getSpriteByGfxName)(spriteOption.gfxName, spriteOption.gfxFile) : yield (0, imagecache_1.getSpriteByGfxName)(spriteOption.gfxName, gfxFiles);
+        if (!sprite) {
+            return undefined;
+        }
+        const iconLikeChild = child;
+        let [x, y] = (0, common_2.calculateBBox)(iconLikeChild, parentInfo);
+        if (iconLikeChild.centerposition) {
+            x -= sprite.width / 2;
+            y -= sprite.height / 2;
+        }
+        const scale = (_b = iconLikeChild.scale) !== null && _b !== void 0 ? _b : 1;
+        const gfxClassPlaceholder = `{{inlay_slot_class:${slot.id}}}`;
+        const spriteHtml = (0, nodecommon_1.renderSprite)({ x: 0, y: 0 }, sprite, sprite, 0, scale, {
+            styleTable,
+            classNames: gfxClassPlaceholder,
+        });
+        const textHtml = type === 'button' ? yield (0, instanttextbox_1.renderInstantTextBox)(Object.assign(Object.assign({}, iconLikeChild), { position: { x: (0, schema_1.toNumberLike)(0), y: (0, schema_1.toNumberLike)(0) }, bordersize: { x: (0, schema_1.toNumberLike)(0), y: (0, schema_1.toNumberLike)(0) }, maxheight: (0, schema_1.toNumberLike)(sprite.height * scale), maxwidth: (0, schema_1.toNumberLike)(sprite.width * scale), font: iconLikeChild.buttonfont, text: (_c = iconLikeChild.buttontext) !== null && _c !== void 0 ? _c : iconLikeChild.text, format: (0, schema_1.toStringAsSymbolIgnoreCase)('center'), vertical_alignment: 'center', orientation: (0, schema_1.toStringAsSymbolIgnoreCase)('upper_left') }), parentInfo, { styleTable }) : '';
+        return `<div
+        start="${(_d = child._token) === null || _d === void 0 ? void 0 : _d.start}"
+        end="${(_e = child._token) === null || _e === void 0 ? void 0 : _e.end}"
+        class="navigator ${styleTable.style('positionAbsolute', () => `position: absolute;`)} ${styleTable.oneTimeStyle('inlay-gui-slot', () => `
+            left: ${x}px;
+            top: ${y}px;
+            width: ${sprite.width * scale}px;
+            height: ${sprite.height * scale}px;
+        `)}">
+            ${spriteHtml}
+            ${textHtml}
+        </div>`;
+    });
 }
 function renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles) {
     var _a, _b, _c, _d;
@@ -263,7 +386,7 @@ function renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles) {
             if (localizedText === focus.id || !localizedText) {
                 if (focus.text) {
                     localizedText = yield (0, localisationIndex_1.getLocalisedTextQuick)(focus.text);
-                    if (localizedText !== focus.text && localizedText != null) {
+                    if (localizedText !== focus.text && localizedText !== null) {
                         textContent += `<br/>${localizedText}`;
                     }
                 }

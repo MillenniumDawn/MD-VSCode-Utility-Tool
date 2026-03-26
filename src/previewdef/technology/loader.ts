@@ -13,10 +13,16 @@ export interface TechnologyTreeLoaderResult {
     gfxFiles: string[];
 }
 
-const technologyUIGfxFiles = ['interface/countrytechtreeview.gfx', 'interface/countrytechnologyview.gfx'];
+const technologyUIGfxFiles = [
+    'interface/countrytechtreeview.gfx',
+    'interface/countrytechnologyview.gfx',
+];
 const technologiesGFX = 'interface/technologies.gfx';
 const relatedGfxFiles = [...technologyUIGfxFiles, technologiesGFX];
-const guiFilePath = ['interface/countrytechtreeview.gui', 'interface/countrydoctrinetreeview.gui'];
+const guiFilePath = [
+    'interface/countrytechtreeview.gui',
+    'interface/countrydoctrinetreeview.gui',
+];
 
 export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResult> {
     protected async postLoad(content: string | undefined, dependencies: Dependency[], error: any, session: LoaderSession): Promise<LoadResultOD<TechnologyTreeLoaderResult>> {

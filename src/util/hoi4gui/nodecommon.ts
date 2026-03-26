@@ -103,7 +103,6 @@ export async function renderBackground(background: HOIPartial<Background> | unde
 
     const backgroundSpriteName = background?.spritetype ?? background?.quadtexturesprite;
     const backgroundSprite = backgroundSpriteName && commonOptions.getSprite ? await commonOptions.getSprite(backgroundSpriteName, 'bg', background?.name) : undefined;
-
     if (backgroundSprite === undefined) {
         return '';
     }
