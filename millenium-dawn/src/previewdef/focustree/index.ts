@@ -12,8 +12,7 @@ function canPreviewFocusTree(document: vscode.TextDocument) {
         return 0;
     }
 
-    const text = document.getText();
-    return /(focus_tree|shared_focus|joint_focus)\s*=\s*{/.exec(text)?.index;
+    return undefined;
 }
 
 class FocusTreePreview extends PreviewBase {

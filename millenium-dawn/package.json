@@ -96,8 +96,8 @@
 				"command": "mdhoi4utilities.preview",
 				"title": "%hoi4modutilities.preview.title%",
 				"icon": {
-					"dark": "static/preview-right-dark.svg",
-					"light": "static/preview-right-light.svg"
+					"dark": "static/preview_icon.svg",
+					"light": "static/preview_icon.svg"
 				},
 				"category": "%hoi4modutilities.category%"
 			},
@@ -152,7 +152,7 @@
 			"editor/title": [
 				{
 					"command": "mdhoi4utilities.preview",
-					"when": "!shouldShowMdHoi4Preview && editorLangId =~ /^(:?plaintext|hoi4|paradox)$/ && !shouldHideMdHoi4Preview",
+					"when": "!shouldShowMdHoi4Preview && resourceExtname == '.txt' && !shouldHideMdHoi4Preview",
 					"group": "navigation"
 				},
 				{

@@ -180,7 +180,7 @@ export function convertFocusFileNodeToJson(node: Node, constants: {}): HOIPartia
 export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFocusTrees: FocusTree[], filePath: string, constants: {} ): FocusTree[] {
     const focusTrees: FocusTree[] = [];
 
-    if (file.shared_focus.length > 0) {
+    if (file.shared_focus.length > 0 || file.joint_focus.length > 0) {
         const conditionExprs: ConditionItem[] = [];
         const warnings: FocusWarning[] = [];
         const focuses = getFocuses([...file.shared_focus, ...file.joint_focus], conditionExprs, filePath, warnings, constants);
