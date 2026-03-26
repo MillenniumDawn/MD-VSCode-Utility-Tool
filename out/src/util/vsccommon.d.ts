@@ -8,6 +8,7 @@ export declare function getConfiguration(): vscode.WorkspaceConfiguration & {
     readonly featureFlags: string[];
     readonly enableSupplyArea: boolean;
     readonly previewLocalisation: "Brazilian Portuguese" | "Simplified Chinese" | "English" | "French" | "German" | "Japanese" | "Polish" | "Russian" | "Spanish";
+    readonly inlayWindowGfxRoots: string[];
 };
 export declare function getDocumentByUri(uri: vscode.Uri): vscode.TextDocument | undefined;
 export declare function getRelativePathInWorkspace(uri: vscode.Uri): string;

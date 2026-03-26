@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 original/
+common/
+interface/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

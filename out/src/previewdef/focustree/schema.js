@@ -10,6 +10,7 @@ const featureflags_1 = require("../../util/featureflags");
 const common_2 = require("../../util/common");
 const i18n_1 = require("../../util/i18n");
 const path = require("path");
+const inlay_1 = require("./inlay");
 const focusOrORListSchema = {
     focus: {
         _innerType: "string",
@@ -27,6 +28,7 @@ const focusSchema = {
         _type: 'array',
     },
     text_icon: "string",
+    overlay: "string",
     x: "number",
     y: "number",
     prerequisite: {
@@ -66,6 +68,10 @@ const focusTreeSchema = {
         _type: 'array',
     },
     continuous_focus_position: schema_1.positionSchema,
+    inlay_window: {
+        _innerType: 'raw',
+        _type: 'array',
+    },
 };
 const focusFileSchema = {
     focus_tree: {
@@ -100,6 +106,9 @@ function getFocusTreeWithFocusFile(file, sharedFocusTrees, filePath, constants) 
         const sharedFocusTree = {
             id: (0, i18n_1.localize)('focustree.sharedfocuses', '<Shared focuses>'),
             focuses,
+            inlayWindowRefs: [],
+            inlayWindows: [],
+            inlayConditionExprs: [],
             allowBranchOptions: getAllowBranchOptions(focuses),
             conditionExprs,
             isSharedFocues: true,
@@ -115,6 +124,9 @@ function getFocusTreeWithFocusFile(file, sharedFocusTrees, filePath, constants) 
         focusTrees.push({
             id: getJointFocusTreeId(filePath),
             focuses,
+            inlayWindowRefs: [],
+            inlayWindows: [],
+            inlayConditionExprs: [],
             allowBranchOptions: getAllowBranchOptions(focuses),
             conditionExprs,
             isSharedFocues: false,
@@ -137,6 +149,13 @@ function getFocusTreeWithFocusFile(file, sharedFocusTrees, filePath, constants) 
         focusTrees.push({
             id: (_a = focusTree.id) !== null && _a !== void 0 ? _a : (0, i18n_1.localize)('focustree.ananymous', '<Anonymous focus tree>'),
             focuses,
+            inlayWindowRefs: focusTree.inlay_window
+                .map(v => v === null || v === void 0 ? void 0 : v._raw)
+                .filter((v) => v !== undefined)
+                .map(v => (0, inlay_1.parseInlayWindowRef)(v, filePath))
+                .filter((v) => v !== undefined),
+            inlayWindows: [],
+            inlayConditionExprs: [],
             allowBranchOptions: getAllowBranchOptions(focuses),
             continuousFocusPositionX: (_c = (0, common_1.normalizeNumberLike)((_b = focusTree.continuous_focus_position) === null || _b === void 0 ? void 0 : _b.x, 0)) !== null && _c !== void 0 ? _c : 50,
             continuousFocusPositionY: (_e = (0, common_1.normalizeNumberLike)((_d = focusTree.continuous_focus_position) === null || _d === void 0 ? void 0 : _d.y, 0)) !== null && _e !== void 0 ? _e : 1000,
@@ -229,6 +248,7 @@ function getFocus(hoiFocus, conditionExprs, filePath, warnings, constants) {
         .map(p => p.focus.concat(p.OR).filter((s) => s !== undefined));
     const icon = parseFocusIcon(hoiFocus.icon.filter((v) => v !== undefined).map(v => v._raw), constants, conditionExprs);
     const textIcon = hoiFocus.text_icon;
+    const overlay = hoiFocus.overlay;
     const hasAllowBranch = hoiFocus.allow_branch.length > 0;
     const allowBranchCondition = (0, condition_1.extractConditionValues)(hoiFocus.allow_branch.filter((v) => v !== undefined).map(v => v._raw.value), scope_1.countryScope, conditionExprs).condition;
     const offset = hoiFocus.offset.map(o => {
@@ -244,6 +264,7 @@ function getFocus(hoiFocus, conditionExprs, filePath, warnings, constants) {
         id,
         icon,
         textIcon,
+        overlay,
         x,
         y,
         relativePositionId,

@@ -5,6 +5,9 @@ import { Warning } from "../../util/common";
 export interface FocusTree {
     id: string;
     focuses: Record<string, Focus>;
+    inlayWindowRefs: FocusTreeInlayRef[];
+    inlayWindows: FocusTreeInlay[];
+    inlayConditionExprs: ConditionItem[];
     allowBranchOptions: string[];
     conditionExprs: ConditionItem[];
     isSharedFocues: boolean;
@@ -22,6 +25,7 @@ export interface Focus {
     id: string;
     icon: FocusIconWithCondition[];
     textIcon?: string;
+    overlay?: string;
     prerequisite: string[][];
     exclusive: string[];
     hasAllowBranch: boolean;
@@ -40,6 +44,49 @@ export interface FocusWarning extends Warning<string> {
         end: number;
     }[];
 }
+export interface FocusTreeInlayRef {
+    id: string;
+    position: {
+        x: number;
+        y: number;
+    };
+    file: string;
+    token: Token | undefined;
+}
+export interface FocusTreeInlay {
+    id: string;
+    file: string;
+    token: Token | undefined;
+    windowName?: string;
+    internal: boolean;
+    visible: ConditionComplexExpr;
+    position: {
+        x: number;
+        y: number;
+    };
+    scriptedImages: FocusInlayImageSlot[];
+    scriptedButtons: FocusTreeInlayButtonMeta[];
+    conditionExprs: ConditionItem[];
+}
+export interface FocusInlayImageSlot {
+    id: string;
+    file: string;
+    token: Token | undefined;
+    gfxOptions: FocusInlayGfxOption[];
+}
+export interface FocusInlayGfxOption {
+    gfxName: string;
+    condition: ConditionComplexExpr;
+    file: string;
+    token: Token | undefined;
+    gfxFile?: string;
+}
+export interface FocusTreeInlayButtonMeta {
+    id: string;
+    file: string;
+    token: Token | undefined;
+    available?: ConditionComplexExpr;
+}
 interface Offset {
     x: number;
     y: number;
@@ -50,11 +97,13 @@ interface FocusTreeDef {
     shared_focus: string[];
     focus: FocusDef[];
     continuous_focus_position: Position;
+    inlay_window: Raw[];
 }
 interface FocusDef {
     id: string;
     icon: Raw[];
     text_icon: string;
+    overlay: string;
     x: number;
     y: number;
     prerequisite: FocusOrORList[];

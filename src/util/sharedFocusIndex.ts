@@ -64,13 +64,11 @@ async function fillFocusItems(focusFile: string, focusIndex: FocusIndex, options
         const sharedFocusTrees: any[] = [];
         const focusTrees = getFocusTree(parseHoi4File(fileContent, localize('infile', 'In file {0}:\n', focusFile)), sharedFocusTrees, focusFile);
 
-        // Only store focus trees where isSharedFocues is true
+        const focusKeysSet = new Set<string>();
         focusTrees.forEach(tree => {
-            if (tree.isSharedFocues) {
-                const focusKeys = Object.keys(tree.focuses);
-                focusIndex[focusFile] = focusKeys;
-            }
+            Object.keys(tree.focuses).forEach(key => focusKeysSet.add(key));
         });
+        focusIndex[focusFile] = Array.from(focusKeysSet);
 
         if (estimatedSize) {
             estimatedSize[0] += fileBuffer.length;

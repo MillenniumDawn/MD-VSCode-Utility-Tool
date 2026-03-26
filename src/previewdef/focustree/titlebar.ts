@@ -6,6 +6,7 @@ import { readFileFromModOrHOI4 } from "../../util/fileloader";
 
 export const focusTitlebarStylesFile = 'common/national_focus/00_titlebar_styles.txt';
 export const nationalFocusViewGfxFile = 'interface/nationalfocusview.gfx';
+export const goalsOverlaysGfxFile = 'interface/goals_overlays.gfx';
 
 interface TitlebarStyleDef {
     name: string;
@@ -58,5 +59,14 @@ export async function getFocusTitlebarImage(textIcon: string | undefined, titleb
     }
 
     const sprite = await getSpriteByGfxName(gfxName, nationalFocusViewGfxFile);
+    return sprite?.image;
+}
+
+export async function getFocusOverlayImage(overlay: string | undefined): Promise<Image | undefined> {
+    if (!overlay) {
+        return undefined;
+    }
+
+    const sprite = await getSpriteByGfxName(overlay, goalsOverlaysGfxFile);
     return sprite?.image;
 }

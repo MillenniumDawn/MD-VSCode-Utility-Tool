@@ -20,7 +20,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _src_hoiformat_schema__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ../src/hoiformat/schema */ "./src/hoiformat/schema.ts");
 /* harmony import */ var _util_i18n__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./util/i18n */ "./webviewsrc/util/i18n.ts");
 /* harmony import */ var _util_checkbox__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ./util/checkbox */ "./webviewsrc/util/checkbox.ts");
-var _a, _b;
+var _a, _b, _c;
 
 
 
@@ -72,14 +72,39 @@ function search(searchContent, navigate = true) {
 const useConditionInFocus = window.useConditionInFocus;
 const focusTrees = window.focusTrees;
 let selectedExprs = (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().selectedExprs) !== null && _a !== void 0 ? _a : [];
-let selectedFocusTreeIndex = Math.min(focusTrees.length - 1, (_b = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().selectedFocusTreeIndex) !== null && _b !== void 0 ? _b : 0);
+let selectedInlayExprs = (_b = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().selectedInlayExprs) !== null && _b !== void 0 ? _b : [];
+let selectedFocusTreeIndex = Math.min(focusTrees.length - 1, (_c = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().selectedFocusTreeIndex) !== null && _c !== void 0 ? _c : 0);
 let allowBranches = undefined;
 let conditions = undefined;
+let inlayConditions = undefined;
 let checkedFocuses = {};
-let customTitlebarsCheckbox = undefined;
 function showCustomTitlebars() {
     var _a;
     return (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().showCustomTitlebars) !== null && _a !== void 0 ? _a : true;
+}
+function showFocusOverlays() {
+    var _a;
+    return (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().showFocusOverlays) !== null && _a !== void 0 ? _a : true;
+}
+function showInlayWindows() {
+    return !!window.__showInlayWindows;
+}
+function getSelectedInlayWindowIds() {
+    var _a;
+    return (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().selectedInlayWindowIds) !== null && _a !== void 0 ? _a : {};
+}
+function getSelectedInlayWindowId(focusTree) {
+    var _a;
+    const selected = getSelectedInlayWindowIds()[focusTree.id];
+    if (focusTree.inlayWindows.some(inlay => inlay.id === selected)) {
+        return selected;
+    }
+    return (_a = focusTree.inlayWindows[0]) === null || _a === void 0 ? void 0 : _a.id;
+}
+function setSelectedInlayWindowId(focusTree, inlayWindowId) {
+    const selectedInlayWindowIds = getSelectedInlayWindowIds();
+    selectedInlayWindowIds[focusTree.id] = inlayWindowId;
+    (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ selectedInlayWindowIds });
 }
 function applyCustomTitlebarVisibility() {
     const visible = showCustomTitlebars();
@@ -87,6 +112,16 @@ function applyCustomTitlebarVisibility() {
     for (let i = 0; i < elements.length; i++) {
         const element = elements[i];
         if (element.dataset.hasCustomTitlebar === 'true') {
+            element.style.display = visible ? 'block' : 'none';
+        }
+    }
+}
+function applyFocusOverlayVisibility() {
+    const visible = showFocusOverlays();
+    const elements = document.getElementsByClassName('focus-overlay-layer');
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        if (element.dataset.hasFocusOverlay === 'true') {
             element.style.display = visible ? 'block' : 'none';
         }
     }
@@ -105,7 +140,7 @@ function buildContent() {
         const focusTree = focusTrees[selectedFocusTreeIndex];
         const focuses = Object.values(focusTree.focuses);
         const allowBranchOptionsValue = {};
-        const exprs = [{ scopeName: '', nodeContent: 'has_focus_tree = ' + focusTree.id }, ...checkedFocusesExprs, ...selectedExprs];
+        const exprs = [{ scopeName: '', nodeContent: 'has_focus_tree = ' + focusTree.id }, ...checkedFocusesExprs, ...selectedExprs, ...selectedInlayExprs];
         focusTree.allowBranchOptions.forEach(option => {
             const focus = focusTree.focuses[option];
             allowBranchOptionsValue[option] = !focus || focus.allowBranch === undefined || (0,_src_hoiformat_condition__WEBPACK_IMPORTED_MODULE_5__.applyCondition)(focus.allowBranch, exprs);
@@ -134,9 +169,12 @@ function buildContent() {
             cornerPosition: 0.5,
         });
         focustreeplaceholder.innerHTML = focusTreeContent + styleTable.toStyleElement(window.styleNonce);
+        const inlayWindowPlaceholder = document.getElementById('inlaywindowplaceholder');
+        inlayWindowPlaceholder.innerHTML = renderInlayWindows(focusTree, exprs);
         (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.subscribeNavigators)();
         setupCheckedFocuses(focuses, focusTree);
         applyCustomTitlebarVisibility();
+        applyFocusOverlayVisibility();
     });
 }
 function calculateFocusAllowed(focusTree, allowBranchOptionsValue) {
@@ -184,7 +222,9 @@ function updateSelectedFocusTree(clearCondition) {
         continuousFocuses.style.display = 'none';
     }
     if (useConditionInFocus) {
-        const conditionExprs = focusTree.conditionExprs.filter(e => e.scopeName !== '' ||
+        const conditionExprs = dedupeConditionExprs(focusTree.conditionExprs).filter(e => e.scopeName !== '' ||
+            (!e.nodeContent.startsWith('has_focus_tree = ') && !e.nodeContent.startsWith('has_completed_focus = ')));
+        const inlayConditionExprs = dedupeConditionExprs(focusTree.inlayConditionExprs).filter(e => e.scopeName !== '' ||
             (!e.nodeContent.startsWith('has_focus_tree = ') && !e.nodeContent.startsWith('has_completed_focus = ')));
         const conditionContainerElement = document.getElementById('condition-container');
         if (conditionContainerElement) {
@@ -194,6 +234,15 @@ function updateSelectedFocusTree(clearCondition) {
             conditions.select.innerHTML = `<span class="value"></span>
                 ${conditionExprs.map(option => `<div class="option" value='${option.scopeName}!|${option.nodeContent}'>${option.scopeName ? `[${option.scopeName}]` : ''}${option.nodeContent}</div>`).join('')}`;
             conditions.selectedValues$.next(clearCondition ? [] : selectedExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
+        }
+        const inlayConditionContainerElement = document.getElementById('inlay-condition-container');
+        if (inlayConditionContainerElement) {
+            inlayConditionContainerElement.style.display = showInlayWindows() && inlayConditionExprs.length > 0 ? 'block' : 'none';
+        }
+        if (inlayConditions) {
+            inlayConditions.select.innerHTML = `<span class="value"></span>
+                ${inlayConditionExprs.map(option => `<div class="option" value='${option.scopeName}!|${option.nodeContent}'>${option.scopeName ? `[${option.scopeName}]` : ''}${option.nodeContent}</div>`).join('')}`;
+            inlayConditions.selectedValues$.next(clearCondition ? [] : selectedInlayExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
         }
     }
     else {
@@ -205,6 +254,23 @@ function updateSelectedFocusTree(clearCondition) {
             allowBranches.select.innerHTML = `<span class="value"></span>
                 ${focusTree.allowBranchOptions.map(option => `<div class="option" value="inbranch_${option}">${option}</div>`).join('')}`;
             allowBranches.selectAll();
+        }
+    }
+    const inlayWindowsElement = document.getElementById('inlay-windows');
+    const inlayWindowsContainerElement = document.getElementById('inlay-window-container');
+    const showInlayWindowsContainerElement = document.getElementById('show-inlay-windows-container');
+    if (showInlayWindowsContainerElement) {
+        showInlayWindowsContainerElement.style.display = focusTree.inlayWindows.length > 0 ? 'flex' : 'none';
+    }
+    if (inlayWindowsContainerElement) {
+        inlayWindowsContainerElement.style.display = focusTree.inlayWindows.length > 0 ? 'block' : 'none';
+    }
+    if (inlayWindowsElement) {
+        inlayWindowsElement.innerHTML = focusTree.inlayWindows.map(inlay => `<option value="${inlay.id}">${inlay.id}</option>`).join('');
+        const selectedInlayWindowId = getSelectedInlayWindowId(focusTree);
+        if (selectedInlayWindowId) {
+            inlayWindowsElement.value = selectedInlayWindowId;
+            setSelectedInlayWindowId(focusTree, selectedInlayWindowId);
         }
     }
     const warnings = document.getElementById('warnings');
@@ -345,6 +411,46 @@ function setupCheckedFocuses(focuses, focusTree) {
         }
     }
 }
+function dedupeConditionExprs(exprs) {
+    const result = [];
+    for (const expr of exprs) {
+        if (!result.some(existing => existing.scopeName === expr.scopeName && existing.nodeContent === expr.nodeContent)) {
+            result.push(expr);
+        }
+    }
+    return result;
+}
+function renderInlayWindows(focusTree, exprs) {
+    var _a, _b;
+    if (!showInlayWindows()) {
+        return '';
+    }
+    const selectedInlayWindowId = getSelectedInlayWindowId(focusTree);
+    if (!selectedInlayWindowId) {
+        return '';
+    }
+    const selectedInlayWindow = focusTree.inlayWindows.find(inlay => inlay.id === selectedInlayWindowId);
+    if (!selectedInlayWindow || !(0,_src_hoiformat_condition__WEBPACK_IMPORTED_MODULE_5__.applyCondition)(selectedInlayWindow.visible, exprs)) {
+        return '';
+    }
+    const renderedInlayWindows = (_a = window.renderedInlayWindows) !== null && _a !== void 0 ? _a : {};
+    const template = (_b = renderedInlayWindows[selectedInlayWindow.id]) !== null && _b !== void 0 ? _b : '';
+    return selectedInlayWindow.scriptedImages.reduce((content, slot) => {
+        const activeOption = getActiveInlayOption(slot.gfxOptions, exprs);
+        return content.split(`{{inlay_slot_class:${slot.id}}}`).join(activeOption ? getInlayGfxClassName(activeOption.gfxName, activeOption.gfxFile) : '');
+    }, template);
+}
+function getActiveInlayOption(options, exprs) {
+    for (const option of options) {
+        if ((0,_src_hoiformat_condition__WEBPACK_IMPORTED_MODULE_5__.applyCondition)(option.condition, exprs)) {
+            return option;
+        }
+    }
+    return undefined;
+}
+function getInlayGfxClassName(gfxName, gfxFile) {
+    return 'st-inlay-gfx-' + (0,_src_util_styletable__WEBPACK_IMPORTED_MODULE_4__.normalizeForStyle)((gfxFile !== null && gfxFile !== void 0 ? gfxFile : 'missing') + '-' + (gfxName !== null && gfxName !== void 0 ? gfxName : 'missing'));
+}
 let retriggerSearch = () => { };
 window.addEventListener('load', (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.tryRun)(function () {
     return (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
@@ -352,22 +458,50 @@ window.addEventListener('load', (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.try
         const showCustomTitlebarsElement = document.getElementById('show-custom-titlebars');
         if (showCustomTitlebarsElement) {
             showCustomTitlebarsElement.checked = showCustomTitlebars();
-            customTitlebarsCheckbox === null || customTitlebarsCheckbox === void 0 ? void 0 : customTitlebarsCheckbox.dispose();
-            customTitlebarsCheckbox = new _util_checkbox__WEBPACK_IMPORTED_MODULE_8__.Checkbox(showCustomTitlebarsElement, (0,_util_i18n__WEBPACK_IMPORTED_MODULE_7__.feLocalize)('TODO', 'Custom titlebars'));
             showCustomTitlebarsElement.addEventListener('change', () => {
                 (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ showCustomTitlebars: showCustomTitlebarsElement.checked });
                 applyCustomTitlebarVisibility();
             });
         }
+        const showFocusOverlaysElement = document.getElementById('show-focus-overlays');
+        if (showFocusOverlaysElement) {
+            showFocusOverlaysElement.checked = showFocusOverlays();
+            showFocusOverlaysElement.addEventListener('change', () => {
+                (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ showFocusOverlays: showFocusOverlaysElement.checked });
+                applyFocusOverlayVisibility();
+            });
+        }
+        const showInlayWindowsElement = document.getElementById('show-inlay-windows');
+        if (showInlayWindowsElement) {
+            window.__showInlayWindows = false;
+            showInlayWindowsElement.checked = false;
+            showInlayWindowsElement.addEventListener('change', () => (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+                window.__showInlayWindows = showInlayWindowsElement.checked;
+                updateSelectedFocusTree(false);
+                yield buildContent();
+                retriggerSearch();
+            }));
+        }
         // Focuses
         const focusesElement = document.getElementById('focuses');
         if (focusesElement) {
             focusesElement.value = selectedFocusTreeIndex.toString();
-            focusesElement.addEventListener('change', () => {
+            focusesElement.addEventListener('change', () => (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
                 selectedFocusTreeIndex = parseInt(focusesElement.value);
                 (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ selectedFocusTreeIndex });
                 updateSelectedFocusTree(true);
-            });
+                yield buildContent();
+                retriggerSearch();
+            }));
+        }
+        const inlayWindowsElement = document.getElementById('inlay-windows');
+        if (inlayWindowsElement) {
+            inlayWindowsElement.addEventListener('change', () => (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+                const focusTree = focusTrees[selectedFocusTreeIndex];
+                setSelectedInlayWindowId(focusTree, inlayWindowsElement.value);
+                yield buildContent();
+                retriggerSearch();
+            }));
         }
         // Allow branch
         if (!useConditionInFocus) {
@@ -448,6 +582,31 @@ window.addEventListener('load', (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.try
                         }
                     });
                     (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ selectedExprs });
+                    yield buildContent();
+                    retriggerSearch();
+                }));
+            }
+            const inlayConditionsElement = document.getElementById('inlay-conditions');
+            if (inlayConditionsElement) {
+                inlayConditions = new _util_dropdown__WEBPACK_IMPORTED_MODULE_1__.DivDropdown(inlayConditionsElement, true);
+                inlayConditions.selectedValues$.next(selectedInlayExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
+                inlayConditions.selectedValues$.subscribe((selection) => (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+                    selectedInlayExprs = selection.map(selection => {
+                        const index = selection.indexOf('!|');
+                        if (index === -1) {
+                            return {
+                                scopeName: '',
+                                nodeContent: selection,
+                            };
+                        }
+                        else {
+                            return {
+                                scopeName: selection.substring(0, index),
+                                nodeContent: selection.substring(index + 2),
+                            };
+                        }
+                    });
+                    (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ selectedInlayExprs });
                     yield buildContent();
                     retriggerSearch();
                 }));

@@ -94,8 +94,10 @@ function renderFocusTrees(focusTrees, styleTable, gfxFiles, jsCodes, styleNonce,
         `)}"></div>` +
             `<div id="focustreecontent" class="${styleTable.oneTimeStyle('focustreecontent', () => `top:40px;left:-20px;position:relative`)}">
             <div id="focustreeplaceholder"></div>
+            <div id="inlaywindowplaceholder"></div>
             ${continuousFocusContent}
         </div>` +
+            renderInlayInspectorContainer(styleTable) +
             renderWarningContainer(styleTable) +
             renderToolBar(focusTrees, styleTable));
     });
@@ -128,6 +130,23 @@ function renderWarningContainer(styleTable) {
         `)}"></textarea>
     </div>`;
 }
+function renderInlayInspectorContainer(styleTable) {
+    return `
+    <div id="inlay-inspector" class="${styleTable.style('inlay-inspector', () => `
+        position: fixed;
+        top: 40px;
+        right: 0;
+        width: 420px;
+        height: calc(100vh - 40px);
+        overflow: auto;
+        box-sizing: border-box;
+        padding: 12px;
+        background: var(--vscode-editor-background);
+        border-left: 1px solid var(--vscode-panel-border);
+        display: none;
+        z-index: 11;
+    `)}"></div>`;
+}
 function renderToolBar(focusTrees, styleTable) {
     const focuses = focusTrees.length <= 1 ? '' : `
         <label for="focuses" class="${styleTable.style('focusesLabel', () => `margin-right:5px`)}">${(0, i18n_1.localize)('focustree.focustree', 'Focus tree: ')}</label>
@@ -144,11 +163,36 @@ function renderToolBar(focusTrees, styleTable) {
             type="text"
         />`;
     const customTitlebars = `
-        <label for="show-custom-titlebars">${(0, i18n_1.localize)('TODO', 'Custom titlebars')}</label>
-        <input
-            id="show-custom-titlebars"
-            type="checkbox"
-        />`;
+        <div class="${styleTable.style('customTitlebarsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
+            <label for="show-custom-titlebars">${(0, i18n_1.localize)('TODO', 'Custom titlebars')}</label>
+            <input
+                id="show-custom-titlebars"
+                type="checkbox"
+            />
+        </div>`;
+    const focusOverlays = `
+        <div class="${styleTable.style('focusOverlaysContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
+            <label for="show-focus-overlays">${(0, i18n_1.localize)('TODO', 'Focus overlays')}</label>
+            <input
+                id="show-focus-overlays"
+                type="checkbox"
+            />
+        </div>`;
+    const inlayWindowsToggle = `
+        <div class="${styleTable.style('inlayWindowsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
+            <label for="show-inlay-windows">${(0, i18n_1.localize)('TODO', 'Inlay windows')}</label>
+            <input
+                id="show-inlay-windows"
+                type="checkbox"
+            />
+        </div>`;
+    const inlayWindows = `
+        <div id="inlay-window-container">
+            <label for="inlay-windows" class="${styleTable.style('inlayWindowsLabel', () => `margin-right:5px`)}">${(0, i18n_1.localize)('TODO', 'Inlay window: ')}</label>
+            <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
+                <select id="inlay-windows" class="select multiple-select" tabindex="0" role="combobox"></select>
+            </div>
+        </div>`;
     const allowbranch = `
         <div id="allowbranch-container">
             <label for="allowbranch" class="${styleTable.style('allowbranchLabel', () => `margin-right:5px`)}">${(0, i18n_1.localize)('focustree.allowbranch', 'Allow branch: ')}</label>
@@ -176,13 +220,16 @@ function renderToolBar(focusTrees, styleTable) {
             ${focuses}
             ${searchbox}
             ${customTitlebars}
+            ${focusOverlays}
+            ${inlayWindowsToggle}
+            ${inlayWindows}
             ${featureflags_1.useConditionInFocus ? conditions : allowbranch}
             ${warningsButton}
         </div>
     </div>`;
 }
 function renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     return tslib_1.__awaiter(this, void 0, void 0, function* () {
         for (const focusIcon of focus.icon) {
             const iconName = focusIcon.icon;
@@ -192,12 +239,21 @@ function renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles) {
         }
         styleTable.style('focus-icon-' + (0, styletable_1.normalizeForStyle)('-empty'), () => 'background: grey;');
         const titlebarObject = yield (0, titlebar_1.getFocusTitlebarImage)(focus.textIcon, titlebarStyles);
-        const titlebarClass = 'focus-titlebar-' + (0, styletable_1.normalizeForStyle)((_a = focus.textIcon) !== null && _a !== void 0 ? _a : '-empty');
-        styleTable.style(titlebarClass, () => titlebarObject ? `
+        const titlebarClass = styleTable.style('focus-titlebar-' + (0, styletable_1.normalizeForStyle)((_a = focus.textIcon) !== null && _a !== void 0 ? _a : '-empty'), () => titlebarObject ? `
             background-image: url(${titlebarObject.uri});
             width: ${titlebarObject.width}px;
             height: ${titlebarObject.height}px;
             background-size: ${titlebarObject.width}px ${titlebarObject.height}px;
+        ` : `
+            display: none;
+        `);
+        const overlayObject = yield (0, titlebar_1.getFocusOverlayImage)(focus.overlay);
+        const overlayClass = styleTable.style('focus-overlay-' + (0, styletable_1.normalizeForStyle)((_b = focus.overlay) !== null && _b !== void 0 ? _b : '-empty'), () => overlayObject ? `
+            background-image: url(${overlayObject.uri});
+            width: ${overlayObject.width}px;
+            height: ${overlayObject.height}px;
+            background-size: ${overlayObject.width}px ${overlayObject.height}px;
+            display: block;
         ` : `
             display: none;
         `);
@@ -219,40 +275,57 @@ function renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles) {
         return `<div
     class="
         navigator
-        {{iconClass}}
         ${styleTable.style('focus-common', () => `
             position: relative;
-            background-position-x: center;
-            background-position-y: calc(50% - 18px);
-            background-repeat: no-repeat;
             width: 100%;
             height: 100%;
             text-align: center;
             cursor: pointer;
         `)}
     "
-    start="${(_b = focus.token) === null || _b === void 0 ? void 0 : _b.start}"
-    end="${(_c = focus.token) === null || _c === void 0 ? void 0 : _c.end}"
+    start="${(_c = focus.token) === null || _c === void 0 ? void 0 : _c.start}"
+    end="${(_d = focus.token) === null || _d === void 0 ? void 0 : _d.end}"
     ${file === focus.file ? '' : `file="${focus.file}"`}
     title="${focus.id}\n({{position}})">
+        <div
+        class="{{iconClass}} ${styleTable.style('focus-icon-layer', () => `
+            position: absolute;
+            inset: 0;
+            background-position-x: center;
+            background-position-y: calc(50% - 18px);
+            background-repeat: no-repeat;
+            z-index: 1;
+            pointer-events: none;
+        `)}"></div>
         <div
         class="focus-titlebar-layer ${titlebarClass} ${styleTable.style('focus-titlebar-layer', () => `
             position: absolute;
             left: 50%;
-            top: 61px;
+            top: 70px;
             transform: translateX(-50%);
             background-repeat: no-repeat;
             pointer-events: none;
             z-index: 0;
         `)}"
         data-has-custom-titlebar="${titlebarObject ? 'true' : 'false'}"></div>
-        <div class="focus-checkbox ${styleTable.style('focus-checkbox', () => `position: absolute; top: 1px;`)}">
+        <div
+        class="focus-overlay-layer ${overlayClass} ${styleTable.style('focus-overlay-layer', () => `
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, calc(-50% - 3px));
+            background-repeat: no-repeat;
+            pointer-events: none;
+            z-index: 2;
+        `)}"
+        data-has-focus-overlay="${overlayObject ? 'true' : 'false'}"></div>
+        <div class="focus-checkbox ${styleTable.style('focus-checkbox', () => `position: absolute; top: 1px; z-index: 3;`)}">
             <input id="checkbox-${(0, styletable_1.normalizeForStyle)(focus.id)}" type="checkbox"/>
         </div>
         <span
         class="${styleTable.style('focus-span', () => `
             position: relative;
-            z-index: 1;
+            z-index: 3;
             margin: 10px -400px;
             margin-top: 85px;
             text-align: center;

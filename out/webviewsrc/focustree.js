@@ -56,10 +56,34 @@ let selectedFocusTreeIndex = Math.min(focusTrees.length - 1, (_b = (0, common_1.
 let allowBranches = undefined;
 let conditions = undefined;
 let checkedFocuses = {};
-let customTitlebarsCheckbox = undefined;
 function showCustomTitlebars() {
     var _a;
     return (_a = (0, common_1.getState)().showCustomTitlebars) !== null && _a !== void 0 ? _a : true;
+}
+function showFocusOverlays() {
+    var _a;
+    return (_a = (0, common_1.getState)().showFocusOverlays) !== null && _a !== void 0 ? _a : true;
+}
+function showInlayWindows() {
+    var _a;
+    return (_a = (0, common_1.getState)().showInlayWindows) !== null && _a !== void 0 ? _a : false;
+}
+function getSelectedInlayWindowIds() {
+    var _a;
+    return (_a = (0, common_1.getState)().selectedInlayWindowIds) !== null && _a !== void 0 ? _a : {};
+}
+function getSelectedInlayWindowId(focusTree) {
+    var _a;
+    const selected = getSelectedInlayWindowIds()[focusTree.id];
+    if (focusTree.inlayWindows.some(inlay => inlay.id === selected)) {
+        return selected;
+    }
+    return (_a = focusTree.inlayWindows[0]) === null || _a === void 0 ? void 0 : _a.id;
+}
+function setSelectedInlayWindowId(focusTree, inlayWindowId) {
+    const selectedInlayWindowIds = getSelectedInlayWindowIds();
+    selectedInlayWindowIds[focusTree.id] = inlayWindowId;
+    (0, common_1.setState)({ selectedInlayWindowIds });
 }
 function applyCustomTitlebarVisibility() {
     const visible = showCustomTitlebars();
@@ -67,6 +91,16 @@ function applyCustomTitlebarVisibility() {
     for (let i = 0; i < elements.length; i++) {
         const element = elements[i];
         if (element.dataset.hasCustomTitlebar === 'true') {
+            element.style.display = visible ? 'block' : 'none';
+        }
+    }
+}
+function applyFocusOverlayVisibility() {
+    const visible = showFocusOverlays();
+    const elements = document.getElementsByClassName('focus-overlay-layer');
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        if (element.dataset.hasFocusOverlay === 'true') {
             element.style.display = visible ? 'block' : 'none';
         }
     }
@@ -114,9 +148,13 @@ function buildContent() {
             cornerPosition: 0.5,
         });
         focustreeplaceholder.innerHTML = focusTreeContent + styleTable.toStyleElement(window.styleNonce);
+        const inlayWindowPlaceholder = document.getElementById('inlaywindowplaceholder');
+        inlayWindowPlaceholder.innerHTML = renderInlayWindows(focusTree, exprs, styleTable);
+        renderInlayInspector(focusTree, exprs);
         (0, common_1.subscribeNavigators)();
         setupCheckedFocuses(focuses, focusTree);
         applyCustomTitlebarVisibility();
+        applyFocusOverlayVisibility();
     });
 }
 function calculateFocusAllowed(focusTree, allowBranchOptionsValue) {
@@ -164,7 +202,7 @@ function updateSelectedFocusTree(clearCondition) {
         continuousFocuses.style.display = 'none';
     }
     if (useConditionInFocus) {
-        const conditionExprs = focusTree.conditionExprs.filter(e => e.scopeName !== '' ||
+        const conditionExprs = dedupeConditionExprs(focusTree.conditionExprs.concat(focusTree.inlayConditionExprs)).filter(e => e.scopeName !== '' ||
             (!e.nodeContent.startsWith('has_focus_tree = ') && !e.nodeContent.startsWith('has_completed_focus = ')));
         const conditionContainerElement = document.getElementById('condition-container');
         if (conditionContainerElement) {
@@ -185,6 +223,19 @@ function updateSelectedFocusTree(clearCondition) {
             allowBranches.select.innerHTML = `<span class="value"></span>
                 ${focusTree.allowBranchOptions.map(option => `<div class="option" value="inbranch_${option}">${option}</div>`).join('')}`;
             allowBranches.selectAll();
+        }
+    }
+    const inlayWindowsElement = document.getElementById('inlay-windows');
+    const inlayWindowsContainerElement = document.getElementById('inlay-window-container');
+    if (inlayWindowsContainerElement) {
+        inlayWindowsContainerElement.style.display = focusTree.inlayWindows.length > 0 ? 'block' : 'none';
+    }
+    if (inlayWindowsElement) {
+        inlayWindowsElement.innerHTML = focusTree.inlayWindows.map(inlay => `<option value="${inlay.id}">${inlay.id}</option>`).join('');
+        const selectedInlayWindowId = getSelectedInlayWindowId(focusTree);
+        if (selectedInlayWindowId) {
+            inlayWindowsElement.value = selectedInlayWindowId;
+            setSelectedInlayWindowId(focusTree, selectedInlayWindowId);
         }
     }
     const warnings = document.getElementById('warnings');
@@ -325,6 +376,136 @@ function setupCheckedFocuses(focuses, focusTree) {
         }
     }
 }
+function dedupeConditionExprs(exprs) {
+    const result = [];
+    for (const expr of exprs) {
+        if (!result.some(existing => existing.scopeName === expr.scopeName && existing.nodeContent === expr.nodeContent)) {
+            result.push(expr);
+        }
+    }
+    return result;
+}
+function renderInlayWindows(focusTree, exprs, styleTable) {
+    var _a, _b, _c;
+    if (!showInlayWindows()) {
+        return '';
+    }
+    const selectedInlayWindowId = getSelectedInlayWindowId(focusTree);
+    if (!selectedInlayWindowId) {
+        return '';
+    }
+    const selectedInlayWindow = focusTree.inlayWindows.find(inlay => inlay.id === selectedInlayWindowId);
+    if (!selectedInlayWindow || !(0, condition_1.applyCondition)(selectedInlayWindow.visible, exprs)) {
+        return '';
+    }
+    const markerClass = styleTable.style('focus-inlay-window-marker', () => `
+        position: absolute;
+        min-width: 160px;
+        min-height: 70px;
+        padding: 8px 12px;
+        box-sizing: border-box;
+        border: 1px dashed var(--vscode-textLink-foreground);
+        background: color-mix(in srgb, var(--vscode-editor-background) 82%, var(--vscode-textLink-foreground) 18%);
+        color: var(--vscode-foreground);
+        z-index: 5;
+        cursor: pointer;
+    `);
+    const titleClass = styleTable.style('focus-inlay-window-marker-title', () => `
+        font-weight: bold;
+        margin-bottom: 4px;
+    `);
+    const activeSlotsText = selectedInlayWindow.scriptedImages.slice(0, 3).map(slot => {
+        var _a;
+        const activeOption = getActiveInlayOption(slot.gfxOptions, exprs);
+        return `${slot.id}: ${(_a = activeOption === null || activeOption === void 0 ? void 0 : activeOption.gfxName) !== null && _a !== void 0 ? _a : '-'}`;
+    }).join('<br/>');
+    return `<div
+        class="navigator ${markerClass}"
+        start="${(_a = selectedInlayWindow.token) === null || _a === void 0 ? void 0 : _a.start}"
+        end="${(_b = selectedInlayWindow.token) === null || _b === void 0 ? void 0 : _b.end}"
+        file="${selectedInlayWindow.file}"
+        style="left:${selectedInlayWindow.position.x}px;top:${selectedInlayWindow.position.y}px;"
+        title="${selectedInlayWindow.id}">
+            <div class="${titleClass}">${selectedInlayWindow.id}</div>
+            <div>${(_c = selectedInlayWindow.windowName) !== null && _c !== void 0 ? _c : ''}</div>
+            <div>${activeSlotsText}</div>
+        </div>`;
+}
+function getActiveInlayOption(options, exprs) {
+    for (const option of options) {
+        if ((0, condition_1.applyCondition)(option.condition, exprs)) {
+            return option;
+        }
+    }
+    return undefined;
+}
+function renderInlayInspector(focusTree, exprs) {
+    var _a, _b, _c, _d, _e;
+    const inlayInspector = document.getElementById('inlay-inspector');
+    if (!inlayInspector) {
+        return;
+    }
+    if (!showInlayWindows()) {
+        inlayInspector.style.display = 'none';
+        inlayInspector.innerHTML = '';
+        return;
+    }
+    const selectedInlayWindowId = getSelectedInlayWindowId(focusTree);
+    const selectedInlayWindow = focusTree.inlayWindows.find(inlay => inlay.id === selectedInlayWindowId);
+    if (!selectedInlayWindow) {
+        inlayInspector.style.display = 'none';
+        inlayInspector.innerHTML = '';
+        return;
+    }
+    inlayInspector.style.display = 'block';
+    const visible = (0, condition_1.applyCondition)(selectedInlayWindow.visible, exprs);
+    const slotSections = selectedInlayWindow.scriptedImages.map(slot => {
+        var _a, _b;
+        const activeOption = getActiveInlayOption(slot.gfxOptions, exprs);
+        const optionRows = slot.gfxOptions.map(option => {
+            var _a, _b, _c, _d;
+            const active = (activeOption === null || activeOption === void 0 ? void 0 : activeOption.gfxName) === option.gfxName;
+            const navigationFile = (_a = option.gfxFile) !== null && _a !== void 0 ? _a : option.file;
+            return `<div
+                class="navigator inlay-inspector-row${active ? ' active' : ''}"
+                start="${(option.gfxFile ? undefined : (_b = option.token) === null || _b === void 0 ? void 0 : _b.start)}"
+                end="${(option.gfxFile ? undefined : (_c = option.token) === null || _c === void 0 ? void 0 : _c.end)}"
+                file="${navigationFile}"
+                style="padding:6px 8px;border:1px solid var(--vscode-panel-border);margin-bottom:6px;${active ? 'background: var(--vscode-list-activeSelectionBackground);' : ''}">
+                    <div><strong>${option.gfxName}</strong>${active ? ' (active)' : ''}</div>
+                    <div>${(0, condition_1.conditionToString)(option.condition)}</div>
+                    <div>${(_d = option.gfxFile) !== null && _d !== void 0 ? _d : option.file}</div>
+                </div>`;
+        }).join('');
+        return `<div style="margin-bottom:14px;">
+            <div class="navigator" start="${(_a = slot.token) === null || _a === void 0 ? void 0 : _a.start}" end="${(_b = slot.token) === null || _b === void 0 ? void 0 : _b.end}" file="${slot.file}" style="font-weight:bold;margin-bottom:6px;cursor:pointer;">${slot.id}</div>
+            ${optionRows}
+        </div>`;
+    }).join('');
+    const buttonSections = selectedInlayWindow.scriptedButtons.map(button => {
+        var _a, _b;
+        return `<div style="padding:6px 0;border-top:1px solid var(--vscode-panel-border);">
+        <div class="navigator" start="${(_a = button.token) === null || _a === void 0 ? void 0 : _a.start}" end="${(_b = button.token) === null || _b === void 0 ? void 0 : _b.end}" file="${button.file}" style="font-weight:bold;cursor:pointer;">${button.id}</div>
+        <div>${button.available ? (0, condition_1.conditionToString)(button.available) : (0, i18n_1.feLocalize)('TODO', 'No available trigger')}</div>
+    </div>`;
+    }).join('');
+    inlayInspector.innerHTML = `
+        <div class="navigator" start="${(_a = selectedInlayWindow.token) === null || _a === void 0 ? void 0 : _a.start}" end="${(_b = selectedInlayWindow.token) === null || _b === void 0 ? void 0 : _b.end}" file="${selectedInlayWindow.file}" style="cursor:pointer;">
+            <div style="font-size:16px;font-weight:bold;">${selectedInlayWindow.id}</div>
+            <div>${(_c = selectedInlayWindow.windowName) !== null && _c !== void 0 ? _c : ''}</div>
+            <div>${selectedInlayWindow.file}</div>
+        </div>
+        <div class="navigator" start="${(_d = selectedInlayWindow.token) === null || _d === void 0 ? void 0 : _d.start}" end="${(_e = selectedInlayWindow.token) === null || _e === void 0 ? void 0 : _e.end}" file="${selectedInlayWindow.file}" style="margin:12px 0;padding:8px;border:1px solid var(--vscode-panel-border);cursor:pointer;">
+            <div><strong>visible</strong>: ${visible ? 'true' : 'false'}</div>
+            <div>${(0, condition_1.conditionToString)(selectedInlayWindow.visible)}</div>
+        </div>
+        <div style="font-size:13px;font-weight:bold;margin-bottom:8px;">Scripted images</div>
+        ${slotSections || '<div>No scripted images.</div>'}
+        <div style="font-size:13px;font-weight:bold;margin:16px 0 8px;">Scripted buttons</div>
+        ${buttonSections || '<div>No scripted buttons.</div>'}
+    `;
+    (0, common_1.subscribeNavigators)();
+}
 let retriggerSearch = () => { };
 window.addEventListener('load', (0, common_1.tryRun)(function () {
     return tslib_1.__awaiter(this, void 0, void 0, function* () {
@@ -332,12 +513,27 @@ window.addEventListener('load', (0, common_1.tryRun)(function () {
         const showCustomTitlebarsElement = document.getElementById('show-custom-titlebars');
         if (showCustomTitlebarsElement) {
             showCustomTitlebarsElement.checked = showCustomTitlebars();
-            customTitlebarsCheckbox === null || customTitlebarsCheckbox === void 0 ? void 0 : customTitlebarsCheckbox.dispose();
-            customTitlebarsCheckbox = new checkbox_1.Checkbox(showCustomTitlebarsElement);
             showCustomTitlebarsElement.addEventListener('change', () => {
                 (0, common_1.setState)({ showCustomTitlebars: showCustomTitlebarsElement.checked });
                 applyCustomTitlebarVisibility();
             });
+        }
+        const showFocusOverlaysElement = document.getElementById('show-focus-overlays');
+        if (showFocusOverlaysElement) {
+            showFocusOverlaysElement.checked = showFocusOverlays();
+            showFocusOverlaysElement.addEventListener('change', () => {
+                (0, common_1.setState)({ showFocusOverlays: showFocusOverlaysElement.checked });
+                applyFocusOverlayVisibility();
+            });
+        }
+        const showInlayWindowsElement = document.getElementById('show-inlay-windows');
+        if (showInlayWindowsElement) {
+            showInlayWindowsElement.checked = showInlayWindows();
+            showInlayWindowsElement.addEventListener('change', () => tslib_1.__awaiter(this, void 0, void 0, function* () {
+                (0, common_1.setState)({ showInlayWindows: showInlayWindowsElement.checked });
+                yield buildContent();
+                retriggerSearch();
+            }));
         }
         // Focuses
         const focusesElement = document.getElementById('focuses');
@@ -348,6 +544,15 @@ window.addEventListener('load', (0, common_1.tryRun)(function () {
                 (0, common_1.setState)({ selectedFocusTreeIndex });
                 updateSelectedFocusTree(true);
             });
+        }
+        const inlayWindowsElement = document.getElementById('inlay-windows');
+        if (inlayWindowsElement) {
+            inlayWindowsElement.addEventListener('change', () => tslib_1.__awaiter(this, void 0, void 0, function* () {
+                const focusTree = focusTrees[selectedFocusTreeIndex];
+                setSelectedInlayWindowId(focusTree, inlayWindowsElement.value);
+                yield buildContent();
+                retriggerSearch();
+            }));
         }
         // Allow branch
         if (!useConditionInFocus) {

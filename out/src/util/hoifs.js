@@ -15,7 +15,14 @@ const installPathContainer = {
 function registerHoiFs() {
     const disposables = [];
     disposables.push(vscode.commands.registerCommand(constants_1.Commands.SelectHoiFolder, selectHoiFolder));
-    disposables.push(vscode.workspace.registerFileSystemProvider(constants_1.Hoi4FsSchema, new Hoi4UtilsFsProvider(), { isReadonly: true }));
+    try {
+        disposables.push(vscode.workspace.registerFileSystemProvider(constants_1.Hoi4FsSchema, new Hoi4UtilsFsProvider(), { isReadonly: true }));
+    }
+    catch (e) {
+        if (!(0, common_1.forceError)(e).message.includes(`scheme '${constants_1.Hoi4FsSchema}' is already registered`)) {
+            throw e;
+        }
+    }
     if (!IS_WEB_EXT) {
         disposables.push(vscode.workspace.onDidChangeConfiguration(onChangeWorkspaceConfiguration));
     }

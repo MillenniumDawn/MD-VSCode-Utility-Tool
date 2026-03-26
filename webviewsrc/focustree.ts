@@ -55,14 +55,42 @@ const useConditionInFocus: boolean = (window as any).useConditionInFocus;
 const focusTrees: FocusTree[] = (window as any).focusTrees;
 
 let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
+let selectedInlayExprs: ConditionItem[] = getState().selectedInlayExprs ?? [];
 let selectedFocusTreeIndex: number = Math.min(focusTrees.length - 1, getState().selectedFocusTreeIndex ?? 0);
 let allowBranches: DivDropdown | undefined = undefined;
 let conditions: DivDropdown | undefined = undefined;
+let inlayConditions: DivDropdown | undefined = undefined;
 let checkedFocuses: Record<string, Checkbox> = {};
-let customTitlebarsCheckbox: Checkbox | undefined = undefined;
 
 function showCustomTitlebars() {
     return getState().showCustomTitlebars ?? true;
+}
+
+function showFocusOverlays() {
+    return getState().showFocusOverlays ?? true;
+}
+
+function showInlayWindows() {
+    return !!(window as any).__showInlayWindows;
+}
+
+function getSelectedInlayWindowIds() {
+    return getState().selectedInlayWindowIds ?? {} as Record<string, string | undefined>;
+}
+
+function getSelectedInlayWindowId(focusTree: FocusTree): string | undefined {
+    const selected = getSelectedInlayWindowIds()[focusTree.id];
+    if (focusTree.inlayWindows.some(inlay => inlay.id === selected)) {
+        return selected;
+    }
+
+    return focusTree.inlayWindows[0]?.id;
+}
+
+function setSelectedInlayWindowId(focusTree: FocusTree, inlayWindowId: string | undefined) {
+    const selectedInlayWindowIds = getSelectedInlayWindowIds();
+    selectedInlayWindowIds[focusTree.id] = inlayWindowId;
+    setState({ selectedInlayWindowIds });
 }
 
 function applyCustomTitlebarVisibility() {
@@ -71,6 +99,17 @@ function applyCustomTitlebarVisibility() {
     for (let i = 0; i < elements.length; i++) {
         const element = elements[i] as HTMLDivElement;
         if (element.dataset.hasCustomTitlebar === 'true') {
+            element.style.display = visible ? 'block' : 'none';
+        }
+    }
+}
+
+function applyFocusOverlayVisibility() {
+    const visible = showFocusOverlays();
+    const elements = document.getElementsByClassName('focus-overlay-layer');
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i] as HTMLDivElement;
+        if (element.dataset.hasFocusOverlay === 'true') {
             element.style.display = visible ? 'block' : 'none';
         }
     }
@@ -91,7 +130,7 @@ async function buildContent() {
     const focuses = Object.values(focusTree.focuses);
 
     const allowBranchOptionsValue: Record<string, boolean> = {};
-    const exprs = [{ scopeName: '', nodeContent: 'has_focus_tree = ' + focusTree.id }, ...checkedFocusesExprs, ...selectedExprs];
+    const exprs = [{ scopeName: '', nodeContent: 'has_focus_tree = ' + focusTree.id }, ...checkedFocusesExprs, ...selectedExprs, ...selectedInlayExprs];
     focusTree.allowBranchOptions.forEach(option => {
         const focus = focusTree.focuses[option];
         allowBranchOptionsValue[option] = !focus || focus.allowBranch === undefined || applyCondition(focus.allowBranch, exprs);
@@ -128,10 +167,13 @@ async function buildContent() {
     });
 
     focustreeplaceholder.innerHTML = focusTreeContent + styleTable.toStyleElement((window as any).styleNonce);
+    const inlayWindowPlaceholder = document.getElementById('inlaywindowplaceholder') as HTMLDivElement;
+    inlayWindowPlaceholder.innerHTML = renderInlayWindows(focusTree, exprs);
 
     subscribeNavigators();
     setupCheckedFocuses(focuses, focusTree);
     applyCustomTitlebarVisibility();
+    applyFocusOverlayVisibility();
 }
 
 function calculateFocusAllowed(focusTree: FocusTree, allowBranchOptionsValue: Record<string, boolean>) {
@@ -184,7 +226,9 @@ function updateSelectedFocusTree(clearCondition: boolean) {
     }
 
     if (useConditionInFocus) {
-        const conditionExprs = focusTree.conditionExprs.filter(e => e.scopeName !== '' ||
+        const conditionExprs = dedupeConditionExprs(focusTree.conditionExprs).filter(e => e.scopeName !== '' ||
+            (!e.nodeContent.startsWith('has_focus_tree = ') && !e.nodeContent.startsWith('has_completed_focus = ')));
+        const inlayConditionExprs = dedupeConditionExprs(focusTree.inlayConditionExprs).filter(e => e.scopeName !== '' ||
             (!e.nodeContent.startsWith('has_focus_tree = ') && !e.nodeContent.startsWith('has_completed_focus = ')));
 
         const conditionContainerElement = document.getElementById('condition-container') as HTMLDivElement | null;
@@ -200,6 +244,19 @@ function updateSelectedFocusTree(clearCondition: boolean) {
             conditions.selectedValues$.next(clearCondition ? [] : selectedExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
         }
 
+        const inlayConditionContainerElement = document.getElementById('inlay-condition-container') as HTMLDivElement | null;
+        if (inlayConditionContainerElement) {
+            inlayConditionContainerElement.style.display = showInlayWindows() && inlayConditionExprs.length > 0 ? 'block' : 'none';
+        }
+
+        if (inlayConditions) {
+            inlayConditions.select.innerHTML = `<span class="value"></span>
+                ${inlayConditionExprs.map(option =>
+                    `<div class="option" value='${option.scopeName}!|${option.nodeContent}'>${option.scopeName ? `[${option.scopeName}]` : ''}${option.nodeContent}</div>`
+                ).join('')}`;
+            inlayConditions.selectedValues$.next(clearCondition ? [] : selectedInlayExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
+        }
+
     } else {
         const allowBranchesContainerElement = document.getElementById('allowbranch-container') as HTMLDivElement | null;
         if (allowBranchesContainerElement) {
@@ -210,6 +267,24 @@ function updateSelectedFocusTree(clearCondition: boolean) {
             allowBranches.select.innerHTML = `<span class="value"></span>
                 ${focusTree.allowBranchOptions.map(option => `<div class="option" value="inbranch_${option}">${option}</div>`).join('')}`;
             allowBranches.selectAll();
+        }
+    }
+
+    const inlayWindowsElement = document.getElementById('inlay-windows') as HTMLSelectElement | null;
+    const inlayWindowsContainerElement = document.getElementById('inlay-window-container') as HTMLDivElement | null;
+    const showInlayWindowsContainerElement = document.getElementById('show-inlay-windows-container') as HTMLDivElement | null;
+    if (showInlayWindowsContainerElement) {
+        showInlayWindowsContainerElement.style.display = focusTree.inlayWindows.length > 0 ? 'flex' : 'none';
+    }
+    if (inlayWindowsContainerElement) {
+        inlayWindowsContainerElement.style.display = focusTree.inlayWindows.length > 0 ? 'block' : 'none';
+    }
+    if (inlayWindowsElement) {
+        inlayWindowsElement.innerHTML = focusTree.inlayWindows.map(inlay => `<option value="${inlay.id}">${inlay.id}</option>`).join('');
+        const selectedInlayWindowId = getSelectedInlayWindowId(focusTree);
+        if (selectedInlayWindowId) {
+            inlayWindowsElement.value = selectedInlayWindowId;
+            setSelectedInlayWindowId(focusTree, selectedInlayWindowId);
         }
     }
 
@@ -379,6 +454,54 @@ function setupCheckedFocuses(focuses: Focus[], focusTree: FocusTree) {
     }
 }
 
+function dedupeConditionExprs(exprs: ConditionItem[]): ConditionItem[] {
+    const result: ConditionItem[] = [];
+    for (const expr of exprs) {
+        if (!result.some(existing => existing.scopeName === expr.scopeName && existing.nodeContent === expr.nodeContent)) {
+            result.push(expr);
+        }
+    }
+
+    return result;
+}
+
+function renderInlayWindows(focusTree: FocusTree, exprs: ConditionItem[]): string {
+    if (!showInlayWindows()) {
+        return '';
+    }
+
+    const selectedInlayWindowId = getSelectedInlayWindowId(focusTree);
+    if (!selectedInlayWindowId) {
+        return '';
+    }
+
+    const selectedInlayWindow = focusTree.inlayWindows.find(inlay => inlay.id === selectedInlayWindowId);
+    if (!selectedInlayWindow || !applyCondition(selectedInlayWindow.visible, exprs)) {
+        return '';
+    }
+
+    const renderedInlayWindows: Record<string, string> = (window as any).renderedInlayWindows ?? {};
+    const template = renderedInlayWindows[selectedInlayWindow.id] ?? '';
+    return selectedInlayWindow.scriptedImages.reduce((content, slot) => {
+        const activeOption = getActiveInlayOption(slot.gfxOptions, exprs);
+        return content.split(`{{inlay_slot_class:${slot.id}}}`).join(activeOption ? getInlayGfxClassName(activeOption.gfxName, activeOption.gfxFile) : '');
+    }, template);
+}
+
+function getActiveInlayOption<T extends { condition: any }>(options: T[], exprs: ConditionItem[]): T | undefined {
+    for (const option of options) {
+        if (applyCondition(option.condition, exprs)) {
+            return option;
+        }
+    }
+
+    return undefined;
+}
+
+function getInlayGfxClassName(gfxName: string | undefined, gfxFile: string | undefined): string {
+    return 'st-inlay-gfx-' + normalizeForStyle((gfxFile ?? 'missing') + '-' + (gfxName ?? 'missing'));
+}
+
 let retriggerSearch: () => void = () => {};
 
 window.addEventListener('load', tryRun(async function() {
@@ -386,11 +509,28 @@ window.addEventListener('load', tryRun(async function() {
     const showCustomTitlebarsElement = document.getElementById('show-custom-titlebars') as HTMLInputElement | null;
     if (showCustomTitlebarsElement) {
         showCustomTitlebarsElement.checked = showCustomTitlebars();
-        customTitlebarsCheckbox?.dispose();
-        customTitlebarsCheckbox = new Checkbox(showCustomTitlebarsElement, feLocalize('TODO', 'Custom titlebars'));
         showCustomTitlebarsElement.addEventListener('change', () => {
             setState({ showCustomTitlebars: showCustomTitlebarsElement.checked });
             applyCustomTitlebarVisibility();
+        });
+    }
+    const showFocusOverlaysElement = document.getElementById('show-focus-overlays') as HTMLInputElement | null;
+    if (showFocusOverlaysElement) {
+        showFocusOverlaysElement.checked = showFocusOverlays();
+        showFocusOverlaysElement.addEventListener('change', () => {
+            setState({ showFocusOverlays: showFocusOverlaysElement.checked });
+            applyFocusOverlayVisibility();
+        });
+    }
+    const showInlayWindowsElement = document.getElementById('show-inlay-windows') as HTMLInputElement | null;
+    if (showInlayWindowsElement) {
+        (window as any).__showInlayWindows = false;
+        showInlayWindowsElement.checked = false;
+        showInlayWindowsElement.addEventListener('change', async () => {
+            (window as any).__showInlayWindows = showInlayWindowsElement.checked;
+            updateSelectedFocusTree(false);
+            await buildContent();
+            retriggerSearch();
         });
     }
 
@@ -398,10 +538,22 @@ window.addEventListener('load', tryRun(async function() {
     const focusesElement = document.getElementById('focuses') as HTMLSelectElement | null;
     if (focusesElement) {
         focusesElement.value = selectedFocusTreeIndex.toString();
-        focusesElement.addEventListener('change', () => {
+        focusesElement.addEventListener('change', async () => {
             selectedFocusTreeIndex = parseInt(focusesElement.value);
             setState({ selectedFocusTreeIndex });
             updateSelectedFocusTree(true);
+            await buildContent();
+            retriggerSearch();
+        });
+    }
+
+    const inlayWindowsElement = document.getElementById('inlay-windows') as HTMLSelectElement | null;
+    if (inlayWindowsElement) {
+        inlayWindowsElement.addEventListener('change', async () => {
+            const focusTree = focusTrees[selectedFocusTreeIndex];
+            setSelectedInlayWindowId(focusTree, inlayWindowsElement.value);
+            await buildContent();
+            retriggerSearch();
         });
     }
 
@@ -495,6 +647,34 @@ window.addEventListener('load', tryRun(async function() {
 
                 setState({ selectedExprs });
                 
+                await buildContent();
+                retriggerSearch();
+            });
+        }
+
+        const inlayConditionsElement = document.getElementById('inlay-conditions') as HTMLDivElement | null;
+        if (inlayConditionsElement) {
+            inlayConditions = new DivDropdown(inlayConditionsElement, true);
+
+            inlayConditions.selectedValues$.next(selectedInlayExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
+            inlayConditions.selectedValues$.subscribe(async (selection) => {
+                selectedInlayExprs = selection.map<ConditionItem>(selection => {
+                    const index = selection.indexOf('!|');
+                    if (index === -1) {
+                        return {
+                            scopeName: '',
+                            nodeContent: selection,
+                        };
+                    } else {
+                        return {
+                            scopeName: selection.substring(0, index),
+                            nodeContent: selection.substring(index + 2),
+                        };
+                    }
+                });
+
+                setState({ selectedInlayExprs });
+
                 await buildContent();
                 retriggerSearch();
             });

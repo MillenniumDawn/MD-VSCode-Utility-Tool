@@ -1,7 +1,7 @@
 import { trimStart } from 'lodash';
 import * as vscode from 'vscode';
 import { Commands, ConfigurationKey, Hoi4FsSchema } from '../constants';
-import { UserError } from './common';
+import { forceError, UserError } from './common';
 import { clearDlcZipCache } from './fileloader';
 import { sendEvent } from './telemetry';
 import { getConfiguration, isFileScheme } from './vsccommon';
@@ -13,7 +13,13 @@ const installPathContainer: { current: vscode.Uri | null } = {
 export function registerHoiFs(): vscode.Disposable {
     const disposables: vscode.Disposable[] = [];
     disposables.push(vscode.commands.registerCommand(Commands.SelectHoiFolder, selectHoiFolder));
-    disposables.push(vscode.workspace.registerFileSystemProvider(Hoi4FsSchema, new Hoi4UtilsFsProvider(), { isReadonly: true }));
+    try {
+        disposables.push(vscode.workspace.registerFileSystemProvider(Hoi4FsSchema, new Hoi4UtilsFsProvider(), { isReadonly: true }));
+    } catch (e) {
+        if (!forceError(e).message.includes(`scheme '${Hoi4FsSchema}' is already registered`)) {
+            throw e;
+        }
+    }
 
     if (!IS_WEB_EXT) {
         disposables.push(vscode.workspace.onDidChangeConfiguration(onChangeWorkspaceConfiguration));

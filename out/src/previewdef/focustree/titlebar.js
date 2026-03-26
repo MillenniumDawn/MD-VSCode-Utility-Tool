@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFocusTitlebarImage = exports.loadFocusTitlebarStyles = exports.nationalFocusViewGfxFile = exports.focusTitlebarStylesFile = void 0;
+exports.getFocusOverlayImage = exports.getFocusTitlebarImage = exports.loadFocusTitlebarStyles = exports.goalsOverlaysGfxFile = exports.nationalFocusViewGfxFile = exports.focusTitlebarStylesFile = void 0;
 const tslib_1 = require("tslib");
 const hoiparser_1 = require("../../hoiformat/hoiparser");
 const schema_1 = require("../../hoiformat/schema");
@@ -9,6 +9,7 @@ const i18n_1 = require("../../util/i18n");
 const fileloader_1 = require("../../util/fileloader");
 exports.focusTitlebarStylesFile = 'common/national_focus/00_titlebar_styles.txt';
 exports.nationalFocusViewGfxFile = 'interface/nationalfocusview.gfx';
+exports.goalsOverlaysGfxFile = 'interface/goals_overlays.gfx';
 const titlebarStyleSchema = {
     name: "string",
     available: "string",
@@ -53,4 +54,14 @@ function getFocusTitlebarImage(textIcon, titlebarStyles) {
     });
 }
 exports.getFocusTitlebarImage = getFocusTitlebarImage;
+function getFocusOverlayImage(overlay) {
+    return tslib_1.__awaiter(this, void 0, void 0, function* () {
+        if (!overlay) {
+            return undefined;
+        }
+        const sprite = yield (0, imagecache_1.getSpriteByGfxName)(overlay, exports.goalsOverlaysGfxFile);
+        return sprite === null || sprite === void 0 ? void 0 : sprite.image;
+    });
+}
+exports.getFocusOverlayImage = getFocusOverlayImage;
 //# sourceMappingURL=titlebar.js.map

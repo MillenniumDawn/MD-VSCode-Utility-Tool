@@ -82,6 +82,15 @@
 						"enum": ["Brazilian Portuguese", "English", "French", "German", "Japanese", "Polish", "Russian", "Simplified Chinese", "Spanish"],
 						"description": "%hoi4modutilities.previewLocalisation.desc%"
 					},
+					"mdHoi4Utilities.inlayWindowGfxRoots": {
+						"title": "Focus inlay window GFX roots",
+						"type": "array",
+						"default": ["interface/scripted_gui"],
+						"items": {
+							"type": "string"
+						},
+						"description": "Workspace/mod/HOI4-relative root folders to scan recursively for .gfx files used by focus inlay windows."
+					},
 					"mdHoi4Utilities.featureFlags": {
 						"title": "%hoi4modutilities.featureFlags.title%",
 						"type": "array",

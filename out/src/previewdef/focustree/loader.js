@@ -11,6 +11,7 @@ const gfxindex_1 = require("../../util/gfxindex");
 const featureflags_1 = require("../../util/featureflags");
 const sharedFocusIndex_1 = require("../../util/sharedFocusIndex");
 const titlebar_1 = require("./titlebar");
+const inlay_1 = require("./inlay");
 const focusesGFX = 'interface/goals.gfx';
 class FocusTreeLoader extends loader_1.ContentLoader {
     postLoad(content, dependencies, error, session) {
@@ -44,10 +45,22 @@ class FocusTreeLoader extends loader_1.ContentLoader {
             const focusTrees = (0, schema_1.getFocusTreeWithFocusFile)(file, sharedFocusTrees, this.file, constants);
             // Include synthetic trees from dependent files (e.g., joint focus trees)
             focusTrees.push(...sharedFocusTrees);
+            const loadedInlays = yield (0, inlay_1.loadFocusInlayWindows)();
+            for (const focusTree of focusTrees) {
+                const resolved = (0, inlay_1.resolveInlaysForTree)(focusTree.inlayWindowRefs, loadedInlays.inlays, loadedInlays.warnings);
+                focusTree.inlayWindows = resolved.inlayWindows;
+                focusTree.inlayConditionExprs = resolved.inlayConditionExprs;
+                focusTree.warnings.push(...resolved.warnings);
+            }
+            const inlayGfxResolution = yield (0, inlay_1.resolveInlayGfxFiles)((0, lodash_1.chain)(focusTrees).flatMap(ft => ft.inlayWindows).value());
+            for (const focusTree of focusTrees) {
+                (0, inlay_1.addInlayGfxWarnings)(focusTree.inlayWindows, focusTree.warnings);
+            }
             const gfxDependencies = [
                 ...dependencies.filter(d => d.type === 'gfx').map(d => d.path),
                 ...(0, lodash_1.flatten)(focusTreeDepFiles.map(f => f.result.gfxFiles)),
                 ...yield (0, gfxindex_1.getGfxContainerFiles)((0, lodash_1.chain)(focusTrees).flatMap(ft => Object.values(ft.focuses)).flatMap(f => f.icon).map(i => i.icon).value()),
+                ...inlayGfxResolution.resolvedFiles,
             ];
             return {
                 result: {
@@ -59,7 +72,9 @@ class FocusTreeLoader extends loader_1.ContentLoader {
                     focusesGFX,
                     titlebar_1.focusTitlebarStylesFile,
                     titlebar_1.nationalFocusViewGfxFile,
+                    titlebar_1.goalsOverlaysGfxFile,
                     ...gfxDependencies,
+                    ...(0, lodash_1.chain)(focusTrees).flatMap(ft => ft.inlayWindows).map(inlay => inlay.file).uniq().value(),
                     ...focusTreeDependencies,
                     ...(0, loader_1.mergeInLoadResult)(focusTreeDepFiles, 'dependencies')
                 ]),

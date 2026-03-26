@@ -8,10 +8,15 @@ import { useConditionInFocus } from "../../util/featureflags";
 import { randomString, Warning } from "../../util/common";
 import { localize } from "../../util/i18n";
 import * as path from 'path';
+import { parseInlayWindowRef } from "./inlay";
+import { ContainerWindowType } from "../../hoiformat/gui";
 
 export interface FocusTree {
     id: string;
     focuses: Record<string, Focus>;
+    inlayWindowRefs: FocusTreeInlayRef[];
+    inlayWindows: FocusTreeInlay[];
+    inlayConditionExprs: ConditionItem[];
     allowBranchOptions: string[];
     conditionExprs: ConditionItem[];
     isSharedFocues: boolean;
@@ -31,6 +36,7 @@ export interface Focus {
     id: string;
     icon: FocusIconWithCondition[];
     textIcon?: string;
+    overlay?: string;
     prerequisite: string[][];
     exclusive: string[];
     hasAllowBranch: boolean;
@@ -47,6 +53,50 @@ export interface FocusWarning extends Warning<string> {
     navigations?: { file: string, start: number, end: number }[];
 }
 
+export interface FocusTreeInlayRef {
+    id: string;
+    position: { x: number; y: number; };
+    file: string;
+    token: Token | undefined;
+}
+
+export interface FocusTreeInlay {
+    id: string;
+    file: string;
+    token: Token | undefined;
+    windowName?: string;
+    guiFile?: string;
+    guiWindow?: HOIPartial<ContainerWindowType>;
+    internal: boolean;
+    visible: ConditionComplexExpr;
+    position: { x: number; y: number; };
+    scriptedImages: FocusInlayImageSlot[];
+    scriptedButtons: FocusTreeInlayButtonMeta[];
+    conditionExprs: ConditionItem[];
+}
+
+export interface FocusInlayImageSlot {
+    id: string;
+    file: string;
+    token: Token | undefined;
+    gfxOptions: FocusInlayGfxOption[];
+}
+
+export interface FocusInlayGfxOption {
+    gfxName: string;
+    condition: ConditionComplexExpr;
+    file: string;
+    token: Token | undefined;
+    gfxFile?: string;
+}
+
+export interface FocusTreeInlayButtonMeta {
+    id: string;
+    file: string;
+    token: Token | undefined;
+    available?: ConditionComplexExpr;
+}
+
 interface Offset {
     x: number;
     y: number;
@@ -58,12 +108,14 @@ interface FocusTreeDef {
     shared_focus: string[];
     focus: FocusDef[];
     continuous_focus_position: Position;
+    inlay_window: Raw[];
 }
 
 interface FocusDef {
     id: string;
     icon: Raw[];
     text_icon: string;
+    overlay: string;
     x: number;
     y: number;
     prerequisite: FocusOrORList[];
@@ -115,6 +167,7 @@ const focusSchema: SchemaDef<FocusDef> = {
         _type: 'array',
     },
     text_icon: "string",
+    overlay: "string",
     x: "number",
     y: "number",
     prerequisite: {
@@ -155,6 +208,10 @@ const focusTreeSchema: SchemaDef<FocusTreeDef> = {
         _type: 'array',
     },
     continuous_focus_position: positionSchema,
+    inlay_window: {
+        _innerType: 'raw',
+        _type: 'array',
+    },
 };
 
 const focusFileSchema: SchemaDef<FocusFile> = {
@@ -192,6 +249,9 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         const sharedFocusTree = {
             id: localize('focustree.sharedfocuses', '<Shared focuses>'),
             focuses,
+            inlayWindowRefs: [],
+            inlayWindows: [],
+            inlayConditionExprs: [],
             allowBranchOptions: getAllowBranchOptions(focuses),
             conditionExprs,
             isSharedFocues: true,
@@ -209,6 +269,9 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         focusTrees.push({
             id: getJointFocusTreeId(filePath),
             focuses,
+            inlayWindowRefs: [],
+            inlayWindows: [],
+            inlayConditionExprs: [],
             allowBranchOptions: getAllowBranchOptions(focuses),
             conditionExprs,
             isSharedFocues: false,
@@ -235,6 +298,13 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         focusTrees.push({
             id: focusTree.id ?? localize('focustree.ananymous', '<Anonymous focus tree>'),
             focuses,
+            inlayWindowRefs: focusTree.inlay_window
+                .map(v => v?._raw)
+                .filter((v): v is Node => v !== undefined)
+                .map(v => parseInlayWindowRef(v, filePath))
+                .filter((v): v is FocusTreeInlayRef => v !== undefined),
+            inlayWindows: [],
+            inlayConditionExprs: [],
             allowBranchOptions: getAllowBranchOptions(focuses),
             continuousFocusPositionX: normalizeNumberLike(focusTree.continuous_focus_position?.x, 0) ?? 50,
             continuousFocusPositionY: normalizeNumberLike(focusTree.continuous_focus_position?.y, 0) ?? 1000,
@@ -336,6 +406,7 @@ function getFocus(hoiFocus: HOIPartial<FocusDef>, conditionExprs: ConditionItem[
         .map(p => p.focus.concat(p.OR).filter((s): s is string => s !== undefined));
     const icon = parseFocusIcon(hoiFocus.icon.filter((v): v is Raw => v !== undefined).map(v => v._raw), constants, conditionExprs);
     const textIcon = hoiFocus.text_icon;
+    const overlay = hoiFocus.overlay;
     const hasAllowBranch = hoiFocus.allow_branch.length > 0;
     const allowBranchCondition = extractConditionValues(hoiFocus.allow_branch.filter((v): v is Raw => v !== undefined).map(v => v._raw.value), countryScope, conditionExprs).condition;
     const offset: Offset[] = hoiFocus.offset.map(o => ({
@@ -350,6 +421,7 @@ function getFocus(hoiFocus: HOIPartial<FocusDef>, conditionExprs: ConditionItem[
         id,
         icon,
         textIcon,
+        overlay,
         x,
         y,
         relativePositionId,
