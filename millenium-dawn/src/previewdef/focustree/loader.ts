@@ -50,6 +50,9 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
 
         const focusTrees = getFocusTreeWithFocusFile(file, sharedFocusTrees, this.file, constants);
 
+        // Include synthetic trees from dependent files (e.g., joint focus trees)
+        focusTrees.push(...sharedFocusTrees);
+
         const gfxDependencies = [
             ...dependencies.filter(d => d.type === 'gfx').map(d => d.path),
             ...flatten(focusTreeDepFiles.map(f => f.result.gfxFiles)),

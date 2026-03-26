@@ -81,6 +81,13 @@ async function buildContent() {
         allowBranchOptionsValue[option] = !focus || focus.allowBranch === undefined || applyCondition(focus.allowBranch, exprs);
     });
 
+    // For synthetic trees (shared focuses), always allow branches to show them in preview
+    if (focusTree.isSharedFocues) {
+        focusTree.allowBranchOptions.forEach(option => {
+            allowBranchOptionsValue[option] = true;
+        });
+    }
+
     const gridbox: GridBoxType = (window as any).gridBox;
 
     const focusPosition: Record<string, NumberPosition> = {};
