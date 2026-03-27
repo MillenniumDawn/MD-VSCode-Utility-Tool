@@ -212,7 +212,7 @@ window.addEventListener('load', (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.try
 /******/ 			return __webpack_require__.O(result);
 /******/ 		}
 /******/ 		
-/******/ 		var chunkLoadingGlobal = self["webpackChunkHearts_Of_Iron_IV_Utilities_2026"] = self["webpackChunkHearts_Of_Iron_IV_Utilities_2026"] || [];
+/******/ 		var chunkLoadingGlobal = self["webpackChunkhearts_of_iron_4_utilities_2026"] = self["webpackChunkhearts_of_iron_4_utilities_2026"] || [];
 /******/ 		chunkLoadingGlobal.forEach(webpackJsonpCallback.bind(null, 0));
 /******/ 		chunkLoadingGlobal.push = webpackJsonpCallback.bind(null, chunkLoadingGlobal.push.bind(chunkLoadingGlobal));
 /******/ 	})();
