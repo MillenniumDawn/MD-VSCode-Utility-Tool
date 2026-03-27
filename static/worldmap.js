@@ -2843,7 +2843,7 @@ class ViewPoint extends _util_event__WEBPACK_IMPORTED_MODULE_0__.Subscriber {
 /******/ 			return __webpack_require__.O(result);
 /******/ 		}
 /******/ 		
-/******/ 		var chunkLoadingGlobal = self["webpackChunkmillennium_dawn_hoi4_utilities"] = self["webpackChunkmillennium_dawn_hoi4_utilities"] || [];
+/******/ 		var chunkLoadingGlobal = self["webpackChunkHearts_Of_Iron_IV_Utilities_2026"] = self["webpackChunkHearts_Of_Iron_IV_Utilities_2026"] || [];
 /******/ 		chunkLoadingGlobal.forEach(webpackJsonpCallback.bind(null, 0));
 /******/ 		chunkLoadingGlobal.push = webpackJsonpCallback.bind(null, chunkLoadingGlobal.push.bind(chunkLoadingGlobal));
 /******/ 	})();

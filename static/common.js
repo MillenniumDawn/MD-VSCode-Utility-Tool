@@ -1,4 +1,4 @@
-(self["webpackChunkmillennium_dawn_hoi4_utilities"] = self["webpackChunkmillennium_dawn_hoi4_utilities"] || []).push([["common"],{
+(self["webpackChunkHearts_Of_Iron_IV_Utilities_2026"] = self["webpackChunkHearts_Of_Iron_IV_Utilities_2026"] || []).push([["common"],{
 
 /***/ "./node_modules/lodash/lodash.js":
 /*!***************************************!*\
