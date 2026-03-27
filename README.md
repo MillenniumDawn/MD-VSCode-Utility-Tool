@@ -1,8 +1,7 @@
-# Millennium Dawn HOI4 Utilities
+# HOI4 Utilities 2026
 
-This extension add tools for Heart of Iron IV Millennium Dawn modding. Some of the tools may work on other Paradox games.
-
-> I'm disappointed by Paradox because of the Silk Road thing. I'll pause this project until they fix it.
+This extension add preview tools to Hearts of Iron 4 coding.
+This is a continuation project based on the HOI4 mod utilities from herbix
 
 ## Features
 
@@ -14,8 +13,6 @@ This extension add tools for Heart of Iron IV Millennium Dawn modding. Some of t
 * GUI preview
 * `.gfx` file preview (sprites used by HOI4 are defined here)
 * `.dds`, `.tga` file preview (images files used by HOI4)
-
-For feature details and user manual, please refer to [Millennium Dawn HOI4 Utilities Wiki](https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool/wiki).
 
 ## Steps to start
 
@@ -29,30 +26,6 @@ For feature details and user manual, please refer to [Millennium Dawn HOI4 Utili
     * Command palette (`Ctrl+Shift+P`) commands: `Preview World Map` and `Preview HOI4 file`*.
     * `Preview HOI4 file` (![Preview HOI4 file button](demo/preview-icon.png))* button on right-top tool bar of text editor.
     * Open a `.dds` or `.tga` file.
-
-\* *`Preview HOI4 file` (![Preview HOI4 file button](demo/preview-icon.png)) button/command is invisible, except on `.gfx`, `map/default.map`, technology tree or national focus tree files.*
-
-## Demos
-
-### World map preview
-
-![World map preview demo](demo/5.gif)
-
-### Focus tree preview
-
-![Focus tree preview demo](demo/1.gif)
-
-### Event tree preview
-
-![Event tree preview demo](demo/6.gif)
-
-### Technology tree preview
-
-![Technology tree preview demo](demo/4.gif)
-
-### GUI Preview
-
-![GUI preview demo](demo/7.gif)
 
 ## Extension Settings
 
@@ -71,13 +44,8 @@ For feature details and user manual, please refer to [Millennium Dawn HOI4 Utili
 * Edge lines on world map not alway fit edge of colors.
 * Event tree preview will duplicate events even they are same event if they are from different option.
 
-## Release Notes - [0.12.2]
-
-### Fixed
-* Allow `|` in symbol type (to support the case `localization_key = building_state_modifier|dam`) (#105) (Contributor: [IShiraiKurokoI(Shirai_Kuroko)](https://github.com/IShiraiKurokoI)).
-
 ## Contribute
-* If you have any suggestion, feel free to create issue on this [Github repo](https://github.com/herbix/hoi4modutilities).
-* If you want to contribute translation, feel free to create pull request to this [Github repo](https://github.com/herbix/hoi4modutilities). All localization related files are under `i18n` folder.
+* If you have any suggestion, feel free to create issue on this [Github repo](https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool).
 
-* Thanks to all contributors listed [here](https://github.com/herbix/hoi4modutilities/graphs/contributors).
+## Original Tool Repo
+- https://github.com/herbix/hoi4modutilities
