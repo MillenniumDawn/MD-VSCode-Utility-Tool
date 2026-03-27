@@ -384,25 +384,42 @@ function getFocuses(hoiFocuses: HOIPartial<FocusDef>[], conditionExprs: Conditio
         }
     }
 
-    let hasChangedInAllowBranch = true;
-    while (hasChangedInAllowBranch) {
-        hasChangedInAllowBranch = false;
-        for (const key in focuses) {
-            const focus = focuses[key];
-            const allPrerequisites = flatten(focus.prerequisite).filter(p => p in focuses);
-            if (allPrerequisites.length === 0) {
-                continue;
-            }
+    // Propagate inAllowBranch from prerequisites to dependents via BFS
+    // Build reverse map: prerequisite -> focuses that depend on it
+    const allowBranchDependents = new Map<string, string[]>();
+    for (const key in focuses) {
+        const prereqs = flatten(focuses[key].prerequisite).filter(p => p in focuses);
+        for (const p of prereqs) {
+            if (!allowBranchDependents.has(p)) { allowBranchDependents.set(p, []); }
+            allowBranchDependents.get(p)!.push(key);
+        }
+    }
 
-            chain(allPrerequisites)
-                .flatMap(p  => focuses[p].inAllowBranch)
-                .forEach(ab => {
-                    if (!focus.inAllowBranch.includes(ab)) {
-                        focus.inAllowBranch.push(ab);
-                        hasChangedInAllowBranch = true;
-                    }
-                })
-                .value();
+    // Seed queue with focuses that have allowBranch
+    const abQueue: string[] = [];
+    for (const key in focuses) {
+        if (focuses[key].hasAllowBranch) {
+            abQueue.push(key);
+        }
+    }
+
+    while (abQueue.length > 0) {
+        const sourceKey = abQueue.shift()!;
+        const source = focuses[sourceKey];
+        const deps = allowBranchDependents.get(sourceKey);
+        if (!deps) { continue; }
+        for (const depKey of deps) {
+            const dep = focuses[depKey];
+            let changed = false;
+            for (const ab of source.inAllowBranch) {
+                if (!dep.inAllowBranch.includes(ab)) {
+                    dep.inAllowBranch.push(ab);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                abQueue.push(depKey);
+            }
         }
     }
 
