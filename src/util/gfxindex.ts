@@ -10,7 +10,7 @@ import { localize } from './i18n';
 import { uniq } from 'lodash';
 import { sendEvent } from './telemetry';
 import { Logger } from './logger';
-import { loadCacheManifest, loadCacheData, saveCacheManifest, saveCacheData, getFileMtimes, computeStaleFiles } from './indexCache';
+import { loadCacheManifest, loadCacheData, saveCacheManifest, saveCacheData, getFileMtimes, computeStaleFiles, IndexTimer } from './indexCache';
 
 interface GfxIndexItem {
     file: string;
@@ -82,10 +82,12 @@ async function buildGfxIndexWithCache(
     options: { mod?: boolean; hoi4?: boolean },
     estimatedSize: [number]
 ): Promise<void> {
+    const timer = new IndexTimer(cacheName);
     const resolveUri = (relativePath: string) => getFilePathFromModOrHOI4(relativePath, options);
     const currentMtimes = await getFileMtimes(gfxFiles, resolveUri);
-    const manifest = await loadCacheManifest(cacheName, GFX_CACHE_VERSION);
+    timer.mark('mtime');
 
+    const manifest = await loadCacheManifest(cacheName, GFX_CACHE_VERSION);
     let filesToParse = gfxFiles;
 
     if (manifest) {
@@ -110,15 +112,17 @@ async function buildGfxIndexWithCache(
                     }
                 }
                 filesToParse = [...staleness.stale, ...staleness.added];
-                Logger.info(`${cacheName}: restored from cache, re-parsing ${filesToParse.length} files`);
             } catch {
                 Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
                 filesToParse = gfxFiles;
             }
         }
     }
+    timer.mark('cache');
 
     await Promise.all(filesToParse.map(f => fillGfxItems(f, targetIndex, fileToKeysMap, options, estimatedSize)));
+    timer.mark('parse');
+    timer.log(gfxFiles.length, filesToParse.length);
 
     const serializedFileToKeys: Record<string, string[]> = {};
     if (fileToKeysMap) {
