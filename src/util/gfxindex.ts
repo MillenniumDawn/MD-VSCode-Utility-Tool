@@ -96,14 +96,12 @@ async function buildGfxIndexWithCache(
             try {
                 const cached: GfxCacheData = JSON.parse(cachedData);
                 const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
-                // Restore cached entries
                 for (const spriteName in cached.index) {
                     const item = cached.index[spriteName];
                     if (item && !skipFiles.has(item.file)) {
                         targetIndex[spriteName] = item;
                     }
                 }
-                // Restore file-to-keys reverse map
                 if (fileToKeysMap && cached.fileToKeys) {
                     for (const file in cached.fileToKeys) {
                         if (!skipFiles.has(file)) {
@@ -120,9 +118,8 @@ async function buildGfxIndexWithCache(
         }
     }
 
-    await Promise.all(filesToParse.map(f => fillGfxItems(f, targetIndex, options, estimatedSize)));
+    await Promise.all(filesToParse.map(f => fillGfxItems(f, targetIndex, fileToKeysMap, options, estimatedSize)));
 
-    // Save updated cache (fire-and-forget)
     const serializedFileToKeys: Record<string, string[]> = {};
     if (fileToKeysMap) {
         fileToKeysMap.forEach((keys, file) => { serializedFileToKeys[file] = keys; });
@@ -131,30 +128,32 @@ async function buildGfxIndexWithCache(
         index: targetIndex,
         fileToKeys: serializedFileToKeys,
     };
-    saveCacheManifest(cacheName, gfxFiles, currentMtimes, GFX_CACHE_VERSION);
-    saveCacheData(cacheName, JSON.stringify(cacheData));
+    // fire-and-forget: write data before manifest for atomicity
+    void Promise.all([
+        saveCacheData(cacheName, JSON.stringify(cacheData)),
+        saveCacheManifest(cacheName, gfxFiles, currentMtimes, GFX_CACHE_VERSION),
+    ]).catch(e => Logger.error(`Cache save failed for ${cacheName}: ${e}`));
 }
 
-async function fillGfxItems(gfxFile: string, gfxIndex: Record<string, GfxIndexItem | undefined>, options: { mod?: boolean, hoi4?: boolean }, estimatedSize?: [number]): Promise<void> {
+async function fillGfxItems(gfxFile: string, gfxIndex: Record<string, GfxIndexItem | undefined>, fileToKeysMap: Map<string, string[]> | null, options: { mod?: boolean, hoi4?: boolean }, estimatedSize?: [number]): Promise<void> {
     try {
         if (estimatedSize) {
             estimatedSize[0] += gfxFile.length;
         }
         const [fileBuffer, uri] = await readFileFromModOrHOI4(gfxFile, options);
         const spriteTypes = getSpriteTypes(parseHoi4File(fileBuffer.toString(), localize('infile', 'In file {0}:\n', uri.toString())));
-        const isWorkspace = gfxIndex === workspaceGfxIndex;
         const spriteNames: string[] = [];
         for (const spriteType of spriteTypes) {
             gfxIndex[spriteType.name] = { file: gfxFile };
-            if (isWorkspace) {
+            if (fileToKeysMap) {
                 spriteNames.push(spriteType.name);
             }
             if (estimatedSize) {
                 estimatedSize[0] += spriteType.name.length + 8;
             }
         }
-        if (isWorkspace && spriteNames.length > 0) {
-            workspaceGfxFileToKeys.set(gfxFile, spriteNames);
+        if (fileToKeysMap && spriteNames.length > 0) {
+            fileToKeysMap.set(gfxFile, spriteNames);
         }
     } catch(e) {
         error(new UserError(forceError(e).toString()));
@@ -240,7 +239,7 @@ function addWorkspaceGfxIndex(file: vscode.Uri) {
     if (wsFolder) {
         const relative = path.relative(wsFolder.uri.path, file.path).replace(/\\+/g, '/');
         if (relative && relative.startsWith('interface/')) {
-            fillGfxItems(relative, workspaceGfxIndex, { hoi4: false });
+            fillGfxItems(relative, workspaceGfxIndex, workspaceGfxFileToKeys, { hoi4: false });
         }
     }
 }

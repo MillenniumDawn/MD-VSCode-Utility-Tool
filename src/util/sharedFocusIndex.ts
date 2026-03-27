@@ -84,7 +84,6 @@ async function buildFocusIndexWithCache(
         if (cachedData && staleness.stale.length + staleness.removed.length + staleness.added.length < focusFiles.length) {
             try {
                 const cached: FocusIndex = JSON.parse(cachedData);
-                // Restore cached entries (excluding stale/removed)
                 const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
                 for (const file in cached) {
                     if (!skipFiles.has(file)) {
@@ -94,7 +93,6 @@ async function buildFocusIndexWithCache(
                         }
                     }
                 }
-                // Only parse stale and newly added files
                 filesToParse = [...staleness.stale, ...staleness.added];
                 Logger.info(`${cacheName}: restored ${Object.keys(cached).length - skipFiles.size} files from cache, re-parsing ${filesToParse.length}`);
             } catch {
@@ -104,14 +102,16 @@ async function buildFocusIndexWithCache(
         }
     }
 
-    await Promise.all(filesToParse.map(f => fillFocusItems(f, focusIndex, options, estimatedSize)));
+    await Promise.all(filesToParse.map(f => fillFocusItems(f, focusIndex, reverseMap, options, estimatedSize)));
 
-    // Save updated cache (fire-and-forget)
-    saveCacheManifest(cacheName, focusFiles, currentMtimes, FOCUS_CACHE_VERSION);
-    saveCacheData(cacheName, JSON.stringify(focusIndex));
+    // fire-and-forget: write data before manifest for atomicity
+    void Promise.all([
+        saveCacheData(cacheName, JSON.stringify(focusIndex)),
+        saveCacheManifest(cacheName, focusFiles, currentMtimes, FOCUS_CACHE_VERSION),
+    ]).catch(e => Logger.error(`Cache save failed for ${cacheName}: ${e}`));
 }
 
-async function fillFocusItems(focusFile: string, focusIndex: FocusIndex, options: { mod?: boolean; hoi4?: boolean }, estimatedSize?: [number]): Promise<void> {
+async function fillFocusItems(focusFile: string, focusIndex: FocusIndex, reverseMap: Map<string, string>, options: { mod?: boolean; hoi4?: boolean }, estimatedSize?: [number]): Promise<void> {
     const [fileBuffer, uri] = await readFileFromModOrHOI4(focusFile, options);
     const fileContent = fileBuffer.toString();
 
@@ -125,8 +125,6 @@ async function fillFocusItems(focusFile: string, focusIndex: FocusIndex, options
         });
         focusIndex[focusFile] = Array.from(focusKeysSet);
 
-        // Populate reverse map
-        const reverseMap = focusIndex === globalFocusIndex ? globalFocusKeyToFile : workspaceFocusKeyToFile;
         for (const key of focusKeysSet) {
             reverseMap.set(key, focusFile);
         }
@@ -146,14 +144,11 @@ async function fillFocusItems(focusFile: string, focusIndex: FocusIndex, options
     }
 }
 
-// Function to find the file name containing the specified focus key
 export function findFileByFocusKey(key: string): string | undefined {
-    // Workspace takes precedence over global
     return workspaceFocusKeyToFile.get(key) ?? globalFocusKeyToFile.get(key);
 }
 
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
-    // Clear the workspace focus index
     workspaceFocusIndex = {};
     workspaceFocusKeyToFile.clear();
 
@@ -235,7 +230,7 @@ function addWorkspaceFocusIndex(file: vscode.Uri) {
     if (wsFolder) {
         const relative = path.relative(wsFolder.uri.path, file.path).replace(/\\+/g, '/');
         if (relative && relative.startsWith('common/national_focus/')) {
-            fillFocusItems(relative, workspaceFocusIndex, { hoi4: false });
+            fillFocusItems(relative, workspaceFocusIndex, workspaceFocusKeyToFile, { hoi4: false });
         }
     }
 }

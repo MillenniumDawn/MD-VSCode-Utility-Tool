@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { contextContainer } from '../context';
 import { Logger } from './logger';
+import { readFile, writeFile, mkdirs, getLastModifiedAsync } from './vsccommon';
 
 interface CacheManifest {
     version: number;
@@ -18,6 +19,8 @@ export interface StalenessResult {
     added: string[];
 }
 
+const MTIME_BATCH_SIZE = 30;
+
 function getCacheDir(): vscode.Uri | null {
     const ctx = contextContainer.current;
     if (!ctx || IS_WEB_EXT) {
@@ -26,31 +29,30 @@ function getCacheDir(): vscode.Uri | null {
     return vscode.Uri.joinPath(ctx.globalStorageUri, 'indexCache');
 }
 
-async function ensureCacheDir(): Promise<vscode.Uri | null> {
-    const dir = getCacheDir();
-    if (!dir) {
-        return null;
+let cacheDirPromise: Promise<vscode.Uri | null> | null = null;
+
+function ensureCacheDir(): Promise<vscode.Uri | null> {
+    if (!cacheDirPromise) {
+        cacheDirPromise = (async () => {
+            const dir = getCacheDir();
+            if (!dir) { return null; }
+            try { await mkdirs(dir); } catch {}
+            return dir;
+        })();
     }
-    try {
-        await vscode.workspace.fs.createDirectory(dir);
-    } catch {
-        // Directory may already exist
-    }
-    return dir;
+    return cacheDirPromise;
 }
 
 export async function saveCacheManifest(indexName: string, filePaths: string[], mtimes: Map<string, number>, version: number): Promise<void> {
     const dir = await ensureCacheDir();
-    if (!dir) {
-        return;
-    }
+    if (!dir) { return; }
     try {
         const manifest: CacheManifest = {
             version,
             entries: filePaths.map(fp => ({ filePath: fp, mtime: mtimes.get(fp) ?? 0 })),
         };
         const uri = vscode.Uri.joinPath(dir, `${indexName}.manifest.json`);
-        await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(manifest)));
+        await writeFile(uri, Buffer.from(JSON.stringify(manifest)));
     } catch (e) {
         Logger.error(`Failed to save cache manifest for ${indexName}: ${e}`);
     }
@@ -58,16 +60,12 @@ export async function saveCacheManifest(indexName: string, filePaths: string[], 
 
 export async function loadCacheManifest(indexName: string, expectedVersion: number): Promise<CacheManifest | null> {
     const dir = getCacheDir();
-    if (!dir) {
-        return null;
-    }
+    if (!dir) { return null; }
     try {
         const uri = vscode.Uri.joinPath(dir, `${indexName}.manifest.json`);
-        const data = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString();
+        const data = (await readFile(uri)).toString();
         const manifest: CacheManifest = JSON.parse(data);
-        if (manifest.version !== expectedVersion) {
-            return null;
-        }
+        if (manifest.version !== expectedVersion) { return null; }
         return manifest;
     } catch {
         return null;
@@ -76,12 +74,10 @@ export async function loadCacheManifest(indexName: string, expectedVersion: numb
 
 export async function saveCacheData(indexName: string, data: string): Promise<void> {
     const dir = await ensureCacheDir();
-    if (!dir) {
-        return;
-    }
+    if (!dir) { return; }
     try {
         const uri = vscode.Uri.joinPath(dir, `${indexName}.data.json`);
-        await vscode.workspace.fs.writeFile(uri, Buffer.from(data));
+        await writeFile(uri, Buffer.from(data));
     } catch (e) {
         Logger.error(`Failed to save cache data for ${indexName}: ${e}`);
     }
@@ -89,12 +85,10 @@ export async function saveCacheData(indexName: string, data: string): Promise<vo
 
 export async function loadCacheData(indexName: string): Promise<string | null> {
     const dir = getCacheDir();
-    if (!dir) {
-        return null;
-    }
+    if (!dir) { return null; }
     try {
         const uri = vscode.Uri.joinPath(dir, `${indexName}.data.json`);
-        return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString();
+        return (await readFile(uri)).toString();
     } catch {
         return null;
     }
@@ -102,17 +96,19 @@ export async function loadCacheData(indexName: string): Promise<string | null> {
 
 export async function getFileMtimes(relativePaths: string[], resolveUri: (relativePath: string) => Promise<vscode.Uri | undefined>): Promise<Map<string, number>> {
     const result = new Map<string, number>();
-    await Promise.all(relativePaths.map(async (relativePath) => {
-        try {
-            const uri = await resolveUri(relativePath);
-            if (uri) {
-                const stat = await vscode.workspace.fs.stat(uri);
-                result.set(relativePath, stat.mtime);
+    for (let i = 0; i < relativePaths.length; i += MTIME_BATCH_SIZE) {
+        const batch = relativePaths.slice(i, i + MTIME_BATCH_SIZE);
+        await Promise.all(batch.map(async (relativePath) => {
+            try {
+                const uri = await resolveUri(relativePath);
+                if (uri) {
+                    result.set(relativePath, await getLastModifiedAsync(uri));
+                }
+            } catch {
+                // File doesn't exist or is inaccessible
             }
-        } catch {
-            // File doesn't exist or is inaccessible
-        }
-    }));
+        }));
+    }
     return result;
 }
 
