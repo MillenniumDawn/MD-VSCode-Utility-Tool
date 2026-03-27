@@ -470,24 +470,40 @@ function addSharedFocus(focuses: Record<string, Focus>, filePath: string, shared
 
     const sharedFocuses = sharedFocusTree.focuses;
 
+    // Build reverse dependency map: focus -> focuses that depend on it
+    const dependents = new Map<string, string[]>();
+    // Track how many unresolved prerequisites each candidate has
+    const unresolvedCount = new Map<string, number>();
+
+    for (const key in sharedFocuses) {
+        if (key in focuses) { continue; }
+        const prereqs = flatten(sharedFocuses[key].prerequisite).filter(p => p in sharedFocuses);
+        if (prereqs.length === 0) { continue; }
+        let unresolved = 0;
+        for (const p of prereqs) {
+            if (!(p in focuses)) {
+                unresolved++;
+                if (!dependents.has(p)) { dependents.set(p, []); }
+                dependents.get(p)!.push(key);
+            }
+        }
+        unresolvedCount.set(key, unresolved);
+    }
+
+    // BFS: start from the requested shared focus, propagate to dependents
+    const queue: string[] = [sharedFocusId];
     focuses[sharedFocusId] = sharedFocuses[sharedFocusId];
     updateConditionExprsByFocus(sharedFocuses[sharedFocusId], conditionExprs);
 
-    let hasChanged = true;
-    while (hasChanged) {
-        hasChanged = false;
-        for (const key in sharedFocuses) {
-            if (key in focuses) {
-                continue;
-            }
-
-            const focus = sharedFocuses[key];
-            const allPrerequisites = flatten(focus.prerequisite).filter(p => p in sharedFocuses);
-            if (allPrerequisites.length === 0) {
-                continue;
-            }
-
-            if (allPrerequisites.every(p => p in focuses)) {
+    while (queue.length > 0) {
+        const added = queue.shift()!;
+        const deps = dependents.get(added);
+        if (!deps) { continue; }
+        for (const dep of deps) {
+            const count = (unresolvedCount.get(dep) ?? 1) - 1;
+            unresolvedCount.set(dep, count);
+            if (count <= 0 && !(dep in focuses)) {
+                const focus = sharedFocuses[dep];
                 if (focus.id in focuses) {
                     const otherFocus = focuses[focus.id];
                     warnings.push({
@@ -507,9 +523,9 @@ function addSharedFocus(focuses: Record<string, Focus>, filePath: string, shared
                         ]
                     });
                 }
-                focuses[key] = focus;
+                focuses[dep] = focus;
                 updateConditionExprsByFocus(focus, conditionExprs);
-                hasChanged = true;
+                queue.push(dep);
             }
         }
     }
