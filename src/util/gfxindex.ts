@@ -5,10 +5,12 @@ import { getSpriteTypes } from '../hoiformat/spritetype';
 import { debounceByInput, forceError, UserError } from './common';
 import { error } from './debug';
 import { gfxIndex } from './featureflags';
-import { listFilesFromModOrHOI4, readFileFromModOrHOI4 } from './fileloader';
+import { getFilePathFromModOrHOI4, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from './fileloader';
 import { localize } from './i18n';
 import { uniq } from 'lodash';
 import { sendEvent } from './telemetry';
+import { Logger } from './logger';
+import { loadCacheManifest, loadCacheData, saveCacheManifest, saveCacheData, getFileMtimes, computeStaleFiles } from './indexCache';
 
 interface GfxIndexItem {
     file: string;
@@ -16,6 +18,9 @@ interface GfxIndexItem {
 
 const globalGfxIndex: Record<string, GfxIndexItem | undefined> = {};
 let workspaceGfxIndex: Record<string, GfxIndexItem | undefined> = {};
+
+// Reverse map for O(1) removal: file path -> sprite names from that file
+const workspaceGfxFileToKeys = new Map<string, string[]>();
 
 export function registerGfxIndex(): vscode.Disposable {
     const disposables: vscode.Disposable[] = [];
@@ -50,16 +55,84 @@ export async function getGfxContainerFiles(gfxNames: (string | undefined)[]): Pr
     return uniq((await Promise.all(gfxNames.map(getGfxContainerFile))).filter((v): v is string => v !== undefined));
 }
 
+const GFX_CACHE_VERSION = 1;
+
+interface GfxCacheData {
+    index: Record<string, GfxIndexItem | undefined>;
+    fileToKeys: Record<string, string[]>;
+}
+
 async function buildGlobalGfxIndex(estimatedSize: [number]): Promise<void> {
     const options = { mod: false, recursively: true };
-    const gfxFiles = (await listFilesFromModOrHOI4('interface', options)).filter(f => f.toLocaleLowerCase().endsWith('.gfx'));
-    await Promise.all(gfxFiles.map(f => fillGfxItems('interface/' + f, globalGfxIndex, options, estimatedSize)));
+    const gfxFiles = (await listFilesFromModOrHOI4('interface', options)).filter(f => f.toLocaleLowerCase().endsWith('.gfx')).map(f => 'interface/' + f);
+    await buildGfxIndexWithCache('gfxIndex.global', gfxFiles, globalGfxIndex, null, options, estimatedSize);
 }
 
 async function buildWorkspaceGfxIndex(estimatedSize: [number]): Promise<void> {
     const options = { hoi4: false, recursively: true };
-    const gfxFiles = (await listFilesFromModOrHOI4('interface', options)).filter(f => f.toLocaleLowerCase().endsWith('.gfx'));
-    await Promise.all(gfxFiles.map(f => fillGfxItems('interface/' + f, workspaceGfxIndex, options, estimatedSize)));
+    const gfxFiles = (await listFilesFromModOrHOI4('interface', options)).filter(f => f.toLocaleLowerCase().endsWith('.gfx')).map(f => 'interface/' + f);
+    await buildGfxIndexWithCache('gfxIndex.workspace', gfxFiles, workspaceGfxIndex, workspaceGfxFileToKeys, options, estimatedSize);
+}
+
+async function buildGfxIndexWithCache(
+    cacheName: string,
+    gfxFiles: string[],
+    targetIndex: Record<string, GfxIndexItem | undefined>,
+    fileToKeysMap: Map<string, string[]> | null,
+    options: { mod?: boolean; hoi4?: boolean },
+    estimatedSize: [number]
+): Promise<void> {
+    const resolveUri = (relativePath: string) => getFilePathFromModOrHOI4(relativePath, options);
+    const currentMtimes = await getFileMtimes(gfxFiles, resolveUri);
+    const manifest = await loadCacheManifest(cacheName, GFX_CACHE_VERSION);
+
+    let filesToParse = gfxFiles;
+
+    if (manifest) {
+        const staleness = computeStaleFiles(manifest, currentMtimes);
+        const cachedData = await loadCacheData(cacheName);
+
+        if (cachedData && staleness.stale.length + staleness.removed.length + staleness.added.length < gfxFiles.length) {
+            try {
+                const cached: GfxCacheData = JSON.parse(cachedData);
+                const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
+                // Restore cached entries
+                for (const spriteName in cached.index) {
+                    const item = cached.index[spriteName];
+                    if (item && !skipFiles.has(item.file)) {
+                        targetIndex[spriteName] = item;
+                    }
+                }
+                // Restore file-to-keys reverse map
+                if (fileToKeysMap && cached.fileToKeys) {
+                    for (const file in cached.fileToKeys) {
+                        if (!skipFiles.has(file)) {
+                            fileToKeysMap.set(file, cached.fileToKeys[file]);
+                        }
+                    }
+                }
+                filesToParse = [...staleness.stale, ...staleness.added];
+                Logger.info(`${cacheName}: restored from cache, re-parsing ${filesToParse.length} files`);
+            } catch {
+                Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
+                filesToParse = gfxFiles;
+            }
+        }
+    }
+
+    await Promise.all(filesToParse.map(f => fillGfxItems(f, targetIndex, options, estimatedSize)));
+
+    // Save updated cache (fire-and-forget)
+    const serializedFileToKeys: Record<string, string[]> = {};
+    if (fileToKeysMap) {
+        fileToKeysMap.forEach((keys, file) => { serializedFileToKeys[file] = keys; });
+    }
+    const cacheData: GfxCacheData = {
+        index: targetIndex,
+        fileToKeys: serializedFileToKeys,
+    };
+    saveCacheManifest(cacheName, gfxFiles, currentMtimes, GFX_CACHE_VERSION);
+    saveCacheData(cacheName, JSON.stringify(cacheData));
 }
 
 async function fillGfxItems(gfxFile: string, gfxIndex: Record<string, GfxIndexItem | undefined>, options: { mod?: boolean, hoi4?: boolean }, estimatedSize?: [number]): Promise<void> {
@@ -69,11 +142,19 @@ async function fillGfxItems(gfxFile: string, gfxIndex: Record<string, GfxIndexIt
         }
         const [fileBuffer, uri] = await readFileFromModOrHOI4(gfxFile, options);
         const spriteTypes = getSpriteTypes(parseHoi4File(fileBuffer.toString(), localize('infile', 'In file {0}:\n', uri.toString())));
+        const isWorkspace = gfxIndex === workspaceGfxIndex;
+        const spriteNames: string[] = [];
         for (const spriteType of spriteTypes) {
             gfxIndex[spriteType.name] = { file: gfxFile };
+            if (isWorkspace) {
+                spriteNames.push(spriteType.name);
+            }
             if (estimatedSize) {
                 estimatedSize[0] += spriteType.name.length + 8;
             }
+        }
+        if (isWorkspace && spriteNames.length > 0) {
+            workspaceGfxFileToKeys.set(gfxFile, spriteNames);
         }
     } catch(e) {
         error(new UserError(forceError(e).toString()));
@@ -82,6 +163,7 @@ async function fillGfxItems(gfxFile: string, gfxIndex: Record<string, GfxIndexIt
 
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
     workspaceGfxIndex = {};
+    workspaceGfxFileToKeys.clear();
     const estimatedSize: [number] = [0];
     const task = buildWorkspaceGfxIndex(estimatedSize);
     vscode.window.setStatusBarMessage('$(loading~spin) ' + localize('gfxindex.workspace.building', 'Building workspace GFX index...'), task);
@@ -110,7 +192,7 @@ const onChangeTextDocumentImpl = debounceByInput(
 
 function onCloseTextDocument(document: vscode.TextDocument) {
     const file = document.uri;
-    if (file.path.endsWith('.gfx')) {
+    if (file.path.endsWith('.gfx') && document.isDirty) {
         removeWorkspaceGfxIndex(file);
         addWorkspaceGfxIndex(file);
     }
@@ -142,10 +224,12 @@ function removeWorkspaceGfxIndex(file: vscode.Uri) {
     if (wsFolder) {
         const relative = path.relative(wsFolder.uri.path, file.path).replace(/\\+/g, '/');
         if (relative && relative.startsWith('interface/')) {
-            for (const key in workspaceGfxIndex) {
-                if (workspaceGfxIndex[key]?.file === relative) {
+            const keys = workspaceGfxFileToKeys.get(relative);
+            if (keys) {
+                for (const key of keys) {
                     delete workspaceGfxIndex[key];
                 }
+                workspaceGfxFileToKeys.delete(relative);
             }
         }
     }
