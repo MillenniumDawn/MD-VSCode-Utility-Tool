@@ -112,6 +112,31 @@ export async function getFileMtimes(relativePaths: string[], resolveUri: (relati
     return result;
 }
 
+export class IndexTimer {
+    private readonly name: string;
+    private readonly start: number;
+    private lastMark: number;
+    private readonly phases: { name: string; ms: number }[] = [];
+
+    constructor(name: string) {
+        this.name = name;
+        this.start = Date.now();
+        this.lastMark = this.start;
+    }
+
+    mark(phaseName: string): void {
+        const now = Date.now();
+        this.phases.push({ name: phaseName, ms: now - this.lastMark });
+        this.lastMark = now;
+    }
+
+    log(fileCount: number, parsedCount: number): void {
+        const total = Date.now() - this.start;
+        const breakdown = this.phases.map(p => `${p.name}=${p.ms}ms`).join(', ');
+        Logger.info(`[Timer] ${this.name}: ${total}ms total (${breakdown}) | ${fileCount} files, ${parsedCount} parsed`);
+    }
+}
+
 export function computeStaleFiles(manifest: CacheManifest, currentMtimes: Map<string, number>): StalenessResult {
     const cachedPaths = new Set(manifest.entries.map(e => e.filePath));
     const currentPaths = new Set(currentMtimes.keys());

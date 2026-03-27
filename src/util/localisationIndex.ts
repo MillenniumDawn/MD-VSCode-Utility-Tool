@@ -9,7 +9,7 @@ import { sendEvent } from './telemetry';
 import { Logger } from "./logger";
 import { YAMLException } from "js-yaml";
 import { ConfigurationKey } from '../constants';
-import { loadCacheManifest, loadCacheData, saveCacheManifest, saveCacheData, getFileMtimes, computeStaleFiles } from './indexCache';
+import { loadCacheManifest, loadCacheData, saveCacheManifest, saveCacheData, getFileMtimes, computeStaleFiles, IndexTimer } from './indexCache';
 
 type LocalisationData = Record<string, Record<string, string>>;
 
@@ -131,10 +131,12 @@ async function buildLocalisationIndexWithCache(
     options: { mod?: boolean; hoi4?: boolean },
     estimatedSize: [number]
 ): Promise<void> {
+    const timer = new IndexTimer(cacheName);
     const resolveUri = (relativePath: string) => getFilePathFromModOrHOI4(relativePath, options);
     const currentMtimes = await getFileMtimes(locFiles, resolveUri);
-    const manifest = await loadCacheManifest(cacheName, LOC_CACHE_VERSION);
+    timer.mark('mtime');
 
+    const manifest = await loadCacheManifest(cacheName, LOC_CACHE_VERSION);
     let filesToParse = locFiles;
 
     if (manifest) {
@@ -170,15 +172,17 @@ async function buildLocalisationIndexWithCache(
                 }
 
                 filesToParse = [...staleness.stale, ...staleness.added];
-                Logger.info(`${cacheName}: restored from cache, re-parsing ${filesToParse.length} files`);
             } catch {
                 Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
                 filesToParse = locFiles;
             }
         }
     }
+    timer.mark('cache');
 
     await Promise.all(filesToParse.map(f => fillLocalisationItems(f, targetIndex, fileMap, options, estimatedSize)));
+    timer.mark('parse');
+    timer.log(locFiles.length, filesToParse.length);
 
     // Serialize Sets to arrays for JSON cache
     const serializedFileMap: Record<string, Record<string, string[]>> = {};

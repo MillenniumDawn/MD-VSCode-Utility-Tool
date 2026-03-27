@@ -8,7 +8,7 @@ import { Logger } from "./logger";
 import { getFocusTree } from "../previewdef/focustree/schema";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import { sharedFocusIndex } from "./featureflags";
-import { loadCacheManifest, loadCacheData, saveCacheManifest, saveCacheData, getFileMtimes, computeStaleFiles } from './indexCache';
+import { loadCacheManifest, loadCacheData, saveCacheManifest, saveCacheData, getFileMtimes, computeStaleFiles, IndexTimer } from './indexCache';
 
 interface FocusIndex {
     [file: string]: string[]; // Filename -> array of focus keys
@@ -71,10 +71,12 @@ async function buildFocusIndexWithCache(
     options: { mod?: boolean; hoi4?: boolean },
     estimatedSize: [number]
 ): Promise<void> {
+    const timer = new IndexTimer(cacheName);
     const resolveUri = (relativePath: string) => getFilePathFromModOrHOI4(relativePath, options);
     const currentMtimes = await getFileMtimes(focusFiles, resolveUri);
-    const manifest = await loadCacheManifest(cacheName, FOCUS_CACHE_VERSION);
+    timer.mark('mtime');
 
+    const manifest = await loadCacheManifest(cacheName, FOCUS_CACHE_VERSION);
     let filesToParse = focusFiles;
 
     if (manifest) {
@@ -94,15 +96,17 @@ async function buildFocusIndexWithCache(
                     }
                 }
                 filesToParse = [...staleness.stale, ...staleness.added];
-                Logger.info(`${cacheName}: restored ${Object.keys(cached).length - skipFiles.size} files from cache, re-parsing ${filesToParse.length}`);
             } catch {
                 Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
                 filesToParse = focusFiles;
             }
         }
     }
+    timer.mark('cache');
 
     await Promise.all(filesToParse.map(f => fillFocusItems(f, focusIndex, reverseMap, options, estimatedSize)));
+    timer.mark('parse');
+    timer.log(focusFiles.length, filesToParse.length);
 
     // fire-and-forget: write data before manifest for atomicity
     void Promise.all([
