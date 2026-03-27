@@ -323,6 +323,31 @@ function getJointFocusTreeId(filePath: string): string {
     return fileName ? `${label} (${fileName})` : label;
 }
 
+/**
+ * Lightweight ID-only extraction for the shared focus index.
+ * Skips expensive per-focus parsing (icons, conditions, prerequisites)
+ * that getFocusTree/getFocuses/getFocus would do.
+ */
+export function extractFocusIds(node: Node): string[] {
+    const constants = {};
+    const file = convertFocusFileNodeToJson(node, constants);
+    const ids: string[] = [];
+
+    for (const tree of file.focus_tree) {
+        for (const focus of tree.focus) {
+            if (focus.id) { ids.push(focus.id); }
+        }
+    }
+    for (const focus of file.shared_focus) {
+        if (focus.id) { ids.push(focus.id); }
+    }
+    for (const focus of file.joint_focus) {
+        if (focus.id) { ids.push(focus.id); }
+    }
+
+    return ids;
+}
+
 export function getFocusTree(node: Node, sharedFocusTrees: FocusTree[], filePath: string): FocusTree[] {
     const constants = {};
     const file = convertFocusFileNodeToJson(node, constants);

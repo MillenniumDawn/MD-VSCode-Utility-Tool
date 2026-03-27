@@ -5,7 +5,7 @@ import { getFilePathFromModOrHOI4, listFilesFromModOrHOI4, readFileFromModOrHOI4
 import { localize } from './i18n';
 import { sendEvent } from './telemetry';
 import { Logger } from "./logger";
-import { getFocusTree } from "../previewdef/focustree/schema";
+import { extractFocusIds } from "../previewdef/focustree/schema";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import { sharedFocusIndex } from "./featureflags";
 import { loadCacheManifest, loadCacheData, saveCacheManifest, saveCacheData, getFileMtimes, computeStaleFiles, IndexTimer } from './indexCache';
@@ -119,17 +119,18 @@ async function fillFocusItems(focusFile: string, focusIndex: FocusIndex, reverse
     const [fileBuffer, uri] = await readFileFromModOrHOI4(focusFile, options);
     const fileContent = fileBuffer.toString();
 
+    // Skip files that don't contain any focus type definitions
+    if (!fileContent.includes('focus_tree')
+        && !fileContent.includes('shared_focus')
+        && !fileContent.includes('joint_focus')) {
+        return;
+    }
+
     try {
-        const sharedFocusTrees: any[] = [];
-        const focusTrees = getFocusTree(parseHoi4File(fileContent, localize('infile', 'In file {0}:\n', focusFile)), sharedFocusTrees, focusFile);
+        const ids = extractFocusIds(parseHoi4File(fileContent, localize('infile', 'In file {0}:\n', focusFile)));
+        focusIndex[focusFile] = ids;
 
-        const focusKeysSet = new Set<string>();
-        focusTrees.forEach(tree => {
-            Object.keys(tree.focuses).forEach(key => focusKeysSet.add(key));
-        });
-        focusIndex[focusFile] = Array.from(focusKeysSet);
-
-        for (const key of focusKeysSet) {
+        for (const key of ids) {
             reverseMap.set(key, focusFile);
         }
 
