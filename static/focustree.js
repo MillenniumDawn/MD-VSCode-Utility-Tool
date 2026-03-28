@@ -1,2 +1,826 @@
-(()=>{"use strict";var e,n={459:(e,n,t)=>{var o=t(215),s=t(409),i=t(757),c=t(543),l=t(390);class d{constructor(){this.records={},this.rawRecords={},this.id=0}style(e,n,t=""){const o=(e=this.name(e))+t;if(void 0!==this.records[o])return e;const s=n();return"string"==typeof s?(this.records[o]=s,e):s.then((n=>(this.records[o]=n,e)))}oneTimeStyle(e,n,t=""){const o=this.id++;return this.style(e+"-"+o,n,t)}toStyleElement(e){return`<style nonce="${e}">\n            ${Object.entries(this.records).map((([e,n])=>`.${e} { ${n.replace(/^\s+/gm,"")} }\n`)).join("")}\n            ${Object.entries(this.rawRecords).map((([e,n])=>`${e} { ${n.replace(/^\s+/gm,"")} }\n`)).join("")}\n            </style>`}name(e){return"st-"+e}raw(e,n){this.rawRecords[e]=n}}function r(e){return e.replace(/[^\w_]/g,(e=>"_"+e.charCodeAt(0)))}var a,u,f,h=t(292),m=t(625),p=t(524),y=t(189);function v(e,n){const t=document.getElementsByClassName(n),o=(0,s.Gu)().hiddenBranches||{};e?delete o[n]:o[n]=!0,(0,s.wb)({hiddenBranches:o});for(let e=0;e<t.length;e++){const n=t[e];n.style.display=n.className.split(" ").some((e=>o[e]))?"none":"block"}}function w(e,n=!0){const t=document.getElementsByClassName("focus"),o=[];let s=!1;for(let i=0;i<t.length;i++){const c=t[i];e&&c.id.toLowerCase().replace(/^focus_/,"").includes(e)?(c.style.outline="1px solid #E33",c.style.background="rgba(255, 0, 0, 0.5)",n&&!s&&(c.scrollIntoView({block:"center",inline:"center"}),s=!0),o.push(c)):(c.style.outlineWidth="0",c.style.background="transparent")}return o}const g=window.useConditionInFocus,b=window.focusTrees;let E,x,$,B=null!==(a=(0,s.Gu)().selectedExprs)&&void 0!==a?a:[],I=null!==(u=(0,s.Gu)().selectedInlayExprs)&&void 0!==u?u:[],k=Math.min(b.length-1,null!==(f=(0,s.Gu)().selectedFocusTreeIndex)&&void 0!==f?f:0),_={};function C(){var e;return null===(e=(0,s.Gu)().showCustomTitlebars)||void 0===e||e}function N(){var e;return null===(e=(0,s.Gu)().showFocusOverlays)||void 0===e||e}function O(){return!!window.__showInlayWindows}function j(){var e;return null!==(e=(0,s.Gu)().selectedInlayWindowIds)&&void 0!==e?e:{}}function L(e){var n;const t=j()[e.id];return e.inlayWindows.some((e=>e.id===t))?t:null===(n=e.inlayWindows[0])||void 0===n?void 0:n.id}function V(e,n){const t=j();t[e.id]=n,(0,s.wb)({selectedInlayWindowIds:t})}function F(){const e=C(),n=document.getElementsByClassName("focus-titlebar-layer");for(let t=0;t<n.length;t++){const o=n[t];"true"===o.dataset.hasCustomTitlebar&&(o.style.display=e?"block":"none")}}function T(){const e=N(),n=document.getElementsByClassName("focus-overlay-layer");for(let t=0;t<n.length;t++){const o=n[t];"true"===o.dataset.hasFocusOverlay&&(o.style.display=e?"block":"none")}}function W(){var e,n,t;return(0,o.sH)(this,void 0,void 0,(function*(){const i=null!==(e=(0,s.Gu)().checkedFocuses)&&void 0!==e?e:{},a=Object.keys(i).filter((e=>i[e])).map((e=>({scopeName:"",nodeContent:"has_completed_focus = "+e})));!function(){for(const e in _)_[e].dispose();_={}}();const u=document.getElementById("focustreeplaceholder"),f=new d,p=window.renderedFocus,v=b[k],w=Object.values(v.focuses),E={},x=[{scopeName:"",nodeContent:"has_focus_tree = "+v.id},...a,...B,...I];v.allowBranchOptions.forEach((e=>{const n=v.focuses[e];E[e]=!n||void 0===n.allowBranch||(0,h.QV)(n.allowBranch,x)})),v.isSharedFocues&&v.allowBranchOptions.forEach((e=>{E[e]=!0}));const $=window.gridBox,C={};!function(e,n){const t=e.focuses;let o=!0;for(;o;){o=!1;for(const e in t){const s=t[e];if(0===s.prerequisite.length)continue;if(s.id in n)continue;let i=!0;for(const e of s.prerequisite)if(0!==e.length&&(i=i&&e.some((e=>!0===n[e])),e.every((e=>!1===n[e])))){n[s.id]=!1,o=!0;break}i&&(n[s.id]=!0,o=!0)}}}(v,E);const N=w.map((e=>function(e,n,t,o,s){if(g&&!1===t[e.id])return;const i=e.inAllowBranch.map((e=>"inbranch_"+e)).join(" "),c=[];for(const t of e.prerequisite){let e;e=t.length>1?"1px dashed #88aaff":"1px solid #88aaff",t.forEach((t=>{var o;const s=n.focuses[t],l=null!==(o=null==s?void 0:s.inAllowBranch.map((e=>"inbranch_"+e)).join(" "))&&void 0!==o?o:"";c.push({target:t,targetType:"parent",style:e,classNames:i+" "+l})}))}e.exclusive.forEach((e=>{var t;const o=n.focuses[e],s=null!==(t=null==o?void 0:o.inAllowBranch.map((e=>"inbranch_"+e)).join(" "))&&void 0!==t?t:"";c.push({target:e,targetType:"related",style:"1px solid red",classNames:i+" "+s})}));const l=G(e,o,n,[],s);return{id:e.id,htmlId:"focus_"+e.id,classNames:i+" focus",gridX:l.x,gridY:l.y,connections:c}}(e,v,E,C,x))).filter((e=>!!e)),j=null!==(t=null===(n=(0,c.minBy)(Object.values(C),"x"))||void 0===n?void 0:n.x)&&void 0!==t?t:0,V=$.position.x._value-Math.min(j*window.xGridSize,0),H=yield(0,l.Vb)(Object.assign(Object.assign({},$),{position:Object.assign(Object.assign({},$.position),{x:(0,m.Qe)(V)})}),{size:{width:0,height:0},orientation:"upper_left"},{styleTable:f,items:(0,s.Pe)(N,"id"),onRenderItem:e=>Promise.resolve(p[e.id].replace("{{position}}",e.gridX+", "+e.gridY).replace("{{iconClass}}",function(e,n,t){for(const o of e.icon)if((0,h.QV)(o.condition,n)){const e=o.icon;return t.name("focus-icon-"+r(null!=e?e:"-empty"))}return t.name("focus-icon-"+r("-empty"))}(v.focuses[e.id],x,f))),cornerPosition:.5});u.innerHTML=H+f.toStyleElement(window.styleNonce),document.getElementById("inlaywindowplaceholder").innerHTML=function(e,n){var t,o;if(!O())return"";const s=L(e);if(!s)return"";const i=e.inlayWindows.find((e=>e.id===s));if(!i||!(0,h.QV)(i.visible,n))return"";const c=null!==(o=(null!==(t=window.renderedInlayWindows)&&void 0!==t?t:{})[i.id])&&void 0!==o?o:"";return i.scriptedImages.reduce(((e,t)=>{const o=function(e,n){for(const t of e)if((0,h.QV)(t.condition,n))return t}(t.gfxOptions,n);return e.split(`{{inlay_slot_class:${t.id}}}`).join(o?(s=o.gfxName,"st-inlay-gfx-"+r((null!=(i=o.gfxFile)?i:"missing")+"-"+(null!=s?s:"missing"))):"");var s,i}),c)}(v,x),(0,s.T3)(),function(e,n){var t,i;const c=null!==(t=(0,s.Gu)().checkedFocuses)&&void 0!==t?t:{};for(const t of e){const e=document.getElementById(`checkbox-${r(t.id)}`);if(e)if(n.conditionExprs.some((e=>""===e.scopeName&&e.nodeContent==="has_completed_focus = "+t.id))){e.checked=!!c[t.id];const n=new y.S(e);_[t.id]=n,e.addEventListener("change",(()=>(0,o.sH)(this,void 0,void 0,(function*(){if(e.checked)for(const e of t.exclusive){const n=_[e];n&&(n.input.checked=!1,c[e]=!1)}c[t.id]=e.checked,(0,s.wb)({checkedFocuses:c});const n=e.getBoundingClientRect(),o=n.left,i=n.top;yield W();const l=document.getElementById(`checkbox-${r(t.id)}`);if(l){const e=l.getBoundingClientRect(),n=e.left,t=e.top;window.scrollBy(n-o,t-i)}M()}))))}else null===(i=e.parentElement)||void 0===i||i.remove()}}(w,v),F(),T()}))}function H(e){const n=b[k],t=document.getElementById("continuousFocuses");if(void 0!==n.continuousFocusPositionX&&void 0!==n.continuousFocusPositionY?(t.style.left=n.continuousFocusPositionX-59+"px",t.style.top=n.continuousFocusPositionY+7+"px",t.style.display="block"):t.style.display="none",g){const t=P(n.conditionExprs).filter((e=>""!==e.scopeName||!e.nodeContent.startsWith("has_focus_tree = ")&&!e.nodeContent.startsWith("has_completed_focus = "))),o=P(n.inlayConditionExprs).filter((e=>""!==e.scopeName||!e.nodeContent.startsWith("has_focus_tree = ")&&!e.nodeContent.startsWith("has_completed_focus = "))),s=document.getElementById("condition-container");s&&(s.style.display=t.length>0?"block":"none"),x&&(x.select.innerHTML=`<span class="value"></span>\n                ${t.map((e=>`<div class="option" value='${e.scopeName}!|${e.nodeContent}'>${e.scopeName?`[${e.scopeName}]`:""}${e.nodeContent}</div>`)).join("")}`,x.selectedValues$.next(e?[]:B.map((e=>`${e.scopeName}!|${e.nodeContent}`))));const i=document.getElementById("inlay-condition-container");i&&(i.style.display=O()&&o.length>0?"block":"none"),$&&($.select.innerHTML=`<span class="value"></span>\n                ${o.map((e=>`<div class="option" value='${e.scopeName}!|${e.nodeContent}'>${e.scopeName?`[${e.scopeName}]`:""}${e.nodeContent}</div>`)).join("")}`,$.selectedValues$.next(e?[]:I.map((e=>`${e.scopeName}!|${e.nodeContent}`))))}else{const e=document.getElementById("allowbranch-container");e&&(e.style.display=n.allowBranchOptions.length>0?"block":"none"),E&&(E.select.innerHTML=`<span class="value"></span>\n                ${n.allowBranchOptions.map((e=>`<div class="option" value="inbranch_${e}">${e}</div>`)).join("")}`,E.selectAll())}const o=document.getElementById("inlay-windows"),s=document.getElementById("inlay-window-container"),i=document.getElementById("show-inlay-windows-container");if(i&&(i.style.display=n.inlayWindows.length>0?"flex":"none"),s&&(s.style.display=n.inlayWindows.length>0?"block":"none"),o){o.innerHTML=n.inlayWindows.map((e=>`<option value="${e.id}">${e.id}</option>`)).join("");const e=L(n);e&&(o.value=e,V(n,e))}const c=document.getElementById("warnings");c&&(c.value=0===n.warnings.length?(0,p.D)("worldmap.warnings.nowarnings","No warnings."):n.warnings.map((e=>`[${e.source}] ${e.text}`)).join("\n"))}function G(e,n,t,o=[],s){if(void 0===e)return{x:0,y:0};const i=n[e.id];if(i)return i;if(o.includes(e))return{x:0,y:0};let c={x:e.x,y:e.y};if(void 0!==e.relativePositionId){o.push(e);const i=G(t.focuses[e.relativePositionId],n,t,o,s);o.pop(),c.x+=i.x,c.y+=i.y}for(const n of e.offset)void 0!==n.trigger&&(0,h.QV)(n.trigger,s)&&(c.x+=n.x,c.y+=n.y);return n[e.id]=c,c}function P(e){const n=[];for(const t of e)n.some((e=>e.scopeName===t.scopeName&&e.nodeContent===t.nodeContent))||n.push(t);return n}let M=()=>{};window.addEventListener("load",(0,s.JR)((function(){return(0,o.sH)(this,void 0,void 0,(function*(){const e=document.getElementById("show-custom-titlebars");e&&(e.checked=C(),e.addEventListener("change",(()=>{(0,s.wb)({showCustomTitlebars:e.checked}),F()})));const n=document.getElementById("show-focus-overlays");n&&(n.checked=N(),n.addEventListener("change",(()=>{(0,s.wb)({showFocusOverlays:n.checked}),T()})));const t=document.getElementById("show-inlay-windows");t&&(window.__showInlayWindows=!1,t.checked=!1,t.addEventListener("change",(()=>(0,o.sH)(this,void 0,void 0,(function*(){window.__showInlayWindows=t.checked,H(!1),yield W(),M()})))));const l=document.getElementById("focuses");l&&(l.value=k.toString(),l.addEventListener("change",(()=>(0,o.sH)(this,void 0,void 0,(function*(){k=parseInt(l.value),(0,s.wb)({selectedFocusTreeIndex:k}),H(!0),yield W(),M()})))));const d=document.getElementById("inlay-windows");if(d&&d.addEventListener("change",(()=>(0,o.sH)(this,void 0,void 0,(function*(){V(b[k],d.value),yield W(),M()})))),!g){const e=(0,s.Gu)().hiddenBranches||{};for(const n in e)v(!1,n);const n=document.getElementById("allowbranch");if(n){E=new i.f3(n,!0),E.selectAll();const t=E.selectedValues$.value;E.selectedValues$.next(t.filter((n=>!e[n])));let o=E.selectedValues$.value;E.selectedValues$.subscribe((e=>{(0,c.difference)(e,o).forEach((e=>v(!0,e))),(0,c.difference)(o,e).forEach((e=>v(!1,e))),o=e;const n=(0,c.difference)(t,e);(0,s.wb)({hiddenBranches:n})}))}}const r=document.getElementById("searchbox");let a=0,u=(0,s.Gu)().searchboxValue||"",f=w(u,!1);r.value=u;const h=function(){const e=this.value.toLowerCase();u!==e&&(a=0,f=w(e),u=e,(0,s.wb)({searchboxValue:e}))};if(r.addEventListener("change",h),r.addEventListener("keypress",(function(e){if("Enter"===e.key){const n=f.filter((e=>"none"!==e.style.display));n.length>0&&(a=(a+(e.shiftKey?n.length-1:1))%n.length,n[a].scrollIntoView({block:"center",inline:"center"}))}else h.apply(this)})),r.addEventListener("keyup",h),r.addEventListener("paste",h),r.addEventListener("cut",h),M=()=>{f=w(u,!1)},g){const e=document.getElementById("conditions");e&&(x=new i.f3(e,!0),x.selectedValues$.next(B.map((e=>`${e.scopeName}!|${e.nodeContent}`))),x.selectedValues$.subscribe((e=>(0,o.sH)(this,void 0,void 0,(function*(){B=e.map((e=>{const n=e.indexOf("!|");return-1===n?{scopeName:"",nodeContent:e}:{scopeName:e.substring(0,n),nodeContent:e.substring(n+2)}})),(0,s.wb)({selectedExprs:B}),yield W(),M()})))));const n=document.getElementById("inlay-conditions");n&&($=new i.f3(n,!0),$.selectedValues$.next(I.map((e=>`${e.scopeName}!|${e.nodeContent}`))),$.selectedValues$.subscribe((e=>(0,o.sH)(this,void 0,void 0,(function*(){I=e.map((e=>{const n=e.indexOf("!|");return-1===n?{scopeName:"",nodeContent:e}:{scopeName:e.substring(0,n),nodeContent:e.substring(n+2)}})),(0,s.wb)({selectedInlayExprs:I}),yield W(),M()})))))}const m=document.getElementById("focustreecontent");(0,s.l6)(m,0,40);const p=document.getElementById("show-warnings");if(p){const e=document.getElementById("warnings-container");p.addEventListener("click",(()=>{const n="block"===e.style.display;document.body.style.overflow=n?"":"hidden",e.style.display=n?"none":"block"}))}H(!1),yield W(),(0,s.iF)()}))})))}},t={};function o(e){var s=t[e];if(void 0!==s)return s.exports;var i=t[e]={id:e,loaded:!1,exports:{}};return n[e].call(i.exports,i,i.exports,o),i.loaded=!0,i.exports}o.m=n,e=[],o.O=(n,t,s,i)=>{if(!t){var c=1/0;for(a=0;a<e.length;a++){for(var[t,s,i]=e[a],l=!0,d=0;d<t.length;d++)(!1&i||c>=i)&&Object.keys(o.O).every((e=>o.O[e](t[d])))?t.splice(d--,1):(l=!1,i<c&&(c=i));if(l){e.splice(a--,1);var r=s();void 0!==r&&(n=r)}}return n}i=i||0;for(var a=e.length;a>0&&e[a-1][2]>i;a--)e[a]=e[a-1];e[a]=[t,s,i]},o.n=e=>{var n=e&&e.__esModule?()=>e.default:()=>e;return o.d(n,{a:n}),n},o.d=(e,n)=>{for(var t in n)o.o(n,t)&&!o.o(e,t)&&Object.defineProperty(e,t,{enumerable:!0,get:n[t]})},o.g=function(){if("object"==typeof globalThis)return globalThis;try{return this||new Function("return this")()}catch(e){if("object"==typeof window)return window}}(),o.o=(e,n)=>Object.prototype.hasOwnProperty.call(e,n),o.nmd=e=>(e.paths=[],e.children||(e.children=[]),e),o.j=509,(()=>{var e={509:0};o.O.j=n=>0===e[n];var n=(n,t)=>{var s,i,[c,l,d]=t,r=0;if(c.some((n=>0!==e[n]))){for(s in l)o.o(l,s)&&(o.m[s]=l[s]);if(d)var a=d(o)}for(n&&n(t);r<c.length;r++)i=c[r],o.o(e,i)&&e[i]&&e[i][0](),e[i]=0;return o.O(a)},t=self.webpackChunkmillennium_dawn_hoi4_utilities=self.webpackChunkmillennium_dawn_hoi4_utilities||[];t.forEach(n.bind(null,0)),t.push=n.bind(null,t.push.bind(t))})();var s=o.O(void 0,[76],(()=>o(459)));s=o.O(s)})();
+/******/ (() => { // webpackBootstrap
+/******/ 	"use strict";
+/******/ 	var __webpack_modules__ = ({
+
+/***/ "./webviewsrc/focustree.ts":
+/*!*********************************!*\
+  !*** ./webviewsrc/focustree.ts ***!
+  \*********************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! tslib */ "./node_modules/tslib/tslib.es6.js");
+/* harmony import */ var _util_common__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./util/common */ "./webviewsrc/util/common.ts");
+/* harmony import */ var _util_dropdown__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./util/dropdown */ "./webviewsrc/util/dropdown.ts");
+/* harmony import */ var lodash__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! lodash */ "./node_modules/lodash/lodash.js");
+/* harmony import */ var lodash__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(lodash__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var _src_util_hoi4gui_gridboxcommon__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ../src/util/hoi4gui/gridboxcommon */ "./src/util/hoi4gui/gridboxcommon.ts");
+/* harmony import */ var _src_util_styletable__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ../src/util/styletable */ "./src/util/styletable.ts");
+/* harmony import */ var _src_hoiformat_condition__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ../src/hoiformat/condition */ "./src/hoiformat/condition.ts");
+/* harmony import */ var _src_hoiformat_schema__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ../src/hoiformat/schema */ "./src/hoiformat/schema.ts");
+/* harmony import */ var _util_i18n__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./util/i18n */ "./webviewsrc/util/i18n.ts");
+/* harmony import */ var _util_checkbox__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ./util/checkbox */ "./webviewsrc/util/checkbox.ts");
+var _a, _b, _c;
+
+
+
+
+
+
+
+
+
+
+function showBranch(visibility, optionClass) {
+    const elements = document.getElementsByClassName(optionClass);
+    const hiddenBranches = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().hiddenBranches || {};
+    if (visibility) {
+        delete hiddenBranches[optionClass];
+    }
+    else {
+        hiddenBranches[optionClass] = true;
+    }
+    (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ hiddenBranches: hiddenBranches });
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        element.style.display = element.className.split(' ').some(b => hiddenBranches[b]) ? "none" : "block";
+    }
+}
+;
+function search(searchContent, navigate = true) {
+    const focuses = document.getElementsByClassName('focus');
+    const searchedFocus = [];
+    let navigated = false;
+    for (let i = 0; i < focuses.length; i++) {
+        const focus = focuses[i];
+        if (searchContent && focus.id.toLowerCase().replace(/^focus_/, '').includes(searchContent)) {
+            focus.style.outline = '1px solid #E33';
+            focus.style.background = 'rgba(255, 0, 0, 0.5)';
+            if (navigate && !navigated) {
+                focus.scrollIntoView({ block: "center", inline: "center" });
+                navigated = true;
+            }
+            searchedFocus.push(focus);
+        }
+        else {
+            focus.style.outlineWidth = '0';
+            focus.style.background = 'transparent';
+        }
+    }
+    return searchedFocus;
+}
+const useConditionInFocus = window.useConditionInFocus;
+const focusTrees = window.focusTrees;
+let selectedExprs = (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().selectedExprs) !== null && _a !== void 0 ? _a : [];
+let selectedInlayExprs = (_b = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().selectedInlayExprs) !== null && _b !== void 0 ? _b : [];
+let selectedFocusTreeIndex = Math.min(focusTrees.length - 1, (_c = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().selectedFocusTreeIndex) !== null && _c !== void 0 ? _c : 0);
+let allowBranches = undefined;
+let conditions = undefined;
+let inlayConditions = undefined;
+let checkedFocuses = {};
+function showCustomTitlebars() {
+    var _a;
+    return (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().showCustomTitlebars) !== null && _a !== void 0 ? _a : true;
+}
+function showFocusOverlays() {
+    var _a;
+    return (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().showFocusOverlays) !== null && _a !== void 0 ? _a : true;
+}
+function showInlayWindows() {
+    return !!window.__showInlayWindows;
+}
+function getSelectedInlayWindowIds() {
+    var _a;
+    return (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().selectedInlayWindowIds) !== null && _a !== void 0 ? _a : {};
+}
+function getSelectedInlayWindowId(focusTree) {
+    var _a;
+    const selected = getSelectedInlayWindowIds()[focusTree.id];
+    if (focusTree.inlayWindows.some(inlay => inlay.id === selected)) {
+        return selected;
+    }
+    return (_a = focusTree.inlayWindows[0]) === null || _a === void 0 ? void 0 : _a.id;
+}
+function setSelectedInlayWindowId(focusTree, inlayWindowId) {
+    const selectedInlayWindowIds = getSelectedInlayWindowIds();
+    selectedInlayWindowIds[focusTree.id] = inlayWindowId;
+    (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ selectedInlayWindowIds });
+}
+function applyCustomTitlebarVisibility() {
+    const visible = showCustomTitlebars();
+    const elements = document.getElementsByClassName('focus-titlebar-layer');
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        if (element.dataset.hasCustomTitlebar === 'true') {
+            element.style.display = visible ? 'block' : 'none';
+        }
+    }
+}
+function applyFocusOverlayVisibility() {
+    const visible = showFocusOverlays();
+    const elements = document.getElementsByClassName('focus-overlay-layer');
+    for (let i = 0; i < elements.length; i++) {
+        const element = elements[i];
+        if (element.dataset.hasFocusOverlay === 'true') {
+            element.style.display = visible ? 'block' : 'none';
+        }
+    }
+}
+function buildContent() {
+    var _a, _b, _c;
+    return (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+        const focusCheckState = (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().checkedFocuses) !== null && _a !== void 0 ? _a : {};
+        const checkedFocusesExprs = Object.keys(focusCheckState)
+            .filter(fid => focusCheckState[fid])
+            .map(fid => ({ scopeName: '', nodeContent: 'has_completed_focus = ' + fid }));
+        clearCheckedFocuses();
+        const focustreeplaceholder = document.getElementById('focustreeplaceholder');
+        const styleTable = new _src_util_styletable__WEBPACK_IMPORTED_MODULE_4__.StyleTable();
+        const renderedFocus = window.renderedFocus;
+        const focusTree = focusTrees[selectedFocusTreeIndex];
+        const focuses = Object.values(focusTree.focuses);
+        const allowBranchOptionsValue = {};
+        const exprs = [{ scopeName: '', nodeContent: 'has_focus_tree = ' + focusTree.id }, ...checkedFocusesExprs, ...selectedExprs, ...selectedInlayExprs];
+        focusTree.allowBranchOptions.forEach(option => {
+            const focus = focusTree.focuses[option];
+            allowBranchOptionsValue[option] = !focus || focus.allowBranch === undefined || (0,_src_hoiformat_condition__WEBPACK_IMPORTED_MODULE_5__.applyCondition)(focus.allowBranch, exprs);
+        });
+        // For synthetic trees (shared focuses), always allow branches to show them in preview
+        if (focusTree.isSharedFocues) {
+            focusTree.allowBranchOptions.forEach(option => {
+                allowBranchOptionsValue[option] = true;
+            });
+        }
+        const gridbox = window.gridBox;
+        const focusPosition = {};
+        calculateFocusAllowed(focusTree, allowBranchOptionsValue);
+        const focusGrixBoxItems = focuses.map(focus => focusToGridItem(focus, focusTree, allowBranchOptionsValue, focusPosition, exprs)).filter((v) => !!v);
+        const minX = (_c = (_b = (0,lodash__WEBPACK_IMPORTED_MODULE_2__.minBy)(Object.values(focusPosition), 'x')) === null || _b === void 0 ? void 0 : _b.x) !== null && _c !== void 0 ? _c : 0;
+        const leftPadding = gridbox.position.x._value - Math.min(minX * window.xGridSize, 0);
+        const focusTreeContent = yield (0,_src_util_hoi4gui_gridboxcommon__WEBPACK_IMPORTED_MODULE_3__.renderGridBoxCommon)(Object.assign(Object.assign({}, gridbox), { position: Object.assign(Object.assign({}, gridbox.position), { x: (0,_src_hoiformat_schema__WEBPACK_IMPORTED_MODULE_6__.toNumberLike)(leftPadding) }) }), {
+            size: { width: 0, height: 0 },
+            orientation: 'upper_left'
+        }, {
+            styleTable,
+            items: (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.arrayToMap)(focusGrixBoxItems, 'id'),
+            onRenderItem: item => Promise.resolve(renderedFocus[item.id]
+                .replace('{{position}}', item.gridX + ', ' + item.gridY)
+                .replace('{{iconClass}}', getFocusIcon(focusTree.focuses[item.id], exprs, styleTable))),
+            cornerPosition: 0.5,
+        });
+        focustreeplaceholder.innerHTML = focusTreeContent + styleTable.toStyleElement(window.styleNonce);
+        const inlayWindowPlaceholder = document.getElementById('inlaywindowplaceholder');
+        inlayWindowPlaceholder.innerHTML = renderInlayWindows(focusTree, exprs);
+        (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.subscribeNavigators)();
+        setupCheckedFocuses(focuses, focusTree);
+        applyCustomTitlebarVisibility();
+        applyFocusOverlayVisibility();
+    });
+}
+function calculateFocusAllowed(focusTree, allowBranchOptionsValue) {
+    const focuses = focusTree.focuses;
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const key in focuses) {
+            const focus = focuses[key];
+            if (focus.prerequisite.length === 0) {
+                continue;
+            }
+            if (focus.id in allowBranchOptionsValue) {
+                continue;
+            }
+            let allow = true;
+            for (const andPrerequests of focus.prerequisite) {
+                if (andPrerequests.length === 0) {
+                    continue;
+                }
+                allow = allow && andPrerequests.some(p => allowBranchOptionsValue[p] === true);
+                const deny = andPrerequests.every(p => allowBranchOptionsValue[p] === false);
+                if (deny) {
+                    allowBranchOptionsValue[focus.id] = false;
+                    changed = true;
+                    break;
+                }
+            }
+            if (allow) {
+                allowBranchOptionsValue[focus.id] = true;
+                changed = true;
+            }
+        }
+    }
+}
+function updateSelectedFocusTree(clearCondition) {
+    const focusTree = focusTrees[selectedFocusTreeIndex];
+    const continuousFocuses = document.getElementById('continuousFocuses');
+    if (focusTree.continuousFocusPositionX !== undefined && focusTree.continuousFocusPositionY !== undefined) {
+        continuousFocuses.style.left = (focusTree.continuousFocusPositionX - 59) + 'px';
+        continuousFocuses.style.top = (focusTree.continuousFocusPositionY + 7) + 'px';
+        continuousFocuses.style.display = 'block';
+    }
+    else {
+        continuousFocuses.style.display = 'none';
+    }
+    if (useConditionInFocus) {
+        const conditionExprs = dedupeConditionExprs(focusTree.conditionExprs).filter(e => e.scopeName !== '' ||
+            (!e.nodeContent.startsWith('has_focus_tree = ') && !e.nodeContent.startsWith('has_completed_focus = ')));
+        const inlayConditionExprs = dedupeConditionExprs(focusTree.inlayConditionExprs).filter(e => e.scopeName !== '' ||
+            (!e.nodeContent.startsWith('has_focus_tree = ') && !e.nodeContent.startsWith('has_completed_focus = ')));
+        const conditionContainerElement = document.getElementById('condition-container');
+        if (conditionContainerElement) {
+            conditionContainerElement.style.display = conditionExprs.length > 0 ? 'block' : 'none';
+        }
+        if (conditions) {
+            conditions.select.innerHTML = `<span class="value"></span>
+                ${conditionExprs.map(option => `<div class="option" value='${option.scopeName}!|${option.nodeContent}'>${option.scopeName ? `[${option.scopeName}]` : ''}${option.nodeContent}</div>`).join('')}`;
+            conditions.selectedValues$.next(clearCondition ? [] : selectedExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
+        }
+        const inlayConditionContainerElement = document.getElementById('inlay-condition-container');
+        if (inlayConditionContainerElement) {
+            inlayConditionContainerElement.style.display = showInlayWindows() && inlayConditionExprs.length > 0 ? 'block' : 'none';
+        }
+        if (inlayConditions) {
+            inlayConditions.select.innerHTML = `<span class="value"></span>
+                ${inlayConditionExprs.map(option => `<div class="option" value='${option.scopeName}!|${option.nodeContent}'>${option.scopeName ? `[${option.scopeName}]` : ''}${option.nodeContent}</div>`).join('')}`;
+            inlayConditions.selectedValues$.next(clearCondition ? [] : selectedInlayExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
+        }
+    }
+    else {
+        const allowBranchesContainerElement = document.getElementById('allowbranch-container');
+        if (allowBranchesContainerElement) {
+            allowBranchesContainerElement.style.display = focusTree.allowBranchOptions.length > 0 ? 'block' : 'none';
+        }
+        if (allowBranches) {
+            allowBranches.select.innerHTML = `<span class="value"></span>
+                ${focusTree.allowBranchOptions.map(option => `<div class="option" value="inbranch_${option}">${option}</div>`).join('')}`;
+            allowBranches.selectAll();
+        }
+    }
+    const inlayWindowsElement = document.getElementById('inlay-windows');
+    const inlayWindowsContainerElement = document.getElementById('inlay-window-container');
+    const showInlayWindowsContainerElement = document.getElementById('show-inlay-windows-container');
+    if (showInlayWindowsContainerElement) {
+        showInlayWindowsContainerElement.style.display = focusTree.inlayWindows.length > 0 ? 'flex' : 'none';
+    }
+    if (inlayWindowsContainerElement) {
+        inlayWindowsContainerElement.style.display = focusTree.inlayWindows.length > 0 ? 'block' : 'none';
+    }
+    if (inlayWindowsElement) {
+        inlayWindowsElement.innerHTML = focusTree.inlayWindows.map(inlay => `<option value="${inlay.id}">${inlay.id}</option>`).join('');
+        const selectedInlayWindowId = getSelectedInlayWindowId(focusTree);
+        if (selectedInlayWindowId) {
+            inlayWindowsElement.value = selectedInlayWindowId;
+            setSelectedInlayWindowId(focusTree, selectedInlayWindowId);
+        }
+    }
+    const warnings = document.getElementById('warnings');
+    if (warnings) {
+        warnings.value = focusTree.warnings.length === 0 ? (0,_util_i18n__WEBPACK_IMPORTED_MODULE_7__.feLocalize)('worldmap.warnings.nowarnings', 'No warnings.') :
+            focusTree.warnings.map(w => `[${w.source}] ${w.text}`).join('\n');
+    }
+}
+function getFocusPosition(focus, positionByFocusId, focusTree, focusStack = [], exprs) {
+    if (focus === undefined) {
+        return { x: 0, y: 0 };
+    }
+    const cached = positionByFocusId[focus.id];
+    if (cached) {
+        return cached;
+    }
+    if (focusStack.includes(focus)) {
+        return { x: 0, y: 0 };
+    }
+    let position = { x: focus.x, y: focus.y };
+    if (focus.relativePositionId !== undefined) {
+        focusStack.push(focus);
+        const relativeFocusPosition = getFocusPosition(focusTree.focuses[focus.relativePositionId], positionByFocusId, focusTree, focusStack, exprs);
+        focusStack.pop();
+        position.x += relativeFocusPosition.x;
+        position.y += relativeFocusPosition.y;
+    }
+    for (const offset of focus.offset) {
+        if (offset.trigger !== undefined && (0,_src_hoiformat_condition__WEBPACK_IMPORTED_MODULE_5__.applyCondition)(offset.trigger, exprs)) {
+            position.x += offset.x;
+            position.y += offset.y;
+        }
+    }
+    positionByFocusId[focus.id] = position;
+    return position;
+}
+function getFocusIcon(focus, exprs, styleTable) {
+    for (const icon of focus.icon) {
+        if ((0,_src_hoiformat_condition__WEBPACK_IMPORTED_MODULE_5__.applyCondition)(icon.condition, exprs)) {
+            const iconName = icon.icon;
+            return styleTable.name('focus-icon-' + (0,_src_util_styletable__WEBPACK_IMPORTED_MODULE_4__.normalizeForStyle)(iconName !== null && iconName !== void 0 ? iconName : '-empty'));
+        }
+    }
+    return styleTable.name('focus-icon-' + (0,_src_util_styletable__WEBPACK_IMPORTED_MODULE_4__.normalizeForStyle)('-empty'));
+}
+function focusToGridItem(focus, focustree, allowBranchOptionsValue, positionByFocusId, exprs) {
+    if (useConditionInFocus) {
+        if (allowBranchOptionsValue[focus.id] === false) {
+            return undefined;
+        }
+    }
+    const classNames = focus.inAllowBranch.map(v => 'inbranch_' + v).join(' ');
+    const connections = [];
+    for (const prerequisites of focus.prerequisite) {
+        let style;
+        if (prerequisites.length > 1) {
+            style = "1px dashed #88aaff";
+        }
+        else {
+            style = "1px solid #88aaff";
+        }
+        prerequisites.forEach(p => {
+            var _a;
+            const fp = focustree.focuses[p];
+            const classNames2 = (_a = fp === null || fp === void 0 ? void 0 : fp.inAllowBranch.map(v => 'inbranch_' + v).join(' ')) !== null && _a !== void 0 ? _a : '';
+            connections.push({
+                target: p,
+                targetType: 'parent',
+                style: style,
+                classNames: classNames + ' ' + classNames2,
+            });
+        });
+    }
+    focus.exclusive.forEach(e => {
+        var _a;
+        const fe = focustree.focuses[e];
+        const classNames2 = (_a = fe === null || fe === void 0 ? void 0 : fe.inAllowBranch.map(v => 'inbranch_' + v).join(' ')) !== null && _a !== void 0 ? _a : '';
+        connections.push({
+            target: e,
+            targetType: 'related',
+            style: "1px solid red",
+            classNames: classNames + ' ' + classNames2,
+        });
+    });
+    const position = getFocusPosition(focus, positionByFocusId, focustree, [], exprs);
+    return {
+        id: focus.id,
+        htmlId: 'focus_' + focus.id,
+        classNames: classNames + ' focus',
+        gridX: position.x,
+        gridY: position.y,
+        connections,
+    };
+}
+function clearCheckedFocuses() {
+    for (const focusId in checkedFocuses) {
+        checkedFocuses[focusId].dispose();
+    }
+    checkedFocuses = {};
+}
+function setupCheckedFocuses(focuses, focusTree) {
+    var _a, _b;
+    const focusCheckState = (_a = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().checkedFocuses) !== null && _a !== void 0 ? _a : {};
+    for (const focus of focuses) {
+        const checkbox = document.getElementById(`checkbox-${(0,_src_util_styletable__WEBPACK_IMPORTED_MODULE_4__.normalizeForStyle)(focus.id)}`);
+        if (checkbox) {
+            if (focusTree.conditionExprs.some(e => e.scopeName === '' && e.nodeContent === 'has_completed_focus = ' + focus.id)) {
+                checkbox.checked = !!focusCheckState[focus.id];
+                const checkboxItem = new _util_checkbox__WEBPACK_IMPORTED_MODULE_8__.Checkbox(checkbox);
+                checkedFocuses[focus.id] = checkboxItem;
+                checkbox.addEventListener('change', () => (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+                    if (checkbox.checked) {
+                        for (const exclusiveFocus of focus.exclusive) {
+                            const exclusiveCheckbox = checkedFocuses[exclusiveFocus];
+                            if (exclusiveCheckbox) {
+                                exclusiveCheckbox.input.checked = false;
+                                focusCheckState[exclusiveFocus] = false;
+                            }
+                        }
+                    }
+                    focusCheckState[focus.id] = checkbox.checked;
+                    (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ checkedFocuses: focusCheckState });
+                    const rect = checkbox.getBoundingClientRect();
+                    const oldLeft = rect.left, oldTop = rect.top;
+                    yield buildContent();
+                    const newCheckbox = document.getElementById(`checkbox-${(0,_src_util_styletable__WEBPACK_IMPORTED_MODULE_4__.normalizeForStyle)(focus.id)}`);
+                    if (newCheckbox) {
+                        const rect = newCheckbox.getBoundingClientRect();
+                        const newLeft = rect.left, newTop = rect.top;
+                        window.scrollBy(newLeft - oldLeft, newTop - oldTop);
+                    }
+                    retriggerSearch();
+                }));
+            }
+            else {
+                (_b = checkbox.parentElement) === null || _b === void 0 ? void 0 : _b.remove();
+            }
+        }
+    }
+}
+function dedupeConditionExprs(exprs) {
+    const result = [];
+    for (const expr of exprs) {
+        if (!result.some(existing => existing.scopeName === expr.scopeName && existing.nodeContent === expr.nodeContent)) {
+            result.push(expr);
+        }
+    }
+    return result;
+}
+function renderInlayWindows(focusTree, exprs) {
+    var _a, _b;
+    if (!showInlayWindows()) {
+        return '';
+    }
+    const selectedInlayWindowId = getSelectedInlayWindowId(focusTree);
+    if (!selectedInlayWindowId) {
+        return '';
+    }
+    const selectedInlayWindow = focusTree.inlayWindows.find(inlay => inlay.id === selectedInlayWindowId);
+    if (!selectedInlayWindow || !(0,_src_hoiformat_condition__WEBPACK_IMPORTED_MODULE_5__.applyCondition)(selectedInlayWindow.visible, exprs)) {
+        return '';
+    }
+    const renderedInlayWindows = (_a = window.renderedInlayWindows) !== null && _a !== void 0 ? _a : {};
+    const template = (_b = renderedInlayWindows[selectedInlayWindow.id]) !== null && _b !== void 0 ? _b : '';
+    return selectedInlayWindow.scriptedImages.reduce((content, slot) => {
+        const activeOption = getActiveInlayOption(slot.gfxOptions, exprs);
+        return content.split(`{{inlay_slot_class:${slot.id}}}`).join(activeOption ? getInlayGfxClassName(activeOption.gfxName, activeOption.gfxFile) : '');
+    }, template);
+}
+function getActiveInlayOption(options, exprs) {
+    for (const option of options) {
+        if ((0,_src_hoiformat_condition__WEBPACK_IMPORTED_MODULE_5__.applyCondition)(option.condition, exprs)) {
+            return option;
+        }
+    }
+    return undefined;
+}
+function getInlayGfxClassName(gfxName, gfxFile) {
+    return 'st-inlay-gfx-' + (0,_src_util_styletable__WEBPACK_IMPORTED_MODULE_4__.normalizeForStyle)((gfxFile !== null && gfxFile !== void 0 ? gfxFile : 'missing') + '-' + (gfxName !== null && gfxName !== void 0 ? gfxName : 'missing'));
+}
+let retriggerSearch = () => { };
+window.addEventListener('load', (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.tryRun)(function () {
+    return (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+        // Custom titlebars
+        const showCustomTitlebarsElement = document.getElementById('show-custom-titlebars');
+        if (showCustomTitlebarsElement) {
+            showCustomTitlebarsElement.checked = showCustomTitlebars();
+            showCustomTitlebarsElement.addEventListener('change', () => {
+                (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ showCustomTitlebars: showCustomTitlebarsElement.checked });
+                applyCustomTitlebarVisibility();
+            });
+        }
+        const showFocusOverlaysElement = document.getElementById('show-focus-overlays');
+        if (showFocusOverlaysElement) {
+            showFocusOverlaysElement.checked = showFocusOverlays();
+            showFocusOverlaysElement.addEventListener('change', () => {
+                (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ showFocusOverlays: showFocusOverlaysElement.checked });
+                applyFocusOverlayVisibility();
+            });
+        }
+        const showInlayWindowsElement = document.getElementById('show-inlay-windows');
+        if (showInlayWindowsElement) {
+            window.__showInlayWindows = false;
+            showInlayWindowsElement.checked = false;
+            showInlayWindowsElement.addEventListener('change', () => (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+                window.__showInlayWindows = showInlayWindowsElement.checked;
+                updateSelectedFocusTree(false);
+                yield buildContent();
+                retriggerSearch();
+            }));
+        }
+        // Focuses
+        const focusesElement = document.getElementById('focuses');
+        if (focusesElement) {
+            focusesElement.value = selectedFocusTreeIndex.toString();
+            focusesElement.addEventListener('change', () => (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+                selectedFocusTreeIndex = parseInt(focusesElement.value);
+                (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ selectedFocusTreeIndex });
+                updateSelectedFocusTree(true);
+                yield buildContent();
+                retriggerSearch();
+            }));
+        }
+        const inlayWindowsElement = document.getElementById('inlay-windows');
+        if (inlayWindowsElement) {
+            inlayWindowsElement.addEventListener('change', () => (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+                const focusTree = focusTrees[selectedFocusTreeIndex];
+                setSelectedInlayWindowId(focusTree, inlayWindowsElement.value);
+                yield buildContent();
+                retriggerSearch();
+            }));
+        }
+        // Allow branch
+        if (!useConditionInFocus) {
+            const hiddenBranches = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().hiddenBranches || {};
+            for (const key in hiddenBranches) {
+                showBranch(false, key);
+            }
+            const allowBranchesElement = document.getElementById('allowbranch');
+            if (allowBranchesElement) {
+                allowBranches = new _util_dropdown__WEBPACK_IMPORTED_MODULE_1__.DivDropdown(allowBranchesElement, true);
+                allowBranches.selectAll();
+                const allValues = allowBranches.selectedValues$.value;
+                allowBranches.selectedValues$.next(allValues.filter(v => !hiddenBranches[v]));
+                let oldSelection = allowBranches.selectedValues$.value;
+                allowBranches.selectedValues$.subscribe(selection => {
+                    const showBranches = (0,lodash__WEBPACK_IMPORTED_MODULE_2__.difference)(selection, oldSelection);
+                    showBranches.forEach(s => showBranch(true, s));
+                    const hideBranches = (0,lodash__WEBPACK_IMPORTED_MODULE_2__.difference)(oldSelection, selection);
+                    hideBranches.forEach(s => showBranch(false, s));
+                    oldSelection = selection;
+                    const hiddenBranches = (0,lodash__WEBPACK_IMPORTED_MODULE_2__.difference)(allValues, selection);
+                    (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ hiddenBranches });
+                });
+            }
+        }
+        // Searchbox
+        const searchbox = document.getElementById('searchbox');
+        let currentNavigatedIndex = 0;
+        let oldSearchboxValue = (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.getState)().searchboxValue || '';
+        let searchedFocus = search(oldSearchboxValue, false);
+        searchbox.value = oldSearchboxValue;
+        const searchboxChangeFunc = function () {
+            const searchboxValue = this.value.toLowerCase();
+            if (oldSearchboxValue !== searchboxValue) {
+                currentNavigatedIndex = 0;
+                searchedFocus = search(searchboxValue);
+                oldSearchboxValue = searchboxValue;
+                (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ searchboxValue });
+            }
+        };
+        searchbox.addEventListener('change', searchboxChangeFunc);
+        searchbox.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                const visibleSearchedFocus = searchedFocus.filter(f => f.style.display !== 'none');
+                if (visibleSearchedFocus.length > 0) {
+                    currentNavigatedIndex = (currentNavigatedIndex + (e.shiftKey ? visibleSearchedFocus.length - 1 : 1)) % visibleSearchedFocus.length;
+                    visibleSearchedFocus[currentNavigatedIndex].scrollIntoView({ block: "center", inline: "center" });
+                }
+            }
+            else {
+                searchboxChangeFunc.apply(this);
+            }
+        });
+        searchbox.addEventListener('keyup', searchboxChangeFunc);
+        searchbox.addEventListener('paste', searchboxChangeFunc);
+        searchbox.addEventListener('cut', searchboxChangeFunc);
+        retriggerSearch = () => { searchedFocus = search(oldSearchboxValue, false); };
+        // Conditions
+        if (useConditionInFocus) {
+            const conditionsElement = document.getElementById('conditions');
+            if (conditionsElement) {
+                conditions = new _util_dropdown__WEBPACK_IMPORTED_MODULE_1__.DivDropdown(conditionsElement, true);
+                conditions.selectedValues$.next(selectedExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
+                conditions.selectedValues$.subscribe((selection) => (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+                    selectedExprs = selection.map(selection => {
+                        const index = selection.indexOf('!|');
+                        if (index === -1) {
+                            return {
+                                scopeName: '',
+                                nodeContent: selection,
+                            };
+                        }
+                        else {
+                            return {
+                                scopeName: selection.substring(0, index),
+                                nodeContent: selection.substring(index + 2),
+                            };
+                        }
+                    });
+                    (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ selectedExprs });
+                    yield buildContent();
+                    retriggerSearch();
+                }));
+            }
+            const inlayConditionsElement = document.getElementById('inlay-conditions');
+            if (inlayConditionsElement) {
+                inlayConditions = new _util_dropdown__WEBPACK_IMPORTED_MODULE_1__.DivDropdown(inlayConditionsElement, true);
+                inlayConditions.selectedValues$.next(selectedInlayExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
+                inlayConditions.selectedValues$.subscribe((selection) => (0,tslib__WEBPACK_IMPORTED_MODULE_9__.__awaiter)(this, void 0, void 0, function* () {
+                    selectedInlayExprs = selection.map(selection => {
+                        const index = selection.indexOf('!|');
+                        if (index === -1) {
+                            return {
+                                scopeName: '',
+                                nodeContent: selection,
+                            };
+                        }
+                        else {
+                            return {
+                                scopeName: selection.substring(0, index),
+                                nodeContent: selection.substring(index + 2),
+                            };
+                        }
+                    });
+                    (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.setState)({ selectedInlayExprs });
+                    yield buildContent();
+                    retriggerSearch();
+                }));
+            }
+        }
+        // Zoom
+        const contentElement = document.getElementById('focustreecontent');
+        (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.enableZoom)(contentElement, 0, 40);
+        // Toggle warnings
+        const showWarnings = document.getElementById('show-warnings');
+        if (showWarnings) {
+            const warnings = document.getElementById('warnings-container');
+            showWarnings.addEventListener('click', () => {
+                const visible = warnings.style.display === 'block';
+                document.body.style.overflow = visible ? '' : 'hidden';
+                warnings.style.display = visible ? 'none' : 'block';
+            });
+        }
+        updateSelectedFocusTree(false);
+        yield buildContent();
+        (0,_util_common__WEBPACK_IMPORTED_MODULE_0__.scrollToState)();
+    });
+}));
+
+
+/***/ })
+
+/******/ 	});
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		if (cachedModule !== undefined) {
+/******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			id: moduleId,
+/******/ 			loaded: false,
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Flag the module as loaded
+/******/ 		module.loaded = true;
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/ 	
+/******/ 	// expose the modules object (__webpack_modules__)
+/******/ 	__webpack_require__.m = __webpack_modules__;
+/******/ 	
+/************************************************************************/
+/******/ 	/* webpack/runtime/chunk loaded */
+/******/ 	(() => {
+/******/ 		var deferred = [];
+/******/ 		__webpack_require__.O = (result, chunkIds, fn, priority) => {
+/******/ 			if(chunkIds) {
+/******/ 				priority = priority || 0;
+/******/ 				for(var i = deferred.length; i > 0 && deferred[i - 1][2] > priority; i--) deferred[i] = deferred[i - 1];
+/******/ 				deferred[i] = [chunkIds, fn, priority];
+/******/ 				return;
+/******/ 			}
+/******/ 			var notFulfilled = Infinity;
+/******/ 			for (var i = 0; i < deferred.length; i++) {
+/******/ 				var [chunkIds, fn, priority] = deferred[i];
+/******/ 				var fulfilled = true;
+/******/ 				for (var j = 0; j < chunkIds.length; j++) {
+/******/ 					if ((priority & 1 === 0 || notFulfilled >= priority) && Object.keys(__webpack_require__.O).every((key) => (__webpack_require__.O[key](chunkIds[j])))) {
+/******/ 						chunkIds.splice(j--, 1);
+/******/ 					} else {
+/******/ 						fulfilled = false;
+/******/ 						if(priority < notFulfilled) notFulfilled = priority;
+/******/ 					}
+/******/ 				}
+/******/ 				if(fulfilled) {
+/******/ 					deferred.splice(i--, 1)
+/******/ 					var r = fn();
+/******/ 					if (r !== undefined) result = r;
+/******/ 				}
+/******/ 			}
+/******/ 			return result;
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/compat get default export */
+/******/ 	(() => {
+/******/ 		// getDefaultExport function for compatibility with non-harmony modules
+/******/ 		__webpack_require__.n = (module) => {
+/******/ 			var getter = module && module.__esModule ?
+/******/ 				() => (module['default']) :
+/******/ 				() => (module);
+/******/ 			__webpack_require__.d(getter, { a: getter });
+/******/ 			return getter;
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/define property getters */
+/******/ 	(() => {
+/******/ 		// define getter functions for harmony exports
+/******/ 		__webpack_require__.d = (exports, definition) => {
+/******/ 			for(var key in definition) {
+/******/ 				if(__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
+/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 				}
+/******/ 			}
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/global */
+/******/ 	(() => {
+/******/ 		__webpack_require__.g = (function() {
+/******/ 			if (typeof globalThis === 'object') return globalThis;
+/******/ 			try {
+/******/ 				return this || new Function('return this')();
+/******/ 			} catch (e) {
+/******/ 				if (typeof window === 'object') return window;
+/******/ 			}
+/******/ 		})();
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
+/******/ 	(() => {
+/******/ 		__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/make namespace object */
+/******/ 	(() => {
+/******/ 		// define __esModule on exports
+/******/ 		__webpack_require__.r = (exports) => {
+/******/ 			if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 				Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 			}
+/******/ 			Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/node module decorator */
+/******/ 	(() => {
+/******/ 		__webpack_require__.nmd = (module) => {
+/******/ 			module.paths = [];
+/******/ 			if (!module.children) module.children = [];
+/******/ 			return module;
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/jsonp chunk loading */
+/******/ 	(() => {
+/******/ 		// no baseURI
+/******/ 		
+/******/ 		// object to store loaded and loading chunks
+/******/ 		// undefined = chunk not loaded, null = chunk preloaded/prefetched
+/******/ 		// [resolve, reject, Promise] = chunk loading, 0 = chunk loaded
+/******/ 		var installedChunks = {
+/******/ 			"focustree": 0
+/******/ 		};
+/******/ 		
+/******/ 		// no chunk on demand loading
+/******/ 		
+/******/ 		// no prefetching
+/******/ 		
+/******/ 		// no preloaded
+/******/ 		
+/******/ 		// no HMR
+/******/ 		
+/******/ 		// no HMR manifest
+/******/ 		
+/******/ 		__webpack_require__.O.j = (chunkId) => (installedChunks[chunkId] === 0);
+/******/ 		
+/******/ 		// install a JSONP callback for chunk loading
+/******/ 		var webpackJsonpCallback = (parentChunkLoadingFunction, data) => {
+/******/ 			var [chunkIds, moreModules, runtime] = data;
+/******/ 			// add "moreModules" to the modules object,
+/******/ 			// then flag all "chunkIds" as loaded and fire callback
+/******/ 			var moduleId, chunkId, i = 0;
+/******/ 			if(chunkIds.some((id) => (installedChunks[id] !== 0))) {
+/******/ 				for(moduleId in moreModules) {
+/******/ 					if(__webpack_require__.o(moreModules, moduleId)) {
+/******/ 						__webpack_require__.m[moduleId] = moreModules[moduleId];
+/******/ 					}
+/******/ 				}
+/******/ 				if(runtime) var result = runtime(__webpack_require__);
+/******/ 			}
+/******/ 			if(parentChunkLoadingFunction) parentChunkLoadingFunction(data);
+/******/ 			for(;i < chunkIds.length; i++) {
+/******/ 				chunkId = chunkIds[i];
+/******/ 				if(__webpack_require__.o(installedChunks, chunkId) && installedChunks[chunkId]) {
+/******/ 					installedChunks[chunkId][0]();
+/******/ 				}
+/******/ 				installedChunks[chunkId] = 0;
+/******/ 			}
+/******/ 			return __webpack_require__.O(result);
+/******/ 		}
+/******/ 		
+/******/ 		var chunkLoadingGlobal = self["webpackChunkhearts_of_iron_4_utilities_2026"] = self["webpackChunkhearts_of_iron_4_utilities_2026"] || [];
+/******/ 		chunkLoadingGlobal.forEach(webpackJsonpCallback.bind(null, 0));
+/******/ 		chunkLoadingGlobal.push = webpackJsonpCallback.bind(null, chunkLoadingGlobal.push.bind(chunkLoadingGlobal));
+/******/ 	})();
+/******/ 	
+/************************************************************************/
+/******/ 	
+/******/ 	// startup
+/******/ 	// Load entry module and return exports
+/******/ 	// This entry module depends on other loaded chunks and execution need to be delayed
+/******/ 	var __webpack_exports__ = __webpack_require__.O(undefined, ["common"], () => (__webpack_require__("./webviewsrc/focustree.ts")))
+/******/ 	__webpack_exports__ = __webpack_require__.O(__webpack_exports__);
+/******/ 	
+/******/ })()
+;
 //# sourceMappingURL=focustree.js.map

@@ -27,16 +27,16 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
         const file = convertFocusFileNodeToJson(parseHoi4File(content, localize('infile', 'In file {0}:\n', this.file)), constants);
 
         if (sharedFocusIndex) {
+            const depPaths = new Set(dependencies.map(d => d.path));
             for (const focusTree of file.focus_tree) {
                 for (const sharedFocus of focusTree.shared_focus) {
                     if (!sharedFocus) {
                         continue;
                     }
                     const filePath = findFileByFocusKey(sharedFocus);
-                    if (filePath) {
-                        if (dependencies.findIndex((item) => item.path === filePath) === -1) {
-                            dependencies.push({type: 'focus', path: filePath});
-                        }
+                    if (filePath && !depPaths.has(filePath)) {
+                        depPaths.add(filePath);
+                        dependencies.push({type: 'focus', path: filePath});
                     }
                 }
             }
