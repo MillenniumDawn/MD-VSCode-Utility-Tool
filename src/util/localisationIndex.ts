@@ -3,17 +3,22 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { debounceByInput } from './common';
 import { localisationIndex } from './featureflags';
-import { listFilesFromModOrHOI4, readFileFromModOrHOI4 } from './fileloader';
+import { getFilePathFromModOrHOI4, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from './fileloader';
 import { localize } from './i18n';
 import { sendEvent } from './telemetry';
 import { Logger } from "./logger";
 import { YAMLException } from "js-yaml";
 import { ConfigurationKey } from '../constants';
+import { loadCacheManifest, loadCacheData, saveCacheManifest, saveCacheData, getFileMtimes, computeStaleFiles, IndexTimer } from './indexCache';
 
 type LocalisationData = Record<string, Record<string, string>>;
 
 const globalLocalisationIndex: LocalisationData = {};
 let workspaceLocalisationIndex: LocalisationData = {};
+
+// Tracks which localisation keys came from which file, per language
+// langKey -> filePath -> Set<localisationKey>
+const workspaceLocalisationFileMap: Record<string, Record<string, Set<string>>> = {};
 
 // Mapping of language ISO codes to yml file language suffixes
 const localeMapping: Record<string, string> = {
@@ -96,19 +101,108 @@ export async function getLocalisedText(localisationKey: string | undefined, lang
     return text ?? localisationKey;
 }
 
+const LOC_CACHE_VERSION = 1;
+const langSuffixes = Object.values(localeMapping);
+const langSuffixPattern = langSuffixes.join('|');
+const localisationFileFilter = new RegExp(`.*_(${langSuffixPattern})\\.yml$`, 'i');
+
+interface LocCacheData {
+    index: LocalisationData;
+    fileMap: Record<string, Record<string, string[]>>; // langKey -> filePath -> keys[]
+}
+
 async function buildGlobalLocalisationIndex(estimatedSize: [number]): Promise<void> {
     const options = {mod: false, hoi4: true, recursively: true};
-    const localisationFiles = (await listFilesFromModOrHOI4('localisation', options)).filter(f => /.*_(l_english|l_braz_por|l_german|l_french|l_spanish|l_polish|l_russian|l_japanese|l_simp_chinese)\.yml$/i.test(f));
-    await Promise.all(localisationFiles.map(f => fillLocalisationItems('localisation/' + f, globalLocalisationIndex, options, estimatedSize)));
+    const localisationFiles = (await listFilesFromModOrHOI4('localisation', options)).filter(f => localisationFileFilter.test(f)).map(f => 'localisation/' + f);
+    await buildLocalisationIndexWithCache('localisationIndex.global', localisationFiles, globalLocalisationIndex, null, options, estimatedSize);
 }
 
 async function buildWorkspaceLocalisationIndex(estimatedSize: [number]): Promise<void> {
     const options = {mod: true, hoi4: false, recursively: true};
-    const localisationFiles = (await listFilesFromModOrHOI4('localisation', options)).filter(f => /.*_(l_english|l_braz_por|l_german|l_french|l_spanish|l_polish|l_russian|l_japanese|l_simp_chinese)\.yml$/i.test(f));
-    await Promise.all(localisationFiles.map(f => fillLocalisationItems('localisation/' + f, workspaceLocalisationIndex, options, estimatedSize)));
+    const localisationFiles = (await listFilesFromModOrHOI4('localisation', options)).filter(f => localisationFileFilter.test(f)).map(f => 'localisation/' + f);
+    await buildLocalisationIndexWithCache('localisationIndex.workspace', localisationFiles, workspaceLocalisationIndex, workspaceLocalisationFileMap, options, estimatedSize);
 }
 
-async function fillLocalisationItems(localisationFile: string, localisationIndex: LocalisationData, options: {
+async function buildLocalisationIndexWithCache(
+    cacheName: string,
+    locFiles: string[],
+    targetIndex: LocalisationData,
+    fileMap: Record<string, Record<string, Set<string>>> | null,
+    options: { mod?: boolean; hoi4?: boolean },
+    estimatedSize: [number]
+): Promise<void> {
+    const timer = new IndexTimer(cacheName);
+    const resolveUri = (relativePath: string) => getFilePathFromModOrHOI4(relativePath, options);
+    const currentMtimes = await getFileMtimes(locFiles, resolveUri);
+    timer.mark('mtime');
+
+    const manifest = await loadCacheManifest(cacheName, LOC_CACHE_VERSION);
+    let filesToParse = locFiles;
+
+    if (manifest) {
+        const staleness = computeStaleFiles(manifest, currentMtimes);
+        const cachedData = await loadCacheData(cacheName);
+
+        if (cachedData && staleness.stale.length + staleness.removed.length + staleness.added.length < locFiles.length) {
+            try {
+                const cached: LocCacheData = JSON.parse(cachedData);
+                const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
+
+                for (const langKey in cached.index) {
+                    if (!targetIndex[langKey]) {
+                        targetIndex[langKey] = {};
+                    }
+                    const fileKeysForLang = cached.fileMap?.[langKey] ?? {};
+                    for (const filePath in fileKeysForLang) {
+                        if (!skipFiles.has(filePath)) {
+                            const keys = fileKeysForLang[filePath];
+                            for (const key of keys) {
+                                if (cached.index[langKey][key] !== undefined) {
+                                    targetIndex[langKey][key] = cached.index[langKey][key];
+                                }
+                            }
+                            if (fileMap) {
+                                if (!fileMap[langKey]) {
+                                    fileMap[langKey] = {};
+                                }
+                                fileMap[langKey][filePath] = new Set(keys);
+                            }
+                        }
+                    }
+                }
+
+                filesToParse = [...staleness.stale, ...staleness.added];
+            } catch {
+                Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
+                filesToParse = locFiles;
+            }
+        }
+    }
+    timer.mark('cache');
+
+    await Promise.all(filesToParse.map(f => fillLocalisationItems(f, targetIndex, fileMap, options, estimatedSize)));
+    timer.mark('parse');
+    timer.log(locFiles.length, filesToParse.length);
+
+    // Serialize Sets to arrays for JSON cache
+    const serializedFileMap: Record<string, Record<string, string[]>> = {};
+    if (fileMap) {
+        for (const langKey in fileMap) {
+            serializedFileMap[langKey] = {};
+            for (const filePath in fileMap[langKey]) {
+                serializedFileMap[langKey][filePath] = [...fileMap[langKey][filePath]];
+            }
+        }
+    }
+    const cacheData: LocCacheData = { index: targetIndex, fileMap: serializedFileMap };
+    // fire-and-forget: write data before manifest for atomicity
+    void Promise.all([
+        saveCacheData(cacheName, JSON.stringify(cacheData)),
+        saveCacheManifest(cacheName, locFiles, currentMtimes, LOC_CACHE_VERSION),
+    ]).catch(e => Logger.error(`Cache save failed for ${cacheName}: ${e}`));
+}
+
+async function fillLocalisationItems(localisationFile: string, localisationIndex: LocalisationData, fileMap: Record<string, Record<string, Set<string>>> | null, options: {
     mod?: boolean,
     hoi4?: boolean
 }, estimatedSize?: [number]): Promise<void> {
@@ -122,6 +216,13 @@ async function fillLocalisationItems(localisationFile: string, localisationIndex
             }
 
             Object.assign(localisationIndex[langKey], localisations[langKey]);
+
+            if (fileMap) {
+                if (!fileMap[langKey]) {
+                    fileMap[langKey] = {};
+                }
+                fileMap[langKey][localisationFile] = new Set(Object.keys(localisations[langKey]));
+            }
 
             if (estimatedSize) {
                 estimatedSize[0] += Object.keys(localisations[langKey]).reduce((sum, key) => sum + key.length + localisations[langKey][key].length, 0);
@@ -146,6 +247,9 @@ async function fillLocalisationItems(localisationFile: string, localisationIndex
     }
 }
 
+const localisationLineRegex = /^\s*([^:]+):\s*\d*\s*"((?:[^"#\\]|\\.)*)".*?(?=#|$)/;
+const unescapedQuoteRegex = /(?<!\\)"/g;
+
 function preprocessYamlContent(fileContent: string): string {
     const lines = fileContent.split(/\r?\n/);
 
@@ -155,19 +259,15 @@ function preprocessYamlContent(fileContent: string): string {
     );
 
     const header = filteredLines.length > 0 ? filteredLines[0].replace(/^\s+/, '') : '';
-    // Can't the goddamn Paradox employees and modders just write standard localization yml files?
     const processedLines = filteredLines.slice(1).map(line => {
         return ' ' + line
-            .replace(/\n/g, 'YAMLParsingLFReplacement')
             .replace(
-                /^\s*([^:]+):\s*\d*\s*"((?:[^"#\\]|\\.)*)".*?(?=#|$)/,
+                localisationLineRegex,
                 (match, p1, p2) => {
-                    // Replace unescaped quotes with escaped ones
-                    const escapedContent = p2.replace(/(?<!\\)"/g, '\\"');
+                    const escapedContent = p2.replace(unescapedQuoteRegex, '\\"');
                     return `${p1}: "${escapedContent}"`;
                 }
             )
-            .replace(/:(\d+)(?=[^"]*")/, ':')
             .replace(/^\s+/, '');
     }).filter(line =>
         line.trim() !== ''
@@ -197,6 +297,9 @@ function parseLocalisationFile(fileContent: string): Record<string, Record<strin
 
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
     workspaceLocalisationIndex = {};
+    for (const langKey in workspaceLocalisationFileMap) {
+        delete workspaceLocalisationFileMap[langKey];
+    }
     const estimatedSize: [number] = [0];
     const task = buildWorkspaceLocalisationIndex(estimatedSize);
     vscode.window.setStatusBarMessage('$(loading~spin) ' + localize('localisationIndex.workspace.building', 'Building workspace Localisation index...'), task);
@@ -225,7 +328,7 @@ const onChangeTextDocumentImpl = debounceByInput(
 
 function onCloseTextDocument(document: vscode.TextDocument) {
     const file = document.uri;
-    if (file.path.endsWith('.yml')) {
+    if (file.path.endsWith('.yml') && document.isDirty) {
         removeWorkspaceLocalisationIndex(file);
         addWorkspaceLocalisationIndex(file);
     }
@@ -258,7 +361,13 @@ function removeWorkspaceLocalisationIndex(file: vscode.Uri) {
         const relative = path.relative(wsFolder.uri.path, file.path).replace(/\\+/g, '/');
         if (relative && relative.startsWith('localisation/')) {
             const langKey = getLangKeyFromPath(relative);
-            delete workspaceLocalisationIndex[langKey];
+            const fileKeys = workspaceLocalisationFileMap[langKey]?.[relative];
+            if (fileKeys && workspaceLocalisationIndex[langKey]) {
+                for (const key of fileKeys) {
+                    delete workspaceLocalisationIndex[langKey][key];
+                }
+                delete workspaceLocalisationFileMap[langKey][relative];
+            }
         }
     }
 }
@@ -268,12 +377,12 @@ function addWorkspaceLocalisationIndex(file: vscode.Uri) {
     if (wsFolder) {
         const relative = path.relative(wsFolder.uri.path, file.path).replace(/\\+/g, '/');
         if (relative && relative.startsWith('localisation/')) {
-            fillLocalisationItems(relative, workspaceLocalisationIndex, {hoi4: false});
+            fillLocalisationItems(relative, workspaceLocalisationIndex, workspaceLocalisationFileMap, {hoi4: false});
         }
     }
 }
 
 function getLangKeyFromPath(filePath: string): string {
-    const match = filePath.match(/.*_(l_english|l_braz_por|l_german|l_french|l_spanish|l_polish|l_russian|l_japanese|l_simp_chinese)\.yml$/i);
+    const match = filePath.match(localisationFileFilter);
     return match ? match[1] : 'l_english';
 }

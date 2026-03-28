@@ -323,6 +323,31 @@ function getJointFocusTreeId(filePath: string): string {
     return fileName ? `${label} (${fileName})` : label;
 }
 
+/**
+ * Lightweight ID-only extraction for the shared focus index.
+ * Skips expensive per-focus parsing (icons, conditions, prerequisites)
+ * that getFocusTree/getFocuses/getFocus would do.
+ */
+export function extractFocusIds(node: Node): string[] {
+    const constants = {};
+    const file = convertFocusFileNodeToJson(node, constants);
+    const ids: string[] = [];
+
+    for (const tree of file.focus_tree) {
+        for (const focus of tree.focus) {
+            if (focus.id) { ids.push(focus.id); }
+        }
+    }
+    for (const focus of file.shared_focus) {
+        if (focus.id) { ids.push(focus.id); }
+    }
+    for (const focus of file.joint_focus) {
+        if (focus.id) { ids.push(focus.id); }
+    }
+
+    return ids;
+}
+
 export function getFocusTree(node: Node, sharedFocusTrees: FocusTree[], filePath: string): FocusTree[] {
     const constants = {};
     const file = convertFocusFileNodeToJson(node, constants);
@@ -359,25 +384,42 @@ function getFocuses(hoiFocuses: HOIPartial<FocusDef>[], conditionExprs: Conditio
         }
     }
 
-    let hasChangedInAllowBranch = true;
-    while (hasChangedInAllowBranch) {
-        hasChangedInAllowBranch = false;
-        for (const key in focuses) {
-            const focus = focuses[key];
-            const allPrerequisites = flatten(focus.prerequisite).filter(p => p in focuses);
-            if (allPrerequisites.length === 0) {
-                continue;
-            }
+    // Propagate inAllowBranch from prerequisites to dependents via BFS
+    // Build reverse map: prerequisite -> focuses that depend on it
+    const allowBranchDependents = new Map<string, string[]>();
+    for (const key in focuses) {
+        const prereqs = flatten(focuses[key].prerequisite).filter(p => p in focuses);
+        for (const p of prereqs) {
+            if (!allowBranchDependents.has(p)) { allowBranchDependents.set(p, []); }
+            allowBranchDependents.get(p)!.push(key);
+        }
+    }
 
-            chain(allPrerequisites)
-                .flatMap(p  => focuses[p].inAllowBranch)
-                .forEach(ab => {
-                    if (!focus.inAllowBranch.includes(ab)) {
-                        focus.inAllowBranch.push(ab);
-                        hasChangedInAllowBranch = true;
-                    }
-                })
-                .value();
+    // Seed queue with focuses that have allowBranch
+    const abQueue: string[] = [];
+    for (const key in focuses) {
+        if (focuses[key].hasAllowBranch) {
+            abQueue.push(key);
+        }
+    }
+
+    while (abQueue.length > 0) {
+        const sourceKey = abQueue.shift()!;
+        const source = focuses[sourceKey];
+        const deps = allowBranchDependents.get(sourceKey);
+        if (!deps) { continue; }
+        for (const depKey of deps) {
+            const dep = focuses[depKey];
+            let changed = false;
+            for (const ab of source.inAllowBranch) {
+                if (!dep.inAllowBranch.includes(ab)) {
+                    dep.inAllowBranch.push(ab);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                abQueue.push(depKey);
+            }
         }
     }
 
@@ -445,24 +487,40 @@ function addSharedFocus(focuses: Record<string, Focus>, filePath: string, shared
 
     const sharedFocuses = sharedFocusTree.focuses;
 
+    // Build reverse dependency map: focus -> focuses that depend on it
+    const dependents = new Map<string, string[]>();
+    // Track how many unresolved prerequisites each candidate has
+    const unresolvedCount = new Map<string, number>();
+
+    for (const key in sharedFocuses) {
+        if (key in focuses) { continue; }
+        const prereqs = flatten(sharedFocuses[key].prerequisite).filter(p => p in sharedFocuses);
+        if (prereqs.length === 0) { continue; }
+        let unresolved = 0;
+        for (const p of prereqs) {
+            if (!(p in focuses)) {
+                unresolved++;
+                if (!dependents.has(p)) { dependents.set(p, []); }
+                dependents.get(p)!.push(key);
+            }
+        }
+        unresolvedCount.set(key, unresolved);
+    }
+
+    // BFS: start from the requested shared focus, propagate to dependents
+    const queue: string[] = [sharedFocusId];
     focuses[sharedFocusId] = sharedFocuses[sharedFocusId];
     updateConditionExprsByFocus(sharedFocuses[sharedFocusId], conditionExprs);
 
-    let hasChanged = true;
-    while (hasChanged) {
-        hasChanged = false;
-        for (const key in sharedFocuses) {
-            if (key in focuses) {
-                continue;
-            }
-
-            const focus = sharedFocuses[key];
-            const allPrerequisites = flatten(focus.prerequisite).filter(p => p in sharedFocuses);
-            if (allPrerequisites.length === 0) {
-                continue;
-            }
-
-            if (allPrerequisites.every(p => p in focuses)) {
+    while (queue.length > 0) {
+        const added = queue.shift()!;
+        const deps = dependents.get(added);
+        if (!deps) { continue; }
+        for (const dep of deps) {
+            const count = (unresolvedCount.get(dep) ?? 1) - 1;
+            unresolvedCount.set(dep, count);
+            if (count <= 0 && !(dep in focuses)) {
+                const focus = sharedFocuses[dep];
                 if (focus.id in focuses) {
                     const otherFocus = focuses[focus.id];
                     warnings.push({
@@ -482,9 +540,9 @@ function addSharedFocus(focuses: Record<string, Focus>, filePath: string, shared
                         ]
                     });
                 }
-                focuses[key] = focus;
+                focuses[dep] = focus;
                 updateConditionExprsByFocus(focus, conditionExprs);
-                hasChanged = true;
+                queue.push(dep);
             }
         }
     }

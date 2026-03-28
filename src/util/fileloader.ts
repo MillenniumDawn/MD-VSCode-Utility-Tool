@@ -237,7 +237,7 @@ export async function listFilesFromModOrHOI4(relativePath: string, options?: { m
         if (replacePaths) {
             for (const replacePath of replacePaths) {
                 if (isSamePath(relativePath, replacePath)) {
-                    return result.filter((v, i, a) => i === a.indexOf(v));
+                    return [...new Set(result)];
                 }
             }
         }
@@ -289,7 +289,7 @@ export async function listFilesFromModOrHOI4(relativePath: string, options?: { m
         }
     }
 
-    return result.filter((v, i, a) => i === a.indexOf(v));
+    return [...new Set(result)];
 }
 
 async function getDlcZipPaths(installPath: string): Promise<vscode.Uri[] | null> {
