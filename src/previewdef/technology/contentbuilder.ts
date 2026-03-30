@@ -90,6 +90,7 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
     `)}">
     </div>
     <div
+    id="techtreecontent"
     class="${styleTable.oneTimeStyle('mainContent', () => `
         position: absolute;
         left: 0;
@@ -397,7 +398,7 @@ async function renderTechnology(
         </div>`;
 }
 
-async function getTechnologySprite(sprite: string, technology: Technology, folder: string, callerType: 'bg' | 'icon', callerName: string | undefined, gfxFiles: string[]): Promise<Sprite | undefined> {
+async function getTechnologySprite(sprite: string, technology: Technology, folder: string, callerType: 'bg' | 'icon', _callerName: string | undefined, gfxFiles: string[]): Promise<Sprite | undefined> {
     let imageTryList: string[] = [sprite];
     if (sprite === 'GFX_technology_unavailable_item_bg' && callerType === 'bg') {
         imageTryList = technology.enableEquipments ? [
@@ -409,8 +410,12 @@ async function getTechnologySprite(sprite: string, technology: Technology, folde
             `GFX_technology_${folder}_available_item_bg`,
             `GFX_technology_available_item_bg`,
         ];
-    } else if (sprite === 'GFX_technology_medium' && callerType === 'icon') {
-        return await getTechnologyIcon(`GFX_${technology.id}_medium`, gfxFiles, 'GFX_technology_medium');
+    } else if (callerType === 'icon') {
+        const result = await getSpriteByGfxName(`GFX_${technology.id}_medium`, gfxFiles);
+        if (result !== undefined) { return result; }
+        const result2 = await getSpriteByGfxName(`GFX_${technology.id}`, gfxFiles);
+        if (result2 !== undefined) { return result2; }
+        return await getSpriteByGfxName(sprite, gfxFiles);
     }
 
     return await getSpriteFromTryList(imageTryList, gfxFiles);

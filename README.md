@@ -24,7 +24,7 @@ This is a continuation project based on the HOI4 mod utilities from herbix
 4. (*Optional*) Open command palette using `Ctrl+Shift+P`. Use command `Select mod file` to set working mod descriptor (the `.mod` file).
 5. Use these entries:
     * Command palette (`Ctrl+Shift+P`) commands: `Preview World Map` and `Preview HOI4 file`*.
-    * `Preview HOI4 file` (![Preview HOI4 file button](demo/preview-icon.png))* button on right-top tool bar of text editor.
+    * `Preview HOI4 file` button on right-top tool bar of text editor.
     * Open a `.dds` or `.tga` file.
 
 ## Extension Settings
@@ -36,7 +36,7 @@ This is a continuation project based on the HOI4 mod utilities from herbix
 |`hoi4ModUtilities.modFile`|`string`|Path to the working `.mod` file. This file is used to read replace_path. If not specified, will use first `.mod` file in first folder of the workspace.|
 |`hoi4ModUtilities.enableSupplyArea`|`boolean`|If you are developing mod for HOI4(version<=1.10). Use this to check enable supply area.|
 |`hoi4ModUtilities.previewLocalisation`|`enum`|Language of content in event tree preview.|
-|`hoi4ModUtilities.featureFlags`|`array` of `string`|Feature flags are used to disable or enable features. Reloading is required after changing this. Please refer to [Wiki](https://github.com/herbix/hoi4modutilities/wiki/Feature-flags) on Github for details.|
+|`hoi4ModUtilities.featureFlags`|`array` of `string`|Feature flags are used to disable or enable features. Reloading is required after changing this.
 
 ## Known Issues
 

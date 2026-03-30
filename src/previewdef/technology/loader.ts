@@ -6,6 +6,8 @@ import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
 import { flatMap, chain } from "lodash";
 import { GuiFileLoader } from "../gui/loader";
+import { listFilesFromModOrHOI4 } from "../../util/fileloader";
+import { getConfiguration } from "../../util/vsccommon";
 
 export interface TechnologyTreeLoaderResult {
     technologyTrees: TechnologyTree[];
@@ -33,16 +35,31 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
         const gfxDependencies = [...relatedGfxFiles, ...dependencies.filter(d => d.type === 'gfx').map(d => d.path)];
         const technologyTrees = getTechnologyTrees(parseHoi4File(content, localize('infile', 'In file {0}:\n', this.file)));
         const guiDependencies = [...guiFilePath, ...dependencies.filter(d => d.type === 'gui').map(d => d.path)];
-        
+
+        const configRoots = (getConfiguration().technologyGfxRoots ?? []).filter((r): r is string => !!r && r.trim() !== '');
+        const extraGfxFiles: string[] = [];
+        for (const root of configRoots) {
+            try {
+                const normalizedRoot = root.replace(/\\+/g, '/');
+                const files = await listFilesFromModOrHOI4(normalizedRoot, { recursively: true });
+                for (const file of files) {
+                    if (file.toLowerCase().endsWith('.gfx')) {
+                        extraGfxFiles.push(`${normalizedRoot}/${file}`.replace(/\/+/g, '/'));
+                    }
+                }
+            } catch {
+            }
+        }
+
         const guiDepFiles = await this.loaderDependencies.loadMultiple(guiDependencies, session, GuiFileLoader);
 
         return {
             result: {
                 technologyTrees,
-                gfxFiles: chain(gfxDependencies).concat(flatMap(guiDepFiles, r => r.result.gfxFiles)).uniq().value(),
+                gfxFiles: chain(gfxDependencies).concat(extraGfxFiles, flatMap(guiDepFiles, r => r.result.gfxFiles)).uniq().value(),
                 guiFiles: chain(guiDepFiles).flatMap(r => r.result.guiFiles).uniq().value(),
             },
-            dependencies: chain([this.file]).concat(gfxDependencies, guiDependencies, mergeInLoadResult(guiDepFiles, 'dependencies')).uniq().value(),
+            dependencies: chain([this.file]).concat(gfxDependencies, extraGfxFiles, guiDependencies, mergeInLoadResult(guiDepFiles, 'dependencies')).uniq().value(),
         };
     }
 

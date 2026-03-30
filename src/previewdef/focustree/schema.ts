@@ -240,8 +240,6 @@ export function convertFocusFileNodeToJson(node: Node, constants: {}): HOIPartia
 
 export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFocusTrees: FocusTree[], filePath: string, constants: {} ): FocusTree[] {
     const focusTrees: FocusTree[] = [];
-    const isJointFocusOnlyFile = file.focus_tree.length === 0 && file.shared_focus.length === 0 && file.joint_focus.length > 0;
-
     if (file.shared_focus.length > 0) {
         const conditionExprs: ConditionItem[] = [];
         const warnings: FocusWarning[] = [];
@@ -261,7 +259,7 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         sharedFocusTrees = [sharedFocusTree, ...sharedFocusTrees];
     }
 
-    if (isJointFocusOnlyFile) {
+    if (file.joint_focus.length > 0) {
         const conditionExprs: ConditionItem[] = [];
         const warnings: FocusWarning[] = [];
         const focuses = getFocuses(file.joint_focus, conditionExprs, filePath, warnings, constants);
@@ -283,7 +281,7 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         const conditionExprs: ConditionItem[] = [];
         const warnings: FocusWarning[] = [];
         const focuses = getFocuses(focusTree.focus, conditionExprs, filePath, warnings, constants);
-        
+
         if (useConditionInFocus) {
             for (const sharedFocus of focusTree.shared_focus) {
                 if (!sharedFocus) {

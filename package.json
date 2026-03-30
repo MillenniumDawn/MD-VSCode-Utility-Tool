@@ -91,11 +91,44 @@
 						},
 						"description": "Workspace/mod/HOI4-relative root folders to scan recursively for .gfx files used by focus inlay windows."
 					},
-					"mdHoi4Utilities.featureFlags": {
-						"title": "%hoi4modutilities.featureFlags.title%",
+					"mdHoi4Utilities.technologyGfxRoots": {
+						"title": "Technology GFX roots",
 						"type": "array",
 						"default": [],
-						"description": "%hoi4modutilities.featureFlags.desc%"
+						"items": {
+							"type": "string"
+						},
+						"description": "Workspace/mod-relative root folders to scan recursively for .gfx files used by the technology tree preview (e.g. \"interface/technologies\")."
+					},
+					"mdHoi4Utilities.useConditionInFocus": {
+						"title": "%hoi4modutilities.useConditionInFocus.title%",
+						"type": "boolean",
+						"default": true,
+						"description": "%hoi4modutilities.useConditionInFocus.desc%"
+					},
+					"mdHoi4Utilities.eventTreePreview": {
+						"title": "%hoi4modutilities.eventTreePreview.title%",
+						"type": "boolean",
+						"default": true,
+						"description": "%hoi4modutilities.eventTreePreview.desc%"
+					},
+					"mdHoi4Utilities.sharedFocusIndex": {
+						"title": "%hoi4modutilities.sharedFocusIndex.title%",
+						"type": "boolean",
+						"default": true,
+						"description": "%hoi4modutilities.sharedFocusIndex.desc%"
+					},
+					"mdHoi4Utilities.gfxIndex": {
+						"title": "%hoi4modutilities.gfxIndex.title%",
+						"type": "boolean",
+						"default": false,
+						"description": "%hoi4modutilities.gfxIndex.desc%"
+					},
+					"mdHoi4Utilities.localisationIndex": {
+						"title": "%hoi4modutilities.localisationIndex.title%",
+						"type": "boolean",
+						"default": false,
+						"description": "%hoi4modutilities.localisationIndex.desc%"
 					}
 				}
 			}

@@ -4,10 +4,15 @@ declare module 'vscode' {
             readonly installPath: string;
             readonly loadDlcContents: boolean;
             readonly modFile: string;
-            readonly featureFlags: string[];
+            readonly useConditionInFocus: boolean;
+            readonly eventTreePreview: boolean;
+            readonly sharedFocusIndex: boolean;
+            readonly gfxIndex: boolean;
+            readonly localisationIndex: boolean;
             readonly enableSupplyArea: boolean;
             readonly previewLocalisation: 'Brazilian Portuguese' | 'English' | 'French' | 'German' | 'Japanese' | 'Polish' | 'Russian' | 'Simplified Chinese' | 'Spanish';
             readonly inlayWindowGfxRoots: string[];
+            readonly technologyGfxRoots: string[];
         };
     }
 }
