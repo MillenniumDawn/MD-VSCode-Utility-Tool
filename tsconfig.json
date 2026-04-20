@@ -1,18 +1,20 @@
 {
 	"compilerOptions": {
-		"module": "es6",
-		"moduleResolution": "node",
-		"target": "es6",
+		"module": "preserve",
+		"moduleResolution": "bundler",
+		"target": "es2022",
 		"outDir": "out",
 		"lib": [
-			"es6",
+			"es2022",
 			"DOM"
 		],
 		"sourceMap": true,
 		"rootDir": ".",
 		"strict": true,
 		"noFallthroughCasesInSwitch": true,
-		"importHelpers": true
+		"importHelpers": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true
 	},
 	"exclude": [
 		"node_modules",
