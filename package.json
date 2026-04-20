@@ -138,8 +138,8 @@
 				"command": "mdhoi4utilities.preview",
 				"title": "%hoi4modutilities.preview.title%",
 				"icon": {
-					"dark": "static/preview_icon.svg",
-					"light": "static/preview_icon.svg"
+					"dark": "static/preview_icon.png",
+					"light": "static/preview_icon.png"
 				},
 				"category": "%hoi4modutilities.category%"
 			},

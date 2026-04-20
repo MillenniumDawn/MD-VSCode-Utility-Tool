@@ -103,6 +103,7 @@ export async function renderGridBoxCommon(
         const children = options.onRenderItem ? await options.onRenderItem(item, childrenParentInfo) : '';
         const position = getLeftUpPosition(item.gridX, item.gridY, format, slotSize, size);
         return `<div
+            data-gridbox-item="${item.id}" data-gridbox-x="${item.gridX}" data-gridbox-y="${item.gridY}"
             ${item.htmlId ? `id="${item.htmlId}"` : ''}
             class="
                 ${item.classNames ? item.classNames : ''}
@@ -144,7 +145,7 @@ export async function renderGridBoxCommon(
 }
 
 export function renderLineConnections(items: Record<string, GridBoxItem>, format: Format['_name'], slotSize: NumberSize, size: NumberSize, styleTable: StyleTable, cornerPosition: number): string {
-    return Object.values(items).map(item => 
+    return Object.values(items).map(item =>
         item.connections.map(conn => {
             const target = items[conn.target];
             if (!target) {
@@ -153,14 +154,15 @@ export function renderLineConnections(items: Record<string, GridBoxItem>, format
 
             const itemPosition = getCenterPosition(item.gridX, item.gridY, format, slotSize, size);
             const targetPosition = getCenterPosition(target.gridX, target.gridY, format, slotSize, size);
-            return renderGridBoxConnection(itemPosition, targetPosition, conn.style ?? '', conn.targetType, format, slotSize, conn.classNames, styleTable, cornerPosition);
+            return renderGridBoxConnection(itemPosition, targetPosition, conn.style ?? '', conn.targetType, format, slotSize, conn.classNames, styleTable, cornerPosition, item.id, conn.target);
         }).join('')
     ).join('');
 }
 
-export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, style: string, type: GridBoxConnectionType, format: Format['_name'], gridSize: NumberSize, classNames: string | undefined, styleTable: StyleTable, cornerPosition: number = 1.5): string {
+export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, style: string, type: GridBoxConnectionType, format: Format['_name'], gridSize: NumberSize, classNames: string | undefined, styleTable: StyleTable, cornerPosition: number = 1.5, fromId: string = '', toId: string = ''): string {
+    const diag = ` data-conn-from="${fromId}" data-conn-to="${toId}" data-conn-type="${type}" data-conn-style="${style.replace(/"/g, '&quot;')}"`;
     if (a.y === b.y) {
-        return `<div
+        return `<div${diag}
             class="
                 ${classNames ? classNames : ''}
                 ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
@@ -175,7 +177,7 @@ export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, st
             "></div>`;
     }
     if (a.x === b.x) {
-        return `<div
+        return `<div${diag}
             class="
                 ${classNames ? classNames : ''}
                 ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
@@ -202,7 +204,7 @@ export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, st
         const by = b.y - a.y;
         const cornerWidth = gridSize.width * cornerPosition;
         if (Math.abs(bx) < cornerWidth) {
-            return `<div
+            return `<div${diag}
                 class="
                     ${classNames ? classNames : ''}
                     ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
@@ -217,7 +219,7 @@ export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, st
                     ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
                 "></div>`;
         } else {
-            return `<div
+            return `<div${diag}
                 class="
                     ${classNames ? classNames : ''}
                     ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
@@ -231,7 +233,7 @@ export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, st
                     `)}
                     ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
                 "></div>
-                <div
+                <div${diag}
                 class="
                     ${classNames ? classNames : ''}
                     ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
@@ -250,7 +252,7 @@ export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, st
         const by = b.y - a.y;
         const cornerHeight = gridSize.height * cornerPosition;
         if (Math.abs(by) < cornerHeight) {
-            return `<div
+            return `<div${diag}
                 class="
                     ${classNames ? classNames : ''}
                     ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
@@ -265,7 +267,7 @@ export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, st
                     ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
                 "></div>`;
         } else {
-            return `<div
+            return `<div${diag}
                 class="
                     ${classNames ? classNames : ''}
                     ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
@@ -279,7 +281,7 @@ export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, st
                     `)}
                     ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
                 "></div>
-                <div
+                <div${diag}
                 class="
                     ${classNames ? classNames : ''}
                     ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
@@ -324,11 +326,16 @@ async function renderControlConnections(
     }
 
     return (await Promise.all(
-        flatMap(controlMatrix, m => 
+        flatMap(controlMatrix, m =>
             map(m, async (item) => {
                 const children = onRenderLineBox ? await onRenderLineBox(item, childrenParentInfo) : '';
                 const position = getLeftUpPosition(item.x, item.y, format, slotSize, size);
-                return `<div
+                const dirSummary = (['up', 'down', 'left', 'right'] as const)
+                    .filter(d => item[d])
+                    .map(d => `${d}[in:${Object.keys(item[d]!.in).join(',')}|out:${Object.keys(item[d]!.out).join(',')}]`)
+                    .join(';');
+                const diag = ` data-cell-x="${item.x}" data-cell-y="${item.y}" data-cell-dirs="${dirSummary.replace(/"/g, '&quot;')}"`;
+                return `<div${diag}
                     class="
                         ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
                         ${styleTable.oneTimeStyle('gridbox-connection', () => `

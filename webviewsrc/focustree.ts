@@ -63,11 +63,11 @@ let inlayConditions: DivDropdown | undefined = undefined;
 let checkedFocuses: Record<string, Checkbox> = {};
 
 function showCustomTitlebars() {
-    return getState().showCustomTitlebars ?? true;
+    return getState().showCustomTitlebars ?? false;
 }
 
 function showFocusOverlays() {
-    return getState().showFocusOverlays ?? true;
+    return getState().showFocusOverlays ?? false;
 }
 
 function showInlayWindows() {
@@ -272,10 +272,6 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 
     const inlayWindowsElement = document.getElementById('inlay-windows') as HTMLSelectElement | null;
     const inlayWindowsContainerElement = document.getElementById('inlay-window-container') as HTMLDivElement | null;
-    const showInlayWindowsContainerElement = document.getElementById('show-inlay-windows-container') as HTMLDivElement | null;
-    if (showInlayWindowsContainerElement) {
-        showInlayWindowsContainerElement.style.display = focusTree.inlayWindows.length > 0 ? 'flex' : 'none';
-    }
     if (inlayWindowsContainerElement) {
         inlayWindowsContainerElement.style.display = focusTree.inlayWindows.length > 0 ? 'block' : 'none';
     }

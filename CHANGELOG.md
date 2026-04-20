@@ -1,3 +1,12 @@
+v1.1
+
+  Functionality:
+  - Joint Focus trees can now be previed from their file or the linked national focus
+
+  Bugfixes:
+  - Fixed duplicate technolgy icon in the technology preview
+
+
 v1.0
 
 Functionality:

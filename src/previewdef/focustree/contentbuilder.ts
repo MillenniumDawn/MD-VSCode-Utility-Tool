@@ -94,6 +94,12 @@ async function renderFocusTrees(focusTrees: FocusTree[], styleTable: StyleTable,
         renderedInlayWindows[inlay.id] = (await renderInlayWindow(inlay, styleTable, gfxFiles)).replace(/\s\s+/g, ' ');
     }));
 
+    const toolbarFlags: ToolbarFlags = {
+        hasCustomTitlebar: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.textIcon !== undefined && titlebarStyles[f.textIcon] !== undefined)),
+        hasFocusOverlay: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.overlay !== undefined)),
+        hasInlayWindows: focusTrees.some(ft => ft.inlayWindows.length > 0),
+    };
+
     jsCodes.push('window.focusTrees = ' + JSON.stringify(focusTrees));
     jsCodes.push('window.renderedFocus = ' + JSON.stringify(renderedFocus));
     jsCodes.push('window.renderedInlayWindows = ' + JSON.stringify(renderedInlayWindows));
@@ -121,14 +127,20 @@ async function renderFocusTrees(focusTrees: FocusTree[], styleTable: StyleTable,
             left:0;
             top:0;
         `)}"></div>` +
-        `<div id="focustreecontent" class="${styleTable.oneTimeStyle('focustreecontent', () => `top:40px;left:-20px;position:relative`)}">
+        `<div id="focustreecontent" class="${styleTable.oneTimeStyle('focustreecontent', () => `top:52px;left:-20px;position:relative`)}">
             <div id="focustreeplaceholder"></div>
             <div id="inlaywindowplaceholder"></div>
             ${continuousFocusContent}
         </div>` +
         renderWarningContainer(styleTable) +
-        renderToolBar(focusTrees, styleTable)
+        renderToolBar(focusTrees, styleTable, toolbarFlags)
     );
+}
+
+interface ToolbarFlags {
+    hasCustomTitlebar: boolean;
+    hasFocusOverlay: boolean;
+    hasInlayWindows: boolean;
 }
 
 function renderWarningContainer(styleTable: StyleTable) {
@@ -140,7 +152,7 @@ function renderWarningContainer(styleTable: StyleTable) {
         position: fixed;
         top: 0;
         left: 0;
-        padding-top: 40px;
+        padding-top: 52px;
         background: var(--vscode-editor-background);
         box-sizing: border-box;
         display: none;
@@ -160,7 +172,7 @@ function renderWarningContainer(styleTable: StyleTable) {
     </div>`;
 }
 
-function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable): string {
+function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: ToolbarFlags): string {
     const focuses = focusTrees.length <= 1 ? '' : `
         <label for="focuses" class="${styleTable.style('focusesLabel', () => `margin-right:5px`)}">${localize('focustree.focustree', 'Focus tree: ')}</label>
         <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
@@ -169,7 +181,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable): string 
             </select>
         </div>`;
 
-    const searchbox = `    
+    const searchbox = `
         <label for="searchbox" class="${styleTable.style('searchboxLabel', () => `margin-right:5px`)}">${localize('focustree.search', 'Search: ')}</label>
         <input
             class="${styleTable.style('searchbox', () => `margin-right:10px`)}"
@@ -177,7 +189,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable): string 
             type="text"
         />`;
 
-    const customTitlebars = `
+    const customTitlebars = !flags.hasCustomTitlebar ? '' : `
         <div class="${styleTable.style('customTitlebarsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
             <label for="show-custom-titlebars">${localize('TODO', 'Custom titlebars')}</label>
             <input
@@ -186,7 +198,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable): string 
             />
         </div>`;
 
-    const focusOverlays = `
+    const focusOverlays = !flags.hasFocusOverlay ? '' : `
         <div class="${styleTable.style('focusOverlaysContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
             <label for="show-focus-overlays">${localize('TODO', 'Focus overlays')}</label>
             <input
@@ -195,7 +207,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable): string 
             />
         </div>`;
 
-    const inlayWindowsToggle = `
+    const inlayWindowsToggle = !flags.hasInlayWindows ? '' : `
         <div id="show-inlay-windows-container" class="${styleTable.style('inlayWindowsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
             <label for="show-inlay-windows">${localize('TODO', 'Inlay windows')}</label>
             <input
@@ -204,7 +216,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable): string 
             />
         </div>`;
 
-    const inlayWindows = `
+    const inlayWindows = !flags.hasInlayWindows ? '' : `
         <div id="inlay-window-container">
             <label for="inlay-windows" class="${styleTable.style('inlayWindowsLabel', () => `margin-right:5px`)}">${localize('TODO', 'Inlay window: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
@@ -247,15 +259,15 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable): string 
             <i class="codicon codicon-warning"></i>
         </button>`;
 
-    return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 40px;`)}">
+    return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 52px;`)}">
         <div class="toolbar">
+            ${useConditionInFocus ? conditions + inlayConditions : allowbranch}
             ${focuses}
             ${searchbox}
             ${customTitlebars}
             ${focusOverlays}
             ${inlayWindowsToggle}
             ${inlayWindows}
-            ${useConditionInFocus ? conditions + inlayConditions : allowbranch}
             ${warningsButton}
         </div>
     </div>`;

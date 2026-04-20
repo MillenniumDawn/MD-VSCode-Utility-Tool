@@ -379,11 +379,12 @@ async function renderTechnology(
     });
 
     return `<div
+        data-tech-id="${technology.id}" data-tech-small="${technology.enableEquipments ? '0' : '1'}"
         start="${technology.token?.start}"
         end="${technology.token?.end}"
         title="${technology.id}${localisationIndex ? `\n${await getLocalisedTextQuick(technology.id)}` : ''}\n(${folder.x}, ${folder.y})"
         class="
-            navigator 
+            navigator
             ${commonOptions.styleTable.style('navigator', () => `
                 position: absolute;
                 left: 0;
@@ -410,7 +411,7 @@ async function getTechnologySprite(sprite: string, technology: Technology, folde
             `GFX_technology_${folder}_available_item_bg`,
             `GFX_technology_available_item_bg`,
         ];
-    } else if (callerType === 'icon') {
+    } else if (sprite === 'GFX_technology_medium' && callerType === 'icon') {
         const result = await getSpriteByGfxName(`GFX_${technology.id}_medium`, gfxFiles);
         if (result !== undefined) { return result; }
         const result2 = await getSpriteByGfxName(`GFX_${technology.id}`, gfxFiles);
@@ -451,6 +452,7 @@ async function renderSubTechnology(
     });
 
     return `<div
+        data-subtech-id="${subTechnology.id}"
         start="${subTechnology.token?.start}"
         end="${subTechnology.token?.end}"
         title="${subTechnology.id}${localisationIndex ? `\n${await getLocalisedTextQuick(subTechnology.id)}` : ''}\n(${folder.x}, ${folder.y})"
@@ -461,7 +463,7 @@ async function renderSubTechnology(
                 left: 0;
                 top: 0;
                 width: 0;
-                height: p;
+                height: 0;
                 cursor: pointer;
                 pointer-events: auto;
             `)}
