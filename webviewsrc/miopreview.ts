@@ -11,18 +11,21 @@ import { feLocalize } from './util/i18n';
 import { Mio, MioTrait } from "../src/previewdef/mio/schema";
 
 const mios: Mio[] = (window as any).mios;
+const mioFrameAvailable: boolean = !!(window as any).mioFrameAvailable;
 
 let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
 let selectedMioIndex: number = Math.min(mios.length - 1, getState().selectedMioIndex ?? 0);
+let showIncludedTraits: boolean = getState().showIncludedTraits ?? true;
+let showFrame: boolean = false;
 let conditions: DivDropdown | undefined = undefined;
 
 async function buildContent() {
     const miopreviewplaceholder = document.getElementById('miopreviewplaceholder') as HTMLDivElement;
-    
+
     const styleTable = new StyleTable();
     const mio = mios[selectedMioIndex];
     const renderedTrait: Record<string, string> = (window as any).renderedTrait[mio.id];
-    const traits = Object.values(mio.traits);
+    const allTraits = Object.values(mio.traits);
 
     const allowBranchOptionsValue: Record<string, boolean> = {};
     const exprs = selectedExprs;
@@ -33,13 +36,16 @@ async function buildContent() {
     });
 
     const gridbox: GridBoxType = (window as any).gridBox;
+    const xGridSize: number = (window as any).xGridSize;
 
     const traitPosition: Record<string, NumberPosition> = {};
     calculateTraitVisible(mio, allowBranchOptionsValue);
-    const traitGrixBoxItems = traits.map(trait => traitToGridItem(trait, mio, allowBranchOptionsValue, traitPosition)).filter((v): v is GridBoxItem => !!v);
-    
+    const visibleTraits = showIncludedTraits ? allTraits : allTraits.filter(t => t.sourceMioId === mio.id);
+    const traitGrixBoxItems = visibleTraits.map(trait => traitToGridItem(trait, mio, allowBranchOptionsValue, traitPosition)).filter((v): v is GridBoxItem => !!v);
+
     const minX = minBy(Object.values(traitPosition), 'x')?.x ?? 0;
-    const leftPadding = gridbox.position.x._value - Math.min(minX * (window as any).xGridSize, 0);
+    const baseLeft = gridbox.position.x._value - Math.min(minX * xGridSize, 0);
+    const leftPadding = baseLeft;
 
     const traitPreviewContent = await renderGridBoxCommon({ ...gridbox, position: {...gridbox.position, x: toNumberLike(leftPadding)} }, {
         size: { width: 0, height: 0 },
@@ -54,7 +60,38 @@ async function buildContent() {
 
     miopreviewplaceholder.innerHTML = traitPreviewContent + styleTable.toStyleElement((window as any).styleNonce);
 
+    applyFrameState();
     subscribeNavigators();
+}
+
+function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function applyFrameState() {
+    const frame = document.getElementById('mio-frame') as HTMLDivElement | null;
+    const frameSlot = document.getElementById('mio-frame-slot') as HTMLDivElement | null;
+    const content = document.getElementById('miopreviewcontent') as HTMLDivElement | null;
+    const placeholder = document.getElementById('miopreviewplaceholder') as HTMLDivElement | null;
+    if (!placeholder || !content) {
+        return;
+    }
+
+    if (showFrame && frame && frameSlot) {
+        if (placeholder.parentElement !== frameSlot) {
+            frameSlot.appendChild(placeholder);
+        }
+        frame.style.display = 'block';
+        content.style.display = 'none';
+    } else {
+        if (placeholder.parentElement !== content) {
+            content.appendChild(placeholder);
+        }
+        if (frame) {
+            frame.style.display = 'none';
+        }
+        content.style.display = '';
+    }
 }
 
 function calculateTraitVisible(mio: Mio, allowBranchOptionsValue: Record<string, boolean>) {
@@ -120,11 +157,6 @@ function updateSelectedMio(clearCondition: boolean) {
         conditions.selectedValues$.next(clearCondition ? [] : selectedExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
     }
 
-    const warnings = document.getElementById('warnings') as HTMLTextAreaElement | null;
-    if (warnings) {
-        warnings.value = mio.warnings.length === 0 ? feLocalize('worldmap.warnings.nowarnings', 'No warnings.') :
-            mio.warnings.map(w => `[${w.source}] ${w.text}`).join('\n');
-    }
 }
 
 function getTraitPosition(
@@ -262,17 +294,43 @@ window.addEventListener('load', tryRun(async function() {
     const contentElement = document.getElementById('miopreviewcontent') as HTMLDivElement;
     enableZoom(contentElement, 0, 40);
 
-    // Toggle warnings
-    const showWarnings = document.getElementById('show-warnings') as HTMLButtonElement;
-    if (showWarnings) {
-        const warnings = document.getElementById('warnings-container') as HTMLDivElement;
-        showWarnings.addEventListener('click', () => {
-            const visible = warnings.style.display === 'block';
-            document.body.style.overflow = visible ? '' : 'hidden';
-            warnings.style.display = visible ? 'none' : 'block';
+    // Toggle inherited traits
+    const showIncludedTraitsCheckbox = document.getElementById('show-included-traits') as HTMLInputElement | null;
+    if (showIncludedTraitsCheckbox) {
+        showIncludedTraitsCheckbox.checked = showIncludedTraits;
+        showIncludedTraitsCheckbox.addEventListener('change', async () => {
+            showIncludedTraits = showIncludedTraitsCheckbox.checked;
+            setState({ showIncludedTraits });
+            await buildContent();
         });
     }
-    
+
+    // Toggle game frame
+    const showFrameCheckbox = document.getElementById('show-frame') as HTMLInputElement | null;
+    if (showFrameCheckbox) {
+        if (!mioFrameAvailable) {
+            showFrameCheckbox.disabled = true;
+            const tooltip = feLocalize('miopreview.frameunavailable', 'industrial_organization_detail.gui not found in mod/HOI4.');
+            showFrameCheckbox.title = tooltip;
+            const wrapper = showFrameCheckbox.nextElementSibling as HTMLElement | null;
+            if (wrapper?.classList.contains('checkbox-container-out')) {
+                wrapper.style.opacity = '0.4';
+                wrapper.style.pointerEvents = 'none';
+                wrapper.title = tooltip;
+            }
+            const frameLabel = document.querySelector('label[for="show-frame"]') as HTMLElement | null;
+            if (frameLabel) {
+                frameLabel.title = tooltip;
+                frameLabel.style.opacity = '0.4';
+            }
+        }
+        showFrameCheckbox.checked = showFrame;
+        showFrameCheckbox.addEventListener('change', async () => {
+            showFrame = mioFrameAvailable && showFrameCheckbox.checked;
+            await buildContent();
+        });
+    }
+
     updateSelectedMio(false);
     await buildContent();
     scrollToState();

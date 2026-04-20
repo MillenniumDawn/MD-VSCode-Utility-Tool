@@ -34,7 +34,7 @@ async function renderMioFile(loader, uri, webview) {
         const styleTable = new styletable_1.StyleTable();
         const jsCodes = [];
         const styleNonce = (0, common_1.randomString)(32);
-        const baseContent = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file);
+        const baseContent = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file, loadResult.result.frame);
         jsCodes.push((0, i18n_1.i18nTableAsScript)());
         return (0, html_1.html)(webview, baseContent, [
             setPreviewFileUriScript,
@@ -57,7 +57,7 @@ const leftPadding = 50;
 const topPadding = 50;
 const xGridSize = 87;
 const yGridSize = 117;
-async function renderMios(mios, styleTable, gfxFiles, jsCodes, styleNonce, file) {
+async function renderMios(mios, styleTable, gfxFiles, jsCodes, styleNonce, file, frame) {
     const gridBox = {
         position: { x: (0, schema_1.toNumberLike)(leftPadding), y: (0, schema_1.toNumberLike)(topPadding) },
         format: (0, schema_1.toStringAsSymbolIgnoreCase)('up'),
@@ -70,11 +70,31 @@ async function renderMios(mios, styleTable, gfxFiles, jsCodes, styleNonce, file)
         renderedTrait[mio.id] = renderedTraitForMio;
         await Promise.all(Object.values(mio.traits).map(async (trait) => renderedTraitForMio[trait.id] = (await renderTrait(trait, styleTable, gfxFiles, file)).replace(/\s\s+/g, ' ')));
     }
+    const mioHeaderTexts = {};
+    for (const mio of mios) {
+        mioHeaderTexts[mio.id] = await Promise.all(mio.headerTexts.map(async (h) => ({
+            text: h.text,
+            resolved: (featureflags_1.localisationIndex ? await (0, localisationIndex_1.getLocalisedTextQuick)(h.text) : undefined) ?? h.text,
+            x: h.x,
+        })));
+    }
+    const treeHeaderInfo = {
+        x: frame?.treeHeaderWindow?.position?.x?._value ?? 0,
+        y: frame?.treeHeaderWindow?.position?.y?._value ?? 11,
+        w: frame?.treeHeaderWindow?.size?.width?._value ?? 945,
+        h: frame?.treeHeaderWindow?.size?.height?._value ?? 24,
+        flavorX: frame?.flavorTextWindow?.position?.x?._value ?? 0,
+        flavorY: frame?.flavorTextWindow?.position?.y?._value ?? 0,
+    };
     jsCodes.push('window.mios = ' + JSON.stringify(mios));
     jsCodes.push('window.renderedTrait = ' + JSON.stringify(renderedTrait));
+    jsCodes.push('window.mioHeaderTexts = ' + JSON.stringify(mioHeaderTexts));
+    jsCodes.push('window.mioTreeHeader = ' + JSON.stringify(treeHeaderInfo));
     jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
     jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
+    const frameHtml = frame ? await renderFrame(frame, gfxFiles, styleTable, treeHeaderInfo) : '';
+    jsCodes.push('window.mioFrameAvailable = ' + JSON.stringify(!!frame));
     return (`<div id="dragger" class="${styleTable.oneTimeStyle('dragger', () => `
             width: 100vw;
             height: 100vh;
@@ -85,35 +105,62 @@ async function renderMios(mios, styleTable, gfxFiles, jsCodes, styleNonce, file)
         `<div id="miopreviewcontent" class="${styleTable.oneTimeStyle('miopreviewcontent', () => `top:40px;left:-20px;position:relative`)}">
             <div id="miopreviewplaceholder"></div>
         </div>` +
-        renderWarningContainer(styleTable) +
+        frameHtml +
         await renderToolBar(mios, styleTable));
 }
-function renderWarningContainer(styleTable) {
-    styleTable.style('warnings', () => 'outline: none;', ':focus');
-    return `
-    <div id="warnings-container" class="${styleTable.style('warnings-container', () => `
-        height: 100vh;
-        width: 100vw;
-        position: fixed;
-        top: 0;
-        left: 0;
-        padding-top: 40px;
-        background: var(--vscode-editor-background);
-        box-sizing: border-box;
+async function renderFrame(frame, gfxFiles, styleTable, treeHeaderInfo) {
+    const width = frame.window.size?.width?._value ?? 945;
+    const height = frame.window.size?.height?._value ?? 665;
+    const scrollbar = frame.scrollbarWindow;
+    const scrollX = scrollbar?.position?.x?._value ?? 45;
+    const scrollY = scrollbar?.position?.y?._value ?? 25;
+    const scrollW = scrollbar?.size?.width?._value ?? 905;
+    const scrollH = scrollbar?.size?.height?._value ?? 640;
+    const marginTop = scrollbar?.margin?.top?._value ?? 0;
+    const marginLeft = scrollbar?.margin?.left?._value ?? 0;
+    const marginBottom = scrollbar?.margin?.bottom?._value ?? 20;
+    const marginRight = scrollbar?.margin?.right?._value ?? 20;
+    const bgSpriteName = frame.window.background?.spritetype ?? 'GFX_MIO_details_background';
+    const bgSprite = await (0, imagecache_1.getSpriteByGfxName)(bgSpriteName, gfxFiles);
+    const bgImage = bgSprite ? bgSprite.image : undefined;
+    const innerW = scrollW - marginLeft - marginRight;
+    const innerH = scrollH - marginTop - marginBottom;
+    return `<div id="mio-frame" class="${styleTable.oneTimeStyle('mio-frame', () => `
         display: none;
+        position: absolute;
+        top: 60px;
+        left: 20px;
+        width: ${width}px;
+        height: ${height}px;
+        ${bgImage ? `background-image: url(${bgImage.uri});` : 'background: #1a1a1a;'}
+        background-size: ${width}px ${height}px;
+        background-repeat: no-repeat;
+        box-sizing: border-box;
     `)}">
-        <textarea id="warnings" readonly wrap="off" class="${styleTable.style('warnings', () => `
-            height: 100%;
-            width: 100%;
-            font-family: 'Consolas', monospace;
-            resize: none;
-            background: var(--vscode-editor-background);
-            padding: 10px;
-            border-top: none;
-            border-left: none;
-            border-bottom: none;
+        <div id="mio-frame-scrollbar" class="${styleTable.oneTimeStyle('mio-frame-scrollbar', () => `
+            position: absolute;
+            left: ${scrollX}px;
+            top: ${scrollY}px;
+            width: ${scrollW}px;
+            height: ${scrollH}px;
+            overflow: auto;
             box-sizing: border-box;
-        `)}"></textarea>
+            padding: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px;
+        `)}">
+            <div id="mio-frame-slot" class="${styleTable.oneTimeStyle('mio-frame-slot', () => `
+                position: relative;
+                width: ${innerW}px;
+                min-height: ${innerH}px;
+            `)}"></div>
+        </div>
+        <div id="mio-frame-tree-header" class="${styleTable.oneTimeStyle('mio-frame-tree-header', () => `
+            position: absolute;
+            left: ${treeHeaderInfo.x}px;
+            top: ${treeHeaderInfo.y}px;
+            width: ${treeHeaderInfo.w}px;
+            height: ${treeHeaderInfo.h}px;
+            pointer-events: none;
+        `)}"></div>
     </div>`;
 }
 async function renderToolBar(mios, styleTable) {
@@ -136,15 +183,16 @@ async function renderToolBar(mios, styleTable) {
                 </div>
             </div>
         </div>`;
-    const warningsButton = mios.every(mio => mio.warnings.length === 0) ? '' : `
-        <button id="show-warnings" title="${(0, i18n_1.localize)('miopreview.warnings', 'Toggle warnings')}">
-            <i class="codicon codicon-warning"></i>
-        </button>`;
+    const toggles = `
+        <label for="show-included-traits" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${(0, i18n_1.localize)('miopreview.showInheritedTraits', 'Show inherited traits')}</label>
+        <input type="checkbox" id="show-included-traits" class="${styleTable.style('marginRight30', () => `margin-right:30px`)}">
+        <label for="show-frame" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${(0, i18n_1.localize)('miopreview.showFrame', 'Show ingame ui')}</label>
+        <input type="checkbox" id="show-frame" class="${styleTable.style('marginRight10', () => `margin-right:10px`)}">`;
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 40px;`)}">
         <div class="toolbar">
             ${mioSelect}
             ${conditions}
-            ${warningsButton}
+            ${toggles}
         </div>
     </div>`;
 }

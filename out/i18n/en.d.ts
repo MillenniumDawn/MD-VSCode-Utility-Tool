@@ -48,8 +48,11 @@ export declare const __table: {
     "localisationIndex.workspace.builddone": string;
     "localisationIndex.workspace.building": string;
     "miopreview.conditions": string;
+    "miopreview.frameunavailable": string;
     "miopreview.mio": string;
     "miopreview.nomio": string;
+    "miopreview.showFrame": string;
+    "miopreview.showInheritedTraits": string;
     "miopreview.warnings": string;
     "miopreview.warnings.overridetraitidnotexist": string;
     "miopreview.warnings.overridetraitnoid": string;

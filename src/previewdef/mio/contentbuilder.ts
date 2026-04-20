@@ -5,7 +5,7 @@ import { forceError, randomString } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { html, htmlEscape } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
-import { MioLoader } from './loader';
+import { MioFrame, MioLoader } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
@@ -41,7 +41,7 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
         const styleTable = new StyleTable();
         const jsCodes: string[] = [];
         const styleNonce = randomString(32);
-        const baseContent = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file);
+        const baseContent = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file, loadResult.result.frame);
         jsCodes.push(i18nTableAsScript());
 
         return html(
@@ -72,7 +72,7 @@ const topPadding = 50;
 const xGridSize = 87;
 const yGridSize = 117;
 
-async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string): Promise<string> {
+async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string, frame: MioFrame | undefined): Promise<string> {
 
     const gridBox: HOIPartial<GridBoxType> = {
         position: { x: toNumberLike(leftPadding), y: toNumberLike(topPadding) },
@@ -95,6 +95,9 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
 
+    const frameHtml = frame ? await renderFrame(frame, gfxFiles, styleTable) : '';
+    jsCodes.push('window.mioFrameAvailable = ' + JSON.stringify(!!frame));
+
     return (
         `<div id="dragger" class="${styleTable.oneTimeStyle('dragger', () => `
             width: 100vw;
@@ -106,37 +109,60 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
         `<div id="miopreviewcontent" class="${styleTable.oneTimeStyle('miopreviewcontent', () => `top:40px;left:-20px;position:relative`)}">
             <div id="miopreviewplaceholder"></div>
         </div>` +
-        renderWarningContainer(styleTable) +
+        frameHtml +
         await renderToolBar(mios, styleTable)
     );
 }
 
-function renderWarningContainer(styleTable: StyleTable) {
-    styleTable.style('warnings', () => 'outline: none;', ':focus');
-    return `
-    <div id="warnings-container" class="${styleTable.style('warnings-container', () => `
-        height: 100vh;
-        width: 100vw;
-        position: fixed;
-        top: 0;
-        left: 0;
-        padding-top: 40px;
-        background: var(--vscode-editor-background);
-        box-sizing: border-box;
+async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: StyleTable): Promise<string> {
+    const width = frame.window.size?.width?._value ?? 945;
+    const height = frame.window.size?.height?._value ?? 665;
+
+    const scrollbar = frame.scrollbarWindow;
+    const scrollX = scrollbar?.position?.x?._value ?? 45;
+    const scrollY = scrollbar?.position?.y?._value ?? 25;
+    const scrollW = scrollbar?.size?.width?._value ?? 905;
+    const scrollH = scrollbar?.size?.height?._value ?? 640;
+    const marginTop = scrollbar?.margin?.top?._value ?? 0;
+    const marginLeft = scrollbar?.margin?.left?._value ?? 0;
+    const marginBottom = scrollbar?.margin?.bottom?._value ?? 20;
+    const marginRight = scrollbar?.margin?.right?._value ?? 20;
+
+    const bgSpriteName = frame.window.background?.spritetype ?? 'GFX_MIO_details_background';
+    const bgSprite = await getSpriteByGfxName(bgSpriteName, gfxFiles);
+    const bgImage = bgSprite ? bgSprite.image : undefined;
+
+    const innerW = scrollW - marginLeft - marginRight;
+    const innerH = scrollH - marginTop - marginBottom;
+
+    return `<div id="mio-frame" class="${styleTable.oneTimeStyle('mio-frame', () => `
         display: none;
+        position: absolute;
+        top: 60px;
+        left: 20px;
+        width: ${width}px;
+        height: ${height}px;
+        ${bgImage ? `background-image: url(${bgImage.uri});` : 'background: #1a1a1a;'}
+        background-size: ${width}px ${height}px;
+        background-repeat: no-repeat;
+        box-sizing: border-box;
     `)}">
-        <textarea id="warnings" readonly wrap="off" class="${styleTable.style('warnings', () => `
-            height: 100%;
-            width: 100%;
-            font-family: 'Consolas', monospace;
-            resize: none;
-            background: var(--vscode-editor-background);
-            padding: 10px;
-            border-top: none;
-            border-left: none;
-            border-bottom: none;
+        <div id="mio-frame-scrollbar" class="${styleTable.oneTimeStyle('mio-frame-scrollbar', () => `
+            position: absolute;
+            left: ${scrollX}px;
+            top: ${scrollY}px;
+            width: ${scrollW}px;
+            height: ${scrollH}px;
+            overflow: auto;
             box-sizing: border-box;
-        `)}"></textarea>
+            padding: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px;
+        `)}">
+            <div id="mio-frame-slot" class="${styleTable.oneTimeStyle('mio-frame-slot', () => `
+                position: relative;
+                width: ${innerW}px;
+                min-height: ${innerH}px;
+            `)}"></div>
+        </div>
     </div>`;
 }
 
@@ -162,16 +188,17 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable): Promise<strin
             </div>
         </div>`;
     
-    const warningsButton = mios.every(mio => mio.warnings.length === 0) ? '' : `
-        <button id="show-warnings" title="${localize('miopreview.warnings', 'Toggle warnings')}">
-            <i class="codicon codicon-warning"></i>
-        </button>`;
+    const toggles = `
+        <label for="show-included-traits" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showInheritedTraits', 'Show inherited traits')}</label>
+        <input type="checkbox" id="show-included-traits" class="${styleTable.style('marginRight30', () => `margin-right:30px`)}">
+        <label for="show-frame" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showFrame', 'Show ingame ui')}</label>
+        <input type="checkbox" id="show-frame" class="${styleTable.style('marginRight10', () => `margin-right:10px`)}">`;
 
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 40px;`)}">
         <div class="toolbar">
             ${mioSelect}
             ${conditions}
-            ${warningsButton}
+            ${toggles}
         </div>
     </div>`;
 }

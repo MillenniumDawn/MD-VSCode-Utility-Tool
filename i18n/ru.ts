@@ -45,7 +45,6 @@ const table: Partial<typeof __table> = {
     "miopreview.conditions": "Conditions: ",
     "miopreview.mio": "Military Industrial Organization: ",
     "miopreview.nomio": "No military industrial organization defined.",
-    "miopreview.warnings": "Toggle warnings",
     "miopreview.warnings.overridetraitidnotexist": "An override_trait referenced a trait that doesn't exist: {0}.",
     "miopreview.warnings.overridetraitnoid": "An override_trait defined in this file don't have token property: {0}.",
     "miopreview.warnings.relativepositioncircularref": "There're circular reference in relative position ID of these traits: {0}.",

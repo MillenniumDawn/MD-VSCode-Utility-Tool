@@ -45,7 +45,6 @@ const table: Partial<typeof __table> = {
     "miopreview.conditions": "조건: ",
     "miopreview.mio": "설계사: ",
     "miopreview.nomio": "설계사 정의되지 않음.",
-    "miopreview.warnings": "Toggle warnings",
     "miopreview.warnings.overridetraitidnotexist": "override_trait 가 존재하지 않습니다: {0}.",
     "miopreview.warnings.overridetraitnoid": "이 파일에 정의된 override_trait 는 토큰이 없습니다: {0}.",
     "miopreview.warnings.relativepositioncircularref": "이 트레잇의 상대위치 ID가 순환참조됩니다: {0}.",

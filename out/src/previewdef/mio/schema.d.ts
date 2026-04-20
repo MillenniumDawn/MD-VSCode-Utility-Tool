@@ -6,6 +6,11 @@ export interface Mio {
     traits: Record<string, MioTrait>;
     conditionExprs: ConditionItem[];
     warnings: MioWarning[];
+    headerTexts: MioHeaderText[];
+}
+export interface MioHeaderText {
+    text: string;
+    x: number;
 }
 export interface MioWarning extends Warning<string> {
     navigations?: {
@@ -35,5 +40,6 @@ export interface MioTrait {
     effects: TraitEffect[];
     token: Token | undefined;
     file: string;
+    sourceMioId: string;
 }
 export declare function getMiosFromFile(node: Node, dependentMios: Mio[], filePath: string): Mio[];

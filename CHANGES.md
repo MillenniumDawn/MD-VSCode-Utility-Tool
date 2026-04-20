@@ -1,10 +1,14 @@
 v1.1
 
   Functionality:
-  - Joint Focus trees can now be previed from their file or the linked national focus
+  - Changed icon to match compatibility with CWTools
+  - [ Focus Tree ] Topbar has been made bigger
+  - [ Focus Tree ] Textbox and overlay checkboxes only apear if found in the file
+  - [ MIO ] previewer will show included traits
+  - [ MIO ] previewer also shows the ingame UI
 
   Bugfixes:
-  - Fixed duplicate technolgy icon in the technology preview
+  - [ Technology ] Fixed duplicate icon in previewer
 
 
 v1.0

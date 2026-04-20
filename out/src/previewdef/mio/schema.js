@@ -42,6 +42,13 @@ const mioSchema = {
         _type: "array",
     },
     remove_trait: "enum",
+    tree_header_text: {
+        _innerType: {
+            text: "string",
+            x: "number",
+        },
+        _type: "array",
+    },
 };
 const mioFileSchema = {
     _innerType: mioSchema,
@@ -88,6 +95,7 @@ function getMio(mioDefItem, dependentMios, filePath) {
     }
     for (const traitDef of [...mioDef.trait, ...mioDef.add_trait]) {
         const trait = getTrait(traitDef, filePath, warnings, conditionExprs);
+        trait.sourceMioId = id;
         if (traits[trait.id]) {
             warnings.push({
                 source: id,
@@ -97,7 +105,7 @@ function getMio(mioDefItem, dependentMios, filePath) {
         traits[trait.id] = trait;
     }
     for (const traitDef of mioDef.override_trait) {
-        overrideTrait(traitDef, traits, filePath, warnings, conditionExprs);
+        overrideTrait(traitDef, traits, filePath, warnings, conditionExprs, id);
     }
     for (const traitId of mioDef.remove_trait._values) {
         if (traitId && traits[traitId]) {
@@ -109,11 +117,18 @@ function getMio(mioDefItem, dependentMios, filePath) {
         }
     }
     validateRelativePositionId(traits, warnings);
+    const localHeaderTexts = mioDef.tree_header_text
+        .filter((h) => !!h && h.text !== undefined && h.x !== undefined)
+        .map(h => ({ text: h.text, x: h.x }));
+    const headerTexts = localHeaderTexts.length > 0
+        ? localHeaderTexts
+        : (baseMio?.headerTexts ? [...baseMio.headerTexts] : []);
     return {
         id,
         traits,
         conditionExprs,
         warnings,
+        headerTexts,
     };
 }
 function validateRelativePositionId(traits, warnings) {
@@ -196,9 +211,10 @@ function getTrait(traitDef, filePath, warnings, conditionExprs) {
         effects,
         token: traitDef._token,
         file: filePath,
+        sourceMioId: '',
     };
 }
-function overrideTrait(traitDef, traits, filePath, warnings, conditionExprs) {
+function overrideTrait(traitDef, traits, filePath, warnings, conditionExprs, overridingMioId) {
     const id = traitDef.token;
     if (!id) {
         warnings.push({
@@ -236,5 +252,6 @@ function overrideTrait(traitDef, traits, filePath, warnings, conditionExprs) {
         trait.token = traitDef._token;
         trait.file = filePath;
     }
+    trait.sourceMioId = overridingMioId;
 }
 //# sourceMappingURL=schema.js.map

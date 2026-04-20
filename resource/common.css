@@ -167,7 +167,7 @@ ul.select-dropdown div.checkbox-container-out {
     vertical-align: top;
 }
 
-input[type=checkbox]:checked ~ div.checkbox-container-out div.checkbox, div.checkbox.checked {
+input[type=checkbox]:checked + div.checkbox-container-out div.checkbox, div.checkbox.checked {
     color: var(--vscode-checkbox-foreground);
 }
 

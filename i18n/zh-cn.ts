@@ -52,7 +52,6 @@ const table: Partial<typeof __table> = {
     "miopreview.conditions": "条件：",
     "miopreview.mio": "军工机构: ",
     "miopreview.nomio": "没有军工机构。",
-    "miopreview.warnings": "开启/收起警告列表",
     "miopreview.warnings.overridetraitidnotexist": "override_trait引用的特质不存在：{0}。",
     "miopreview.warnings.overridetraitnoid": "这个文件中的override_trait没有token字段：{0}。",
     "miopreview.warnings.relativepositioncircularref": "这些特质的relative_position_id字段有循环引用：{0}。",

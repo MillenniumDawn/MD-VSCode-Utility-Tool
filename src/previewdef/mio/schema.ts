@@ -37,6 +37,7 @@ export interface MioTrait {
     effects: TraitEffect[];
     token: Token | undefined;
     file: string;
+    sourceMioId: string;
 }
 
 interface MioDef {
@@ -166,6 +167,7 @@ function getMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }, depend
 
     for (const traitDef of [...mioDef.trait, ...mioDef.add_trait]) {
         const trait = getTrait(traitDef, filePath, warnings, conditionExprs);
+        trait.sourceMioId = id;
         if (traits[trait.id]) {
             warnings.push({
                 source: id,
@@ -176,7 +178,7 @@ function getMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }, depend
     }
 
     for (const traitDef of mioDef.override_trait) {
-        overrideTrait(traitDef, traits, filePath, warnings, conditionExprs);
+        overrideTrait(traitDef, traits, filePath, warnings, conditionExprs, id);
     }
 
     for (const traitId of mioDef.remove_trait._values) {
@@ -288,10 +290,11 @@ function getTrait(traitDef: HOIPartial<MioTraitDef>, filePath: string, warnings:
         effects,
         token: traitDef._token,
         file: filePath,
+        sourceMioId: '',
     };
 }
 
-function overrideTrait(traitDef: HOIPartial<MioTraitDef>, traits: Record<string, MioTrait>, filePath: string, warnings: MioWarning[], conditionExprs: ConditionItem[]) {
+function overrideTrait(traitDef: HOIPartial<MioTraitDef>, traits: Record<string, MioTrait>, filePath: string, warnings: MioWarning[], conditionExprs: ConditionItem[], overridingMioId: string) {
     const id = traitDef.token;
     if (!id) {
         warnings.push({
@@ -331,5 +334,6 @@ function overrideTrait(traitDef: HOIPartial<MioTraitDef>, traits: Record<string,
         trait.token = traitDef._token;
         trait.file = filePath;
     }
+    trait.sourceMioId = overridingMioId;
 }
 
