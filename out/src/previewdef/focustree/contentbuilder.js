@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildFocusTreePayload = buildFocusTreePayload;
 exports.renderFocusTreeFile = renderFocusTreeFile;
 exports.getFocusIcon = getFocusIcon;
 const imagecache_1 = require("../../util/image/imagecache");
@@ -20,6 +21,56 @@ const common_2 = require("../../util/hoi4gui/common");
 const instanttextbox_1 = require("../../util/hoi4gui/instanttextbox");
 const nodecommon_1 = require("../../util/hoi4gui/nodecommon");
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
+async function buildFocusTreePayload(loader) {
+    try {
+        const session = new loader_1.LoaderSession(false);
+        const loadResult = await loader.load(session);
+        const loadedLoaders = Array.from(session.loadedLoader).map(v => v.toString());
+        (0, debug_1.debug)('Loader session focus tree', loadedLoaders);
+        const focusTrees = loadResult.result.focusTrees;
+        if (focusTrees.length === 0) {
+            return null;
+        }
+        const styleTable = new styletable_1.StyleTable();
+        const styleNonce = (0, common_1.randomString)(32);
+        const renderedFocus = {};
+        const renderedInlayWindows = {};
+        const titlebarStyles = await (0, titlebar_1.loadFocusTitlebarStyles)();
+        await Promise.all((0, lodash_1.flatMap)(focusTrees, tree => Object.values(tree.focuses)).map(async (focus) => renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles)).replace(/\s\s+/g, ' ')));
+        await prepareInlayGfxStyles(focusTrees, styleTable);
+        await Promise.all((0, lodash_1.flatMap)(focusTrees, tree => tree.inlayWindows).map(async (inlay) => {
+            renderedInlayWindows[inlay.id] = (await renderInlayWindow(inlay, styleTable, loadResult.result.gfxFiles)).replace(/\s\s+/g, ' ');
+        }));
+        const toolbarFlags = {
+            hasCustomTitlebar: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.textIcon !== undefined && titlebarStyles[f.textIcon] !== undefined)),
+            hasFocusOverlay: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.overlay !== undefined)),
+            hasInlayWindows: focusTrees.some(ft => ft.inlayWindows.length > 0),
+        };
+        const gridBox = {
+            position: { x: (0, schema_1.toNumberLike)(leftPaddingBase), y: (0, schema_1.toNumberLike)(topPaddingBase) },
+            format: (0, schema_1.toStringAsSymbolIgnoreCase)('up'),
+            size: { width: (0, schema_1.toNumberLike)(xGridSize), height: undefined },
+            slotsize: { width: (0, schema_1.toNumberLike)(xGridSize), height: (0, schema_1.toNumberLike)(yGridSize) },
+        };
+        const cssFingerprint = JSON.stringify(styleTable.records);
+        return {
+            focusTrees,
+            renderedFocus,
+            renderedInlayWindows,
+            gridBox,
+            useConditionInFocus: featureflags_1.useConditionInFocus,
+            xGridSize,
+            styleTable,
+            styleNonce,
+            toolbarFlags,
+            cssFingerprint,
+        };
+    }
+    catch (e) {
+        (0, debug_1.error)(e);
+        return null;
+    }
+}
 async function renderFocusTreeFile(loader, uri, webview) {
     const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
     try {

@@ -5,8 +5,6 @@ import { ContainerWindowType } from "../../hoiformat/gui";
 export interface MioFrame {
     window: HOIPartial<ContainerWindowType>;
     scrollbarWindow: HOIPartial<ContainerWindowType> | undefined;
-    treeHeaderWindow: HOIPartial<ContainerWindowType> | undefined;
-    flavorTextWindow: HOIPartial<ContainerWindowType> | undefined;
 }
 export interface MioLoaderResult {
     mios: Mio[];

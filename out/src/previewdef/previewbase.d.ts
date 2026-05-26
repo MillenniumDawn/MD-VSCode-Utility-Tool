@@ -8,8 +8,10 @@ export declare abstract class PreviewBase {
     private disposeEmitter;
     onDispose: vscode.Event<undefined>;
     private disposed;
+    protected panelInitialized: boolean;
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel);
     onDocumentChange(document: vscode.TextDocument): Promise<void>;
+    protected sendPartialUpdate(document: vscode.TextDocument): Promise<void>;
     dispose(): void;
     get isDisposed(): boolean;
     initializePanelContent(document: vscode.TextDocument): Promise<void>;

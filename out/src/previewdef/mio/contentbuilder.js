@@ -70,30 +70,12 @@ async function renderMios(mios, styleTable, gfxFiles, jsCodes, styleNonce, file,
         renderedTrait[mio.id] = renderedTraitForMio;
         await Promise.all(Object.values(mio.traits).map(async (trait) => renderedTraitForMio[trait.id] = (await renderTrait(trait, styleTable, gfxFiles, file)).replace(/\s\s+/g, ' ')));
     }
-    const mioHeaderTexts = {};
-    for (const mio of mios) {
-        mioHeaderTexts[mio.id] = await Promise.all(mio.headerTexts.map(async (h) => ({
-            text: h.text,
-            resolved: (featureflags_1.localisationIndex ? await (0, localisationIndex_1.getLocalisedTextQuick)(h.text) : undefined) ?? h.text,
-            x: h.x,
-        })));
-    }
-    const treeHeaderInfo = {
-        x: frame?.treeHeaderWindow?.position?.x?._value ?? 0,
-        y: frame?.treeHeaderWindow?.position?.y?._value ?? 11,
-        w: frame?.treeHeaderWindow?.size?.width?._value ?? 945,
-        h: frame?.treeHeaderWindow?.size?.height?._value ?? 24,
-        flavorX: frame?.flavorTextWindow?.position?.x?._value ?? 0,
-        flavorY: frame?.flavorTextWindow?.position?.y?._value ?? 0,
-    };
     jsCodes.push('window.mios = ' + JSON.stringify(mios));
     jsCodes.push('window.renderedTrait = ' + JSON.stringify(renderedTrait));
-    jsCodes.push('window.mioHeaderTexts = ' + JSON.stringify(mioHeaderTexts));
-    jsCodes.push('window.mioTreeHeader = ' + JSON.stringify(treeHeaderInfo));
     jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
     jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
-    const frameHtml = frame ? await renderFrame(frame, gfxFiles, styleTable, treeHeaderInfo) : '';
+    const frameHtml = frame ? await renderFrame(frame, gfxFiles, styleTable) : '';
     jsCodes.push('window.mioFrameAvailable = ' + JSON.stringify(!!frame));
     return (`<div id="dragger" class="${styleTable.oneTimeStyle('dragger', () => `
             width: 100vw;
@@ -108,7 +90,7 @@ async function renderMios(mios, styleTable, gfxFiles, jsCodes, styleNonce, file,
         frameHtml +
         await renderToolBar(mios, styleTable));
 }
-async function renderFrame(frame, gfxFiles, styleTable, treeHeaderInfo) {
+async function renderFrame(frame, gfxFiles, styleTable) {
     const width = frame.window.size?.width?._value ?? 945;
     const height = frame.window.size?.height?._value ?? 665;
     const scrollbar = frame.scrollbarWindow;
@@ -153,14 +135,6 @@ async function renderFrame(frame, gfxFiles, styleTable, treeHeaderInfo) {
                 min-height: ${innerH}px;
             `)}"></div>
         </div>
-        <div id="mio-frame-tree-header" class="${styleTable.oneTimeStyle('mio-frame-tree-header', () => `
-            position: absolute;
-            left: ${treeHeaderInfo.x}px;
-            top: ${treeHeaderInfo.y}px;
-            width: ${treeHeaderInfo.w}px;
-            height: ${treeHeaderInfo.h}px;
-            pointer-events: none;
-        `)}"></div>
     </div>`;
 }
 async function renderToolBar(mios, styleTable) {

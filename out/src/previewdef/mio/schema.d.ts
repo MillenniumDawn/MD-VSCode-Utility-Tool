@@ -6,11 +6,6 @@ export interface Mio {
     traits: Record<string, MioTrait>;
     conditionExprs: ConditionItem[];
     warnings: MioWarning[];
-    headerTexts: MioHeaderText[];
-}
-export interface MioHeaderText {
-    text: string;
-    x: number;
 }
 export interface MioWarning extends Warning<string> {
     navigations?: {

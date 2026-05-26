@@ -9,9 +9,7 @@ const condition_1 = require("../src/hoiformat/condition");
 const schema_1 = require("../src/hoiformat/schema");
 const i18n_1 = require("./util/i18n");
 const mios = window.mios;
-const mioHeaderTexts = window.mioHeaderTexts ?? {};
 const mioFrameAvailable = !!window.mioFrameAvailable;
-const mioTreeHeader = window.mioTreeHeader ?? { x: 0, y: 11, w: 945, h: 24, flavorX: 0, flavorY: 0 };
 let selectedExprs = (0, common_1.getState)().selectedExprs ?? [];
 let selectedMioIndex = Math.min(mios.length - 1, (0, common_1.getState)().selectedMioIndex ?? 0);
 let showIncludedTraits = (0, common_1.getState)().showIncludedTraits ?? true;
@@ -48,44 +46,9 @@ async function buildContent() {
         onRenderItem: item => Promise.resolve(renderedTrait[item.id].replace('{{position}}', item.gridX + ', ' + item.gridY)),
         cornerPosition: 0.5,
     });
-    const headers = mioHeaderTexts[mio.id] ?? [];
-    const gridHeaderHtml = renderGridHeaderTexts(headers, leftPadding, xGridSize, mioTreeHeader.y);
-    const gridHeaderWrapper = gridHeaderHtml
-        ? `<div id="mio-grid-header" style="position:relative; height:${mioTreeHeader.y + mioTreeHeader.h}px; width:100%;">${gridHeaderHtml}</div>`
-        : '';
-    miopreviewplaceholder.innerHTML = gridHeaderWrapper + traitPreviewContent + styleTable.toStyleElement(window.styleNonce);
-    const frameTreeHeaderSlot = document.getElementById('mio-frame-tree-header');
-    if (frameTreeHeaderSlot) {
-        frameTreeHeaderSlot.innerHTML = renderFrameHeaderTexts(headers, mioTreeHeader);
-    }
+    miopreviewplaceholder.innerHTML = traitPreviewContent + styleTable.toStyleElement(window.styleNonce);
     applyFrameState();
     (0, common_1.subscribeNavigators)();
-}
-function renderHeaderLabel(h, left, top) {
-    const display = h.resolved || h.text || '';
-    const keyBadge = h.text && h.text !== h.resolved ? ` <span style="opacity:0.6;font-size:10px;">[${escapeHtml(h.text)}]</span>` : '';
-    return `<div style="position:absolute; left:${left}px; top:${top}px; transform:translateX(-50%); text-align:center; font-weight:bold; color:#d4c068; font-size:13px; white-space:nowrap; pointer-events:none; z-index:4;">
-        ${escapeHtml(display)}${keyBadge}
-    </div>`;
-}
-function renderGridHeaderTexts(headers, leftPadding, xGridSize, topY) {
-    if (headers.length === 0) {
-        return '';
-    }
-    return headers.map(h => {
-        const left = leftPadding + h.x * xGridSize + xGridSize / 2;
-        return renderHeaderLabel(h, left, topY);
-    }).join('');
-}
-function renderFrameHeaderTexts(headers, info) {
-    if (headers.length === 0) {
-        return '';
-    }
-    return headers.map(h => {
-        const left = info.flavorX + h.x;
-        const top = info.flavorY;
-        return renderHeaderLabel(h, left, top);
-    }).join('');
 }
 function escapeHtml(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

@@ -16,8 +16,6 @@ const mioOrgDir = 'common/military_industrial_organization/organizations';
 const genericMio = `${mioOrgDir}/00_generic_organization.txt`;
 const mioDetailGui = 'interface/military_industrial_organization/industrial_organization_detail.gui';
 const mioFrameWindowName = 'industrial_organisation_tree_window';
-const mioTreeHeaderName = 'tree_header';
-const mioFlavorTextName = 'industrial_organisation_flavortext_window';
 class MioLoader extends loader_1.ContentLoader {
     async postLoad(content, dependencies, error, session) {
         if (error || (content === undefined)) {
@@ -105,10 +103,7 @@ async function loadMioFrame() {
         }
         const directChildren = [...(found.containerwindowtype ?? []), ...(found.windowtype ?? [])];
         const scrollbarWindow = directChildren.find(c => c?.name === 'scrollbar_window');
-        const treeHeaderWindow = findByName([found], mioTreeHeaderName);
-        const flavorTextWindow = (treeHeaderWindow ? findByName([treeHeaderWindow], mioFlavorTextName) : undefined)
-            ?? findByName(topLevelWindows, mioFlavorTextName);
-        return { window: found, scrollbarWindow, treeHeaderWindow, flavorTextWindow };
+        return { window: found, scrollbarWindow };
     }
     catch {
         return undefined;

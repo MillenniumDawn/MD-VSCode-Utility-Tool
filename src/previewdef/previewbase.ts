@@ -18,6 +18,7 @@ export abstract class PreviewBase {
     public onDispose = this.disposeEmitter.event;
 
     private disposed = false;
+    protected panelInitialized = false;
 
     constructor(
         readonly uri: vscode.Uri,
@@ -28,10 +29,19 @@ export abstract class PreviewBase {
 
     public async onDocumentChange(document: vscode.TextDocument): Promise<void> {
         try {
-            this.panel.webview.html = await this.getContent(document);
+            if (!this.panelInitialized) {
+                this.panel.webview.html = await this.getContent(document);
+                this.panelInitialized = true;
+            } else {
+                await this.sendPartialUpdate(document);
+            }
         } catch(e) {
             error(e);
         }
+    }
+
+    protected async sendPartialUpdate(document: vscode.TextDocument): Promise<void> {
+        this.panel.webview.html = await this.getContent(document);
     }
     
     public dispose(): void {
@@ -46,6 +56,7 @@ export abstract class PreviewBase {
     }
 
     public async initializePanelContent(document: vscode.TextDocument): Promise<void> {
+        this.panelInitialized = false;
         this.panel.webview.html = localize('loading', 'Loading...');
         await this.onDocumentChange(document);
     }
@@ -138,12 +149,13 @@ export abstract class PreviewBase {
         }
     }
 
-    protected reload() {        
+    protected reload() {
         const document = getDocumentByUri(this.uri);
         if (document === undefined) {
             return;
         }
 
+        this.panelInitialized = false;
         this.onDocumentChange(document);
     }
 

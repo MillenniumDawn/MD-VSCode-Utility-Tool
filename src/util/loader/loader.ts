@@ -242,6 +242,8 @@ export abstract class ContentLoader<T, E={}> extends Loader<T, E> {
     private expiryToken: string = '';
     protected loaderDependencies = new LoaderDependencies();
     protected readDependency = true;
+    private lastContentHash = 0;
+    private pendingContent: string | undefined = undefined;
 
     constructor(public file: string, private contentProvider?: () => Promise<string>) {
         super();
@@ -250,9 +252,17 @@ export abstract class ContentLoader<T, E={}> extends Loader<T, E> {
     public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
         if (this.contentProvider === undefined) {
             return await hoiFileExpiryToken(this.file) !== this.expiryToken || this.loaderDependencies.shouldReload(session);
-        } else {
-            return true;
         }
+        // Peek at in-memory content to compute hash; store it to avoid a second call in loadImpl
+        const content = await this.contentProvider();
+        const hash = fnv1a(content);
+        const depsChanged = await this.loaderDependencies.shouldReload(session);
+        if (hash === this.lastContentHash && !depsChanged) {
+            return false;
+        }
+        this.pendingContent = content;
+        this.lastContentHash = hash;
+        return true;
     }
 
     protected beforeLoadImpl(session: LoaderSession): void {
@@ -271,8 +281,10 @@ export abstract class ContentLoader<T, E={}> extends Loader<T, E> {
         try {
             content = this.contentProvider === undefined ?
                 (await readFileFromModOrHOI4(this.file))[0].toString('utf-8').replace(/^\uFEFF/, '') :
-                await this.contentProvider();
+                (this.pendingContent !== undefined ? this.pendingContent : await this.contentProvider());
+            this.pendingContent = undefined;
         } catch(e) {
+            this.pendingContent = undefined;
             error(e);
             errorValue = e;
         }
@@ -361,4 +373,13 @@ function checkLoaderSessionLoadingFile(session: LoaderSession, file: string) {
             throw new UserError('Circular dependency when loading file. Loading loaders: ' + session.loadingLoader);
         }
     }
+}
+
+function fnv1a(s: string): number {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = (h * 16777619) >>> 0;
+    }
+    return h;
 }

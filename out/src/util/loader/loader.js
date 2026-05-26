@@ -209,6 +209,8 @@ class ContentLoader extends Loader {
     expiryToken = '';
     loaderDependencies = new LoaderDependencies();
     readDependency = true;
+    lastContentHash = 0;
+    pendingContent = undefined;
     constructor(file, contentProvider) {
         super();
         this.file = file;
@@ -218,9 +220,16 @@ class ContentLoader extends Loader {
         if (this.contentProvider === undefined) {
             return await (0, fileloader_1.hoiFileExpiryToken)(this.file) !== this.expiryToken || this.loaderDependencies.shouldReload(session);
         }
-        else {
-            return true;
+        // Peek at in-memory content to compute hash; store it to avoid a second call in loadImpl
+        const content = await this.contentProvider();
+        const hash = fnv1a(content);
+        const depsChanged = await this.loaderDependencies.shouldReload(session);
+        if (hash === this.lastContentHash && !depsChanged) {
+            return false;
         }
+        this.pendingContent = content;
+        this.lastContentHash = hash;
+        return true;
     }
     beforeLoadImpl(session) {
         checkLoaderSessionLoadingFile(session, this.file);
@@ -235,9 +244,11 @@ class ContentLoader extends Loader {
         try {
             content = this.contentProvider === undefined ?
                 (await (0, fileloader_1.readFileFromModOrHOI4)(this.file))[0].toString('utf-8').replace(/^\uFEFF/, '') :
-                await this.contentProvider();
+                (this.pendingContent !== undefined ? this.pendingContent : await this.contentProvider());
+            this.pendingContent = undefined;
         }
         catch (e) {
+            this.pendingContent = undefined;
             (0, debug_1.error)(e);
             errorValue = e;
         }
@@ -314,5 +325,13 @@ function checkLoaderSessionLoadingFile(session, file) {
             throw new common_1.UserError('Circular dependency when loading file. Loading loaders: ' + session.loadingLoader);
         }
     }
+}
+function fnv1a(s) {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = (h * 16777619) >>> 0;
+    }
+    return h;
 }
 //# sourceMappingURL=loader.js.map

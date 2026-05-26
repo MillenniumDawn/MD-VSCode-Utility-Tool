@@ -42,13 +42,6 @@ const mioSchema = {
         _type: "array",
     },
     remove_trait: "enum",
-    tree_header_text: {
-        _innerType: {
-            text: "string",
-            x: "number",
-        },
-        _type: "array",
-    },
 };
 const mioFileSchema = {
     _innerType: mioSchema,
@@ -117,18 +110,11 @@ function getMio(mioDefItem, dependentMios, filePath) {
         }
     }
     validateRelativePositionId(traits, warnings);
-    const localHeaderTexts = mioDef.tree_header_text
-        .filter((h) => !!h && h.text !== undefined && h.x !== undefined)
-        .map(h => ({ text: h.text, x: h.x }));
-    const headerTexts = localHeaderTexts.length > 0
-        ? localHeaderTexts
-        : (baseMio?.headerTexts ? [...baseMio.headerTexts] : []);
     return {
         id,
         traits,
         conditionExprs,
         warnings,
-        headerTexts,
     };
 }
 function validateRelativePositionId(traits, warnings) {

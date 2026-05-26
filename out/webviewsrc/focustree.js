@@ -47,8 +47,8 @@ function search(searchContent, navigate = true) {
     }
     return searchedFocus;
 }
-const useConditionInFocus = window.useConditionInFocus;
-const focusTrees = window.focusTrees;
+let useConditionInFocus = window.useConditionInFocus;
+let focusTrees = window.focusTrees;
 let selectedExprs = (0, common_1.getState)().selectedExprs ?? [];
 let selectedInlayExprs = (0, common_1.getState)().selectedInlayExprs ?? [];
 let selectedFocusTreeIndex = Math.min(focusTrees.length - 1, (0, common_1.getState)().selectedFocusTreeIndex ?? 0);
@@ -415,6 +415,26 @@ function getInlayGfxClassName(gfxName, gfxFile) {
     return 'st-inlay-gfx-' + (0, styletable_1.normalizeForStyle)((gfxFile ?? 'missing') + '-' + (gfxName ?? 'missing'));
 }
 let retriggerSearch = () => { };
+window.addEventListener('message', async (event) => {
+    const msg = event.data;
+    if (msg.type !== 'update')
+        return;
+    focusTrees = msg.focusTrees;
+    window.focusTrees = msg.focusTrees;
+    window.renderedFocus = msg.renderedFocus;
+    window.renderedInlayWindows = msg.renderedInlayWindows;
+    window.gridBox = msg.gridBox;
+    useConditionInFocus = msg.useConditionInFocus;
+    window.useConditionInFocus = msg.useConditionInFocus;
+    window.xGridSize = msg.xGridSize;
+    if (selectedFocusTreeIndex >= focusTrees.length) {
+        selectedFocusTreeIndex = Math.max(0, focusTrees.length - 1);
+        (0, common_1.setState)({ selectedFocusTreeIndex });
+    }
+    updateSelectedFocusTree(false);
+    await buildContent();
+    retriggerSearch();
+});
 window.addEventListener('load', (0, common_1.tryRun)(async function () {
     // Custom titlebars
     const showCustomTitlebarsElement = document.getElementById('show-custom-titlebars');

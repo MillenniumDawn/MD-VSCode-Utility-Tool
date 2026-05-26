@@ -8,7 +8,7 @@ import { html, htmlEscape } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
 import { FocusTreeLoader } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
-import { debug } from '../../util/debug';
+import { debug, error } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { useConditionInFocus } from '../../util/featureflags';
 import { flatMap } from 'lodash';
@@ -22,6 +22,82 @@ import { renderSprite } from "../../util/hoi4gui/nodecommon";
 import { ContainerWindowType, IconType, ButtonType } from "../../hoiformat/gui";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
+
+export interface FocusTreeUpdatePayload {
+    focusTrees: FocusTree[];
+    renderedFocus: Record<string, string>;
+    renderedInlayWindows: Record<string, string>;
+    gridBox: HOIPartial<GridBoxType>;
+    useConditionInFocus: boolean;
+    xGridSize: number;
+}
+
+export interface FocusTreePayload extends FocusTreeUpdatePayload {
+    styleTable: StyleTable;
+    styleNonce: string;
+    toolbarFlags: ToolbarFlags;
+    cssFingerprint: string;
+}
+
+export type { ToolbarFlags };
+
+export async function buildFocusTreePayload(loader: FocusTreeLoader): Promise<FocusTreePayload | null> {
+    try {
+        const session = new LoaderSession(false);
+        const loadResult = await loader.load(session);
+        const loadedLoaders = Array.from((session as any).loadedLoader).map<string>(v => (v as any).toString());
+        debug('Loader session focus tree', loadedLoaders);
+
+        const focusTrees = loadResult.result.focusTrees;
+        if (focusTrees.length === 0) {
+            return null;
+        }
+
+        const styleTable = new StyleTable();
+        const styleNonce = randomString(32);
+        const renderedFocus: Record<string, string> = {};
+        const renderedInlayWindows: Record<string, string> = {};
+
+        const titlebarStyles = await loadFocusTitlebarStyles();
+        await Promise.all(flatMap(focusTrees, tree => Object.values(tree.focuses)).map(async (focus) =>
+            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles)).replace(/\s\s+/g, ' ')));
+        await prepareInlayGfxStyles(focusTrees, styleTable);
+        await Promise.all(flatMap(focusTrees, tree => tree.inlayWindows).map(async (inlay) => {
+            renderedInlayWindows[inlay.id] = (await renderInlayWindow(inlay, styleTable, loadResult.result.gfxFiles)).replace(/\s\s+/g, ' ');
+        }));
+
+        const toolbarFlags: ToolbarFlags = {
+            hasCustomTitlebar: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.textIcon !== undefined && titlebarStyles[f.textIcon] !== undefined)),
+            hasFocusOverlay: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.overlay !== undefined)),
+            hasInlayWindows: focusTrees.some(ft => ft.inlayWindows.length > 0),
+        };
+
+        const gridBox: HOIPartial<GridBoxType> = {
+            position: { x: toNumberLike(leftPaddingBase), y: toNumberLike(topPaddingBase) },
+            format: toStringAsSymbolIgnoreCase('up'),
+            size: { width: toNumberLike(xGridSize), height: undefined },
+            slotsize: { width: toNumberLike(xGridSize), height: toNumberLike(yGridSize) },
+        } as HOIPartial<GridBoxType>;
+
+        const cssFingerprint = JSON.stringify((styleTable as any).records);
+
+        return {
+            focusTrees,
+            renderedFocus,
+            renderedInlayWindows,
+            gridBox,
+            useConditionInFocus,
+            xGridSize,
+            styleTable,
+            styleNonce,
+            toolbarFlags,
+            cssFingerprint,
+        };
+    } catch (e) {
+        error(e);
+        return null;
+    }
+}
 
 export async function renderFocusTreeFile(loader: FocusTreeLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
     const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };

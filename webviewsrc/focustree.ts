@@ -51,8 +51,8 @@ function search(searchContent: string, navigate: boolean = true) {
     return searchedFocus;
 }
 
-const useConditionInFocus: boolean = (window as any).useConditionInFocus;
-const focusTrees: FocusTree[] = (window as any).focusTrees;
+let useConditionInFocus: boolean = (window as any).useConditionInFocus;
+let focusTrees: FocusTree[] = (window as any).focusTrees;
 
 let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
 let selectedInlayExprs: ConditionItem[] = getState().selectedInlayExprs ?? [];
@@ -499,6 +499,29 @@ function getInlayGfxClassName(gfxName: string | undefined, gfxFile: string | und
 }
 
 let retriggerSearch: () => void = () => {};
+
+window.addEventListener('message', async (event) => {
+    const msg = event.data;
+    if (msg.type !== 'update') return;
+
+    focusTrees = msg.focusTrees;
+    (window as any).focusTrees = msg.focusTrees;
+    (window as any).renderedFocus = msg.renderedFocus;
+    (window as any).renderedInlayWindows = msg.renderedInlayWindows;
+    (window as any).gridBox = msg.gridBox;
+    useConditionInFocus = msg.useConditionInFocus;
+    (window as any).useConditionInFocus = msg.useConditionInFocus;
+    (window as any).xGridSize = msg.xGridSize;
+
+    if (selectedFocusTreeIndex >= focusTrees.length) {
+        selectedFocusTreeIndex = Math.max(0, focusTrees.length - 1);
+        setState({ selectedFocusTreeIndex });
+    }
+
+    updateSelectedFocusTree(false);
+    await buildContent();
+    retriggerSearch();
+});
 
 window.addEventListener('load', tryRun(async function() {
     // Custom titlebars

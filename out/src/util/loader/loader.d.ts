@@ -73,6 +73,8 @@ export declare abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
     private expiryToken;
     protected loaderDependencies: LoaderDependencies;
     protected readDependency: boolean;
+    private lastContentHash;
+    private pendingContent;
     constructor(file: string, contentProvider?: (() => Promise<string>) | undefined);
     shouldReloadImpl(session: LoaderSession): Promise<boolean>;
     protected beforeLoadImpl(session: LoaderSession): void;
