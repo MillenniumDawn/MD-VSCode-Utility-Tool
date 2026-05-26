@@ -253,7 +253,11 @@
 		"pretest-ui": "npm run compile-ts && npm run lint",
 		"test-ui": "node ./out/test-ui/runTest.js",
 		"clean": "rimraf dist out static",
-		"geni18n": "npm run compile-ts && node scripts/genzhi18n.js"
+		"geni18n": "npm run compile-ts && node scripts/genzhi18n.js",
+		"package": "vsce package",
+		"package:patch": "npm version patch --no-git-tag-version && vsce package",
+		"package:minor": "npm version minor --no-git-tag-version && vsce package",
+		"package:major": "npm version major --no-git-tag-version && vsce package"
 	},
 	"devDependencies": {
 		"@types/adm-zip": "^0.4.33",
