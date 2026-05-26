@@ -3,7 +3,7 @@ import { FocusTree } from './schema';
 import { Image } from '../../util/image/imagecache';
 import { HOIPartial } from '../../hoiformat/schema';
 import { GridBoxType } from '../../hoiformat/gui';
-import { FocusTreeLoader } from './loader';
+import { FocusTreeLoader, ProgressCallback } from './loader';
 import { StyleTable } from '../../util/styletable';
 export interface FocusTreeUpdatePayload {
     focusTrees: FocusTree[];
@@ -20,8 +20,8 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
     cssFingerprint: string;
 }
 export type { ToolbarFlags };
-export declare function buildFocusTreePayload(loader: FocusTreeLoader): Promise<FocusTreePayload | null>;
-export declare function renderFocusTreeFile(loader: FocusTreeLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string>;
+export declare function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback): Promise<FocusTreePayload | null>;
+export declare function renderFocusTreeFile(loader: FocusTreeLoader, uri: vscode.Uri, webview: vscode.Webview, progress?: ProgressCallback): Promise<string>;
 interface ToolbarFlags {
     hasCustomTitlebar: boolean;
     hasFocusOverlay: boolean;

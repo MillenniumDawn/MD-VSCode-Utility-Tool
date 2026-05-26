@@ -14,9 +14,21 @@ export interface FocusTreeLoaderResult {
     gfxFiles: string[];
 }
 
+export type ProgressCallback = (message: string, current?: number, total?: number) => void;
+
 const focusesGFX = 'interface/goals.gfx';
 
 export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
+    private progressListener: ProgressCallback | undefined;
+
+    public setProgressListener(cb: ProgressCallback | undefined): void {
+        this.progressListener = cb;
+    }
+
+    private emitProgress(message: string, current?: number, total?: number): void {
+        this.progressListener?.(message, current, total);
+    }
+
     protected async postLoad(content: string | undefined, dependencies: Dependency[], error: any, session: LoaderSession): Promise<LoadResultOD<FocusTreeLoaderResult>> {
         if (error || (content === undefined)) {
             throw error;
@@ -24,6 +36,7 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
 
         const constants = {};
 
+        this.emitProgress(localize('focustree.loading.parsing', 'Parsing focus file'));
         const file = convertFocusFileNodeToJson(parseHoi4File(content, localize('infile', 'In file {0}:\n', this.file)), constants);
 
         if (sharedFocusIndex) {
@@ -43,6 +56,9 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
         }
 
         const focusTreeDependencies = dependencies.filter(d => d.type === 'focus').map(d => d.path);
+        if (focusTreeDependencies.length > 0) {
+            this.emitProgress(localize('focustree.loading.shared', 'Loading shared focus dependencies'));
+        }
         const focusTreeDepFiles = await this.loaderDependencies.loadMultiple(focusTreeDependencies, session, FocusTreeLoader);
 
         const importedFocusTrees = chain(focusTreeDepFiles)
@@ -54,6 +70,7 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
         // Include synthetic trees from dependent files (e.g., joint focus trees)
         focusTrees.push(...importedFocusTrees.filter(tree => tree.isSharedFocues));
 
+        this.emitProgress(localize('focustree.loading.inlays', 'Loading inlay windows'));
         const loadedInlays = await loadFocusInlayWindows();
         for (const focusTree of focusTrees) {
             const resolved = resolveInlaysForTree(focusTree.inlayWindowRefs, loadedInlays.inlays);
@@ -65,11 +82,13 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
             focusTree.warnings.push(...resolved.warnings);
         }
 
+        this.emitProgress(localize('focustree.loading.inlay_gui', 'Resolving inlay GUI files'));
         const guiResolution = await resolveInlayGuiWindows(chain(focusTrees).flatMap(ft => ft.inlayWindows).value());
         for (const focusTree of focusTrees) {
             focusTree.warnings.push(...guiResolution.warnings.filter(w => focusTree.inlayWindows.some(inlay => inlay.id === w.source)));
         }
 
+        this.emitProgress(localize('focustree.loading.inlay_gfx', 'Resolving inlay sprites'));
         const inlayGfxResolution = await resolveInlayGfxFiles(chain(focusTrees).flatMap(ft => ft.inlayWindows).value());
         for (const focusTree of focusTrees) {
             addInlayGfxWarnings(focusTree.inlayWindows, focusTree.warnings);

@@ -15,6 +15,7 @@ export declare abstract class PreviewBase {
     dispose(): void;
     get isDisposed(): boolean;
     initializePanelContent(document: vscode.TextDocument): Promise<void>;
+    protected getLoadingShellHtml(): string;
     protected registerEvents(panel: vscode.WebviewPanel): void;
     protected updateDependencies(dependencies: string[]): void;
     protected openOrCopyFile(file: string, start: number | undefined, end: number | undefined): Promise<void>;

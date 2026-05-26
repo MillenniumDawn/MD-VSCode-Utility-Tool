@@ -6,7 +6,7 @@ import { forceError, randomString } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { html, htmlEscape } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
-import { FocusTreeLoader } from './loader';
+import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug, error } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
@@ -41,7 +41,7 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
 
 export type { ToolbarFlags };
 
-export async function buildFocusTreePayload(loader: FocusTreeLoader): Promise<FocusTreePayload | null> {
+export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback): Promise<FocusTreePayload | null> {
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -59,11 +59,38 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader): Promise<Fo
         const renderedInlayWindows: Record<string, string> = {};
 
         const titlebarStyles = await loadFocusTitlebarStyles();
-        await Promise.all(flatMap(focusTrees, tree => Object.values(tree.focuses)).map(async (focus) =>
-            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles)).replace(/\s\s+/g, ' ')));
+
+        const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
+        const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
+        if (progress && allFocuses.length > 0) {
+            progress(focusMessage, 0, allFocuses.length);
+        }
+        let renderedFocusCount = 0;
+        await Promise.all(allFocuses.map(async (focus) => {
+            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles)).replace(/\s\s+/g, ' ');
+            renderedFocusCount++;
+            if (progress) {
+                progress(focusMessage, renderedFocusCount, allFocuses.length);
+            }
+        }));
+
+        if (progress) {
+            progress(localize('focustree.loading.preparing_inlay_styles', 'Preparing inlay styles'));
+        }
         await prepareInlayGfxStyles(focusTrees, styleTable);
-        await Promise.all(flatMap(focusTrees, tree => tree.inlayWindows).map(async (inlay) => {
+
+        const allInlays = flatMap(focusTrees, tree => tree.inlayWindows);
+        const inlayMessage = localize('focustree.loading.rendering_inlays', 'Rendering inlay windows');
+        if (progress && allInlays.length > 0) {
+            progress(inlayMessage, 0, allInlays.length);
+        }
+        let renderedInlayCount = 0;
+        await Promise.all(allInlays.map(async (inlay) => {
             renderedInlayWindows[inlay.id] = (await renderInlayWindow(inlay, styleTable, loadResult.result.gfxFiles)).replace(/\s\s+/g, ' ');
+            renderedInlayCount++;
+            if (progress) {
+                progress(inlayMessage, renderedInlayCount, allInlays.length);
+            }
         }));
 
         const toolbarFlags: ToolbarFlags = {
@@ -99,7 +126,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader): Promise<Fo
     }
 }
 
-export async function renderFocusTreeFile(loader: FocusTreeLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
+export async function renderFocusTreeFile(loader: FocusTreeLoader, uri: vscode.Uri, webview: vscode.Webview, progress?: ProgressCallback): Promise<string> {
     const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
 
     try {
@@ -118,7 +145,10 @@ export async function renderFocusTreeFile(loader: FocusTreeLoader, uri: vscode.U
         const styleTable = new StyleTable();
         const jsCodes: string[] = [];
         const styleNonce = randomString(32);
-        const baseContent = await renderFocusTrees(focustrees, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file);
+        const baseContent = await renderFocusTrees(focustrees, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file, progress);
+        if (progress) {
+            progress(localize('focustree.loading.building_html', 'Building HTML'));
+        }
         jsCodes.push(i18nTableAsScript());
 
         return html(
@@ -149,7 +179,7 @@ const topPaddingBase = 50;
 const xGridSize = 96;
 const yGridSize = 130;
 
-async function renderFocusTrees(focusTrees: FocusTree[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string): Promise<string> {
+async function renderFocusTrees(focusTrees: FocusTree[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string, progress?: ProgressCallback): Promise<string> {
     const leftPadding = leftPaddingBase;
     const topPadding = topPaddingBase;
 
@@ -163,11 +193,38 @@ async function renderFocusTrees(focusTrees: FocusTree[], styleTable: StyleTable,
     const titlebarStyles = await loadFocusTitlebarStyles();
     const renderedFocus: Record<string, string> = {};
     const renderedInlayWindows: Record<string, string> = {};
-    await Promise.all(flatMap(focusTrees, tree => Object.values(tree.focuses)).map(async (focus) =>
-        renderedFocus[focus.id] = (await renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles)).replace(/\s\s+/g, ' ')));
+
+    const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
+    const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
+    if (progress && allFocuses.length > 0) {
+        progress(focusMessage, 0, allFocuses.length);
+    }
+    let renderedFocusCount = 0;
+    await Promise.all(allFocuses.map(async (focus) => {
+        renderedFocus[focus.id] = (await renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles)).replace(/\s\s+/g, ' ');
+        renderedFocusCount++;
+        if (progress) {
+            progress(focusMessage, renderedFocusCount, allFocuses.length);
+        }
+    }));
+
+    if (progress) {
+        progress(localize('focustree.loading.preparing_inlay_styles', 'Preparing inlay styles'));
+    }
     await prepareInlayGfxStyles(focusTrees, styleTable);
-    await Promise.all(flatMap(focusTrees, tree => tree.inlayWindows).map(async (inlay) => {
+
+    const allInlays = flatMap(focusTrees, tree => tree.inlayWindows);
+    const inlayMessage = localize('focustree.loading.rendering_inlays', 'Rendering inlay windows');
+    if (progress && allInlays.length > 0) {
+        progress(inlayMessage, 0, allInlays.length);
+    }
+    let renderedInlayCount = 0;
+    await Promise.all(allInlays.map(async (inlay) => {
         renderedInlayWindows[inlay.id] = (await renderInlayWindow(inlay, styleTable, gfxFiles)).replace(/\s\s+/g, ' ');
+        renderedInlayCount++;
+        if (progress) {
+            progress(inlayMessage, renderedInlayCount, allInlays.length);
+        }
     }));
 
     const toolbarFlags: ToolbarFlags = {

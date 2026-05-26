@@ -13,11 +13,19 @@ const titlebar_1 = require("./titlebar");
 const inlay_1 = require("./inlay");
 const focusesGFX = 'interface/goals.gfx';
 class FocusTreeLoader extends loader_1.ContentLoader {
+    progressListener;
+    setProgressListener(cb) {
+        this.progressListener = cb;
+    }
+    emitProgress(message, current, total) {
+        this.progressListener?.(message, current, total);
+    }
     async postLoad(content, dependencies, error, session) {
         if (error || (content === undefined)) {
             throw error;
         }
         const constants = {};
+        this.emitProgress((0, i18n_1.localize)('focustree.loading.parsing', 'Parsing focus file'));
         const file = (0, schema_1.convertFocusFileNodeToJson)((0, hoiparser_1.parseHoi4File)(content, (0, i18n_1.localize)('infile', 'In file {0}:\n', this.file)), constants);
         if (featureflags_1.sharedFocusIndex) {
             const depPaths = new Set(dependencies.map(d => d.path));
@@ -35,6 +43,9 @@ class FocusTreeLoader extends loader_1.ContentLoader {
             }
         }
         const focusTreeDependencies = dependencies.filter(d => d.type === 'focus').map(d => d.path);
+        if (focusTreeDependencies.length > 0) {
+            this.emitProgress((0, i18n_1.localize)('focustree.loading.shared', 'Loading shared focus dependencies'));
+        }
         const focusTreeDepFiles = await this.loaderDependencies.loadMultiple(focusTreeDependencies, session, FocusTreeLoader);
         const importedFocusTrees = (0, lodash_1.chain)(focusTreeDepFiles)
             .flatMap(f => f.result.focusTrees)
@@ -42,6 +53,7 @@ class FocusTreeLoader extends loader_1.ContentLoader {
         const focusTrees = (0, schema_1.getFocusTreeWithFocusFile)(file, importedFocusTrees, this.file, constants);
         // Include synthetic trees from dependent files (e.g., joint focus trees)
         focusTrees.push(...importedFocusTrees.filter(tree => tree.isSharedFocues));
+        this.emitProgress((0, i18n_1.localize)('focustree.loading.inlays', 'Loading inlay windows'));
         const loadedInlays = await (0, inlay_1.loadFocusInlayWindows)();
         for (const focusTree of focusTrees) {
             const resolved = (0, inlay_1.resolveInlaysForTree)(focusTree.inlayWindowRefs, loadedInlays.inlays);
@@ -52,10 +64,12 @@ class FocusTreeLoader extends loader_1.ContentLoader {
             }
             focusTree.warnings.push(...resolved.warnings);
         }
+        this.emitProgress((0, i18n_1.localize)('focustree.loading.inlay_gui', 'Resolving inlay GUI files'));
         const guiResolution = await (0, inlay_1.resolveInlayGuiWindows)((0, lodash_1.chain)(focusTrees).flatMap(ft => ft.inlayWindows).value());
         for (const focusTree of focusTrees) {
             focusTree.warnings.push(...guiResolution.warnings.filter(w => focusTree.inlayWindows.some(inlay => inlay.id === w.source)));
         }
+        this.emitProgress((0, i18n_1.localize)('focustree.loading.inlay_gfx', 'Resolving inlay sprites'));
         const inlayGfxResolution = await (0, inlay_1.resolveInlayGfxFiles)((0, lodash_1.chain)(focusTrees).flatMap(ft => ft.inlayWindows).value());
         for (const focusTree of focusTrees) {
             (0, inlay_1.addInlayGfxWarnings)(focusTree.inlayWindows, focusTree.warnings);

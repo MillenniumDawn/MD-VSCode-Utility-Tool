@@ -19,6 +19,16 @@ export declare const __table: {
     "focustree.ananymous": string;
     "focustree.conditions": string;
     "focustree.focustree": string;
+    "focustree.loading.building_html": string;
+    "focustree.loading.inlay_gfx": string;
+    "focustree.loading.inlay_gui": string;
+    "focustree.loading.inlays": string;
+    "focustree.loading.parsing": string;
+    "focustree.loading.preparing_inlay_styles": string;
+    "focustree.loading.rendering_focuses": string;
+    "focustree.loading.rendering_inlays": string;
+    "focustree.loading.shared": string;
+    "focustree.loading.start": string;
     "focustree.nofocustree": string;
     "focustree.search": string;
     "focustree.sharedfocuses": string;

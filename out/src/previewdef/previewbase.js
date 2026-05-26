@@ -54,8 +54,11 @@ class PreviewBase {
     }
     async initializePanelContent(document) {
         this.panelInitialized = false;
-        this.panel.webview.html = (0, i18n_1.localize)('loading', 'Loading...');
+        this.panel.webview.html = this.getLoadingShellHtml();
         await this.onDocumentChange(document);
+    }
+    getLoadingShellHtml() {
+        return (0, i18n_1.localize)('loading', 'Loading...');
     }
     registerEvents(panel) {
         panel.webview.onDidReceiveMessage((msg) => {

@@ -57,8 +57,12 @@ export abstract class PreviewBase {
 
     public async initializePanelContent(document: vscode.TextDocument): Promise<void> {
         this.panelInitialized = false;
-        this.panel.webview.html = localize('loading', 'Loading...');
+        this.panel.webview.html = this.getLoadingShellHtml();
         await this.onDocumentChange(document);
+    }
+
+    protected getLoadingShellHtml(): string {
+        return localize('loading', 'Loading...');
     }
 
     protected registerEvents(panel: vscode.WebviewPanel): void {
