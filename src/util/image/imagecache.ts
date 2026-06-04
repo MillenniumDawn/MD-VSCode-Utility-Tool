@@ -14,22 +14,31 @@ import { UserError } from '../common';
 import { getGfxContainerFile } from '../gfxindex';
 export { Sprite, Image };
 
-const imageCache = new PromiseCache({
+// Decoded PNG buffers are the heaviest thing in memory; bound the image cache by total bytes
+// (least-recently-accessed eviction) so large texture packs can't grow it without limit. The
+// smaller caches use an entry-count cap. (Entry sizes vary ~1000x for images, so a count cap
+// alone would not bound their RAM.)
+const imageCacheMaxBytes = 128 * 1024 * 1024;
+const imageCache = new PromiseCache<Image | undefined>({
     expireWhenChange: hoiFileExpiryToken,
     factory: getImage,
-    life: 10 * 60 * 1000
+    life: 10 * 60 * 1000,
+    maxBytes: imageCacheMaxBytes,
+    weigher: image => image ? image.pngBuffer.length : 0
 });
 
 const spriteCache = new PromiseCache({
     expireWhenChange: spriteCacheExpiryToken,
     factory: getSpriteByKey,
-    life: 10 * 60 * 1000
+    life: 10 * 60 * 1000,
+    maxSize: 128
 });
 
 const gfxMapCache = new PromiseCache({
     expireWhenChange: hoiFileExpiryToken,
     factory: loadGfxMap,
-    life: 10 * 60 * 1000
+    life: 10 * 60 * 1000,
+    maxSize: 64
 });
 
 export function getImageByPath(relativePath: string): Promise<Image | undefined> {

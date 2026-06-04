@@ -114,9 +114,19 @@ const tokenRegexStrings: Record<HOITokenType, [string, number]> = {
     eof: ['$', 1000],
 };
 
-export function parseHoi4File(input: string, errorMessagePrefix: string = ''): Node {
+export interface ParseOptions {
+    /**
+     * When false, position Tokens (nameToken, operatorToken, value*Token) are not stored on the
+     * resulting nodes. Index builds only need names/values, not editor positions, so dropping the
+     * tokens substantially lowers peak RAM while parsing many files. Defaults to true.
+     */
+    keepTokens?: boolean;
+}
+
+export function parseHoi4File(input: string, errorMessagePrefix: string = '', options: ParseOptions = {}): Node {
+    const keepTokens = options.keepTokens !== false;
     const tokens = tokenizer(input, tokenRegexStrings, errorMessagePrefix);
-    const value = parseBlockContent(tokens);
+    const value = parseBlockContent(tokens, keepTokens);
 
     if (tokens.peek().type !== 'eof') {
         tokens.throw("File content can't be completely parsed");
@@ -135,7 +145,46 @@ export function parseHoi4File(input: string, errorMessagePrefix: string = ''): N
     };
 }
 
-function parseNode(tokens: Tokenizer<HOITokenType>): Node {
+/**
+ * Resolves HOI4 script constants. Files (scripted GUI especially) define `@name = <number|string>`
+ * at the top and reference `@name` in places like `size = { width = @MY_WIDTH }`. The parser keeps
+ * `@name` as a symbol, so without this pass those numeric fields become undefined and the windows
+ * collapse to zero size (issue: scripted GUI files showing nothing). This substitutes every
+ * `@name` reference with its defined value, in place. Inline `@[ expr ]` expressions are left as-is.
+ */
+export function resolveScriptVariables(root: Node): Node {
+    const constants: Record<string, number | string> = {};
+    const collect = (node: Node) => {
+        if (node.name && node.name.startsWith('@') && (typeof node.value === 'number' || typeof node.value === 'string')) {
+            constants[node.name] = node.value;
+        }
+        if (Array.isArray(node.value)) {
+            node.value.forEach(collect);
+        }
+    };
+    collect(root);
+
+    if (Object.keys(constants).length === 0) {
+        return root;
+    }
+
+    const substitute = (node: Node) => {
+        const value = node.value;
+        if (Array.isArray(value)) {
+            value.forEach(substitute);
+        } else if (value !== null && typeof value === 'object' && 'name' in value) {
+            const name = value.name;
+            if (name.startsWith('@') && name in constants) {
+                node.value = constants[name];
+            }
+        }
+    };
+    substitute(root);
+
+    return root;
+}
+
+function parseNode(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node {
     const name = tokens.next();
     if (name.type !== 'string' && name.type !== 'symbol' && name.type !== 'number') {
         tokens.throw("Expect name to be symbol, string or number", true);
@@ -154,7 +203,7 @@ function parseNode(tokens: Tokenizer<HOITokenType>): Node {
         }
         return {
             name: name.value,
-            nameToken: name,
+            nameToken: keepTokens ? name : null,
             operator: null,
             operatorToken: null,
             value: null,
@@ -177,14 +226,14 @@ function parseNode(tokens: Tokenizer<HOITokenType>): Node {
 
     let valueAttachment: SymbolNode | null = null;
     let valueAttachmentToken: Token | null = null;
-    let [value, valueStartToken, valueEndToken] = parseNodeValue(tokens);
+    let [value, valueStartToken, valueEndToken] = parseNodeValue(tokens, keepTokens);
 
     if (value !== null && typeof value === 'object' && 'name' in value) {
         const nextToken = tokens.peek();
         if (nextToken.value === '{') {
             valueAttachment = value;
             valueAttachmentToken = valueStartToken;
-            [value, valueStartToken, valueEndToken] = parseNodeValue(tokens);
+            [value, valueStartToken, valueEndToken] = parseNodeValue(tokens, keepTokens);
         }
     }
 
@@ -196,18 +245,18 @@ function parseNode(tokens: Tokenizer<HOITokenType>): Node {
 
     return {
         name: name.value,
-        nameToken: name,
+        nameToken: keepTokens ? name : null,
         operator: operator.value,
-        operatorToken: operator,
+        operatorToken: keepTokens ? operator : null,
         value,
-        valueStartToken,
-        valueEndToken,
+        valueStartToken: keepTokens ? valueStartToken : null,
+        valueEndToken: keepTokens ? valueEndToken : null,
         valueAttachment,
-        valueAttachmentToken,
+        valueAttachmentToken: keepTokens ? valueAttachmentToken : null,
     };
 }
 
-function parseNodeValue(tokens: Tokenizer<HOITokenType>): [ NodeValue, Token<HOITokenType>, Token<HOITokenType> ] {
+function parseNodeValue(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): [ NodeValue, Token<HOITokenType>, Token<HOITokenType> ] {
     const nextToken = tokens.next();
     switch (nextToken.type) {
         case 'string':
@@ -232,7 +281,7 @@ function parseNodeValue(tokens: Tokenizer<HOITokenType>): [ NodeValue, Token<HOI
             ];
         case 'operator':
             if (nextToken.value === '{') {
-                const result = parseBlockContent(tokens);
+                const result = parseBlockContent(tokens, keepTokens);
                 const right = tokens.next();
                 if (right.value !== '}') {
                     tokens.throw("Expect a '}'", true);
@@ -245,11 +294,11 @@ function parseNodeValue(tokens: Tokenizer<HOITokenType>): [ NodeValue, Token<HOI
             }
             break;
     }
-    
+
     tokens.throw("Expect string, number, symbol, or {", true);
 }
 
-function parseBlockContent(tokens: Tokenizer<HOITokenType>): Node[] {
+function parseBlockContent(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node[] {
     const nodes: Node[] = [];
 
     while (true) {
@@ -258,7 +307,7 @@ function parseBlockContent(tokens: Tokenizer<HOITokenType>): Node[] {
             break;
         }
 
-        nodes.push(parseNode(tokens));
+        nodes.push(parseNode(tokens, keepTokens));
     }
 
     return nodes;

@@ -333,6 +333,30 @@ async function renderXorItem(xorItem: HOIPartial<ContainerWindowType>, format: F
     });
 }
 
+// HOI4 falls back to the first enabled equipment's localised name when a technology has no
+// localisation entry of its own. getLocalisedTextQuick returns the key unchanged when missing,
+// so we detect "no entry" by comparing the result against the key. Returns the localisation
+// *key* to use (renderInstantTextBox / the title localise it again downstream).
+async function resolveTechNameKey(technology: Technology): Promise<string> {
+    if (!localisationIndex) {
+        return technology.id;
+    }
+
+    const idLoc = await getLocalisedTextQuick(technology.id);
+    if (idLoc && idLoc !== technology.id) {
+        return technology.id;
+    }
+
+    for (const equipment of technology.enableEquipmentNames) {
+        const equipmentLoc = await getLocalisedTextQuick(equipment);
+        if (equipmentLoc && equipmentLoc !== equipment) {
+            return equipment;
+        }
+    }
+
+    return technology.id;
+}
+
 async function renderTechnology(
     item: HOIPartial<ContainerWindowType> | undefined,
     technology: Technology,
@@ -346,6 +370,7 @@ async function renderTechnology(
         return `<div>${localize('techtree.cantfindtechitemin', "Can't find containerwindowtype \"{0}\" in {1}", `techtree_${folder.name}_item`, guiFiles)}</div>`;
     }
 
+    const nameKey = await resolveTechNameKey(technology);
     const subSlotRegex = /^sub_technology_slot_(\d)$/;
     const containerWindow = await renderContainerWindow(item, parentInfo, {
         ...commonOptions,
@@ -362,7 +387,7 @@ async function renderTechnology(
                 if (childname === 'bonus') {
                     return '';
                 } else if (childname === 'name') {
-                    return await renderInstantTextBox({ ...text, text: technology.id }, parentInfo, commonOptions);
+                    return await renderInstantTextBox({ ...text, text: nameKey }, parentInfo, commonOptions);
                 }
             }
 
@@ -382,7 +407,7 @@ async function renderTechnology(
         data-tech-id="${technology.id}" data-tech-small="${technology.enableEquipments ? '0' : '1'}"
         start="${technology.token?.start}"
         end="${technology.token?.end}"
-        title="${technology.id}${localisationIndex ? `\n${await getLocalisedTextQuick(technology.id)}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${technology.id}${localisationIndex ? `\n${await getLocalisedTextQuick(nameKey)}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `

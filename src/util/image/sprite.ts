@@ -3,7 +3,6 @@ import { PNG } from "pngjs";
 import { NumberPosition } from "../common";
 
 export class Image {
-    private cachedUri: string | undefined = undefined;
     constructor(
         readonly pngBuffer: Buffer,
         readonly width: number,
@@ -11,12 +10,11 @@ export class Image {
         readonly path: vscode.Uri) {
     }
 
+    // Computed on demand rather than cached: the base64 data URI is ~33% larger than the PNG
+    // buffer, and caching it permanently doubled each image's footprint in the (capped) image
+    // cache. Callers use this once per unique style, so re-encoding is cheap relative to the RAM.
     public get uri(): string {
-        if (this.cachedUri) {
-            return this.cachedUri;
-        }
-
-        return this.cachedUri = toDataUrl(this.pngBuffer);
+        return toDataUrl(this.pngBuffer);
     }
 }
 

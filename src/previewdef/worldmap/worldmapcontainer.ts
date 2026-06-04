@@ -4,6 +4,7 @@ import { WorldMap } from './worldmap';
 import { contextContainer } from '../../context';
 import { localize } from '../../util/i18n';
 import { sendEvent } from '../../util/telemetry';
+import { getConfiguration } from '../../util/vsccommon';
 
 export class WorldMapContainer implements vscode.WebviewPanelSerializer {
     private worldMap: WorldMap | undefined = undefined;
@@ -39,7 +40,7 @@ export class WorldMapContainer implements vscode.WebviewPanelSerializer {
             vscode.ViewColumn.Active,
             {
                 enableScripts: true,
-                retainContextWhenHidden: true,
+                retainContextWhenHidden: getConfiguration().worldMapRetainContextWhenHidden !== false,
             }
         );
 

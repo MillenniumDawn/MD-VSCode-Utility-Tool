@@ -127,7 +127,7 @@ async function fillFocusItems(focusFile: string, focusIndex: FocusIndex, reverse
     }
 
     try {
-        const ids = extractFocusIds(parseHoi4File(fileContent, localize('infile', 'In file {0}:\n', focusFile)));
+        const ids = extractFocusIds(parseHoi4File(fileContent, localize('infile', 'In file {0}:\n', focusFile), { keepTokens: false }));
         focusIndex[focusFile] = ids;
 
         for (const key of ids) {

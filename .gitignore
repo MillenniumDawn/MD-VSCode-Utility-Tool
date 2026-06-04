@@ -13,6 +13,9 @@ dist/
 build/
 static/
 
+# Unit test build output (tsconfig.test.json)
+out-test/
+
 # Logs
 *.log
 logs/

@@ -13,6 +13,7 @@ import { registerGfxIndex } from './util/gfxindex';
 import { Logger } from "./util/logger";
 import { registerLocalisationIndex } from "./util/localisationIndex";
 import { registerSharedFocusIndex } from "./util/sharedFocusIndex";
+import { registerFeatureFlags } from "./util/featureflags";
 
 export function activate(context: vscode.ExtensionContext) {
     let locale = (context as any).extension?.packageJSON.locale;
@@ -28,6 +29,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Must register this first because other component may use it.
     context.subscriptions.push(registerContextContainer(context));
     context.subscriptions.push(registerTelemetryReporter());
+    context.subscriptions.push(registerFeatureFlags());
 
     sendEvent('extension.activate', { locale, isWeb: IS_WEB_EXT.toString() });
 

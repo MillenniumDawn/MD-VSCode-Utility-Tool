@@ -145,7 +145,7 @@ async function fillGfxItems(gfxFile: string, gfxIndex: Record<string, GfxIndexIt
             estimatedSize[0] += gfxFile.length;
         }
         const [fileBuffer, uri] = await readFileFromModOrHOI4(gfxFile, options);
-        const spriteTypes = getSpriteTypes(parseHoi4File(fileBuffer.toString(), localize('infile', 'In file {0}:\n', uri.toString())));
+        const spriteTypes = getSpriteTypes(parseHoi4File(fileBuffer.toString(), localize('infile', 'In file {0}:\n', uri.toString()), { keepTokens: false }));
         const spriteNames: string[] = [];
         for (const spriteType of spriteTypes) {
             gfxIndex[spriteType.name] = { file: gfxFile };

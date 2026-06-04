@@ -45,13 +45,29 @@ if (!IS_WEB_EXT) {
         factory: getDlcZip,
         expireWhenChange: key => getLastModifiedAsync(vscode.Uri.parse(key)),
         life: 15 * 1000,
+        maxSize: 8,
     });
 }
+
+// Small bounded cache of read file contents, keyed by resolved path. Avoids re-reading the same
+// mod/HOI4 files on every preview render. Opened/dirty documents bypass this cache (see
+// readFileFromPath) so edits show up immediately. The cached Buffer is shared across all callers
+// of a given path; treat it as read-only and never mutate it in place.
+const fileContentCache = new PromiseCache<[Buffer, vscode.Uri]>({
+    factory: key => readFileFromPathImpl(vscode.Uri.parse(key)),
+    expireWhenChange: key => expiryToken(vscode.Uri.parse(key)),
+    life: 60 * 1000,
+    maxSize: 100,
+    maxBytes: 32 * 1024 * 1024,
+    weigher: ([buffer]) => buffer.length,
+});
 
 export async function clearDlcZipCache() {
     dlcPathsCache.clear();
     dlcZipPathsCache.clear();
     dlcZipCache?.clear();
+    fileContentCache.clear();
+    fileListCache.clear();
 }
 
 export function getFilePathFromMod(relativePath: string): Promise<vscode.Uri | undefined> {
@@ -173,6 +189,23 @@ export async function expiryToken(realPath: vscode.Uri | undefined): Promise<str
 }
 
 export async function readFileFromPath(realPath: vscode.Uri, relativePath?: string): Promise<[Buffer, vscode.Uri]> {
+    try {
+        // Opened/dirty documents must always reflect the live editor text, so they bypass the
+        // content cache entirely. The cache's nonExpireLife window could otherwise serve a stale
+        // buffer for a short time after an edit. Only on-disk files (keyed by path + mtime) cache.
+        if (isHoiFileOpened(realPath)) {
+            return await readFileFromPathImpl(realPath, relativePath);
+        }
+        return await fileContentCache.get(realPath.toString());
+    } catch (e) {
+        if (relativePath !== undefined && e instanceof UserError) {
+            throw new UserError("Can't find file " + relativePath);
+        }
+        throw e;
+    }
+}
+
+async function readFileFromPathImpl(realPath: vscode.Uri, relativePath?: string): Promise<[Buffer, vscode.Uri]> {
     if (isHoiFileOpened(realPath)) {
         const realPathWithoutOpenMark = getHoiOpenedFileOriginalUri(realPath);
         const document = getDocumentByUri(realPathWithoutOpenMark);
@@ -215,7 +248,25 @@ export async function readFileFromModOrHOI4AsJson<T>(relativePath: string, schem
     return convertNodeToJson<T>(nodes, schema);
 }
 
-export async function listFilesFromModOrHOI4(relativePath: string, options?: { mod?: boolean, hoi4?: boolean, recursively?: boolean }): Promise<string[]> {
+// Short-lived cache of directory listings. listFilesFromModOrHOI4 walks the workspace, the HOI4
+// install and every DLC on each call, and a single preview render calls it many times in quick
+// succession (e.g. the inlay scan over interface/). A small TTL collapses those repeated walks
+// while staying fresh enough to pick up new files within a couple of seconds.
+const fileListCache = new PromiseCache<string[]>({
+    factory: key => listFilesFromModOrHOI4Impl(JSON.parse(key)[0], JSON.parse(key)[1]),
+    life: 3 * 1000,
+    maxSize: 300,
+});
+
+export async function clearFileListCache() {
+    fileListCache.clear();
+}
+
+export function listFilesFromModOrHOI4(relativePath: string, options?: { mod?: boolean, hoi4?: boolean, recursively?: boolean }): Promise<string[]> {
+    return fileListCache.get(JSON.stringify([relativePath, options ?? null]));
+}
+
+async function listFilesFromModOrHOI4Impl(relativePath: string, options?: { mod?: boolean, hoi4?: boolean, recursively?: boolean } | null): Promise<string[]> {
     const readFunction = options?.recursively ? readDirFilesRecursively : readDirFiles;
     relativePath = relativePath.replace(/\/\/+|\\+/g, '/');
     const result: string[] = [];
