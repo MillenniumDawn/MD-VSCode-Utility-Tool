@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { FocusTree, Focus } from './schema';
 import { getSpriteByGfxName, Image, getImageByPath } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
-import { forceError, randomString } from '../../util/common';
+import { forceError, randomString, mapLimit } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { html, htmlEscape } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
@@ -22,6 +22,12 @@ import { renderSprite } from "../../util/hoi4gui/nodecommon";
 import { ContainerWindowType, IconType, ButtonType } from "../../hoiformat/gui";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
+
+// Max number of focus/inlay renders running concurrently. Each render can trigger a
+// synchronous, memory-heavy DDS->PNG conversion, so firing them all at once saturates
+// the single-threaded event loop under RAM pressure (progress messages stop arriving and
+// the preview appears frozen). A small pool keeps the loop responsive.
+const renderConcurrency = 8;
 
 export interface FocusTreeUpdatePayload {
     focusTrees: FocusTree[];
@@ -66,13 +72,13 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             progress(focusMessage, 0, allFocuses.length);
         }
         let renderedFocusCount = 0;
-        await Promise.all(allFocuses.map(async (focus) => {
+        await mapLimit(allFocuses, renderConcurrency, async (focus) => {
             renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles)).replace(/\s\s+/g, ' ');
             renderedFocusCount++;
             if (progress) {
                 progress(focusMessage, renderedFocusCount, allFocuses.length);
             }
-        }));
+        });
 
         if (progress) {
             progress(localize('focustree.loading.preparing_inlay_styles', 'Preparing inlay styles'));
@@ -85,13 +91,13 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             progress(inlayMessage, 0, allInlays.length);
         }
         let renderedInlayCount = 0;
-        await Promise.all(allInlays.map(async (inlay) => {
+        await mapLimit(allInlays, renderConcurrency, async (inlay) => {
             renderedInlayWindows[inlay.id] = (await renderInlayWindow(inlay, styleTable, loadResult.result.gfxFiles)).replace(/\s\s+/g, ' ');
             renderedInlayCount++;
             if (progress) {
                 progress(inlayMessage, renderedInlayCount, allInlays.length);
             }
-        }));
+        });
 
         const toolbarFlags: ToolbarFlags = {
             hasCustomTitlebar: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.textIcon !== undefined && titlebarStyles[f.textIcon] !== undefined)),
@@ -126,52 +132,73 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
     }
 }
 
-export async function renderFocusTreeFile(loader: FocusTreeLoader, uri: vscode.Uri, webview: vscode.Webview, progress?: ProgressCallback): Promise<string> {
+/**
+ * Builds the final preview HTML from an already-computed payload. This reuses the
+ * focuses/inlays rendered by buildFocusTreePayload instead of rendering them a second
+ * time, halving the heavy image work on the initial load.
+ */
+export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.Webview, uri: vscode.Uri): string {
     const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
 
-    try {
-        const session = new LoaderSession(false);
-        const loadResult = await loader.load(session);
-        const loadedLoaders = Array.from((session as any).loadedLoader).map<string>(v => (v as any).toString());
-        debug('Loader session focus tree', loadedLoaders);
+    const jsCodes: string[] = [];
+    jsCodes.push('window.focusTrees = ' + JSON.stringify(payload.focusTrees));
+    jsCodes.push('window.renderedFocus = ' + JSON.stringify(payload.renderedFocus));
+    jsCodes.push('window.renderedInlayWindows = ' + JSON.stringify(payload.renderedInlayWindows));
+    jsCodes.push('window.gridBox = ' + JSON.stringify(payload.gridBox));
+    jsCodes.push('window.styleNonce = ' + JSON.stringify(payload.styleNonce));
+    jsCodes.push('window.useConditionInFocus = ' + payload.useConditionInFocus);
+    jsCodes.push('window.xGridSize = ' + payload.xGridSize);
+    jsCodes.push(i18nTableAsScript());
 
-        const focustrees = loadResult.result.focusTrees;
+    const baseContent = renderFocusTreeShell(payload.focusTrees, payload.styleTable, payload.toolbarFlags);
 
-        if (focustrees.length === 0) {
-            const baseContent = localize('focustree.nofocustree', 'No focus tree.');
-            return html(webview, baseContent, [ setPreviewFileUriScript ], []);
-        }
+    return html(
+        webview,
+        baseContent,
+        [
+            setPreviewFileUriScript,
+            ...jsCodes.map(c => ({ content: c })),
+            'common.js',
+            'focustree.js',
+        ],
+        [
+            'codicon.css',
+            'common.css',
+            payload.styleTable,
+            { nonce: payload.styleNonce },
+        ],
+    );
+}
 
-        const styleTable = new StyleTable();
-        const jsCodes: string[] = [];
-        const styleNonce = randomString(32);
-        const baseContent = await renderFocusTrees(focustrees, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file, progress);
-        if (progress) {
-            progress(localize('focustree.loading.building_html', 'Building HTML'));
-        }
-        jsCodes.push(i18nTableAsScript());
+/** HTML shown when the file legitimately contains no focus tree. */
+export function buildNoFocusTreeHtml(webview: vscode.Webview, uri: vscode.Uri): string {
+    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
+    const baseContent = localize('focustree.nofocustree', 'No focus tree.');
+    return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+}
 
-        return html(
-            webview,
-            baseContent,
-            [
-                setPreviewFileUriScript,
-                ...jsCodes.map(c => ({ content: c })),
-                'common.js',
-                'focustree.js',
-            ],
-            [
-                'codicon.css',
-                'common.css',
-                styleTable,
-                { nonce: styleNonce },
-            ],
-        );
-
-    } catch (e) {
-        const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ setPreviewFileUriScript ], []);
-    }
+/**
+ * Recoverable error/timeout panel. Shows a message plus a Reload button so the user is
+ * never stuck in a dead loading spinner when a render is too slow or fails.
+ */
+export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri, e: unknown): string {
+    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
+    const reloadScript = {
+        content: `(function(){
+            var api = acquireVsCodeApi();
+            var btn = document.getElementById('ft-reload');
+            if (btn) { btn.addEventListener('click', function(){ api.postMessage({ command: 'reload' }); }); }
+        })();`,
+    };
+    const message = htmlEscape(forceError(e).toString());
+    const reloadLabel = htmlEscape(localize('focustree.reload', 'Reload'));
+    const title = htmlEscape(localize('focustree.loading.slow_title', 'The focus tree is taking too long to render (large file or low memory).'));
+    const baseContent = `<div style="padding:16px; font:13px var(--vscode-font-family); color:var(--vscode-foreground);">
+        <p>${title}</p>
+        <pre style="white-space:pre-wrap; opacity:0.8;">${message}</pre>
+        <button id="ft-reload">${reloadLabel}</button>
+    </div>`;
+    return html(webview, baseContent, [ setPreviewFileUriScript, reloadScript ], []);
 }
 
 const leftPaddingBase = 50;
@@ -179,68 +206,12 @@ const topPaddingBase = 50;
 const xGridSize = 96;
 const yGridSize = 130;
 
-async function renderFocusTrees(focusTrees: FocusTree[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string, progress?: ProgressCallback): Promise<string> {
-    const leftPadding = leftPaddingBase;
-    const topPadding = topPaddingBase;
-
-    const gridBox: HOIPartial<GridBoxType> = {
-        position: { x: toNumberLike(leftPadding), y: toNumberLike(topPadding) },
-        format: toStringAsSymbolIgnoreCase('up'),
-        size: { width: toNumberLike(xGridSize), height: undefined },
-        slotsize: { width: toNumberLike(xGridSize), height: toNumberLike(yGridSize) },
-    } as HOIPartial<GridBoxType>;
-
-    const titlebarStyles = await loadFocusTitlebarStyles();
-    const renderedFocus: Record<string, string> = {};
-    const renderedInlayWindows: Record<string, string> = {};
-
-    const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
-    const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
-    if (progress && allFocuses.length > 0) {
-        progress(focusMessage, 0, allFocuses.length);
-    }
-    let renderedFocusCount = 0;
-    await Promise.all(allFocuses.map(async (focus) => {
-        renderedFocus[focus.id] = (await renderFocus(focus, styleTable, gfxFiles, file, titlebarStyles)).replace(/\s\s+/g, ' ');
-        renderedFocusCount++;
-        if (progress) {
-            progress(focusMessage, renderedFocusCount, allFocuses.length);
-        }
-    }));
-
-    if (progress) {
-        progress(localize('focustree.loading.preparing_inlay_styles', 'Preparing inlay styles'));
-    }
-    await prepareInlayGfxStyles(focusTrees, styleTable);
-
-    const allInlays = flatMap(focusTrees, tree => tree.inlayWindows);
-    const inlayMessage = localize('focustree.loading.rendering_inlays', 'Rendering inlay windows');
-    if (progress && allInlays.length > 0) {
-        progress(inlayMessage, 0, allInlays.length);
-    }
-    let renderedInlayCount = 0;
-    await Promise.all(allInlays.map(async (inlay) => {
-        renderedInlayWindows[inlay.id] = (await renderInlayWindow(inlay, styleTable, gfxFiles)).replace(/\s\s+/g, ' ');
-        renderedInlayCount++;
-        if (progress) {
-            progress(inlayMessage, renderedInlayCount, allInlays.length);
-        }
-    }));
-
-    const toolbarFlags: ToolbarFlags = {
-        hasCustomTitlebar: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.textIcon !== undefined && titlebarStyles[f.textIcon] !== undefined)),
-        hasFocusOverlay: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.overlay !== undefined)),
-        hasInlayWindows: focusTrees.some(ft => ft.inlayWindows.length > 0),
-    };
-
-    jsCodes.push('window.focusTrees = ' + JSON.stringify(focusTrees));
-    jsCodes.push('window.renderedFocus = ' + JSON.stringify(renderedFocus));
-    jsCodes.push('window.renderedInlayWindows = ' + JSON.stringify(renderedInlayWindows));
-    jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
-    jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
-    jsCodes.push('window.useConditionInFocus = ' + useConditionInFocus);
-    jsCodes.push('window.xGridSize = ' + xGridSize);
-
+/**
+ * Renders the static page shell (dragger, content placeholders, warnings container,
+ * toolbar). Focuses and inlays themselves are rendered separately into the payload and
+ * injected by the webview, so this is a cheap synchronous step.
+ */
+function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, toolbarFlags: ToolbarFlags): string {
     const continuousFocusContent =
         `<div id="continuousFocuses" class="${styleTable.oneTimeStyle('continuousFocuses', () => `
             position: absolute;

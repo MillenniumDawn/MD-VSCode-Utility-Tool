@@ -1,3 +1,14 @@
+v1.1.3
+
+  Functionality:
+  - [ Focus Tree ] Large focus trees now render through a limited concurrency pool, keeping progress updates responsive instead of freezing under memory pressure
+  - [ Focus Tree ] Added a "still working" indicator and a Reload button so a slow or failed render no longer leaves the preview stuck on a loading spinner
+  - [ Focus Tree ] Added a render timeout that surfaces a recoverable error panel rather than hanging indefinitely
+
+  Bugfixes:
+  - [ Focus Tree ] Fixed focuses and inlay windows being rendered twice on the initial preview load
+
+
 v1.1
 
   Functionality:

@@ -1,12 +1,18 @@
 import * as vscode from 'vscode';
-import { renderFocusTreeFile, buildFocusTreePayload, FocusTreePayload, FocusTreeUpdatePayload, ToolbarFlags } from './contentbuilder';
+import { buildFocusTreeHtml, buildNoFocusTreeHtml, buildFocusTreeErrorHtml, buildFocusTreePayload, FocusTreePayload, FocusTreeUpdatePayload, ToolbarFlags } from './contentbuilder';
 import { matchPathEnd } from '../../util/nodecommon';
 import { PreviewBase } from '../previewbase';
 import { PreviewProviderDef } from '../previewmanager';
 import { FocusTreeLoader } from './loader';
-import { getRelativePathInWorkspace } from '../../util/vsccommon';
+import { getRelativePathInWorkspace, getDocumentByUri } from '../../util/vsccommon';
 import { localize } from '../../util/i18n';
 import { htmlEscape } from '../../util/html';
+import { withTimeout, TimeoutError } from '../../util/common';
+import { error } from '../../util/debug';
+
+// A render taking longer than this is treated as stuck. The underlying load keeps running
+// in the background, but the user gets a recoverable panel instead of an endless spinner.
+const focusTreeRenderTimeout = 60 * 1000;
 
 function canPreviewFocusTree(document: vscode.TextDocument) {
     const uri = document.uri;
@@ -29,11 +35,27 @@ class FocusTreePreview extends PreviewBase {
     private content: string | undefined;
     private lastCssFingerprint: string | undefined = undefined;
     private lastToolbarFlags: ToolbarFlags | undefined = undefined;
+    private lastGoodHadFocusTrees = false;
+    // Serializes updates so two loads can never run concurrently against the same loader.
+    private updateQueue: Promise<void> = Promise.resolve();
 
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
         super(uri, panel);
-        this.focusTreeLoader = new FocusTreeLoader(getRelativePathInWorkspace(this.uri), () => Promise.resolve(this.content ?? ''));
+        // Read from the live document so a parallel update clearing `this.content` can never
+        // make the loader parse an empty string (which used to flip the preview to "No focus tree").
+        this.focusTreeLoader = new FocusTreeLoader(
+            getRelativePathInWorkspace(this.uri),
+            () => Promise.resolve(getDocumentByUri(this.uri)?.getText() ?? this.content ?? ''),
+        );
         this.focusTreeLoader.onLoadDone(r => this.updateDependencies(r.dependencies));
+    }
+
+    public onDocumentChange(document: vscode.TextDocument): Promise<void> {
+        // Chain onto the previous update so renders are serialized. By the time a queued
+        // render runs it reads the live document text, coalescing intermediate edits.
+        const run = this.updateQueue.then(() => super.onDocumentChange(document));
+        this.updateQueue = run.catch(() => undefined);
+        return run;
     }
 
     protected async getContent(document: vscode.TextDocument): Promise<string> {
@@ -43,18 +65,30 @@ class FocusTreePreview extends PreviewBase {
         };
         this.focusTreeLoader.setProgressListener(progress);
         try {
-            // Build payload first while content is set; second loader.load() inside renderFocusTreeFile
-            // returns from cache (shouldReload = false, hash matches), so this is cheap.
-            const payload = await buildFocusTreePayload(this.focusTreeLoader, progress);
+            const payload = await withTimeout(
+                buildFocusTreePayload(this.focusTreeLoader, progress),
+                focusTreeRenderTimeout,
+                () => {
+                    progress(localize('focustree.loading.slow', 'Still working on a heavy focus tree...'));
+                    return new TimeoutError();
+                },
+            );
             if (payload) {
                 this.lastCssFingerprint = payload.cssFingerprint;
                 this.lastToolbarFlags = payload.toolbarFlags;
-            } else {
-                this.lastCssFingerprint = undefined;
-                this.lastToolbarFlags = undefined;
+                this.lastGoodHadFocusTrees = true;
+                return buildFocusTreeHtml(payload, this.panel.webview, document.uri);
             }
-            const result = await renderFocusTreeFile(this.focusTreeLoader, document.uri, this.panel.webview, progress);
-            return result;
+
+            this.lastCssFingerprint = undefined;
+            this.lastToolbarFlags = undefined;
+            this.lastGoodHadFocusTrees = false;
+            return buildNoFocusTreeHtml(this.panel.webview, document.uri);
+        } catch (e) {
+            // Timeout or unexpected failure: show a recoverable panel with a Reload button
+            // instead of leaving the user stuck on a dead loading spinner.
+            error(e);
+            return buildFocusTreeErrorHtml(this.panel.webview, document.uri, e);
         } finally {
             this.focusTreeLoader.setProgressListener(undefined);
             this.content = undefined;
@@ -122,24 +156,43 @@ class FocusTreePreview extends PreviewBase {
         this.content = document.getText();
         let payload: FocusTreePayload | null = null;
         try {
-            payload = await buildFocusTreePayload(this.focusTreeLoader);
+            payload = await withTimeout(buildFocusTreePayload(this.focusTreeLoader), focusTreeRenderTimeout);
+        } catch (e) {
+            // Slow/stuck transient render: keep the current preview rather than flipping to
+            // an error or empty state. A later edit (or reload) will refresh it.
+            error(e);
+            return;
         } finally {
             this.content = undefined;
         }
 
+        if (payload === null) {
+            if (this.lastGoodHadFocusTrees) {
+                // Transient empty result (e.g. mid-save race or in-progress edit). Keep the
+                // last good render instead of showing "No focus tree".
+                return;
+            }
+            // No good render yet and the file is genuinely empty: do a full reload so the
+            // "No focus tree" panel is shown. Use the base (non-queued) method to avoid
+            // deadlocking on the update queue we are already running inside.
+            this.panelInitialized = false;
+            await super.onDocumentChange(document);
+            return;
+        }
+
         if (
-            payload === null ||
             payload.cssFingerprint !== this.lastCssFingerprint ||
             !toolbarFlagsEqual(payload.toolbarFlags, this.lastToolbarFlags)
         ) {
-            // Fall back to full HTML reload
+            // Structure changed (styles/toolbar): fall back to a full HTML reload.
             this.panelInitialized = false;
-            await this.onDocumentChange(document);
+            await super.onDocumentChange(document);
             return;
         }
 
         this.lastCssFingerprint = payload.cssFingerprint;
         this.lastToolbarFlags = payload.toolbarFlags;
+        this.lastGoodHadFocusTrees = true;
 
         const updateMsg: FocusTreeUpdatePayload & { type: string } = {
             type: 'update',

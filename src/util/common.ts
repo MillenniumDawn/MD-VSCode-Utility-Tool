@@ -115,6 +115,78 @@ export function clipNumber(value: number, min: number, max: number): number {
     return value;
 }
 
+/**
+ * Races a promise against a timeout. If the timeout fires first, `onTimeout` is called
+ * (e.g. to surface a "still working" state) and the returned promise rejects with the
+ * value `onTimeout` returns, or a default TimeoutError. The original promise keeps running
+ * so a slow-but-not-stuck load can still finish in the background.
+ */
+export class TimeoutError extends Error {
+    constructor(message: string = 'Operation timed out') {
+        super(message);
+        this.name = 'TimeoutError';
+    }
+}
+
+export function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout?: () => Error | void): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+            if (settled) { return; }
+            settled = true;
+            const err = onTimeout?.() ?? new TimeoutError(`Operation timed out after ${ms}ms`);
+            reject(err);
+        }, ms);
+
+        promise.then(
+            value => {
+                if (settled) { return; }
+                settled = true;
+                clearTimeout(timer);
+                resolve(value);
+            },
+            error => {
+                if (settled) { return; }
+                settled = true;
+                clearTimeout(timer);
+                reject(error);
+            });
+    });
+}
+
+/**
+ * Like `Promise.all(items.map(fn))` but runs at most `limit` callbacks concurrently.
+ * Keeps the event loop responsive when each callback does heavy synchronous work
+ * (e.g. DDS->PNG image conversion) under memory pressure. Results preserve input order.
+ */
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    if (items.length === 0) {
+        return results;
+    }
+
+    const effectiveLimit = Math.max(1, Math.min(limit, items.length));
+    let nextIndex = 0;
+
+    async function worker(): Promise<void> {
+        while (true) {
+            const index = nextIndex++;
+            if (index >= items.length) {
+                return;
+            }
+            results[index] = await fn(items[index], index);
+        }
+    }
+
+    const workers: Promise<void>[] = [];
+    for (let i = 0; i < effectiveLimit; i++) {
+        workers.push(worker());
+    }
+    await Promise.all(workers);
+
+    return results;
+}
+
 export class UserError extends Error {
     constructor (message: string) {
       super(message);
