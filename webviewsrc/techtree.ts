@@ -1,5 +1,7 @@
 import { setState, getState, scrollToState, tryRun, subscribeRefreshButton, enableZoom, initCommon } from "./util/common";
 
+initCommon();
+
 function folderChange(folder: string) {
     const elements = document.getElementsByClassName('techfolder');
     setState({ folder: folder });

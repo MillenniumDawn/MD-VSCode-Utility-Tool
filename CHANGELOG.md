@@ -1,3 +1,10 @@
+v1.1.7
+
+  Bugfixes:
+  - [ Technology ] Fixed: the tech tree webview was missing navigator click-to-source, drag-to-scroll, and scroll-position restore because `initCommon()` was imported but never called. All other webview entry points already called it.
+  - [ Telemetry ] Fixed: the telemetry source file was accidentally minified to a single line, making it unreadable in version control and removing typed property/measurement signatures.
+
+
 v1.1.6
 
   Functionality:
