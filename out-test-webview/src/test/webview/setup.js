@@ -5,7 +5,7 @@ const dom = new jsdom_1.JSDOM('<!DOCTYPE html><html><body></body></html>', {
     url: 'https://localhost',
     pretendToBeVisual: true,
 });
-// @ts-expect-error global window
+// global window (no ts-expect-error)
 global.window = dom.window;
 global.document = dom.window.document;
 // Mock acquireVsCodeApi for webview tests
@@ -16,8 +16,17 @@ global.acquireVsCodeApi = () => ({
     setState: (s) => {
         Object.assign(state, s);
     },
-    // @ts-expect-error
+    // end of acquireVsCodeApi mock (no ts-expect-error)
 });
+// Provide browser globals that jsdom exposes on its window so that
+// `new Event(...)`, `new MouseEvent(...)`, `new KeyboardEvent(...)` etc.
+// work in test code the same way they do in a real browser.
+for (const name of [
+    'Event', 'MouseEvent', 'KeyboardEvent', 'FocusEvent',
+    'PointerEvent', 'WheelEvent',
+]) {
+    global[name] = dom.window[name];
+}
 // Mock i18n table for feLocalize tests
 dom.window.__i18ntable = {
     'test.key': 'Translated value',

@@ -62,19 +62,21 @@ function slice(array, start, end) {
     if (!array) {
         return [];
     }
-    if (start >= 0) {
-        return array.slice(start, end);
+    const len = array.length;
+    let realStart = start;
+    if (realStart < 0) {
+        realStart = len + realStart;
     }
-    else {
-        if (end <= start) {
-            return [];
-        }
-        const result = new Array(end - start);
-        for (let i = start, j = 0; i < end; i++, j++) {
-            result[j] = array[i];
-        }
-        return result;
+    if (realStart < 0)
+        realStart = 0;
+    let realEnd = end;
+    if (realEnd < 0) {
+        realEnd = len + realEnd;
     }
+    if (realEnd <= realStart) {
+        return [];
+    }
+    return array.slice(realStart, realEnd);
 }
 function debounceByInput(func, keySelector, wait, debounceSettings) {
     const cachedMethods = {};

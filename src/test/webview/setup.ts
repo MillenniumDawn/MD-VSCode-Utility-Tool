@@ -20,6 +20,16 @@ const state: Record<string, any> = {};
     // end of acquireVsCodeApi mock (no ts-expect-error)
 });
 
+// Provide browser globals that jsdom exposes on its window so that
+// `new Event(...)`, `new MouseEvent(...)`, `new KeyboardEvent(...)` etc.
+// work in test code the same way they do in a real browser.
+for (const name of [
+    'Event', 'MouseEvent', 'KeyboardEvent', 'FocusEvent',
+    'PointerEvent', 'WheelEvent',
+]) {
+    (global as any)[name] = (dom.window as any)[name];
+}
+
 // Mock i18n table for feLocalize tests
 (dom.window as any).__i18ntable = {
     'test.key': 'Translated value',

@@ -42,9 +42,9 @@ describe('webview/util/i18n', function () {
             const result = (0, i18n_1.feLocalize)('combobox.multiple', '{0} (+{1})', 'Alpha', 3);
             assert.strictEqual(result, 'Alpha (+3)');
         });
-        it('falls back to default message when key is not in table', function () {
-            const result = (0, i18n_1.feLocalize)('combobox.noselection', '(No selection)');
-            assert.strictEqual(result, 'Translated value');
+        it('returns table value when key is in table', function () {
+            const result = (0, i18n_1.feLocalize)('combobox.noselection', 'unused default');
+            assert.strictEqual(result, '(No selection)');
         });
         it('uses default message when key is absent', function () {
             const result = (0, i18n_1.feLocalize)('nonexistent.key', 'Default fallback');

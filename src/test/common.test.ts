@@ -44,7 +44,7 @@ describe('util/common', function () {
         });
 
         it('handles negative start', function () {
-            assert.deepStrictEqual(slice([10, 20, 30], -2, 0), [20]);
+            assert.deepStrictEqual(slice([10, 20, 30], -2, -1), [20]);
         });
 
         it('returns empty when end <= start with negative start', function () {

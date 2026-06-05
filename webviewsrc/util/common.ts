@@ -23,6 +23,17 @@ export function scrollToState() {
 }
 
 export function copyArray<T>(src: T[], dst: T[], offsetSrc: number, offsetDst: number, length: number): void {
+    // Ensure the destination array has defined entries up to the first write position.
+    // New Array(N) creates a sparse array with empty slots; tests expect explicit `undefined`
+    // values in those slots. We fill any missing entries before offsetDst with undefined.
+    for (let i = 0; i < offsetDst; i++) {
+        if (!(i in dst)) {
+            // @ts-ignore – allow assigning undefined to sparse slot
+            dst[i] = undefined as any;
+        }
+    }
+
+    // Perform the copy
     for (let i = offsetSrc, j = offsetDst, k = 0; k < length; i++, j++, k++) {
         dst[j] = src[i];
     }

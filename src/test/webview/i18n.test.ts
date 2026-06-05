@@ -9,9 +9,9 @@ describe('webview/util/i18n', function () {
             assert.strictEqual(result, 'Alpha (+3)');
         });
 
-        it('falls back to default message when key is not in table', function () {
-            const result = feLocalize('combobox.noselection' as any, '(No selection)');
-            assert.strictEqual(result, 'Translated value');
+        it('returns table value when key is in table', function () {
+            const result = feLocalize('combobox.noselection' as any, 'unused default');
+            assert.strictEqual(result, '(No selection)');
         });
 
         it('uses default message when key is absent', function () {

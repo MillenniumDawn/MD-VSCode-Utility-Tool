@@ -100,6 +100,14 @@ class DivDropdown extends event_1.Subscriber {
             const options = this.getOptions(value);
             this.updateSelectedValue(options);
         }));
+        // If no explicit selection and single‑select mode, default to the first option.
+        if (!this.multiSelection && this.selectedValues$.value.length === 0) {
+            const first = this.getOptions()[0];
+            if (first) {
+                first.selected = true;
+                this.selectedValues$.next([first.value]);
+            }
+        }
     }
     selectAll() {
         const options = this.getOptions();
