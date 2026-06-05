@@ -57,6 +57,9 @@ jspm_packages/
 .env.test
 .env.production
 
+# Tool directories
+.opencode/
+
 # IDE and editor files
 .vscode/settings.json
 .vscode/launch.json

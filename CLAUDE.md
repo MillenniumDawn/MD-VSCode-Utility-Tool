@@ -1,31 +1,31 @@
 # Project: MD VSCode Utility Tool
 
-## Versie & changelog — eenmalig per branch
+## Version & changelog — once per branch
 
-Versie-bumps gebeuren **eenmalig per feature-branch**, niet bij elke individuele turn.
-De `package.json` en `CHANGELOG.md` worden pas bijgewerkt op het moment van merge
-(zoals onderdeel van een afsluitende commit, of in een aparte PR die de branch samenvoegt).
+Version bumps happen **once per feature branch**, not on every individual turn.
+`package.json` and `CHANGELOG.md` are only updated at merge time (as part of a
+closing commit, or in a separate PR that merges the branch).
 
-Binnen één branch (of meerdere turns op dezelfde feature) blijft de versie dus stabiel.
-Pas bij het afronden van de hele feature:
+Within one branch (or multiple turns on the same feature), the version stays stable.
+Only when the entire feature is finalized:
 
-1. **Bump de versie** in [package.json](package.json) `version`-veld met **+1 patch**
-   (bijv. `1.1.2` → `1.1.3`).
-2. **Voeg bovenaan [CHANGELOG.md](CHANGELOG.md) een nieuwe sectie toe** met exact diezelfde
-   versie als kop (`v1.1.3`), in de bestaande stijl:
-   - Subsecties `Functionality:` en/of `Bugfixes:`.
-   - Bullets met `  - ` (twee spaties indent), zoals bestaande entries.
-   - Gebruik een `[ Component ]`-prefix waar passend (`[ Focus Tree ]`, `[ MIO ]`,
-     `[ Technology ]`, …).
-   - Inhoudelijk en encyclopedisch; beschrijf wat er daadwerkelijk veranderd is.
-3. **Houd `package.json` en de CHANGELOG-kop altijd op exact dezelfde versie.**
+1. **Bump the version** in [package.json](package.json) `version` field by **+1 patch**
+   (e.g. `1.1.2` -> `1.1.3`).
+2. **Add a new section at the top of [CHANGELOG.md](CHANGELOG.md)** with that same
+   version as heading (`v1.1.3`), in the existing style:
+   - Subsections `Functionality:` and/or `Bugfixes:`.
+   - Bullets with `  - ` (two-space indent), like existing entries.
+   - Use a `[ Component ]` prefix where appropriate (`[ Focus Tree ]`, `[ MIO ]`,
+     `[ Technology ]`, ...).
+   - Substantive and encyclopedic; describe what actually changed.
+3. **Keep `package.json` and the CHANGELOG heading at exactly the same version.**
 
-### In implementatieplannen
-Wanneer je een plan maakt dat functionaliteit toevoegt of wijzigt, neem de versie-bump
-(+1 patch) en de bijbehorende CHANGELOG-entry **op als expliciete stap in het plan onder
-"Finalize / merge"** — niet als afterthought per turn. De changelog-stap hoort bij het
-afronden van de feature, niet bij elk tussentijds commit.
+### In implementation plans
+When you create a plan that adds or changes functionality, include the version bump
+(+1 patch) and the corresponding CHANGELOG entry **as an explicit step in the plan
+under "Finalize / merge"** -- not as an afterthought per turn. The changelog step
+belongs to finalizing the feature, not to each intermediate commit.
 
-### Afdwinging
-De `Stop`-hook ([.claude/hooks/changelog-guard.js](.claude/hooks/changelog-guard.js))
-is aangepast of uitgeschakeld voor deze werkwijze; houd de regel hierboven aan bij merges.
+### Enforcement
+The `Stop` hook ([.claude/hooks/changelog-guard.js](.claude/hooks/changelog-guard.js))
+has been adjusted or disabled for this workflow; follow the rule above at merges.
