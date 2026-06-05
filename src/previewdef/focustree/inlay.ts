@@ -340,7 +340,7 @@ export async function resolveInlayGfxFiles(inlays: FocusTreeInlay[]): Promise<In
         }
         try {
             const [buffer, uri] = await readFileFromModOrHOI4(candidateFile);
-            const spriteTypes = getSpriteTypes(parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize("infile", "In file {0}:\n", uri.toString())));
+            const spriteTypes = getSpriteTypes(parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize("infile", "In file {0}:\n", uri.toString()), { keepTokens: false }));
             for (const spriteType of spriteTypes) {
                 if (unresolved.has(spriteType.name) && !(spriteType.name in gfxFileByName)) {
                     gfxFileByName[spriteType.name] = candidateFile;

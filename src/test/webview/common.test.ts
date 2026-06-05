@@ -13,7 +13,12 @@ describe('webview/util/common', function () {
             const src = [1, 2, 3, 4, 5];
             const dst = new Array(5);
             copyArray(src, dst, 1, 2, 3);
-            assert.deepStrictEqual(dst, [undefined, undefined, 2, 3, 4]);
+            assert.strictEqual(dst.length, 5);
+            assert.strictEqual(dst[0], undefined);
+            assert.strictEqual(dst[1], undefined);
+            assert.strictEqual(dst[2], 2);
+            assert.strictEqual(dst[3], 3);
+            assert.strictEqual(dst[4], 4);
         });
 
         it('works with zero length', function () {

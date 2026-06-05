@@ -13,8 +13,12 @@ dist/
 build/
 static/
 
-# Unit test build output (tsconfig.test.json)
+# Compiled TypeScript output
+out/
+
+# Unit test build output (tsconfig.test.json / tsconfig.webview.test.json)
 out-test/
+out-test-webview/
 
 # Logs
 *.log

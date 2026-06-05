@@ -64,7 +64,7 @@ export class WorldMap {
 
     public onDocumentChange = debounceByInput(
         (uri: vscode.Uri) => {
-            if (!this.worldMapDependencies) {
+            if (!this.worldMapDependencies || !this.panel?.visible) {
                 return;
             }
 

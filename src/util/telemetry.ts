@@ -45,16 +45,16 @@ export function registerTelemetryReporter() {
     };
 }
 
-export const sendEvent = (eventName: string, properties?: any, mesurements?: any) => {
-    telemetryReporter?.sendTelemetryEvent(eventName, properties, mesurements);
+export const sendEvent = (eventName: string, properties?: { [key: string]: string }, measurements?: { [key: string]: number }) => {
+    telemetryReporter?.sendTelemetryEvent(eventName, properties, measurements);
 };
 
-export const sendError = (eventName: string, properties?: any, mesurements?: any) => {
-    telemetryReporter?.sendTelemetryErrorEvent(eventName, properties, mesurements);
+export const sendError = (eventName: string, properties?: { [key: string]: string }, measurements?: { [key: string]: number }, errorProps?: string[]) => {
+    telemetryReporter?.sendTelemetryErrorEvent(eventName, properties, measurements, errorProps);
 };
 
-export const sendException = (error: Error, properties?: any, mesurements?: any) => {
-    telemetryReporter?.sendTelemetryException(error, properties, mesurements);
+export const sendException = (error: Error, properties?: { [key: string]: string }, measurements?: { [key: string]: number }) => {
+    telemetryReporter?.sendTelemetryException(error, properties, measurements);
 };
 
 export function sendByMessage(message: TelemetryMessage) {
