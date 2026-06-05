@@ -2,7 +2,7 @@
 	"name": "hearts-of-iron-iv-utilities-2026",
 	"displayName": "%hoi4modutilities.displayName%",
 	"description": "Utilities for Heart of Iron IV mods developers",
-	"version": "1.1.5",
+	"version": "1.1.6",
 	"author": "TheGeneral",
 	"publisher": "MilleniumDawnModTeam",
 	"icon": "icon.png",
@@ -111,6 +111,12 @@
 							"type": "string"
 						},
 						"description": "Workspace/mod-relative root folders to scan recursively for .gfx files used by the technology tree preview (e.g. \"interface/technologies\")."
+					},
+					"mdHoi4Utilities.technologyShowId": {
+						"title": "Technology: show raw id instead of localisation",
+						"type": "boolean",
+						"default": false,
+						"description": "Show each technology's raw id (e.g. \"infantry_weapons1\") in the technology tree preview instead of its localised name. Applies to every tech, both those with their own localisation and those that fall back to the name of the equipment they unlock. Has no effect unless the localisation index is on."
 					},
 					"mdHoi4Utilities.worldMapRetainContextWhenHidden": {
 						"title": "World map: keep webview in memory when hidden",

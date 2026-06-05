@@ -1,3 +1,9 @@
+v1.1.6
+
+  Functionality:
+  - [ Technology ] New setting "Technology: show raw id instead of localisation". When on, the technology tree shows each tech's raw id instead of its localised name. It applies to every tech, both those with their own localisation and those that fall back to the name of the equipment they unlock, so you can read the ids straight off the tree while modding. Off by default; localisation is still shown otherwise.
+
+
 v1.1.5
 
   Functionality:
