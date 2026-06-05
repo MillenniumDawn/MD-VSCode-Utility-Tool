@@ -1,4 +1,4 @@
-import { getState, setState, arrayToMap, subscribeNavigators, scrollToState, tryRun, enableZoom } from "./util/common";
+import { getState, setState, arrayToMap, subscribeNavigators, scrollToState, tryRun, enableZoom, initCommon } from "./util/common";
 import { DivDropdown } from "./util/dropdown";
 import { minBy } from "lodash";
 import { renderGridBoxCommon, GridBoxItem, GridBoxConnection } from "../src/util/hoi4gui/gridboxcommon";
@@ -18,6 +18,8 @@ let selectedMioIndex: number = Math.min(mios.length - 1, getState().selectedMioI
 let showIncludedTraits: boolean = getState().showIncludedTraits ?? true;
 let showFrame: boolean = false;
 let conditions: DivDropdown | undefined = undefined;
+
+initCommon();
 
 async function buildContent() {
     const miopreviewplaceholder = document.getElementById('miopreviewplaceholder') as HTMLDivElement;

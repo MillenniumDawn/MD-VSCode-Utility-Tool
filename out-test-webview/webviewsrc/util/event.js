@@ -1,40 +1,40 @@
-import { BehaviorSubject, fromEvent, Subscription } from 'rxjs';
-
-export type Disposable = { dispose(): void };
-
-export function toDisposable(...subscription: Subscription[]): Disposable {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.Subscriber = void 0;
+exports.toDisposable = toDisposable;
+exports.toBehaviorSubject = toBehaviorSubject;
+const rxjs_1 = require("rxjs");
+function toDisposable(...subscription) {
     return {
         dispose: () => subscription.forEach(s => s.unsubscribe())
     };
 }
-
-export class Subscriber implements Disposable {
-    private rxjsSubscriptions: Subscription[] = [];
-    private subscriptions: Disposable[] = [];
-
-    addSubscription(subscription: Subscription | Disposable): void {
+class Subscriber {
+    constructor() {
+        this.rxjsSubscriptions = [];
+        this.subscriptions = [];
+    }
+    addSubscription(subscription) {
         if ('dispose' in subscription) {
             this.subscriptions.push(subscription);
-        } else {
+        }
+        else {
             this.rxjsSubscriptions.push(subscription);
         }
     }
-
-    dispose(): void {
+    dispose() {
         this.subscriptions.forEach(s => s.dispose());
         toDisposable(...this.rxjsSubscriptions).dispose();
     }
 }
-
-export function toBehaviorSubject(element: HTMLSelectElement | HTMLInputElement, initialValue?: string): BehaviorSubject<string> {
+exports.Subscriber = Subscriber;
+function toBehaviorSubject(element, initialValue) {
     if (initialValue !== undefined) {
         element.value = initialValue;
     }
-
-    const disposables: Subscription[] = [];
-    const observable = new BehaviorSubject<string>(element.value as string);
+    const disposables = [];
+    const observable = new rxjs_1.BehaviorSubject(element.value);
     let changing = false;
-
     disposables.push(observable.subscribe({
         next: v => {
             if (changing) {
@@ -48,15 +48,14 @@ export function toBehaviorSubject(element: HTMLSelectElement | HTMLInputElement,
             disposables.forEach(d => d.unsubscribe());
         }
     }));
-
-    disposables.push(fromEvent(element, 'change').subscribe(() => {
+    disposables.push((0, rxjs_1.fromEvent)(element, 'change').subscribe(() => {
         if (changing) {
             return;
         }
         changing = true;
-        observable.next(element.value as string);
+        observable.next(element.value);
         changing = false;
     }));
-
     return observable;
 }
+//# sourceMappingURL=event.js.map

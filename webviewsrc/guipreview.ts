@@ -1,8 +1,11 @@
 import { normalizeForStyle } from "../src/util/styletable";
 import { Checkbox } from "./util/checkbox";
-import { setState, getState, scrollToState, tryRun, subscribeRefreshButton } from "./util/common";
+import { setState, getState, scrollToState, tryRun, subscribeRefreshButton, initCommon } from "./util/common";
 
 const existingCheckboxes: Checkbox[] = [];
+
+initCommon();
+
 let toggleVisibilityContentVisible = getState().toggleVisibilityContentVisible;
 
 function folderChange(folder: string) {

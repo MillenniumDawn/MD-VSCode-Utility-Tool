@@ -1,9 +1,13 @@
 # Project: MD VSCode Utility Tool
 
-## Versie & changelog — verplicht bij elke wijziging
+## Versie & changelog — eenmalig per branch
 
-Bij **elke turn waarin bronbestanden gewijzigd worden** (alles behalve `CHANGELOG.md`
-en `package.json` zelf) geldt:
+Versie-bumps gebeuren **eenmalig per feature-branch**, niet bij elke individuele turn.
+De `package.json` en `CHANGELOG.md` worden pas bijgewerkt op het moment van merge
+(zoals onderdeel van een afsluitende commit, of in een aparte PR die de branch samenvoegt).
+
+Binnen één branch (of meerdere turns op dezelfde feature) blijft de versie dus stabiel.
+Pas bij het afronden van de hele feature:
 
 1. **Bump de versie** in [package.json](package.json) `version`-veld met **+1 patch**
    (bijv. `1.1.2` → `1.1.3`).
@@ -18,12 +22,10 @@ en `package.json` zelf) geldt:
 
 ### In implementatieplannen
 Wanneer je een plan maakt dat functionaliteit toevoegt of wijzigt, neem de versie-bump
-(+1 patch) en de bijbehorende CHANGELOG-entry **al op als expliciete stap in het plan** —
-niet pas als afterthought achteraf. De changelog/commit-stap hoort onderdeel te zijn van
-het ontwerp.
+(+1 patch) en de bijbehorende CHANGELOG-entry **op als expliciete stap in het plan onder
+"Finalize / merge"** — niet als afterthought per turn. De changelog-stap hoort bij het
+afronden van de feature, niet bij elk tussentijds commit.
 
 ### Afdwinging
-Een `Stop`-hook ([.claude/hooks/changelog-guard.js](.claude/hooks/changelog-guard.js))
-controleert aan het eind van elke turn of bronwijzigingen samengaan met een versie-bump én
-een changelog-update, en blokkeert het afronden tot beide gedaan zijn. De hook is het
-vangnet; de regels hierboven zijn leidend voor de inhoud.
+De `Stop`-hook ([.claude/hooks/changelog-guard.js](.claude/hooks/changelog-guard.js))
+is aangepast of uitgeschakeld voor deze werkwijze; houd de regel hierboven aan bij merges.

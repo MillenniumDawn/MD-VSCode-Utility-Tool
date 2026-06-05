@@ -1,38 +1,46 @@
-import { enableDropdowns, numDropDownOpened$ } from './dropdown';
-import { enableCheckboxes } from './checkbox';
-import { vscode } from './vscode';
-import { sendException } from './telemetry';
-import { forceError } from '../../src/util/common';
-export { arrayToMap } from '../../src/util/common';
-
-export function setState(obj: Record<string, any>): void {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.arrayToMap = void 0;
+exports.setState = setState;
+exports.getState = getState;
+exports.scrollToState = scrollToState;
+exports.copyArray = copyArray;
+exports.subscribeNavigators = subscribeNavigators;
+exports.tryRun = tryRun;
+exports.enableZoom = enableZoom;
+exports.subscribeRefreshButton = subscribeRefreshButton;
+exports.initCommon = initCommon;
+const dropdown_1 = require("./dropdown");
+const checkbox_1 = require("./checkbox");
+const vscode_1 = require("./vscode");
+const telemetry_1 = require("./telemetry");
+const common_1 = require("../../src/util/common");
+var common_2 = require("../../src/util/common");
+Object.defineProperty(exports, "arrayToMap", { enumerable: true, get: function () { return common_2.arrayToMap; } });
+function setState(obj) {
     const state = getState();
     Object.assign(state, obj);
-    vscode.setState(state);
+    vscode_1.vscode.setState(state);
 }
-
-export function getState(): Record<string, any> {
-    return vscode.getState() || {};
+function getState() {
+    return vscode_1.vscode.getState() || {};
 }
-
-export function scrollToState() {
+function scrollToState() {
     const state = getState();
     const xOffset = state.xOffset || 0;
     const yOffset = state.yOffset || 0;
     window.scroll(xOffset, yOffset);
 }
-
-export function copyArray<T>(src: T[], dst: T[], offsetSrc: number, offsetDst: number, length: number): void {
+function copyArray(src, dst, offsetSrc, offsetDst, length) {
     for (let i = offsetSrc, j = offsetDst, k = 0; k < length; i++, j++, k++) {
         dst[j] = src[i];
     }
 }
-
-export function subscribeNavigators() {
+function subscribeNavigators() {
     const navigators = document.getElementsByClassName("navigator");
     for (let i = 0; i < navigators.length; i++) {
-        const navigator = navigators[i] as HTMLDivElement;
-        navigator.addEventListener('click', function(e) {
+        const navigator = navigators[i];
+        navigator.addEventListener('click', function (e) {
             e.stopPropagation();
             const startStr = this.attributes.getNamedItem('start')?.value;
             const endStr = this.attributes.getNamedItem('end')?.value;
@@ -43,144 +51,122 @@ export function subscribeNavigators() {
         });
     }
 }
-
-export function tryRun<T extends (...args: any[]) => any>(func: T): (...args: Parameters<T>) => ReturnType<T> | undefined {
-    return function(this: any, ...args) {
+function tryRun(func) {
+    return function (...args) {
         try {
             const result = func.apply(this, args);
             if (result instanceof Promise) {
                 return result.catch(e => {
                     console.error(e);
-                    sendException(forceError(e));
-                }) as ReturnType<T>;
+                    (0, telemetry_1.sendException)((0, common_1.forceError)(e));
+                });
             }
-
             return result;
-
-        } catch (e) {
-            console.error(e);
-            sendException(forceError(e));
         }
-
+        catch (e) {
+            console.error(e);
+            (0, telemetry_1.sendException)((0, common_1.forceError)(e));
+        }
         return undefined;
     };
 }
-
 let shouldDisableZoom = false;
-export function enableZoom(contentElement: HTMLDivElement, xOffset: number, yOffset: number): void {
+function enableZoom(contentElement, xOffset, yOffset) {
     let scale = getState().scale || 1;
     contentElement.style.transform = `scale(${scale})`;
     contentElement.style.transformOrigin = '0 0';
-    window.addEventListener('wheel', function(e) {
+    window.addEventListener('wheel', function (e) {
         if (shouldDisableZoom) {
             return;
         }
-
         e.preventDefault();
         const oldScale = scale;
-
         if (e.deltaY > 0) {
             scale = Math.max(0.2, scale - 0.2);
-        } else if (e.deltaY < 0) {
+        }
+        else if (e.deltaY < 0) {
             scale = Math.min(1, scale + 0.2);
         }
-
         const oldScrollX = window.scrollX;
         const oldScrollY = window.scrollY;
-        
         contentElement.style.transform = `scale(${scale})`;
         setState({ scale });
-
         const nextScrollX = (e.pageX - xOffset) * scale / oldScale + xOffset - (e.pageX - oldScrollX);
         const nextScrollY = (e.pageY - yOffset) * scale / oldScale + yOffset - (e.pageY - oldScrollY);
         window.scrollTo(nextScrollX, nextScrollY);
-    },
-    {
+    }, {
         passive: false
     });
 }
-
-function navigateText(start: number | undefined, end: number | undefined, file: string | undefined): void {
-    vscode.postMessage({
+function navigateText(start, end, file) {
+    vscode_1.vscode.postMessage({
         command: 'navigate',
         start,
         end,
         file,
     });
-};
-
-export function subscribeRefreshButton() {
-    const button = document.getElementById('refresh') as HTMLButtonElement;
-    button?.addEventListener('click', function() {
-        vscode.postMessage({ command: 'reload' });
+}
+;
+function subscribeRefreshButton() {
+    const button = document.getElementById('refresh');
+    button?.addEventListener('click', function () {
+        vscode_1.vscode.postMessage({ command: 'reload' });
         button.disabled = true;
     });
 }
-
-export function initCommon(): void {
-    if ((window as any).previewedFileUri) {
-        setState({ uri: (window as any).previewedFileUri });
+function initCommon() {
+    if (window.previewedFileUri) {
+        setState({ uri: window.previewedFileUri });
     }
-
-    window.addEventListener('load', function() {
+    window.addEventListener('load', function () {
         // Disable selection
         document.body.style.userSelect = 'none';
-
         // Save scroll position
-        (function() {
+        (function () {
             scrollToState();
-
-            window.addEventListener('scroll', function() {
+            window.addEventListener('scroll', function () {
                 const state = getState();
                 state.xOffset = window.pageXOffset;
                 state.yOffset = window.pageYOffset;
-                vscode.setState(state);
+                vscode_1.vscode.setState(state);
             });
         })();
-
         // Drag to scroll
-        (function() {
+        (function () {
             // Dragger should be like this: <div id="dragger" style="width:100vw;height:100vh;position:fixed;left:0;top:0;"></div>
             const dragger = document.getElementById("dragger");
             if (!dragger) {
                 return;
             }
-
             dragger.addEventListener('contextmenu', event => event.preventDefault());
-
             let mdx = -1;
             let mdy = -1;
             let pressed = false;
-            dragger.addEventListener('mousedown', function(e) {
+            dragger.addEventListener('mousedown', function (e) {
                 mdx = e.pageX;
                 mdy = e.pageY;
                 pressed = true;
             });
-
-            document.body.addEventListener('mousemove', function(e) {
+            document.body.addEventListener('mousemove', function (e) {
                 if (pressed) {
                     window.scroll(window.pageXOffset - e.pageX + mdx, window.pageYOffset - e.pageY + mdy);
                 }
             });
-
-            document.body.addEventListener('mouseup', function() {
+            document.body.addEventListener('mouseup', function () {
                 pressed = false;
             });
-
-            document.body.addEventListener('mouseenter', function(e) {
+            document.body.addEventListener('mouseenter', function (e) {
                 if (pressed && (e.buttons & 1) !== 1) {
                     pressed = false;
                 }
             });
         })();
-
         subscribeNavigators();
-
-        enableDropdowns();
-        enableCheckboxes();
-
-        numDropDownOpened$.subscribe(num => {
+        (0, dropdown_1.enableDropdowns)();
+        (0, checkbox_1.enableCheckboxes)();
+        dropdown_1.numDropDownOpened$.subscribe(num => {
             shouldDisableZoom = num > 0;
         });
     });
 }
+//# sourceMappingURL=common.js.map
