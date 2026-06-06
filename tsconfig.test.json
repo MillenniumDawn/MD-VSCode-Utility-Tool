@@ -8,7 +8,7 @@
 			"es2020"
 		],
 		"outDir": "out-test",
-		"rootDir": "src",
+		"rootDir": ".",
 		"sourceMap": true,
 		"strict": true,
 		"noFallthroughCasesInSwitch": true,
@@ -20,9 +20,11 @@
 		]
 	},
 	"include": [
-		"src/test/**/*.ts"
+		"src/test/**/*.ts",
+		"src/def.d.ts",
+		"i18n/en.ts"
 	],
 	"exclude": [
 		"src/test/webview"
-	],
+	]
 }

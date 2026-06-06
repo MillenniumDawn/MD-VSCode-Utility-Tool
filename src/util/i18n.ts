@@ -15,8 +15,12 @@ export function loadI18n(locale?: string) {
 
 function tryLoadTable(locale: string): Record<string, string> | undefined {
     try {
-        const requireContext = require.context('../../i18n', false, /\/(?!template)[\w-]*\.ts$/);
-        return requireContext('./' + locale + '.ts').default;
+        // require.context is a webpack-only API. The build step replaces this call, but plain
+        // tsc + Node don't know about it, so cast through unknown to keep the type checker
+        // happy. The whole expression is wrapped in try/catch and never invoked at test time.
+        const requireContext = (require as unknown as { context(directory: string, recursive: boolean, regex: RegExp): (request: string) => { default: unknown } })
+            .context('../../i18n', false, /\/(?!template)[\w-]*\.ts$/);
+        return requireContext('./' + locale + '.ts').default as Record<string, string>;
     } catch(e) {
         error(e);
     }
