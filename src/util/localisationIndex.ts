@@ -245,7 +245,7 @@ async function fillLocalisationItems(localisationFile: string, localisationIndex
     }
 }
 
-const localisationLineRegex = /^\s*([^:]+):\s*\d*\s*"((?:[^"#\\]|\\.)*)".*?(?=#|$)/;
+const localisationLineRegex = /^\s*([^:]+):\s*\d*\s*"((?:[^"\\]|\\.)*)".*?(?=#|$)/;
 const unescapedQuoteRegex = /(?<!\\)"/g;
 
 function preprocessYamlContent(fileContent: string): string {
