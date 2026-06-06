@@ -32,7 +32,7 @@ export interface WorldMapData {
 export interface ProvinceBmp {
     width: number;
     height: number;
-    colorByPosition: number[]; // width * height
+    colorByPosition: Uint32Array; // width * height
     colorToProvince: Record<number, ProvinceGraph>;
     provinces: ProvinceGraph[];
 }
@@ -40,7 +40,7 @@ export interface ProvinceBmp {
 export interface ProvinceMap {
     width: number;
     height: number;
-    colorByPosition: number[]; // width * height
+    colorByPosition: Uint32Array; // width * height
     provinces: (Province | undefined | null)[]; // count of provinces
     badProvincesCount: number;
     continents: string[];

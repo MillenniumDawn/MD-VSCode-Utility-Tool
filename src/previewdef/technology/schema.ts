@@ -15,6 +15,7 @@ export interface Technology {
     xor: string[];
     startYear: number;
     enableEquipments: boolean;
+    enableEquipmentNames: string[];
     subTechnologies: Technology[];
     token: Token | undefined;
 }
@@ -167,7 +168,8 @@ function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Rec
         const startYear = technology.start_year ?? 0;
         const leadsToTechs = technology.path.map(p => p.leads_to_tech).filter((p): p is string => p !== undefined);
         const xor = technology.xor._values;
-        const enableEquipments = technology.enable_equipments._values.length > 0;
+        const enableEquipmentNames = technology.enable_equipments._values.filter((p): p is string => p !== undefined);
+        const enableEquipments = enableEquipmentNames.length > 0;
         const folders: Record<string, TechnologyFolder> = {};
         
         for (const folder of technology.folder) {
@@ -181,7 +183,7 @@ function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Rec
         }
 
         result[id] = {
-            id, token, startYear, leadsToTechs, xor, enableEquipments, folders,
+            id, token, startYear, leadsToTechs, xor, enableEquipments, enableEquipmentNames, folders,
             subTechnologies: [],
         };
     }

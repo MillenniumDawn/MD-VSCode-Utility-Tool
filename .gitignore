@@ -13,6 +13,13 @@ dist/
 build/
 static/
 
+# Compiled TypeScript output
+out/
+
+# Unit test build output (tsconfig.test.json / tsconfig.webview.test.json)
+out-test/
+out-test-webview/
+
 # Logs
 *.log
 logs/
@@ -49,6 +56,9 @@ jspm_packages/
 .env
 .env.test
 .env.production
+
+# Tool directories
+.opencode/
 
 # IDE and editor files
 .vscode/settings.json

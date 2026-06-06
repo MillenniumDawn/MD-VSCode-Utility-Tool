@@ -1,6 +1,7 @@
-import * as yaml from 'js-yaml';
-
+// js-yaml is required lazily so it isn't loaded at activation; it only loads the first time a YAML
+// file is actually parsed (the scan-references command).
 export function parseYaml(content: string): any {
+    const yaml = require('js-yaml');
     try {
         return yaml.safeLoad(content);
     } catch (e) {

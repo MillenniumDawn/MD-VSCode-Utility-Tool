@@ -4,7 +4,8 @@ import { localize, i18nTableAsScript } from '../../util/i18n';
 import { forceError, randomString } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { html, htmlEscape } from '../../util/html';
-import { GridBoxType } from '../../hoiformat/gui';
+import { ContainerWindowType, GridBoxType } from '../../hoiformat/gui';
+import { renderContainerWindow } from '../../util/hoi4gui/containerwindow';
 import { MioFrame, MioLoader } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug } from '../../util/debug';
@@ -114,9 +115,16 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     );
 }
 
+// Names of the dynamic panels inside industrial_organisation_detail_window that the game fills at
+// runtime. We render our own trait tree in their place, so we skip them when drawing the chrome.
+const detailTreeWindowName = 'tree_scrollbar_window';
+const detailHistoryWindowName = 'history_window';
+
 async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: StyleTable): Promise<string> {
-    const width = frame.window.size?.width?._value ?? 945;
-    const height = frame.window.size?.height?._value ?? 665;
+    // --- Trait tree panel (industrial_organisation_tree_window). Holds the scrollable trait grid. ---
+    const treeWindow = frame.window;
+    const treeWidth = treeWindow.size?.width?._value ?? 945;
+    const treeHeight = treeWindow.size?.height?._value ?? 665;
 
     const scrollbar = frame.scrollbarWindow;
     const scrollX = scrollbar?.position?.x?._value ?? 45;
@@ -127,42 +135,98 @@ async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: Styl
     const marginLeft = scrollbar?.margin?.left?._value ?? 0;
     const marginBottom = scrollbar?.margin?.bottom?._value ?? 20;
     const marginRight = scrollbar?.margin?.right?._value ?? 20;
+    const innerW = scrollW - marginLeft - marginRight;
+    const innerH = scrollH - marginTop - marginBottom;
 
-    const bgSpriteName = frame.window.background?.spritetype ?? 'GFX_MIO_details_background';
+    const bgSpriteName = treeWindow.background?.spritetype ?? 'GFX_MIO_details_background';
     const bgSprite = await getSpriteByGfxName(bgSpriteName, gfxFiles);
     const bgImage = bgSprite ? bgSprite.image : undefined;
 
-    const innerW = scrollW - marginLeft - marginRight;
-    const innerH = scrollH - marginTop - marginBottom;
+    const treePanel = (left: number, top: number) => `
+        <div id="mio-frame-treewindow" class="${styleTable.oneTimeStyle('mio-frame-treewindow', () => `
+            position: absolute;
+            left: ${left}px;
+            top: ${top}px;
+            width: ${treeWidth}px;
+            height: ${treeHeight}px;
+            ${bgImage ? `background-image: url(${bgImage.uri});` : 'background: #1a1a1a;'}
+            background-size: ${treeWidth}px ${treeHeight}px;
+            background-repeat: no-repeat;
+            box-sizing: border-box;
+        `)}">
+            <div id="mio-frame-scrollbar" class="${styleTable.oneTimeStyle('mio-frame-scrollbar', () => `
+                position: absolute;
+                left: ${scrollX}px;
+                top: ${scrollY}px;
+                width: ${scrollW}px;
+                height: ${scrollH}px;
+                overflow: auto;
+                box-sizing: border-box;
+                padding: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px;
+            `)}">
+                <div id="mio-frame-slot" class="${styleTable.oneTimeStyle('mio-frame-slot', () => `
+                    position: relative;
+                    width: ${innerW}px;
+                    min-height: ${innerH}px;
+                `)}"></div>
+            </div>
+        </div>`;
+
+    const detail = frame.detailWindow;
+
+    // Fallback: detail window missing from the gui — render just the tree panel (previous behavior).
+    if (!detail) {
+        return `<div id="mio-frame" class="${styleTable.oneTimeStyle('mio-frame', () => `
+            display: none;
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            width: ${treeWidth}px;
+            height: ${treeHeight}px;
+            box-sizing: border-box;
+        `)}">
+            ${treePanel(0, 0)}
+        </div>`;
+    }
+
+    // --- Full in-game detail window: left info column (org icon/size/points, aggregated bonuses,
+    // policies), title and the traits/history tabs. We draw it as chrome and overlay the trait tree. ---
+    const detailW = detail.size?.width?._value ?? 1280;
+    const detailH = detail.size?.height?._value ?? 720;
+    const treeAreaX = frame.treeScrollbarWindow?.position?.x?._value ?? 320;
+    const treeAreaY = frame.treeScrollbarWindow?.position?.y?._value ?? 50;
+
+    const chrome = await renderContainerWindow(
+        {
+            ...detail,
+            orientation: toStringAsSymbolIgnoreCase('upper_left'),
+            origo: toStringAsSymbolIgnoreCase('upper_left'),
+        } as HOIPartial<ContainerWindowType>,
+        { size: { width: detailW, height: detailH }, orientation: 'upper_left' },
+        {
+            getSprite: (sprite: string) => getSpriteByGfxName(sprite, gfxFiles),
+            styleTable,
+            ignorePosition: true,
+            onRenderChild: async (type, child) => {
+                if (type === 'containerwindow' && (child.name === detailTreeWindowName || child.name === detailHistoryWindowName)) {
+                    return '';
+                }
+                return undefined;
+            },
+        },
+    );
 
     return `<div id="mio-frame" class="${styleTable.oneTimeStyle('mio-frame', () => `
         display: none;
         position: absolute;
         top: 60px;
         left: 20px;
-        width: ${width}px;
-        height: ${height}px;
-        ${bgImage ? `background-image: url(${bgImage.uri});` : 'background: #1a1a1a;'}
-        background-size: ${width}px ${height}px;
-        background-repeat: no-repeat;
+        width: ${detailW}px;
+        height: ${detailH}px;
         box-sizing: border-box;
     `)}">
-        <div id="mio-frame-scrollbar" class="${styleTable.oneTimeStyle('mio-frame-scrollbar', () => `
-            position: absolute;
-            left: ${scrollX}px;
-            top: ${scrollY}px;
-            width: ${scrollW}px;
-            height: ${scrollH}px;
-            overflow: auto;
-            box-sizing: border-box;
-            padding: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px;
-        `)}">
-            <div id="mio-frame-slot" class="${styleTable.oneTimeStyle('mio-frame-slot', () => `
-                position: relative;
-                width: ${innerW}px;
-                min-height: ${innerH}px;
-            `)}"></div>
-        </div>
+        ${chrome}
+        ${treePanel(treeAreaX, treeAreaY)}
     </div>`;
 }
 

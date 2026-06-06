@@ -1,4 +1,6 @@
-import TelemetryReporter from '@vscode/extension-telemetry';
+declare const EXTENSION_ID: string;
+declare const VERSION: string;
+declare const TelemetryReporter: any;
 
 interface TelemetryReporterInterface {
     sendTelemetryEvent(eventName: string, properties?: {
@@ -43,16 +45,16 @@ export function registerTelemetryReporter() {
     };
 }
 
-export const sendEvent: TelemetryReporter['sendTelemetryEvent'] = (eventName, properties, mesurements) => {
-    telemetryReporter?.sendTelemetryEvent(eventName, properties, mesurements);
+export const sendEvent = (eventName: string, properties?: { [key: string]: string }, measurements?: { [key: string]: number }) => {
+    telemetryReporter?.sendTelemetryEvent(eventName, properties, measurements);
 };
 
-export const sendError: TelemetryReporter['sendTelemetryErrorEvent'] = (eventName, properties, mesurements) => {
-    telemetryReporter?.sendTelemetryErrorEvent(eventName, properties, mesurements);
+export const sendError = (eventName: string, properties?: { [key: string]: string }, measurements?: { [key: string]: number }, errorProps?: string[]) => {
+    telemetryReporter?.sendTelemetryErrorEvent(eventName, properties, measurements, errorProps);
 };
 
-export const sendException: TelemetryReporter['sendTelemetryException'] = (error, properties, mesurements) => {
-    telemetryReporter?.sendTelemetryException(error, properties, mesurements);
+export const sendException = (error: Error, properties?: { [key: string]: string }, measurements?: { [key: string]: number }) => {
+    telemetryReporter?.sendTelemetryException(error, properties, measurements);
 };
 
 export function sendByMessage(message: TelemetryMessage) {

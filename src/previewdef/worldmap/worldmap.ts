@@ -38,11 +38,33 @@ export class WorldMap {
         const webview = this.panel.webview;
         webview.html = this.renderWorldMap(webview);
         webview.onDidReceiveMessage((msg) => this.onMessage(msg));
+        this.panel.onDidChangeViewState(() => this.onViewStateChanged());
+    }
+
+    // The full world map (provinces, states, countries, ...) is 100-300 MB. When the panel is
+    // hidden, release the extension-host copy so it doesn't linger for the whole session. The
+    // webview keeps its own rendered copy (when retainContextWhenHidden is on), so the map is
+    // still shown immediately on return; any further data request reloads from disk on demand.
+    private onViewStateChanged(): void {
+        if (this.panel && !this.panel.visible) {
+            this.releaseMemory();
+        }
+    }
+
+    private releaseMemory(): void {
+        if (this.cachedWorldMap === undefined) {
+            return;
+        }
+        this.cachedWorldMap = undefined;
+        // Dropping the loader lets its cached WorldMapData be garbage collected. A fresh loader
+        // rebuilds from disk on the next request.
+        this.worldMapLoader = new WorldMapLoader();
+        this.worldMapLoader.onProgress(this.progressReporter);
     }
 
     public onDocumentChange = debounceByInput(
         (uri: vscode.Uri) => {
-            if (!this.worldMapDependencies) {
+            if (!this.worldMapDependencies || !this.panel?.visible) {
                 return;
             }
 

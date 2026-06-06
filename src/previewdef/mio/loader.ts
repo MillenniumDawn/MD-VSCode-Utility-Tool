@@ -1,5 +1,5 @@
 import { ContentLoader, LoadResultOD, Dependency, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
-import { parseHoi4File } from "../../hoiformat/hoiparser";
+import { parseHoi4File, resolveScriptVariables } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
 import { uniq, flatten, chain, flatMap } from "lodash";
 import { Mio, getMiosFromFile } from "./schema";
@@ -11,6 +11,10 @@ import { ContainerWindowType, GuiFile, guiFileSchema } from "../../hoiformat/gui
 export interface MioFrame {
     window: HOIPartial<ContainerWindowType>;
     scrollbarWindow: HOIPartial<ContainerWindowType> | undefined;
+    // The full in-game detail window (left info column, tabs, title). Drawn as chrome around the tree.
+    detailWindow: HOIPartial<ContainerWindowType> | undefined;
+    // The detail window's tree area, used to position the trait tree inside the chrome.
+    treeScrollbarWindow: HOIPartial<ContainerWindowType> | undefined;
 }
 
 export interface MioLoaderResult {
@@ -25,6 +29,8 @@ const mioOrgDir = 'common/military_industrial_organization/organizations';
 const genericMio = `${mioOrgDir}/00_generic_organization.txt`;
 const mioDetailGui = 'interface/military_industrial_organization/industrial_organization_detail.gui';
 const mioFrameWindowName = 'industrial_organisation_tree_window';
+const mioDetailWindowName = 'industrial_organisation_detail_window';
+const mioTreeScrollbarWindowName = 'tree_scrollbar_window';
 
 export class MioLoader extends ContentLoader<MioLoaderResult> {
     protected async postLoad(content: string | undefined, dependencies: Dependency[], error: any, session: LoaderSession): Promise<LoadResultOD<MioLoaderResult>> {
@@ -77,7 +83,7 @@ export class MioLoader extends ContentLoader<MioLoaderResult> {
 async function loadMioFrame(): Promise<MioFrame | undefined> {
     try {
         const [buffer, uri] = await readFileFromModOrHOI4(mioDetailGui);
-        const guiNode = parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize('infile', 'In file {0}:\n', uri.toString()));
+        const guiNode = resolveScriptVariables(parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize('infile', 'In file {0}:\n', uri.toString())));
         const guiFile = convertNodeToJson<GuiFile>(guiNode, guiFileSchema);
 
         const findByName = (roots: HOIPartial<ContainerWindowType>[], name: string): HOIPartial<ContainerWindowType> | undefined => {
@@ -118,7 +124,10 @@ async function loadMioFrame(): Promise<MioFrame | undefined> {
         const directChildren = [...(found.containerwindowtype ?? []), ...(found.windowtype ?? [])];
         const scrollbarWindow = directChildren.find(c => c?.name === 'scrollbar_window');
 
-        return { window: found, scrollbarWindow };
+        const detailWindow = findByName(topLevelWindows, mioDetailWindowName);
+        const treeScrollbarWindow = detailWindow ? findByName([detailWindow], mioTreeScrollbarWindowName) : undefined;
+
+        return { window: found, scrollbarWindow, detailWindow, treeScrollbarWindow };
     } catch {
         return undefined;
     }

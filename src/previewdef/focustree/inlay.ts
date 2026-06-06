@@ -1,6 +1,6 @@
 import { GuiFile, guiFileSchema, ContainerWindowType } from "../../hoiformat/gui";
 import { extractConditionValue, extractConditionalExprs, ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
-import { Node, parseHoi4File } from "../../hoiformat/hoiparser";
+import { Node, parseHoi4File, resolveScriptVariables } from "../../hoiformat/hoiparser";
 import { countryScope } from "../../hoiformat/scope";
 import { convertNodeToJson, positionSchema, Position, HOIPartial } from "../../hoiformat/schema";
 import { localize } from "../../util/i18n";
@@ -8,6 +8,8 @@ import type { FocusInlayGfxOption, FocusInlayImageSlot, FocusTreeInlay, FocusTre
 import { listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
 import { getConfiguration } from "../../util/vsccommon";
 import { getSpriteTypes } from "../../hoiformat/spritetype";
+import { getGfxContainerFile } from "../../util/gfxindex";
+import { uniq } from "lodash";
 
 interface ParsedInlayFile {
     inlays: FocusTreeInlay[];
@@ -15,7 +17,10 @@ interface ParsedInlayFile {
 }
 
 const focusInlayWindowsFolder = "common/focus_inlay_windows";
-const scriptedGuiFolder = "interface/scripted_gui";
+// Inlay-referenced scripted GUI windows and their sprites can live anywhere under interface/
+// (e.g. interface/GER_inner_circle_scripted_gui.gui, interface/inner_circle.gfx), not just
+// interface/scripted_gui (which doesn't even exist in vanilla). Scan the whole interface tree.
+const guiInterfaceFolder = "interface";
 
 export async function loadFocusInlayWindows(): Promise<ParsedInlayFile> {
     const files = await listFilesFromModOrHOI4(focusInlayWindowsFolder);
@@ -202,15 +207,27 @@ export async function resolveInlayGuiWindows(inlays: FocusTreeInlay[]): Promise<
     const warnings: FocusWarning[] = [];
     const guiFiles = await listGuiFiles();
     const gfxFiles = await listGuiGfxFiles();
-    const parsedGuiFiles: { file: string; windows: Record<string, HOIPartial<ContainerWindowType>> }[] = [];
+
+    // Only the window names actually referenced by inlays. We parse gui files until all of them
+    // are found, so we don't parse the whole interface tree when a few windows are needed.
+    const unresolved = new Set(inlays.map(i => i.windowName).filter((n): n is string => !!n));
+    const windowByName: Record<string, { file: string; window: HOIPartial<ContainerWindowType> }> = {};
 
     for (const guiFile of guiFiles) {
+        if (unresolved.size === 0) {
+            break;
+        }
         try {
             const [buffer, uri] = await readFileFromModOrHOI4(guiFile);
-            const guiNode = parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize("infile", "In file {0}:\n", uri.toString()));
+            const guiNode = resolveScriptVariables(parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize("infile", "In file {0}:\n", uri.toString())));
             const guiFileData = convertNodeToJson<GuiFile>(guiNode, guiFileSchema);
             const windows = collectContainerWindows(guiFileData);
-            parsedGuiFiles.push({ file: guiFile, windows });
+            for (const name of Object.keys(windows)) {
+                if (unresolved.has(name) && !(name in windowByName)) {
+                    windowByName[name] = { file: guiFile, window: windows[name] };
+                    unresolved.delete(name);
+                }
+            }
         } catch (e) {
         }
     }
@@ -220,7 +237,7 @@ export async function resolveInlayGuiWindows(inlays: FocusTreeInlay[]): Promise<
             continue;
         }
 
-        const matched = parsedGuiFiles.find(gui => gui.windows[inlay.windowName!] !== undefined);
+        const matched = windowByName[inlay.windowName];
         if (!matched) {
             warnings.push({
                 text: localize("TODO", "Can't resolve scripted GUI window {0} for inlay {1}.", inlay.windowName, inlay.id),
@@ -231,7 +248,7 @@ export async function resolveInlayGuiWindows(inlays: FocusTreeInlay[]): Promise<
         }
 
         inlay.guiFile = matched.file;
-        inlay.guiWindow = matched.windows[inlay.windowName];
+        inlay.guiWindow = matched.window;
     }
 
     return { guiFiles, gfxFiles, warnings };
@@ -239,10 +256,10 @@ export async function resolveInlayGuiWindows(inlays: FocusTreeInlay[]): Promise<
 
 async function listGuiFiles(): Promise<string[]> {
     try {
-        const files = await listFilesFromModOrHOI4(scriptedGuiFolder, { recursively: true });
+        const files = await listFilesFromModOrHOI4(guiInterfaceFolder, { recursively: true });
         return files
             .filter(file => file.toLowerCase().endsWith(".gui"))
-            .map(file => `${scriptedGuiFolder}/${file}`.replace(/\/+/g, "/"));
+            .map(file => `${guiInterfaceFolder}/${file}`.replace(/\/+/g, "/"));
     } catch (e) {
         return [];
     }
@@ -250,10 +267,10 @@ async function listGuiFiles(): Promise<string[]> {
 
 async function listGuiGfxFiles(): Promise<string[]> {
     try {
-        const files = await listFilesFromModOrHOI4(scriptedGuiFolder, { recursively: true });
+        const files = await listFilesFromModOrHOI4(guiInterfaceFolder, { recursively: true });
         return files
             .filter(file => file.toLowerCase().endsWith(".gfx"))
-            .map(file => `${scriptedGuiFolder}/${file}`.replace(/\/+/g, "/"));
+            .map(file => `${guiInterfaceFolder}/${file}`.replace(/\/+/g, "/"));
     } catch (e) {
         return [];
     }
@@ -279,6 +296,29 @@ function collectContainerWindowRecursive(containerWindow: HOIPartial<ContainerWi
 }
 
 export async function resolveInlayGfxFiles(inlays: FocusTreeInlay[]): Promise<InlayGfxResolution> {
+    const gfxFileByName: Record<string, string | undefined> = {};
+    const unresolved = new Set<string>();
+    for (const inlay of inlays) {
+        for (const slot of inlay.scriptedImages) {
+            for (const option of slot.gfxOptions) {
+                unresolved.add(option.gfxName);
+            }
+        }
+    }
+
+    // 1. Cheap lookups via the global gfx index (when the gfxIndex feature is enabled). This also
+    //    covers sprites outside interface/ (e.g. portraits under gfx/).
+    for (const name of [...unresolved]) {
+        const fromIndex = await getGfxContainerFile(name);
+        if (fromIndex) {
+            gfxFileByName[name] = fromIndex;
+            unresolved.delete(name);
+        }
+    }
+
+    // 2. Parse .gfx files for the rest: user-configured roots first, then the whole interface tree
+    //    (where inlay sprites such as inner_circle.gfx / _leader_portraits.gfx live). Stop once
+    //    every needed sprite is resolved so we don't parse the entire tree unnecessarily.
     const roots = (getConfiguration().inlayWindowGfxRoots ?? []).filter((root): root is string => !!root && root.trim() !== "");
     const candidateFiles: string[] = [];
     for (const root of roots) {
@@ -292,22 +332,26 @@ export async function resolveInlayGfxFiles(inlays: FocusTreeInlay[]): Promise<In
         } catch (e) {
         }
     }
+    candidateFiles.push(...await listGuiGfxFiles());
 
-    const gfxFileByName: Record<string, string | undefined> = {};
-    const resolvedFiles = new Set<string>();
-    for (const candidateFile of candidateFiles) {
+    for (const candidateFile of uniq(candidateFiles)) {
+        if (unresolved.size === 0) {
+            break;
+        }
         try {
             const [buffer, uri] = await readFileFromModOrHOI4(candidateFile);
-            const spriteTypes = getSpriteTypes(parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize("infile", "In file {0}:\n", uri.toString())));
+            const spriteTypes = getSpriteTypes(parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize("infile", "In file {0}:\n", uri.toString()), { keepTokens: false }));
             for (const spriteType of spriteTypes) {
-                if (!(spriteType.name in gfxFileByName)) {
+                if (unresolved.has(spriteType.name) && !(spriteType.name in gfxFileByName)) {
                     gfxFileByName[spriteType.name] = candidateFile;
+                    unresolved.delete(spriteType.name);
                 }
             }
         } catch (e) {
         }
     }
 
+    const resolvedFiles = new Set<string>();
     for (const inlay of inlays) {
         for (const slot of inlay.scriptedImages) {
             for (const option of slot.gfxOptions) {

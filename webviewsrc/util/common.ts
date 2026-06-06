@@ -117,68 +117,70 @@ export function subscribeRefreshButton() {
     });
 }
 
-if (window.previewedFileUri) {
-    setState({ uri: window.previewedFileUri });
-}
+export function initCommon(): void {
+    if ((window as any).previewedFileUri) {
+        setState({ uri: (window as any).previewedFileUri });
+    }
 
-window.addEventListener('load', function() {
-    // Disable selection
-    document.body.style.userSelect = 'none';
+    window.addEventListener('load', function() {
+        // Disable selection
+        document.body.style.userSelect = 'none';
 
-    // Save scroll position
-    (function() {
-        scrollToState();
+        // Save scroll position
+        (function() {
+            scrollToState();
 
-        window.addEventListener('scroll', function() {
-            const state = getState();
-            state.xOffset = window.pageXOffset;
-            state.yOffset = window.pageYOffset;
-            vscode.setState(state);
-        });
-    })();
+            window.addEventListener('scroll', function() {
+                const state = getState();
+                state.xOffset = window.pageXOffset;
+                state.yOffset = window.pageYOffset;
+                vscode.setState(state);
+            });
+        })();
 
-    // Drag to scroll
-    (function() {
-        // Dragger should be like this: <div id="dragger" style="width:100vw;height:100vh;position:fixed;left:0;top:0;"></div>
-        const dragger = document.getElementById("dragger");
-        if (!dragger) {
-            return;
-        }
-
-        dragger.addEventListener('contextmenu', event => event.preventDefault());
-
-        let mdx = -1;
-        let mdy = -1;
-        let pressed = false;
-        dragger.addEventListener('mousedown', function(e) {
-            mdx = e.pageX;
-            mdy = e.pageY;
-            pressed = true;
-        });
-
-        document.body.addEventListener('mousemove', function(e) {
-            if (pressed) {
-                window.scroll(window.pageXOffset - e.pageX + mdx, window.pageYOffset - e.pageY + mdy);
+        // Drag to scroll
+        (function() {
+            // Dragger should be like this: <div id="dragger" style="width:100vw;height:100vh;position:fixed;left:0;top:0;"></div>
+            const dragger = document.getElementById("dragger");
+            if (!dragger) {
+                return;
             }
-        });
 
-        document.body.addEventListener('mouseup', function() {
-            pressed = false;
-        });
+            dragger.addEventListener('contextmenu', event => event.preventDefault());
 
-        document.body.addEventListener('mouseenter', function(e) {
-            if (pressed && (e.buttons & 1) !== 1) {
+            let mdx = -1;
+            let mdy = -1;
+            let pressed = false;
+            dragger.addEventListener('mousedown', function(e) {
+                mdx = e.pageX;
+                mdy = e.pageY;
+                pressed = true;
+            });
+
+            document.body.addEventListener('mousemove', function(e) {
+                if (pressed) {
+                    window.scroll(window.pageXOffset - e.pageX + mdx, window.pageYOffset - e.pageY + mdy);
+                }
+            });
+
+            document.body.addEventListener('mouseup', function() {
                 pressed = false;
-            }
+            });
+
+            document.body.addEventListener('mouseenter', function(e) {
+                if (pressed && (e.buttons & 1) !== 1) {
+                    pressed = false;
+                }
+            });
+        })();
+
+        subscribeNavigators();
+
+        enableDropdowns();
+        enableCheckboxes();
+
+        numDropDownOpened$.subscribe(num => {
+            shouldDisableZoom = num > 0;
         });
-    })();
-
-    subscribeNavigators();
-
-    enableDropdowns();
-    enableCheckboxes();
-
-    numDropDownOpened$.subscribe(num => {
-        shouldDisableZoom = num > 0;
     });
-});
+}

@@ -2,7 +2,7 @@
 	"name": "hearts-of-iron-iv-utilities-2026",
 	"displayName": "%hoi4modutilities.displayName%",
 	"description": "Utilities for Heart of Iron IV mods developers",
-	"version": "1.1.3",
+	"version": "1.1.5",
 	"author": "TheGeneral",
 	"publisher": "MilleniumDawnModTeam",
 	"icon": "icon.png",
@@ -111,6 +111,18 @@
 							"type": "string"
 						},
 						"description": "Workspace/mod-relative root folders to scan recursively for .gfx files used by the technology tree preview (e.g. \"interface/technologies\")."
+					},
+					"mdHoi4Utilities.technologyShowId": {
+						"title": "Technology: show raw id instead of localisation",
+						"type": "boolean",
+						"default": false,
+						"description": "Show each technology's raw id (e.g. \"infantry_weapons1\") in the technology tree preview instead of its localised name. Applies to every tech, both those with their own localisation and those that fall back to the name of the equipment they unlock. Has no effect unless the localisation index is on."
+					},
+					"mdHoi4Utilities.worldMapRetainContextWhenHidden": {
+						"title": "World map: keep webview in memory when hidden",
+						"type": "boolean",
+						"default": true,
+						"description": "Keep the world map preview's webview loaded while the tab is hidden (faster to switch back, uses more memory). Turn off to free the webview when hidden and reload it on return, lowering memory use on large maps. The extension-host copy of the map is always released while hidden."
 					},
 					"mdHoi4Utilities.useConditionInFocus": {
 						"title": "%hoi4modutilities.useConditionInFocus.title%",
@@ -246,10 +258,12 @@
 		"webpack-dev": "webpack --mode development --watch --progress",
 		"web-ext": "serve --cors -l 5000 --ssl-cert \"%CERT_PATH%/localhost.cer\" --ssl-key \"%CERT_PATH%/localhost.key\"",
 		"compile-ts": "tsc -d -p ./ --module commonjs",
+		"compile-test": "tsc -p ./tsconfig.test.json",
 		"lint": "eslint src --ext ts",
 		"watch": "tsc -watch -p ./",
-		"pretest": "npm run compile-ts && npm run lint",
-		"test": "mocha ./out/test/**/*.test.js",
+		"compile-test-webview": "tsc -p ./tsconfig.webview.test.json",
+		"pretest": "npm run compile-test && npm run compile-test-webview",
+		"test": "mocha './out-test/test/**/*.test.js' './out-test-webview/src/test/webview/**/*.test.js'",
 		"pretest-ui": "npm run compile-ts && npm run lint",
 		"test-ui": "node ./out/test-ui/runTest.js",
 		"clean": "rimraf dist out static",
@@ -263,6 +277,7 @@
 		"@types/adm-zip": "^0.4.33",
 		"@types/copy-webpack-plugin": "^8.0.0",
 		"@types/js-yaml": "^3.12.5",
+		"@types/jsdom": "^28.0.3",
 		"@types/lodash": "^4.14.149",
 		"@types/mocha": "^7.0.2",
 		"@types/node": "^13.11.0",
@@ -272,6 +287,7 @@
 		"@vscode/test-electron": "^2.5.2",
 		"copy-webpack-plugin": "^9.1.0",
 		"eslint": "^10.1.0",
+		"jsdom": "^29.1.1",
 		"mocha": "^11.1.0",
 		"raw-loader": "^4.0.1",
 		"rimraf": "^6.1.3",

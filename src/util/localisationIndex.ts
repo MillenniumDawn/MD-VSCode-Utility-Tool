@@ -1,13 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as yaml from 'js-yaml';
 import { debounceByInput } from './common';
 import { localisationIndex } from './featureflags';
 import { getFilePathFromModOrHOI4, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from './fileloader';
 import { localize } from './i18n';
 import { sendEvent } from './telemetry';
 import { Logger } from "./logger";
-import { YAMLException } from "js-yaml";
 import { ConfigurationKey } from '../constants';
 import { loadCacheManifest, loadCacheData, saveCacheManifest, saveCacheData, getFileMtimes, computeStaleFiles, IndexTimer } from './indexCache';
 
@@ -239,8 +237,8 @@ async function fillLocalisationItems(localisationFile: string, localisationIndex
 
         const failureMessage = localize('localisationIndex.parseFailure','parsing failed! Please check if the file has issues!');
 
-        if (e instanceof YAMLException) {
-            Logger.error(`${baseMessage} ${localisationFile} ${failureMessage}\n${e.message}`);
+        if ((e as { name?: string } | null)?.name === 'YAMLException') {
+            Logger.error(`${baseMessage} ${localisationFile} ${failureMessage}\n${(e as Error).message}`);
         } else {
             Logger.error(`${baseMessage} ${localisationFile} ${failureMessage}`);
         }
@@ -279,6 +277,9 @@ function preprocessYamlContent(fileContent: string): string {
 function parseLocalisationFile(fileContent: string): Record<string, Record<string, string>> {
     const result: Record<string, Record<string, string>> = {};
 
+    // Required lazily so js-yaml only loads when the localisation index is actually built (it is
+    // off by default), instead of at activation.
+    const yaml = require('js-yaml');
     const parsed = yaml.load(fileContent, {schema: yaml.JSON_SCHEMA, json: true}) as Record<string, any>;
 
     for (const langKey in parsed) {

@@ -1,0 +1,27 @@
+{
+	"compilerOptions": {
+		"module": "commonjs",
+		"moduleResolution": "node",
+		"ignoreDeprecations": "6.0",
+		"target": "es2020",
+		"lib": [
+			"es2020",
+			"DOM"
+		],
+		"outDir": "out-test-webview",
+		"rootDir": ".",
+		"sourceMap": true,
+		"strict": true,
+		"noFallthroughCasesInSwitch": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"types": [
+			"node",
+			"mocha"
+		]
+	},
+	"include": [
+    "src/def.d.ts",
+    "src/test/webview/**/*.ts",
+	]
+}

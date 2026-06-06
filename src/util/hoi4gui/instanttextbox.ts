@@ -6,6 +6,9 @@ import { getLocalisedTextQuick } from "../localisationIndex";
 import { localisationIndex } from "../featureflags";
 
 export interface RenderInstantTextBoxOptions extends RenderCommonOptions {
+    // Show textbox.text verbatim instead of looking it up in the localisation index. Used by the
+    // technology tree to render raw tech ids when the user prefers ids over localised names.
+    rawText?: boolean;
 }
 
 export async function renderInstantTextBox(textbox: HOIPartial<InstantTextBoxType>, parentInfo: ParentInfo, options: RenderInstantTextBoxOptions): Promise<string> {
@@ -41,6 +44,6 @@ export async function renderInstantTextBox(textbox: HOIPartial<InstantTextBoxTyp
         `)}
         ${options.enableNavigator ? 'navigator navigator-highlight' : ''}
     ">
-        ${htmlEscape(localisationIndex ? (await getLocalisedTextQuick(textbox.text) ?? ' ') : (textbox.text ?? ''))}
+        ${htmlEscape(localisationIndex && !options.rawText ? (await getLocalisedTextQuick(textbox.text) ?? ' ') : (textbox.text ?? ''))}
     </div>`;
 }

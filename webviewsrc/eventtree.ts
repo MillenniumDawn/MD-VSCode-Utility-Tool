@@ -1,4 +1,6 @@
-import { tryRun, enableZoom } from "./util/common";
+import { tryRun, enableZoom, initCommon } from "./util/common";
+
+initCommon();
 
 window.addEventListener('load', tryRun(async function() {
     // Zoom

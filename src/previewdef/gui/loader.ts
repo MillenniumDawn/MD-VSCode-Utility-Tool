@@ -1,6 +1,6 @@
 import { chain, flatMap } from "lodash";
 import { GuiFile, guiFileSchema } from "../../hoiformat/gui";
-import { parseHoi4File } from "../../hoiformat/hoiparser";
+import { parseHoi4File, resolveScriptVariables } from "../../hoiformat/hoiparser";
 import { convertNodeToJson, HOIPartial } from "../../hoiformat/schema";
 import { localize } from "../../util/i18n";
 import { ContentLoader, Dependency, LoaderSession, LoadResultOD, mergeInLoadResult } from "../../util/loader/loader";
@@ -21,7 +21,7 @@ export class GuiFileLoader extends ContentLoader<GuiFileLoaderResult> {
 
         const guiDepFiles = await this.loaderDependencies.loadMultiple(guiDependencies, session, GuiFileLoader);
 
-        const guiFile = convertNodeToJson<GuiFile>(parseHoi4File(content, localize('infile', 'In file {0}:\n', this.file)), guiFileSchema);
+        const guiFile = convertNodeToJson<GuiFile>(resolveScriptVariables(parseHoi4File(content, localize('infile', 'In file {0}:\n', this.file))), guiFileSchema);
 
         return {
             result: {
