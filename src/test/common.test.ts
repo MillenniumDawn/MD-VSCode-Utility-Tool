@@ -164,9 +164,10 @@ describe('util/common', function () {
     describe('debounceByInput', function () {
         // The debouncer uses lodash debounce under the hood, which schedules via
         // setTimeout(0) when wait is 0. We have to wait for at least one macrotask
-        // tick before the wrapped function fires.
+        // tick before the wrapped function fires. The margin is generous so the
+        // test stays reliable under heavy CI load.
         function nextTick(): Promise<void> {
-            return new Promise(resolve => setTimeout(resolve, 10));
+            return new Promise(resolve => setTimeout(resolve, 50));
         }
 
         it('coalesces calls with the same key into a single deferred call', async function () {
