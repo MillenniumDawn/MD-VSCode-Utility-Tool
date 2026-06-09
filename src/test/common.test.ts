@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { hsvToRgb, slice, clipNumber, withTimeout, mapLimit, forceError, arrayToMap, TimeoutError, UserError } from '../util/common';
+import { hsvToRgb, slice, clipNumber, withTimeout, mapLimit, forceError, arrayToMap, TimeoutError, UserError, randomString, debounceByInput } from '../util/common';
 
 describe('util/common', function () {
     describe('arrayToMap', function () {
@@ -131,6 +131,77 @@ describe('util/common', function () {
         it('wraps plain objects', function () {
             const err = forceError({ foo: 1 });
             assert.ok(err instanceof Error);
+        });
+    });
+
+    describe('randomString', function () {
+        it('returns a string of the requested length', function () {
+            assert.strictEqual(randomString(0).length, 0);
+            assert.strictEqual(randomString(16).length, 16);
+            assert.strictEqual(randomString(64).length, 64);
+        });
+
+        it('uses the provided charset when one is supplied', function () {
+            const s = randomString(8, 'ab');
+            assert.ok(/^[ab]{8}$/.test(s), `expected only a/b characters, got ${s}`);
+        });
+
+        it('produces different strings on consecutive calls', function () {
+            // A 32-char default charset has 62^32 possible values; the chance of collision is
+            // astronomical, but the test is here to guard against accidentally returning a
+            // constant.
+            assert.notStrictEqual(randomString(32), randomString(32));
+        });
+    });
+
+    describe('arrayToMap', function () {
+        it('throws when the key is neither string nor number', function () {
+            const items = [{ key: { foo: 1 } }];
+            assert.throws(() => arrayToMap(items, 'key' as any));
+        });
+    });
+
+    describe('debounceByInput', function () {
+        // The debouncer uses lodash debounce under the hood, which schedules via
+        // setTimeout(0) when wait is 0. We have to wait for at least one macrotask
+        // tick before the wrapped function fires.
+        function nextTick(): Promise<void> {
+            return new Promise(resolve => setTimeout(resolve, 10));
+        }
+
+        it('coalesces calls with the same key into a single deferred call', async function () {
+            let calls = 0;
+            const fn = debounceByInput(
+                (...args: number[]) => { calls++; return args.reduce((a, b) => a + b, 0); },
+                (...args: number[]) => args.join(','),
+                0,
+            );
+
+            fn(1, 2);
+            fn(1, 2);
+            await nextTick();
+
+            assert.strictEqual(calls, 1);
+
+            // After the debounce fires, the cache is cleared so a new call with the
+            // same key runs again.
+            fn(1, 2);
+            await nextTick();
+            assert.strictEqual(calls, 2);
+        });
+
+        it('runs separate debouncers for different keys', async function () {
+            let calls = 0;
+            const fn = debounceByInput(
+                (v: number) => { calls++; return v * 2; },
+                (v: number) => String(v),
+                0,
+            );
+
+            fn(1);
+            fn(2);
+            await nextTick();
+            assert.strictEqual(calls, 2);
         });
     });
 });

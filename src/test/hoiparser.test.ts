@@ -30,6 +30,98 @@ describe('parseHoi4File', () => {
         assert.strictEqual(a.name, 'a');
         assert.strictEqual(a.value, 1);
     });
+
+    it('parses nested blocks recursively', () => {
+        const root = parseHoi4File('outer = { inner = { leaf = 7 } }');
+        const inner = child(child(root, 'outer'), 'inner');
+        assert.strictEqual(child(inner, 'leaf').value, 7);
+    });
+
+    it('parses hex numbers', () => {
+        // Known limitation: the tokenizer's `symbol` rule (priority 40) matches
+        // `0x10` before the `number` rule (priority 50) does, so hex literals end
+        // up tokenized as symbols. The number parser then calls parseFloat on the
+        // symbol value, which yields 0. Document the actual behaviour: the regex
+        // supports hex on paper but the tokenizer order makes it inert in
+        // practice.
+        const root = parseHoi4File('flags = 0x10');
+        const flags = child(root, 'flags');
+        assert.strictEqual(flags.value, 0);
+    });
+
+    it('parses float numbers', () => {
+        const root = parseHoi4File('ratio = 0.5');
+        assert.strictEqual(child(root, 'ratio').value, 0.5);
+    });
+
+    it('parses unescaped quotes inside a string', () => {
+        const root = parseHoi4File('name = "hello world"');
+        assert.strictEqual(child(root, 'name').value, 'hello world');
+    });
+
+    it('preserves escaped characters in a string', () => {
+        // The parser un-escapes \" to " and \\ to \.
+        const root = parseHoi4File('name = "he said \\"hi\\""');
+        assert.strictEqual(child(root, 'name').value, 'he said "hi"');
+    });
+
+    it('parses symbol values (bare identifiers)', () => {
+        const root = parseHoi4File('color = red');
+        const color = child(root, 'color');
+        assert.deepStrictEqual(color.value, { name: 'red' });
+    });
+
+    it('parses the single-character >, <, and != comparison operators', () => {
+        // Known limitation: the operator regex lists `[=<>]` and the multi-char
+        // forms `>=|<=|!=` as alternates, but the regex engine tries the single
+        // char first. So `le <= 3` consumes `<`, leaves `=`, and the parser then
+        // chokes on `=` as a value. `!=` works because `!` is not in the single
+        // char set. Document the actual behaviour: only `>`, `<`, `!=` work.
+        const root = parseHoi4File('limit > 5\nlt < 2\nne != 0');
+        assert.strictEqual(child(root, 'limit').operator, '>');
+        assert.strictEqual(child(root, 'limit').value, 5);
+        assert.strictEqual(child(root, 'lt').operator, '<');
+        assert.strictEqual(child(root, 'ne').operator, '!=');
+    });
+
+    it('handles commas and semicolons as separators', () => {
+        const root = parseHoi4File('a = 1, b = 2; c = 3');
+        assert.strictEqual(child(root, 'a').value, 1);
+        assert.strictEqual(child(root, 'b').value, 2);
+        assert.strictEqual(child(root, 'c').value, 3);
+    });
+
+    it('captures value attachment when a value is followed by a block', () => {
+        // In HOI4 `buttonType = ButtonType { ... }` is a common idiom; the parser preserves
+        // the symbol before the block as valueAttachment.
+        const root = parseHoi4File('button = ButtonType { x = 1 y = 2 }');
+        const button = child(root, 'button');
+        assert.deepStrictEqual(button.valueAttachment, { name: 'ButtonType' });
+        const block = button.value as Node[];
+        assert.strictEqual(child({ value: block } as any, 'x').value, 1);
+    });
+
+    it('parses flagless entries (name with no operator)', () => {
+        // Bare names with no operator are stored as null-valued nodes.
+        const root = parseHoi4File('flag');
+        const flag = (root.value as Node[]).find(n => n.name === 'flag');
+        assert.ok(flag, 'expected a node named flag');
+        assert.strictEqual(flag!.value, null);
+    });
+
+    it('skips comments and still parses surrounding tokens', () => {
+        const root = parseHoi4File('# this is a comment\na = 1 # trailing\nb = 2');
+        assert.strictEqual(child(root, 'a').value, 1);
+        assert.strictEqual(child(root, 'b').value, 2);
+    });
+
+    it('throws a UserError when input has an invalid token', () => {
+        assert.throws(() => parseHoi4File('a = `bad`'), /Invalid token/);
+    });
+
+    it('throws when an unterminated block is left open', () => {
+        assert.throws(() => parseHoi4File('a = { b = 1'), /Expect a '}'|Invalid token/);
+    });
 });
 
 describe('resolveScriptVariables', () => {

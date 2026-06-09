@@ -15,6 +15,10 @@ static/
 
 # Compiled TypeScript output
 out/
+# i18n is source-only at runtime -- tsc emits en.js when test compilation
+# pulls i18n/en.ts in via imports. Ignore the JS+sourcemap siblings.
+i18n/*.js
+i18n/*.js.map
 
 # Unit test build output (tsconfig.test.json / tsconfig.webview.test.json)
 out-test/
