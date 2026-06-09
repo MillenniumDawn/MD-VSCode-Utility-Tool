@@ -28,8 +28,9 @@ function buildStub() {
         parse(v: string) {
             return { fsPath: v, path: v, scheme: 'file', toString: () => v };
         },
-        joinPath(base: any) {
-            const fsPath = (base && base.fsPath) || '';
+        joinPath(base: any, ...pathSegments: string[]) {
+            const basePath = (base && base.fsPath) || '';
+            const fsPath = [basePath, ...pathSegments].join('/').replace(/\\/g, '/');
             return { fsPath, path: '/' + fsPath, scheme: 'file', toString: () => 'file://' + fsPath };
         },
     };

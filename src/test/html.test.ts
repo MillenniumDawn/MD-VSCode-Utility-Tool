@@ -20,7 +20,7 @@ describe('util/html', () => {
         it('escapes newlines and spaces', () => {
             // The function encodes every space and newline, which is unusual for HTML, but is
             // the project's actual contract: callers feed it pre-trimmed text.
-            assert.strictEqual(htmlEscape('a\nb'), 'a&#13;b');
+            assert.strictEqual(htmlEscape('a\nb'), 'a&#10;b');
             assert.strictEqual(htmlEscape('a b'), 'a&nbsp;b');
         });
 
