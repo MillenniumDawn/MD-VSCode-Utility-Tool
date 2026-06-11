@@ -3,7 +3,7 @@ import { ddsToPng, tgaToPng } from './util/image/converter';
 import { PNG } from 'pngjs';
 import { localize } from './util/i18n';
 import { DDS } from './util/image/dds';
-import { html, htmlEscape } from './util/html';
+import { html, htmlEscape, loadingShellHtml } from './util/html';
 import { StyleTable } from './util/styletable';
 import { sendEvent } from './util/telemetry';
 import { forceError } from './util/common';
@@ -18,6 +18,10 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
     public async resolveCustomEditor(document: vscode.CustomDocument, webviewPanel: vscode.WebviewPanel, token: vscode.CancellationToken): Promise<void> {
         try {
             this.onOpen();
+
+            // Show the shared loading spinner while the (potentially large) texture is read
+            // and decoded. It is replaced by the rendered image as soon as decoding finishes.
+            webviewPanel.webview.html = loadingShellHtml();
 
             const buffer = await Promise.race([
                 readFile(document.uri),

@@ -1,3 +1,11 @@
+v1.1.8
+
+  Functionality:
+  - [ Previewer ] The animated loading spinner that the focus tree preview showed while building is now a shared, standard part of every preview. While a technology tree, MIO, event, GUI or GFX preview is being built, the panel shows the same centered spinner with a status line instead of the previous plain "Loading..." text. The DDS and TGA image viewers also show it while a (potentially large) texture is read and decoded, replacing it with the rendered image once decoding finishes. The shell still listens for progress updates, so previewers that report progress (the focus tree) keep showing their live message and counter. The spinner markup lives in a single `loadingShellHtml` helper reused by `PreviewBase` and the image viewers, removing the duplicated copy that previously only existed in the focus tree preview.
+
+  Bugfixes:
+  - [ Build ] Fixed the packaged extension failing to activate in production with `ReferenceError: TelemetryReporter is not defined`, which left every preview command unregistered ("command 'mdhoi4utilities.preview' not found") and the output channel empty. The real `import TelemetryReporter from '@vscode/extension-telemetry'` had been replaced by a `declare const` global that nothing supplied: `EXTENSION_ID`/`VERSION` survived because the webpack DefinePlugin inlines them as string literals, but the reporter class did not, so the production bundle referenced an undefined global. Development builds were unaffected because they use the in-process `DevTelemetryReporter`. Restoring the import lets webpack bundle the class again.
+
 v1.1.7
 
   Functionality:

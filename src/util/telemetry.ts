@@ -1,6 +1,7 @@
+import TelemetryReporter from '@vscode/extension-telemetry';
+
 declare const EXTENSION_ID: string;
 declare const VERSION: string;
-declare const TelemetryReporter: any;
 
 interface TelemetryReporterInterface {
     sendTelemetryEvent(eventName: string, properties?: {

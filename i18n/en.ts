@@ -91,6 +91,7 @@ const internalTable = /* SOT Do not remove this comment */{
     "preview.cantfinddoc": "Can't find opened document {0}.",
     "preview.cantpreviewfile": "Can't preview this file.\nValid types: {0}.",
     "preview.failedtoopen": "Failed to open file \"{0}\": {1}.",
+    "preview.loading": "Loading preview...",
     "preview.mustopenafolder": "Must open a folder before opening \"{0}\".",
     "preview.noactivedoc": "No active document.",
     "preview.selectafolder": "Select a folder to copy \"{0}\"",

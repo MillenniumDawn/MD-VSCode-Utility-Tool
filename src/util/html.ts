@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { contextContainer } from '../context';
 import { StyleTable } from './styletable';
 import { randomString } from './common';
+import { localize } from './i18n';
 
 export interface DynamicScript {
     content: string;
@@ -80,6 +81,73 @@ export function html(webview: vscode.Webview, body: string, scripts: (string | D
     <body>${body.replace(/\s\s+/g, ' ')}</body>
 </html>
 `;
+}
+
+/**
+ * Standalone loading shell shown in a preview webview while its content is being
+ * built. Renders a centered spinner with a status line that listens for `progress`
+ * messages (`{ type: 'progress', message, current, total }`) so previewers that
+ * report progress can update the text and counter; previewers that don't simply
+ * keep the initial message while the spinner animates.
+ *
+ * This is a self-contained HTML document assigned directly to `webview.html`
+ * (not routed through `html()`), so inline <style>/<script> are used without a CSP.
+ */
+export function loadingShellHtml(message?: string): string {
+    const initialText = htmlEscape(message ?? localize('preview.loading', 'Loading preview...'));
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    html, body { margin: 0; padding: 0; height: 100%; background: var(--vscode-editor-background); }
+    .preview-loading {
+        position: fixed; inset: 0;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 16px;
+        font: 13px var(--vscode-font-family);
+        color: var(--vscode-foreground);
+    }
+    .preview-spinner {
+        width: 32px; height: 32px;
+        border-radius: 50%;
+        border: 3px solid var(--vscode-progressBar-background, var(--vscode-foreground, #888));
+        border-top-color: transparent;
+        animation: preview-spin 0.9s linear infinite;
+    }
+    .preview-status { opacity: 0.85; text-align: center; max-width: 80%; }
+    .preview-counter { opacity: 0.6; margin-left: 6px; font-variant-numeric: tabular-nums; }
+    @keyframes preview-spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="preview-loading" role="status" aria-live="polite">
+    <div class="preview-spinner" aria-hidden="true"></div>
+    <div class="preview-status"><span id="loading-message">${initialText}</span><span id="loading-counter" class="preview-counter"></span></div>
+</div>
+<script>
+(function () {
+    var msgEl = document.getElementById('loading-message');
+    var counterEl = document.getElementById('loading-counter');
+    window.addEventListener('message', function (event) {
+        var data = event.data;
+        if (!data || data.type !== 'progress') return;
+        if (typeof data.message === 'string' && msgEl) {
+            msgEl.textContent = data.message;
+        }
+        if (counterEl) {
+            if (typeof data.current === 'number' && typeof data.total === 'number' && data.total > 0) {
+                counterEl.textContent = '(' + data.current + '/' + data.total + ')';
+            } else {
+                counterEl.textContent = '';
+            }
+        }
+    });
+})();
+</script>
+</body>
+</html>`;
 }
 
 export function htmlEscape(unsafe: string): string {

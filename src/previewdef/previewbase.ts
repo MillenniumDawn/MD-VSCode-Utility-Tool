@@ -7,6 +7,7 @@ import { getFilePathFromMod, getHoiOpenedFileOriginalUri, readFileFromModOrHOI4 
 import { mkdirs, writeFile } from '../util/vsccommon';
 import { sendByMessage } from '../util/telemetry';
 import { forceError } from '../util/common';
+import { loadingShellHtml } from '../util/html';
 
 export abstract class PreviewBase {
     private cachedDependencies: string[] | undefined = undefined;
@@ -62,7 +63,7 @@ export abstract class PreviewBase {
     }
 
     protected getLoadingShellHtml(): string {
-        return localize('loading', 'Loading...');
+        return loadingShellHtml(localize('preview.loading', 'Loading preview...'));
     }
 
     protected registerEvents(panel: vscode.WebviewPanel): void {
