@@ -39,8 +39,8 @@ export class TopBar extends Subscriber {
         this.addSubscription(this.warningFilter = new DivDropdown(document.getElementById('warningfilter') as HTMLDivElement, true));
         this.addSubscription(this.display = new DivDropdown(document.getElementById('display') as HTMLDivElement, true));
 
-        this.viewMode$ = toBehaviorSubject(document.getElementById('viewmode') as HTMLSelectElement, state.viewMode ?? 'province');
-        this.colorSet$ = toBehaviorSubject(document.getElementById('colorset') as HTMLSelectElement, state.colorSet ?? 'provinceid');
+        this.viewMode$ = toBehaviorSubject<ViewMode>(document.getElementById('viewmode') as HTMLSelectElement, state.viewMode ?? 'province');
+        this.colorSet$ = toBehaviorSubject<ColorSet>(document.getElementById('colorset') as HTMLSelectElement, state.colorSet ?? 'provinceid');
         this.hoverProvinceId$ = new BehaviorSubject<number | undefined>(undefined);
         this.selectedProvinceId$ = new BehaviorSubject<number | undefined>(state.selectedProvinceId ?? undefined);
         this.hoverStateId$ = new BehaviorSubject<number | undefined>(undefined);
@@ -166,7 +166,7 @@ export class TopBar extends Subscriber {
             if (selected) {
                 const state = this.loader.worldMap.getStateById(selected);
                 if (state) {
-                    vscode.postMessage<WorldMapMessage>({ command: 'openfile', type: 'state', file: state.file, start: state.token?.start, end: state.token?.end });
+                    vscode.postMessage({ command: 'openfile', type: 'state', file: state.file, start: state.token?.start, end: state.token?.end } as WorldMapMessage);
                 }
             }
         } else if (this.viewMode$.value === 'strategicregion') {
@@ -174,8 +174,8 @@ export class TopBar extends Subscriber {
             if (selected) {
                 const strategicRegion = this.loader.worldMap.getStrategicRegionById(selected);
                 if (strategicRegion) {
-                    vscode.postMessage<WorldMapMessage>({ command: 'openfile', type: 'strategicregion', file: strategicRegion.file,
-                        start: strategicRegion.token?.start, end: strategicRegion.token?.end });
+                    vscode.postMessage({ command: 'openfile', type: 'strategicregion', file: strategicRegion.file,
+                        start: strategicRegion.token?.start, end: strategicRegion.token?.end } as WorldMapMessage);
                 }
             }
         } else if (this.viewMode$.value === 'supplyarea') {
@@ -183,8 +183,8 @@ export class TopBar extends Subscriber {
             if (selected) {
                 const supplyArea = this.loader.worldMap.getSupplyAreaById(selected);
                 if (supplyArea) {
-                    vscode.postMessage<WorldMapMessage>({ command: 'openfile', type: 'supplyarea', file: supplyArea.file,
-                        start: supplyArea.token?.start, end: supplyArea.token?.end });
+                    vscode.postMessage({ command: 'openfile', type: 'supplyarea', file: supplyArea.file,
+                        start: supplyArea.token?.start, end: supplyArea.token?.end } as WorldMapMessage);
                 }
             }
         }

@@ -46,8 +46,14 @@ export function activate(context: vscode.ExtensionContext) {
 
     if (process.env.NODE_ENV !== 'production') {
         vscode.commands.registerCommand(Commands.Test, () => {
-            const debugModule = require('./util/debug.shouldignore');
-            debugModule.testCommand();
+            try {
+                const debugModuleName = 'debug.shouldignore';
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const debugModule = require(/* webpackInclude: /\.shouldignore$/ */ './util/' + debugModuleName);
+                debugModule.testCommand();
+            } catch {
+                // dev-only debug helper is git-ignored and may be absent
+            }
         });
 
         setVscodeContext(ContextName.Hoi4MUInDev, true);

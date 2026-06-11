@@ -1,3 +1,9 @@
+v1.1.7
+
+  Bugfixes:
+  - [ Build ] The webpack/extension build pulled the entire `src/test` tree into the TypeScript program, so the preview build flooded with hundreds of `TS2593: Cannot find name 'it'/'describe'/'beforeEach'` errors because the main tsconfig does not load the Mocha types. The test sources are now excluded from the extension build (they keep compiling through their own tsconfig.test.json / tsconfig.webview.test.json), so the preview compiles cleanly.
+
+
 v1.1.6
 
   Functionality:
