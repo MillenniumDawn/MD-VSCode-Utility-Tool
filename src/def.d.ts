@@ -13,7 +13,6 @@ declare module 'vscode' {
             readonly previewLocalisation: 'Brazilian Portuguese' | 'English' | 'French' | 'German' | 'Japanese' | 'Polish' | 'Russian' | 'Simplified Chinese' | 'Spanish';
             readonly inlayWindowGfxRoots: string[];
             readonly technologyGfxRoots: string[];
-            readonly technologyShowId: boolean;
             readonly worldMapRetainContextWhenHidden: boolean;
         };
     }

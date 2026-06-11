@@ -12,7 +12,6 @@ export let eventTreePreview = getConfiguration().eventTreePreview;
 export let sharedFocusIndex = getConfiguration().sharedFocusIndex;
 export let gfxIndex = getConfiguration().gfxIndex;
 export let localisationIndex = getConfiguration().localisationIndex;
-export let technologyShowId = getConfiguration().technologyShowId;
 
 export function refreshFeatureFlags(): void {
     const config = getConfiguration();
@@ -21,7 +20,6 @@ export function refreshFeatureFlags(): void {
     sharedFocusIndex = config.sharedFocusIndex;
     gfxIndex = config.gfxIndex;
     localisationIndex = config.localisationIndex;
-    technologyShowId = config.technologyShowId;
 }
 
 export function registerFeatureFlags(): vscode.Disposable {

@@ -39,8 +39,8 @@ export class TopBar extends Subscriber {
         this.addSubscription(this.warningFilter = new DivDropdown(document.getElementById('warningfilter') as HTMLDivElement, true));
         this.addSubscription(this.display = new DivDropdown(document.getElementById('display') as HTMLDivElement, true));
 
-        this.viewMode$ = toBehaviorSubject(document.getElementById('viewmode') as HTMLSelectElement, state.viewMode ?? 'province');
-        this.colorSet$ = toBehaviorSubject(document.getElementById('colorset') as HTMLSelectElement, state.colorSet ?? 'provinceid');
+        this.viewMode$ = toBehaviorSubject<ViewMode>(document.getElementById('viewmode') as HTMLSelectElement, state.viewMode ?? 'province');
+        this.colorSet$ = toBehaviorSubject<ColorSet>(document.getElementById('colorset') as HTMLSelectElement, state.colorSet ?? 'provinceid');
         this.hoverProvinceId$ = new BehaviorSubject<number | undefined>(undefined);
         this.selectedProvinceId$ = new BehaviorSubject<number | undefined>(state.selectedProvinceId ?? undefined);
         this.hoverStateId$ = new BehaviorSubject<number | undefined>(undefined);

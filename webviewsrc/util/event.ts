@@ -26,13 +26,13 @@ export class Subscriber implements Disposable {
     }
 }
 
-export function toBehaviorSubject(element: HTMLSelectElement | HTMLInputElement, initialValue?: string): BehaviorSubject<string> {
+export function toBehaviorSubject<T extends string = string>(element: HTMLSelectElement | HTMLInputElement, initialValue?: T): BehaviorSubject<T> {
     if (initialValue !== undefined) {
         element.value = initialValue;
     }
 
     const disposables: Subscription[] = [];
-    const observable = new BehaviorSubject<string>(element.value as string);
+    const observable = new BehaviorSubject<T>(element.value as T);
     let changing = false;
 
     disposables.push(observable.subscribe({
@@ -54,7 +54,7 @@ export function toBehaviorSubject(element: HTMLSelectElement | HTMLInputElement,
             return;
         }
         changing = true;
-        observable.next(element.value as string);
+        observable.next(element.value as T);
         changing = false;
     }));
 

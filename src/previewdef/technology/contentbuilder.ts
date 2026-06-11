@@ -18,7 +18,7 @@ import { flatMap, sumBy, min, flatten, chain, uniq } from 'lodash';
 import { StyleTable } from '../../util/styletable';
 import { RenderNodeCommonOptions } from '../../util/hoi4gui/nodecommon';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
-import { localisationIndex, technologyShowId } from "../../util/featureflags";
+import { localisationIndex } from "../../util/featureflags";
 
 const techTreeViewName = 'countrytechtreeview';
 const doctrineTreeViewName = 'countrydoctrineview';
@@ -40,6 +40,16 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
         }
 
         const styleTable = new StyleTable();
+        // Live toggle between raw tech id and localised tech name: both variants are rendered
+        // into the DOM and the "show-tech-loc" class on #techtreecontent (driven by the toolbar
+        // checkbox) decides which is visible. By default the raw id is shown; checking the box
+        // adds "show-tech-loc" to reveal the localised name. display:contents keeps the
+        // instanttextbox absolutely positioned relative to its real ancestor instead of the
+        // wrapper span.
+        styleTable.raw('.tech-name-variant', 'display: contents;');
+        styleTable.raw('#techtreecontent .tech-name-loc', 'display: none;');
+        styleTable.raw('#techtreecontent.show-tech-loc .tech-name-loc', 'display: contents;');
+        styleTable.raw('#techtreecontent.show-tech-loc .tech-name-id', 'display: none;');
         const baseContent = await renderTechnologyFolders(technologyTrees, folders, styleTable, loadResult.result);
 
         return html(
@@ -134,6 +144,18 @@ async function renderFolderSelector(folders: string[], styleTable: StyleTable): 
             >
                 ${folderOptions.join('')}
             </select>
+        </div>
+        <div class="${styleTable.oneTimeStyle('showTechLocContainer', () => `display:inline-flex; align-items:center; margin-left:15px`)}">
+            <label for="show-tech-loc">${localize('techtree.showlocalisation', 'Show localisation')}</label>
+            <input
+                id="show-tech-loc"
+                type="checkbox"
+                data-localisation-index="${localisationIndex}"
+            />
+            <span
+                id="show-loc-warning"
+                class="${styleTable.oneTimeStyle('showLocWarning', () => `color:var(--vscode-editorWarning-foreground); margin-left:8px; display:none`)}"
+            >⚠ ${localize('techtree.showlocnoindex', 'Localisation index is off — raw ids are shown. Enable the localisation index setting to see localised names.')}</span>
         </div>
     </div>`;
 }
@@ -387,9 +409,9 @@ async function renderTechnology(
                 if (childname === 'bonus') {
                     return '';
                 } else if (childname === 'name') {
-                    return technologyShowId
-                        ? await renderInstantTextBox({ ...text, text: technology.id }, parentInfo, { ...commonOptions, rawText: true })
-                        : await renderInstantTextBox({ ...text, text: nameKey }, parentInfo, commonOptions);
+                    const locBox = await renderInstantTextBox({ ...text, text: nameKey }, parentInfo, commonOptions);
+                    const idBox = await renderInstantTextBox({ ...text, text: technology.id }, parentInfo, { ...commonOptions, rawText: true });
+                    return `<span class="tech-name-variant tech-name-loc">${locBox}</span><span class="tech-name-variant tech-name-id">${idBox}</span>`;
                 }
             }
 

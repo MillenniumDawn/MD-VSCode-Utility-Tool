@@ -109,6 +109,8 @@ const internalTable = /* SOT Do not remove this comment */{
     "techtree.cantfindtechitemin": "Can't find containerwindowtype \"{0}\" in {1}",
     "techtree.cantfindviewin": "Can't find {0} in {1}.",
     "techtree.notechtree": "No technology tree.",
+    "techtree.showlocalisation": "Show localisation",
+    "techtree.showlocnoindex": "Localisation index is off — raw ids are shown. Enable the localisation index setting to see localised names.",
     "techtree.techfolder": "Technology folder: ",
     "worldmap.error.fieldnotindefaultmap": "Field \"{0}\" is not found in default.map.",
     "worldmap.error.multiply256": "Height and width of map image must be multiply of 256: {0}x{1}.",

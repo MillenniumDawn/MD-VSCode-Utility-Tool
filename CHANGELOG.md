@@ -1,3 +1,11 @@
+v1.1.7
+
+  Functionality:
+  - [ Technology ] Added an in-preview "Show technology id" checkbox to the technology tree toolbar, next to the folder selector. It toggles every tech label live between its localised name and its raw id (e.g. `infantry_weapons1`) without reloading the preview, and without shifting the tech icons or positions. The existing "Technology: show raw id instead of localisation" setting now seeds the checkbox's initial state, and the choice is remembered across folder switches and reloads.
+
+  Bugfixes:
+  - [ Build ] Fixed the development build (`webpack-dev`) failing to compile after the TypeScript 6 upgrade. The world map top bar now types the `vscode` webview API instead of treating it as `any`, and `toBehaviorSubject` is generic over its value type, so the stricter compiler accepts the existing code without behaviour changes.
+
 v1.1.6
 
   Functionality:

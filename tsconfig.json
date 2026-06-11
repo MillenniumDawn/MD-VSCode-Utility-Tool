@@ -20,6 +20,9 @@
 		"node_modules",
 		".vscode-test",
 		"out",
-		"scripts"
+		"out-test",
+		"out-test-webview",
+		"scripts",
+		"src/test"
 	]
 }
