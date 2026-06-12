@@ -38,6 +38,12 @@ class FocusTreePreview extends PreviewBase {
     private lastGoodHadFocusTrees = false;
     // Serializes updates so two loads can never run concurrently against the same loader.
     private updateQueue: Promise<void> = Promise.resolve();
+    // Generation token: each full (re)load bumps it so a slow background icon push from an earlier
+    // load is dropped instead of overwriting a newer render.
+    private iconRenderGeneration = 0;
+    // Resolves when the webview signals it has rendered the structure and can accept icon CSS.
+    private webviewReady: Promise<void> = Promise.resolve();
+    private signalWebviewReady: () => void = () => {};
 
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
         super(uri, panel);
@@ -48,6 +54,11 @@ class FocusTreePreview extends PreviewBase {
             () => Promise.resolve(getDocumentByUri(this.uri)?.getText() ?? this.content ?? ''),
         );
         this.focusTreeLoader.onLoadDone(r => this.updateDependencies(r.dependencies));
+        this.panel.webview.onDidReceiveMessage(msg => {
+            if (msg?.command === 'ready') {
+                this.signalWebviewReady();
+            }
+        });
     }
 
     public onDocumentChange(document: vscode.TextDocument): Promise<void> {
@@ -60,24 +71,32 @@ class FocusTreePreview extends PreviewBase {
 
     protected async getContent(document: vscode.TextDocument): Promise<string> {
         this.content = document.getText();
+        const generation = ++this.iconRenderGeneration;
+        this.webviewReady = new Promise<void>(resolve => { this.signalWebviewReady = resolve; });
         const progress = (message: string, current?: number, total?: number) => {
             this.panel.webview.postMessage({ type: 'progress', message, current, total });
         };
         this.focusTreeLoader.setProgressListener(progress);
         try {
-            const payload = await withTimeout(
-                buildFocusTreePayload(this.focusTreeLoader, progress),
+            // Phase 1 (cheap): render the focus-tree structure with placeholder icons so the tree
+            // appears immediately even when the (slow) DDS->PNG icon conversion would blow the
+            // render budget. The timeout now only guards this fast structural pass. (plan Stap 3)
+            const structure = await withTimeout(
+                buildFocusTreePayload(this.focusTreeLoader, progress, { resolveIcons: false }),
                 focusTreeRenderTimeout,
                 () => {
                     progress(localize('focustree.loading.slow', 'Still working on a heavy focus tree...'));
                     return new TimeoutError();
                 },
             );
-            if (payload) {
-                this.lastCssFingerprint = payload.cssFingerprint;
-                this.lastToolbarFlags = payload.toolbarFlags;
+            if (structure) {
+                this.lastCssFingerprint = structure.cssFingerprint;
+                this.lastToolbarFlags = structure.toolbarFlags;
                 this.lastGoodHadFocusTrees = true;
-                return buildFocusTreeHtml(payload, this.panel.webview, document.uri);
+                // Phase 2 (background): resolve the real focus icons and stream their CSS into the
+                // already-visible preview. No hard timeout: slow icons fill in when ready.
+                void this.pushIconStyles(generation);
+                return buildFocusTreeHtml(structure, this.panel.webview, document.uri);
             }
 
             this.lastCssFingerprint = undefined;
@@ -92,6 +111,32 @@ class FocusTreePreview extends PreviewBase {
         } finally {
             this.focusTreeLoader.setProgressListener(undefined);
             this.content = undefined;
+        }
+    }
+
+    /**
+     * Resolves the real focus-icon images (the expensive DDS->PNG pass) in the background and
+     * streams the resulting CSS into the already-rendered structure via an `iconStyles` message.
+     * Waits for the webview's `ready` signal so the message is never dropped, and drops itself if a
+     * newer load superseded it (generation mismatch) or the panel was disposed.
+     */
+    private async pushIconStyles(generation: number): Promise<void> {
+        try {
+            const full = await buildFocusTreePayload(this.focusTreeLoader);
+            if (!full || generation !== this.iconRenderGeneration || this.isDisposed) {
+                return;
+            }
+            await this.webviewReady;
+            if (generation !== this.iconRenderGeneration || this.isDisposed) {
+                return;
+            }
+            // Record the real-icon fingerprint so a later partial update that doesn't change icons
+            // can use the fast in-place update path instead of forcing a full reload.
+            this.lastCssFingerprint = full.cssFingerprint;
+            this.lastToolbarFlags = full.toolbarFlags;
+            this.panel.webview.postMessage({ type: 'iconStyles', css: full.styleTable.toRawCss() });
+        } catch (e) {
+            error(e);
         }
     }
 

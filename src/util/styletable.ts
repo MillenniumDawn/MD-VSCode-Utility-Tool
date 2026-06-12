@@ -34,9 +34,18 @@ export class StyleTable {
 
     public toStyleElement(nonce: string): string {
         return `<style nonce="${nonce}">
-            ${Object.entries(this.records).map(([k, v]) => `.${k} { ${v.replace(/^\s+/gm, '')} }\n`).join('')}
-            ${Object.entries(this.rawRecords).map(([k, v]) => `${k} { ${v.replace(/^\s+/gm, '')} }\n`).join('')}
+            ${this.toRawCss()}
             </style>`;
+    }
+
+    /**
+     * The accumulated CSS rules without the surrounding `<style>` wrapper. Used to stream style
+     * updates into a pre-existing, CSP-nonced `<style>` element in the webview (e.g. progressive
+     * focus-icon backgrounds), where re-emitting a `<style nonce>` tag would be blocked by CSP.
+     */
+    public toRawCss(): string {
+        return Object.entries(this.records).map(([k, v]) => `.${k} { ${v.replace(/^\s+/gm, '')} }\n`).join('') +
+            Object.entries(this.rawRecords).map(([k, v]) => `${k} { ${v.replace(/^\s+/gm, '')} }\n`).join('');
     }
 
     public name(name: string) {
