@@ -10,6 +10,7 @@ import { GridBoxType } from "../src/hoiformat/gui";
 import { toNumberLike } from "../src/hoiformat/schema";
 import { feLocalize } from './util/i18n';
 import { Checkbox } from "./util/checkbox";
+import { vscode } from "./util/vscode";
 
 initCommon();
 
@@ -504,6 +505,18 @@ let retriggerSearch: () => void = () => {};
 
 window.addEventListener('message', async (event) => {
     const msg = event.data;
+
+    // Deferred focus-icon backgrounds: the structure was rendered with neutral placeholders; fill
+    // in the real icon CSS once the (slow) DDS->PNG conversion finished on the extension side. The
+    // target <style> already carries the page CSP nonce, so we only swap its text. (plan Stap 3)
+    if (msg.type === 'iconStyles') {
+        const styleEl = document.getElementById('ft-progressive-icons');
+        if (styleEl) {
+            styleEl.textContent = msg.css;
+        }
+        return;
+    }
+
     if (msg.type !== 'update') return;
 
     focusTrees = msg.focusTrees;
@@ -720,4 +733,8 @@ window.addEventListener('load', tryRun(async function() {
     updateSelectedFocusTree(false);
     await buildContent();
     scrollToState();
+
+    // Tell the extension the structure is on screen and we can receive deferred focus-icon CSS.
+    // The extension waits for this before posting 'iconStyles' so the message is never dropped.
+    vscode.postMessage({ command: 'ready' });
 }));

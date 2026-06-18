@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { FocusTree, Focus } from './schema';
-import { getSpriteByGfxName, Image, getImageByPath } from '../../util/image/imagecache';
+import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconResolveStats } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
 import { forceError, randomString, mapLimit } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
@@ -47,12 +47,19 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
 
 export type { ToolbarFlags };
 
-export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback): Promise<FocusTreePayload | null> {
+export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean }): Promise<FocusTreePayload | null> {
+    const resolveIcons = options?.resolveIcons !== false;
     try {
+        // Per-phase timing to separate parsing/loading cost from icon resolution ("searching") and
+        // DDS->PNG conversion ("conversion"). Logged via debug() (dev builds only). (plan Stap 1)
+        resetIconResolveStats();
+        const tStart = Date.now();
+
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
         const loadedLoaders = Array.from((session as any).loadedLoader).map<string>(v => (v as any).toString());
         debug('Loader session focus tree', loadedLoaders);
+        const tLoaded = Date.now();
 
         const focusTrees = loadResult.result.focusTrees;
         if (focusTrees.length === 0) {
@@ -73,12 +80,13 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         }
         let renderedFocusCount = 0;
         await mapLimit(allFocuses, renderConcurrency, async (focus) => {
-            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles)).replace(/\s\s+/g, ' ');
+            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles, resolveIcons)).replace(/\s\s+/g, ' ');
             renderedFocusCount++;
             if (progress) {
                 progress(focusMessage, renderedFocusCount, allFocuses.length);
             }
         });
+        const tRendered = Date.now();
 
         if (progress) {
             progress(localize('focustree.loading.preparing_inlay_styles', 'Preparing inlay styles'));
@@ -98,6 +106,13 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
                 progress(inlayMessage, renderedInlayCount, allInlays.length);
             }
         });
+        const tInlay = Date.now();
+
+        debug(`[focustree] timing: load=${tLoaded - tStart}ms focusRender=${tRendered - tLoaded}ms ` +
+            `inlayRender=${tInlay - tRendered}ms | focuses=${allFocuses.length} ` +
+            `indexMiss=${iconResolveStats.indexMiss} scanIters=${iconResolveStats.scanIterations} ` +
+            `gfxMapParses=${iconResolveStats.gfxMapParses} ` +
+            `imageDecodes=${iconResolveStats.imageDecodes} decodeTime=${iconResolveStats.imageDecodeMs}ms`);
 
         const toolbarFlags: ToolbarFlags = {
             hasCustomTitlebar: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.textIcon !== undefined && titlebarStyles[f.textIcon] !== undefined)),
@@ -150,7 +165,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
     jsCodes.push('window.xGridSize = ' + payload.xGridSize);
     jsCodes.push(i18nTableAsScript());
 
-    const baseContent = renderFocusTreeShell(payload.focusTrees, payload.styleTable, payload.toolbarFlags);
+    const baseContent = renderFocusTreeShell(payload.focusTrees, payload.styleTable, payload.toolbarFlags, payload.styleNonce);
 
     return html(
         webview,
@@ -211,7 +226,11 @@ const yGridSize = 130;
  * toolbar). Focuses and inlays themselves are rendered separately into the payload and
  * injected by the webview, so this is a cheap synchronous step.
  */
-function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, toolbarFlags: ToolbarFlags): string {
+function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, toolbarFlags: ToolbarFlags, styleNonce: string): string {
+    // Pre-created, CSP-nonced style element that the webview fills with the real focus-icon
+    // background CSS once the (deferred) icon conversion completes. Re-emitting a <style nonce>
+    // from the webview would be blocked by CSP, so the element exists up front. (plan Stap 3)
+    const progressiveIconStyles = `<style id="ft-progressive-icons" nonce="${styleNonce}"></style>`;
     const continuousFocusContent =
         `<div id="continuousFocuses" class="${styleTable.oneTimeStyle('continuousFocuses', () => `
             position: absolute;
@@ -224,6 +243,7 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
         `)}">Continuous focuses</div>`;
 
     return (
+        progressiveIconStyles +
         `<div id="dragger" class="${styleTable.oneTimeStyle('dragger', () => `
             width: 100vw;
             height: 100vh;
@@ -538,13 +558,20 @@ async function renderFocus(
     gfxFiles: string[],
     file: string,
     titlebarStyles: Record<string, string>,
+    resolveIcons: boolean = true,
 ): Promise<string> {
+    // Focus icons are the expensive part (one synchronous DDS->PNG conversion per distinct texture).
+    // In the structure-only pass (resolveIcons=false) we skip the image loads and register a neutral
+    // placeholder; the real background-image CSS is streamed in afterwards. (plan Stap 3)
     for (const focusIcon of focus.icon) {
         const iconName = focusIcon.icon;
-        const iconObject = iconName ? await getFocusIcon(iconName, gfxFiles) : null;
-        styleTable.style('focus-icon-' + normalizeForStyle(iconName ?? '-empty'), () => 
-            `${iconObject ? `background-image: url(${iconObject.uri});` : 'background: grey;'}
-            background-size: ${iconObject ? iconObject.width: 0}px;`
+        const iconObject = resolveIcons && iconName ? await getFocusIcon(iconName, gfxFiles) : null;
+        styleTable.style('focus-icon-' + normalizeForStyle(iconName ?? '-empty'), () =>
+            iconObject
+                ? `background-image: url(${iconObject.uri}); background-size: ${iconObject.width}px;`
+                : resolveIcons
+                    ? `background: grey; background-size: 0px;`
+                    : `background-color: rgba(127, 127, 127, 0.25); background-size: 0px;`
         );
     }
     

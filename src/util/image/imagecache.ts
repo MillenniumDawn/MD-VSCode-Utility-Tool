@@ -12,6 +12,7 @@ import { error } from '../debug';
 import { DDS } from './dds';
 import { UserError } from '../common';
 import { getGfxContainerFile } from '../gfxindex';
+import { gfxIndex } from '../featureflags';
 export { Sprite, Image };
 
 // Decoded PNG buffers are the heaviest thing in memory; bound the image cache by total bytes
@@ -41,6 +42,33 @@ const gfxMapCache = new PromiseCache({
     maxSize: 64
 });
 
+// Diagnostic counters for profiling focus-tree icon resolution (plan Stap 1). They separate
+// "searching" cost (index misses + fallback-scan iterations) from "conversion" cost (synchronous
+// DDS->PNG decodes). Reset before a render and dumped after, behind the debug() flag.
+export const iconResolveStats = {
+    indexMiss: 0,
+    scanIterations: 0,
+    gfxMapParses: 0,
+    imageDecodes: 0,
+    imageDecodeMs: 0,
+};
+
+// Negative-scan memo for the index-off fallback path: remembers that a given icon name was not
+// found in a given gfxFilePath set, so the same unresolved icon doesn't re-scan (and re-miss) the
+// whole list for every focus that references it. Only negatives are stored; positive sprites go
+// through spriteCache (which has proper file-change expiry). Cleared per render via
+// resetIconResolveStats so a newly added gfx file is picked up on the next preview.
+const negativeScanMemo = new Set<string>();
+
+export function resetIconResolveStats(): void {
+    iconResolveStats.indexMiss = 0;
+    iconResolveStats.scanIterations = 0;
+    iconResolveStats.gfxMapParses = 0;
+    iconResolveStats.imageDecodes = 0;
+    iconResolveStats.imageDecodeMs = 0;
+    negativeScanMemo.clear();
+}
+
 export function getImageByPath(relativePath: string): Promise<Image | undefined> {
     return imageCache.get(relativePath);
 }
@@ -49,18 +77,36 @@ export async function getSpriteByGfxName(name: string, gfxFilePath: string | str
     const pathFromIndex = await getGfxContainerFile(name);
     if (pathFromIndex) {
         return await spriteCache.get(pathFromIndex + '?' + name);
-    } else if (Array.isArray(gfxFilePath)) {
+    }
+
+    iconResolveStats.indexMiss++;
+
+    // When the gfx index is enabled it is authoritative: a miss means the sprite is defined in no
+    // indexed gfx file. The `gfxFilePath` fallback list is itself derived from index hits, so
+    // scanning it cannot find the sprite either. Return undefined immediately instead of re-parsing
+    // every gfx file for each unresolved focus icon. (plan Stap 2)
+    if (gfxIndex) {
+        return undefined;
+    }
+
+    if (Array.isArray(gfxFilePath)) {
+        const memoKey = name + ' ' + gfxFilePath.join(' ');
+        if (negativeScanMemo.has(memoKey)) {
+            return undefined;
+        }
         for (const path of gfxFilePath) {
+            iconResolveStats.scanIterations++;
             const result = await spriteCache.get(path + '?' + name);
             if (result !== undefined) {
                 return result;
             }
         }
+        // Remember the miss so the same icon doesn't re-scan the whole list for every focus.
+        negativeScanMemo.add(memoKey);
+        return undefined;
     } else {
         return await spriteCache.get(gfxFilePath + '?' + name);
     }
-
-    return undefined;
 }
 
 async function spriteCacheExpiryToken(key: string, spritePromise: Promise<Sprite | undefined>): Promise<string> {
@@ -122,11 +168,12 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
         let pngBuffer: Buffer;
 
         relativePath = relativePath.toLowerCase();
+        const decodeStart = Date.now();
         if (relativePath.endsWith('.dds')) {
             const dds = DDS.parse(buffer.buffer, buffer.byteOffset);
             png = ddsToPng(dds);
             pngBuffer = PNG.sync.write(png);
-        
+
         } else if (relativePath.endsWith('.tga')) {
             png = tgaToPng(buffer);
             pngBuffer = PNG.sync.write(png);
@@ -138,6 +185,8 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
         } else {
             throw new UserError('Unsupported image type: ' + relativePath);
         }
+        iconResolveStats.imageDecodes++;
+        iconResolveStats.imageDecodeMs += Date.now() - decodeStart;
 
         return new Image(pngBuffer, png.width, png.height, realPath);
 
@@ -153,6 +202,7 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
 async function loadGfxMap(path: string): Promise<Record<string, (SpriteType | CorneredTileSpriteType)>> {
     const gfxMap: Record<string, SpriteType> = {};
     try {
+        iconResolveStats.gfxMapParses++;
         const [buffer, realPath] = await readFileFromModOrHOI4(path);
         const gfx = buffer.toString('utf-8');
         const node = parseHoi4File(gfx, localize('infile', 'In file {0}:\n', realPath));

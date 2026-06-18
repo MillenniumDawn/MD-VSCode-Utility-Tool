@@ -1,3 +1,11 @@
+v1.1.9
+
+  Functionality:
+  - [ Focus Tree ] The focus tree preview now renders in two phases so a heavy tree appears almost immediately instead of hitting the render timeout. The first phase draws every focus box, its title, position, prerequisites and branches with a neutral placeholder where the icon goes; this pass does no image decoding and is fast even for trees whose icons are slow or unresolvable. The expensive part — one synchronous DDS->PNG conversion per distinct focus icon — then runs in the background and its CSS is streamed into the already-visible preview through a new `iconStyles` message, filling the placeholders in once ready. The 60-second render budget now only guards the cheap structural pass, so slow icon conversion no longer blocks the tree or fails the whole preview; the webview signals readiness before the icon CSS is sent so the update is never dropped.
+
+  Bugfixes:
+  - [ Focus Tree ] With the GFX index enabled, a focus icon that is not in the index no longer triggers a scan over the whole gfx dependency list (which could repeatedly re-parse large `.gfx` files such as `interface/goals.gfx`): the index is authoritative, so an unindexed sprite returns the grey fallback immediately. When the index is disabled the fallback scan still runs, but an unresolved icon name is now memoised per render so it is searched once instead of for every focus that references it.
+
 v1.1.8
 
   Functionality:
