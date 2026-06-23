@@ -2,6 +2,7 @@
 
 This extension add preview tools to Hearts of Iron 4 coding.
 This is a continuation project based on the HOI4 mod utilities from herbix
+Very big shoutout to my friend AngriestBird for helping this project!
 
 ## Features
 
