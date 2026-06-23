@@ -94,6 +94,7 @@ export interface State extends Region, TokenInFile {
     provinces: number[];
     cores: string[];
     impassable: boolean;
+    impassableIgnoredLinks: number[];
     victoryPoints: Record<number, number | undefined>;
     resources: Record<string, number | undefined>;
 }

@@ -154,6 +154,7 @@ const internalTable = /* SOT Do not remove this comment */{
     "worldmap.tooltip.continent": "Continent",
     "worldmap.tooltip.coreof": "Core of",
     "worldmap.tooltip.impassable": "Impassable",
+    "worldmap.tooltip.impassableignoredlinks": "Impassable ignored links",
     "worldmap.tooltip.manpower": "Manpower",
     "worldmap.tooltip.navalterrain": "Naval terrain",
     "worldmap.tooltip.owner": "Owner",

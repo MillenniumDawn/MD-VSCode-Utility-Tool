@@ -23,6 +23,7 @@ interface StateDefinition {
     history: StateHistory;
     provinces: Enum;
     impassable: boolean;
+    impassable_ignored_links: Enum;
     resources: CustomMap<number>;
     _token: Token;
 }
@@ -53,6 +54,7 @@ const stateFileSchema: SchemaDef<StateFile> = {
             },
             provinces: "enum",
             impassable: "boolean",
+            impassable_ignored_links: "enum",
             resources: {
                 _innerType: "number",
                 _type: "map",
@@ -243,6 +245,7 @@ async function loadState(stateFile: string, globalWarnings: WorldMapWarning[]): 
             const provinces = state.provinces._values.map(v => parseInt(v));
             const cores = state.history?.add_core_of.map(v => v).filter((v, i, a): v is string => v !== undefined && i === a.indexOf(v)) ?? [];
             const impassable = state.impassable ?? false;
+            const impassableIgnoredLinks = state.impassable_ignored_links?._values.map(v => parseInt(v)) ?? [];
             const victoryPointsArray = state.history?.victory_points.filter(v => v._values.length >= 2).map(v => v._values.slice(0, 2).map(v => parseInt(v)) as [number, number]) ?? [];
             const victoryPoints = arrayToMap(victoryPointsArray, "0", v => v[1]);
             const resources = arrayToMap(
@@ -269,7 +272,7 @@ async function loadState(stateFile: string, globalWarnings: WorldMapWarning[]): 
             })));
 
             result.push({
-                id, name, manpower, category, owner, provinces, cores, impassable, victoryPoints, resources,
+                id, name, manpower, category, owner, provinces, cores, impassable, impassableIgnoredLinks, victoryPoints, resources,
                 file: stateFile,
                 token: state._token ?? null,
             });
