@@ -27,29 +27,31 @@ window.addEventListener('load', tryRun(function() {
 
     const contentElement = document.getElementById('techtreecontent') as HTMLDivElement;
 
-    // Live toggle between raw tech id (default) and localised tech name. Unchecked shows the
-    // raw id; checking the box adds the "show-tech-loc" class to reveal the localised name.
-    // The persisted webview state overrides the default so the choice survives folder switches
-    // and reloads. When the localisation index is off, checking the box has no real effect
-    // (the id is shown regardless), so we surface a warning next to the checkbox.
-    const showTechLoc = document.getElementById('show-tech-loc') as HTMLInputElement | null;
-    if (showTechLoc) {
+    // Live name-mode switch. Each mode maps to a "name-mode-<value>" class on #techtreecontent
+    // that reveals the matching name variant; the default is "id" (raw token). The persisted
+    // webview state overrides the default so the choice survives folder switches and reloads.
+    // When the localisation index is off, only the id resolves, so any non-id mode surfaces a
+    // warning next to the dropdown.
+    const nameMode = document.getElementById('tech-name-mode') as HTMLSelectElement | null;
+    if (nameMode) {
         const warning = document.getElementById('show-loc-warning');
-        const localisationIndex = showTechLoc.dataset.localisationIndex === 'true';
-        const updateWarning = (checked: boolean) => {
+        const localisationIndex = nameMode.dataset.localisationIndex === 'true';
+        const modes = ['id', 'short', 'long', 'techname'];
+        const applyMode = (mode: string) => {
+            for (const m of modes) {
+                contentElement.classList.toggle(`name-mode-${m}`, m === mode);
+            }
             if (warning) {
-                warning.style.display = checked && !localisationIndex ? 'inline' : 'none';
+                warning.style.display = mode !== 'id' && !localisationIndex ? 'inline' : 'none';
             }
         };
 
-        const initial = getState().showLoc ?? showTechLoc.checked;
-        showTechLoc.checked = initial;
-        contentElement.classList.toggle('show-tech-loc', initial);
-        updateWarning(initial);
-        showTechLoc.addEventListener('change', function() {
-            setState({ showLoc: this.checked });
-            contentElement.classList.toggle('show-tech-loc', this.checked);
-            updateWarning(this.checked);
+        const initial = getState().nameMode ?? 'id';
+        nameMode.value = initial;
+        applyMode(initial);
+        nameMode.addEventListener('change', function() {
+            setState({ nameMode: this.value });
+            applyMode(this.value);
         });
     }
 

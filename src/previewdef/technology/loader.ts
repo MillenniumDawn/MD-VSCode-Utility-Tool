@@ -1,4 +1,5 @@
 import { TechnologyTree, getTechnologyTrees } from "./schema";
+import { EquipmentArchetype, getEquipmentArchetypes } from "./equipmentschema";
 import { HOIPartial } from "../../hoiformat/schema";
 import { GuiFile } from "../../hoiformat/gui";
 import { ContentLoader, Dependency, LoadResultOD, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
@@ -6,14 +7,18 @@ import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
 import { flatMap, chain } from "lodash";
 import { GuiFileLoader } from "../gui/loader";
-import { listFilesFromModOrHOI4 } from "../../util/fileloader";
+import { listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
 import { getConfiguration } from "../../util/vsccommon";
+import { localisationIndex } from "../../util/featureflags";
 
 export interface TechnologyTreeLoaderResult {
     technologyTrees: TechnologyTree[];
     guiFiles: { file: string, data: HOIPartial<GuiFile> }[];
     gfxFiles: string[];
+    equipmentArchetypes: Record<string, EquipmentArchetype>;
 }
+
+const equipmentFolder = 'common/units/equipment';
 
 const technologyUIGfxFiles = [
     'interface/countrytechtreeview.gfx',
@@ -53,17 +58,49 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
 
         const guiDepFiles = await this.loaderDependencies.loadMultiple(guiDependencies, session, GuiFileLoader);
 
+        const { equipmentArchetypes, equipmentFiles } = await loadEquipmentArchetypes();
+
         return {
             result: {
                 technologyTrees,
                 gfxFiles: chain(gfxDependencies).concat(extraGfxFiles, flatMap(guiDepFiles, r => r.result.gfxFiles)).uniq().value(),
                 guiFiles: chain(guiDepFiles).flatMap(r => r.result.guiFiles).uniq().value(),
+                equipmentArchetypes,
             },
-            dependencies: chain([this.file]).concat(gfxDependencies, extraGfxFiles, guiDependencies, mergeInLoadResult(guiDepFiles, 'dependencies')).uniq().value(),
+            dependencies: chain([this.file]).concat(gfxDependencies, extraGfxFiles, guiDependencies, equipmentFiles, mergeInLoadResult(guiDepFiles, 'dependencies')).uniq().value(),
         };
     }
 
     public toString() {
         return `[TechnologyTreeLoader ${this.file}]`;
     }
+}
+
+// Parses every `common/units/equipment/*.txt` file (mod + base game) into a single
+// id -> archetype map so the renderer can resolve equipment short names. Skipped when the
+// localisation index is off, since without it all name modes fall back to the raw id anyway.
+// Returns the parsed files so they can be registered as preview dependencies (edits refresh).
+async function loadEquipmentArchetypes(): Promise<{ equipmentArchetypes: Record<string, EquipmentArchetype>, equipmentFiles: string[] }> {
+    const equipmentArchetypes: Record<string, EquipmentArchetype> = {};
+
+    if (!localisationIndex) {
+        return { equipmentArchetypes, equipmentFiles: [] };
+    }
+
+    const relativeFiles = chain(await listFilesFromModOrHOI4(equipmentFolder, { recursively: true }))
+        .filter(f => f.toLowerCase().endsWith('.txt'))
+        .map(f => `${equipmentFolder}/${f}`.replace(/\/+/g, '/'))
+        .uniq()
+        .value();
+
+    for (const file of relativeFiles) {
+        try {
+            const [buffer, realPath] = await readFileFromModOrHOI4(file);
+            const archetypes = getEquipmentArchetypes(parseHoi4File(buffer.toString(), localize('infile', 'In file {0}:\n', realPath)));
+            Object.assign(equipmentArchetypes, archetypes);
+        } catch {
+        }
+    }
+
+    return { equipmentArchetypes, equipmentFiles: relativeFiles };
 }
