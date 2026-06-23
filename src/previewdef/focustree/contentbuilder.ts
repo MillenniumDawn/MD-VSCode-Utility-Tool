@@ -23,10 +23,7 @@ import { ContainerWindowType, IconType, ButtonType } from "../../hoiformat/gui";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
 
-// Max number of focus/inlay renders running concurrently. Each render can trigger a
-// synchronous, memory-heavy DDS->PNG conversion, so firing them all at once saturates
-// the single-threaded event loop under RAM pressure (progress messages stop arriving and
-// the preview appears frozen). A small pool keeps the loop responsive.
+// Caps how many focus/inlay renders run concurrently.
 const renderConcurrency = 8;
 
 export interface FocusTreeUpdatePayload {
@@ -50,8 +47,7 @@ export type { ToolbarFlags };
 export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean }): Promise<FocusTreePayload | null> {
     const resolveIcons = options?.resolveIcons !== false;
     try {
-        // Per-phase timing to separate parsing/loading cost from icon resolution ("searching") and
-        // DDS->PNG conversion ("conversion"). Logged via debug() (dev builds only). (plan Stap 1)
+        // Per-phase timing of parsing/loading, icon resolution, and DDS->PNG conversion, logged via debug() in dev builds.
         resetIconResolveStats();
         const tStart = Date.now();
 
@@ -227,9 +223,7 @@ const yGridSize = 130;
  * injected by the webview, so this is a cheap synchronous step.
  */
 function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, toolbarFlags: ToolbarFlags, styleNonce: string): string {
-    // Pre-created, CSP-nonced style element that the webview fills with the real focus-icon
-    // background CSS once the (deferred) icon conversion completes. Re-emitting a <style nonce>
-    // from the webview would be blocked by CSP, so the element exists up front. (plan Stap 3)
+    // CSP-nonced <style> element the webview later fills with the resolved focus-icon background CSS.
     const progressiveIconStyles = `<style id="ft-progressive-icons" nonce="${styleNonce}"></style>`;
     const continuousFocusContent =
         `<div id="continuousFocuses" class="${styleTable.oneTimeStyle('continuousFocuses', () => `
@@ -383,6 +377,12 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             <i class="codicon codicon-warning"></i>
         </button>`;
 
+    const hasAllowBranch = focusTrees.some(ft => ft.allowBranchOptions.length > 0);
+    const resetCheckboxesButton = !hasAllowBranch ? '' : `
+        <button id="reset-focus-checkboxes" title="${localize('focustree.resetcheckboxes', 'Reset focus checkboxes')}">
+            <i class="codicon codicon-clear-all"></i>
+        </button>`;
+
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 52px;`)}">
         <div class="toolbar">
             ${useConditionInFocus ? conditions + inlayConditions : allowbranch}
@@ -393,6 +393,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${inlayWindowsToggle}
             ${inlayWindows}
             ${warningsButton}
+            ${resetCheckboxesButton}
         </div>
     </div>`;
 }
@@ -560,15 +561,13 @@ async function renderFocus(
     titlebarStyles: Record<string, string>,
     resolveIcons: boolean = true,
 ): Promise<string> {
-    // Focus icons are the expensive part (one synchronous DDS->PNG conversion per distinct texture).
-    // In the structure-only pass (resolveIcons=false) we skip the image loads and register a neutral
-    // placeholder; the real background-image CSS is streamed in afterwards. (plan Stap 3)
+    // Skips the expensive per-texture DDS->PNG conversions in the structure-only pass and registers a neutral placeholder.
     for (const focusIcon of focus.icon) {
         const iconName = focusIcon.icon;
         const iconObject = resolveIcons && iconName ? await getFocusIcon(iconName, gfxFiles) : null;
         styleTable.style('focus-icon-' + normalizeForStyle(iconName ?? '-empty'), () =>
             iconObject
-                ? `background-image: url(${iconObject.uri}); background-size: ${iconObject.width}px;`
+                ? `background-image: url(${iconObject.uri}); background-size: ${iconObject.width}px; background-color: transparent;`
                 : resolveIcons
                     ? `background: grey; background-size: 0px;`
                     : `background-color: rgba(127, 127, 127, 0.25); background-size: 0px;`

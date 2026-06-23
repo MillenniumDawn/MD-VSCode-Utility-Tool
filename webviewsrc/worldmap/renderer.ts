@@ -753,6 +753,7 @@ ${worldMap.getProvinceWarnings(province, stateObject, strategicRegion, supplyAre
         const supplyArea = worldMap.getSupplyAreaByStateId(state.id);
         this.renderTooltip(`
 ${state.impassable ? '|r|' + feLocalize('worldmap.tooltip.impassable', 'Impassable') : ''}
+${state.impassableIgnoredLinks.length > 0 ? feLocalize('worldmap.tooltip.impassableignoredlinks', 'Impassable ignored links') + '=' + state.impassableIgnoredLinks.join(',') : ''}
 ${feLocalize('worldmap.tooltip.state', 'State')}=${state.id}
 ${supplyArea ? `
 ${feLocalize('worldmap.tooltip.supplyarea', 'Supply area')}=${supplyArea.id}

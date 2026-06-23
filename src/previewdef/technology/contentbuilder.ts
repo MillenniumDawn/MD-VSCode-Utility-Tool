@@ -12,6 +12,7 @@ import { renderIcon } from '../../util/hoi4gui/icon';
 import { html, htmlEscape } from '../../util/html';
 import { ContainerWindowType, GridBoxType, IconType, InstantTextBoxType, Format } from '../../hoiformat/gui';
 import { TechnologyTreeLoader, TechnologyTreeLoaderResult } from './loader';
+import { EquipmentArchetype } from './equipmentschema';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug } from '../../util/debug';
 import { flatMap, sumBy, min, flatten, chain, uniq } from 'lodash';
@@ -40,16 +41,11 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
         }
 
         const styleTable = new StyleTable();
-        // Live toggle between raw tech id and localised tech name: both variants are rendered
-        // into the DOM and the "show-tech-loc" class on #techtreecontent (driven by the toolbar
-        // checkbox) decides which is visible. By default the raw id is shown; checking the box
-        // adds "show-tech-loc" to reveal the localised name. display:contents keeps the
-        // instanttextbox absolutely positioned relative to its real ancestor instead of the
-        // wrapper span.
-        styleTable.raw('.tech-name-variant', 'display: contents;');
-        styleTable.raw('#techtreecontent .tech-name-loc', 'display: none;');
-        styleTable.raw('#techtreecontent.show-tech-loc .tech-name-loc', 'display: contents;');
-        styleTable.raw('#techtreecontent.show-tech-loc .tech-name-id', 'display: none;');
+        // Renders every name variant and reveals one via a "name-mode-*" class on #techtreecontent (default name-mode-id).
+        styleTable.raw('.tech-name-variant', 'display: none;');
+        for (const mode of techNameModes) {
+            styleTable.raw(`#techtreecontent.name-mode-${mode.id} .tech-name-${mode.id}`, 'display: contents;');
+        }
         const baseContent = await renderTechnologyFolders(technologyTrees, folders, styleTable, loadResult.result);
 
         return html(
@@ -84,7 +80,8 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
     }
 
     const gfxFiles = loadResult.gfxFiles;
-    const techFolders = (await Promise.all(folders.map(folder => renderTechnologyFolder(technologyTrees, folder, techTreeViews, containerWindowTypes, styleTable, guiFiles, gfxFiles)))).join('');
+    const equipmentArchetypes = loadResult.equipmentArchetypes;
+    const techFolders = (await Promise.all(folders.map(folder => renderTechnologyFolder(technologyTrees, folder, techTreeViews, containerWindowTypes, styleTable, guiFiles, gfxFiles, equipmentArchetypes)))).join('');
 
     return `
     ${await renderFolderSelector(folders, styleTable)}
@@ -101,7 +98,7 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
     </div>
     <div
     id="techtreecontent"
-    class="${styleTable.oneTimeStyle('mainContent', () => `
+    class="name-mode-id ${styleTable.oneTimeStyle('mainContent', () => `
         position: absolute;
         left: 0;
         top: 0;
@@ -146,12 +143,17 @@ async function renderFolderSelector(folders: string[], styleTable: StyleTable): 
             </select>
         </div>
         <div class="${styleTable.oneTimeStyle('showTechLocContainer', () => `display:inline-flex; align-items:center; margin-left:15px`)}">
-            <label for="show-tech-loc">${localize('techtree.showlocalisation', 'Show localisation')}</label>
-            <input
-                id="show-tech-loc"
-                type="checkbox"
+            <label for="tech-name-mode">${localize('techtree.namemode', 'Name')}</label>
+            <select
+                id="tech-name-mode"
+                class="${styleTable.oneTimeStyle('techNameMode', () => `margin-left:5px`)}"
                 data-localisation-index="${localisationIndex}"
-            />
+            >
+                <option value="id">${localize('techtree.namemode.id', 'Id')}</option>
+                <option value="short">${localize('techtree.namemode.short', 'Short name')}</option>
+                <option value="long">${localize('techtree.namemode.long', 'Long name')}</option>
+                <option value="techname">${localize('techtree.namemode.techname', 'Technology name')}</option>
+            </select>
             <span
                 id="show-loc-warning"
                 class="${styleTable.oneTimeStyle('showLocWarning', () => `color:var(--vscode-editorWarning-foreground); margin-left:8px; display:none`)}"
@@ -168,6 +170,7 @@ async function renderTechnologyFolder(
     styleTable: StyleTable,
     guiFiles: string[],
     gfxFiles: string[],
+    equipmentArchetypes: Record<string, EquipmentArchetype>,
 ): Promise<string> {
     const folderTreeView = flatMap(techTreeViews, tv => tv.containerwindowtype).find(c => c.name === folder);
     let children: string;
@@ -198,7 +201,7 @@ async function renderTechnologyFolder(
                         const tree = technologyTrees.find(t => t.startTechnology + '_tree' === child.name);
                         if (tree) {
                             const gridboxType = child as HOIPartial<GridBoxType>;
-                            return await renderTechnologyTreeGridBox(tree, gridboxType, folder, folderItem, folderSmallItem, lineItem, xorItem, parentInfo, commonOptions, guiFiles, gfxFiles);
+                            return await renderTechnologyTreeGridBox(tree, gridboxType, folder, folderItem, folderSmallItem, lineItem, xorItem, parentInfo, commonOptions, guiFiles, gfxFiles, equipmentArchetypes);
                         }
                     }
 
@@ -228,6 +231,7 @@ async function renderTechnologyTreeGridBox(
     commonOptions: RenderCommonOptions,
     guiFiles: string[],
     gfxFiles: string[],
+    equipmentArchetypes: Record<string, EquipmentArchetype>,
 ): Promise<string> {
     const xorJointKey = "#xorJoint#";
     const treeMap = arrayToMap(tree.technologies, 'id');
@@ -292,7 +296,7 @@ async function renderTechnologyTreeGridBox(
             } else {
                 const technology = treeMap[item.id];
                 const technologyItem = technology.enableEquipments ? folderItem : folderSmallItem;
-                return await renderTechnology(technologyItem, technology, technology.folders[folder], parent, commonOptions, guiFiles, gfxFiles);
+                return await renderTechnology(technologyItem, technology, technology.folders[folder], parent, commonOptions, guiFiles, gfxFiles, equipmentArchetypes);
             }
         },
         onRenderLineBox: async (item, parent) => {
@@ -355,28 +359,68 @@ async function renderXorItem(xorItem: HOIPartial<ContainerWindowType>, format: F
     });
 }
 
-// HOI4 falls back to the first enabled equipment's localised name when a technology has no
-// localisation entry of its own. getLocalisedTextQuick returns the key unchanged when missing,
-// so we detect "no entry" by comparing the result against the key. Returns the localisation
-// *key* to use (renderInstantTextBox / the title localise it again downstream).
-async function resolveTechNameKey(technology: Technology): Promise<string> {
+interface TechNameKeys {
+    shortKey?: string;
+    longKey?: string;
+    techKey?: string;
+    id: string;
+}
+
+// The tech-tree name-mode dropdown, in tooltip-preference order. `key` selects the
+// localisation key from the resolved TechNameKeys; undefined => fall back to the raw id.
+const techNameModes: { id: string; key: (k: TechNameKeys) => string | undefined }[] = [
+    { id: 'short', key: k => k.shortKey ?? k.longKey ?? k.techKey },
+    { id: 'long', key: k => k.longKey ?? k.shortKey ?? k.techKey },
+    { id: 'techname', key: k => k.techKey },
+    { id: 'id', key: () => undefined },
+];
+
+// Resolves a technology tree name's localisation keys in the dropdown's short/long equipment-name and technology-name forms.
+async function resolveTechNameKeys(technology: Technology, equipmentArchetypes: Record<string, EquipmentArchetype>): Promise<TechNameKeys> {
+    const keys: TechNameKeys = { id: technology.id };
+
     if (!localisationIndex) {
-        return technology.id;
+        return keys;
     }
 
-    const idLoc = await getLocalisedTextQuick(technology.id);
-    if (idLoc && idLoc !== technology.id) {
-        return technology.id;
+    const techLoc = await getLocalisedTextQuick(technology.id);
+    if (techLoc && techLoc !== technology.id) {
+        keys.techKey = technology.id;
     }
 
     for (const equipment of technology.enableEquipmentNames) {
-        const equipmentLoc = await getLocalisedTextQuick(equipment);
-        if (equipmentLoc && equipmentLoc !== equipment) {
-            return equipment;
+        const shortKey = resolveShortNameKey(equipment, equipmentArchetypes);
+        const [shortLoc, longLoc] = await Promise.all([
+            keys.shortKey === undefined ? getLocalisedTextQuick(shortKey) : undefined,
+            keys.longKey === undefined ? getLocalisedTextQuick(equipment) : undefined,
+        ]);
+        if (keys.shortKey === undefined && shortLoc && shortLoc !== shortKey) {
+            keys.shortKey = shortKey;
+        }
+        if (keys.longKey === undefined && longLoc && longLoc !== equipment) {
+            keys.longKey = equipment;
+        }
+        if (keys.shortKey !== undefined && keys.longKey !== undefined) {
+            break;
         }
     }
 
-    return technology.id;
+    return keys;
+}
+
+// Finds an equipment's short-name localisation key from its (or its archetype's) `short_name` field, falling back to the `<equipment>_short` convention.
+function resolveShortNameKey(equipment: string, equipmentArchetypes: Record<string, EquipmentArchetype>): string {
+    const direct = equipmentArchetypes[equipment];
+    if (direct?.shortName) {
+        return direct.shortName;
+    }
+    if (direct?.archetype) {
+        const parent = equipmentArchetypes[direct.archetype];
+        if (parent?.shortName) {
+            return parent.shortName;
+        }
+    }
+    return `${equipment}_short`;
 }
 
 async function renderTechnology(
@@ -387,12 +431,16 @@ async function renderTechnology(
     commonOptions: RenderCommonOptions,
     guiFiles: string[],
     gfxFiles: string[],
+    equipmentArchetypes: Record<string, EquipmentArchetype>,
 ): Promise<string> {
     if (!item) {
         return `<div>${localize('techtree.cantfindtechitemin', "Can't find containerwindowtype \"{0}\" in {1}", `techtree_${folder.name}_item`, guiFiles)}</div>`;
     }
 
-    const nameKey = await resolveTechNameKey(technology);
+    const nameKeys = await resolveTechNameKeys(technology, equipmentArchetypes);
+    // Resolve each dropdown mode's localisation key (undefined => fall back to the raw id).
+    const modeKeys = techNameModes.map(m => ({ id: m.id, key: m.key(nameKeys) }));
+    const bestNameKey = modeKeys.map(m => m.key).find(k => k !== undefined) ?? technology.id;
     const subSlotRegex = /^sub_technology_slot_(\d)$/;
     const containerWindow = await renderContainerWindow(item, parentInfo, {
         ...commonOptions,
@@ -409,9 +457,13 @@ async function renderTechnology(
                 if (childname === 'bonus') {
                     return '';
                 } else if (childname === 'name') {
-                    const locBox = await renderInstantTextBox({ ...text, text: nameKey }, parentInfo, commonOptions);
+                    // A box per dropdown mode; a mode with no key reuses the single raw-id box.
                     const idBox = await renderInstantTextBox({ ...text, text: technology.id }, parentInfo, { ...commonOptions, rawText: true });
-                    return `<span class="tech-name-variant tech-name-loc">${locBox}</span><span class="tech-name-variant tech-name-id">${idBox}</span>`;
+                    const boxes = await Promise.all(modeKeys.map(m => m.key !== undefined
+                        ? renderInstantTextBox({ ...text, text: m.key }, parentInfo, commonOptions)
+                        : Promise.resolve(idBox)));
+                    return modeKeys.map((m, i) =>
+                        `<span class="tech-name-variant tech-name-${m.id}">${boxes[i]}</span>`).join('');
                 }
             }
 
@@ -431,7 +483,7 @@ async function renderTechnology(
         data-tech-id="${technology.id}" data-tech-small="${technology.enableEquipments ? '0' : '1'}"
         start="${technology.token?.start}"
         end="${technology.token?.end}"
-        title="${technology.id}${localisationIndex ? `\n${await getLocalisedTextQuick(nameKey)}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${technology.id}${localisationIndex ? `\n${await getLocalisedTextQuick(bestNameKey)}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `
