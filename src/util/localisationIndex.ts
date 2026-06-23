@@ -205,9 +205,9 @@ async function fillLocalisationItems(localisationFile: string, localisationIndex
     hoi4?: boolean
 }, estimatedSize?: [number]): Promise<void> {
     const [fileBuffer, uri] = await readFileFromModOrHOI4(localisationFile, options);
-    const processedContent = preprocessYamlContent(fileBuffer.toString());
+    const content = fileBuffer.toString();
     try {
-        const localisations = parseLocalisationFile(processedContent);
+        const localisations = parseLocalisation(content);
         for (const langKey in localisations) {
             if (!localisationIndex[langKey]) {
                 localisationIndex[langKey] = {};
@@ -228,7 +228,7 @@ async function fillLocalisationItems(localisationFile: string, localisationIndex
         }
     } catch (e) {
         console.log(localisationFile);
-        console.log(processedContent);
+        console.log(content);
         console.error(e);
 
         const baseMessage = options.hoi4
@@ -245,51 +245,42 @@ async function fillLocalisationItems(localisationFile: string, localisationIndex
     }
 }
 
-const localisationLineRegex = /^\s*([^:]+):\s*\d*\s*"((?:[^"\\]|\\.)*)".*?(?=#|$)/;
-const unescapedQuoteRegex = /(?<!\\)"/g;
+const langHeaderRegex = /^\s*(l_[a-z_]+):\s*(?:#.*)?$/i;
+// Key, optional version number, then a greedy "(.*)" so the value spans from the first quote to
+// the last quote on the line. Greedy matching preserves quotes embedded in the value and ignores
+// any trailing `# comment`.
+const localisationEntryRegex = /^\s*([^\s:#][^:]*):\s*\d*\s*"(.*)"/;
 
-function preprocessYamlContent(fileContent: string): string {
-    const lines = fileContent.split(/\r?\n/);
+// Parses a HOI4 localisation .yml line by line rather than round-tripping through a YAML parser.
+// Each line is independent, so a single malformed entry (e.g. a value with no closing quote) is
+// skipped on its own instead of corrupting every entry after it in the same file.
+export function parseLocalisation(fileContent: string): LocalisationData {
+    const result: LocalisationData = {};
+    let currentLang: string | undefined;
 
-    // Filter out any lines that start with #, regardless of leading spaces
-    const filteredLines = lines.filter(line =>
-        !/^\s*#/.test(line)
-    );
+    for (const rawLine of fileContent.split(/\r?\n/)) {
+        const line = rawLine.replace(/^﻿/, '');
+        const trimmed = line.trim();
+        if (trimmed === '' || trimmed.startsWith('#')) {
+            continue;
+        }
 
-    const header = filteredLines.length > 0 ? filteredLines[0].replace(/^\s+/, '') : '';
-    const processedLines = filteredLines.slice(1).map(line => {
-        return ' ' + line
-            .replace(
-                localisationLineRegex,
-                (match, p1, p2) => {
-                    const escapedContent = p2.replace(unescapedQuoteRegex, '\\"');
-                    return `${p1}: "${escapedContent}"`;
-                }
-            )
-            .replace(/^\s+/, '');
-    }).filter(line =>
-        line.trim() !== ''
-    );
-
-    return [header, ...processedLines].join('\n');
-}
-
-function parseLocalisationFile(fileContent: string): Record<string, Record<string, string>> {
-    const result: Record<string, Record<string, string>> = {};
-
-    // Required lazily so js-yaml only loads when the localisation index is actually built (it is
-    // off by default), instead of at activation.
-    const yaml = require('js-yaml');
-    const parsed = yaml.load(fileContent, {schema: yaml.JSON_SCHEMA, json: true}) as Record<string, any>;
-
-    for (const langKey in parsed) {
-        if (langKey.startsWith('l_')) {
-            result[langKey] = result[langKey] || {};
-            const entries = parsed[langKey] as Record<string, string>;
-
-            for (const key in entries) {
-                result[langKey][key] = entries[key].replace(/YAMLParsingLFReplacement/g, '\n');
+        const headerMatch = langHeaderRegex.exec(line);
+        if (headerMatch) {
+            currentLang = headerMatch[1];
+            if (!result[currentLang]) {
+                result[currentLang] = {};
             }
+            continue;
+        }
+
+        if (!currentLang) {
+            continue;
+        }
+
+        const entryMatch = localisationEntryRegex.exec(line);
+        if (entryMatch) {
+            result[currentLang][entryMatch[1].trim()] = entryMatch[2];
         }
     }
 
