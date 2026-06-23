@@ -383,6 +383,12 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             <i class="codicon codicon-warning"></i>
         </button>`;
 
+    const hasAllowBranch = focusTrees.some(ft => ft.allowBranchOptions.length > 0);
+    const resetCheckboxesButton = !hasAllowBranch ? '' : `
+        <button id="reset-focus-checkboxes" title="${localize('focustree.resetcheckboxes', 'Reset focus checkboxes')}">
+            <i class="codicon codicon-clear-all"></i>
+        </button>`;
+
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 52px;`)}">
         <div class="toolbar">
             ${useConditionInFocus ? conditions + inlayConditions : allowbranch}
@@ -393,6 +399,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${inlayWindowsToggle}
             ${inlayWindows}
             ${warningsButton}
+            ${resetCheckboxesButton}
         </div>
     </div>`;
 }
@@ -568,7 +575,7 @@ async function renderFocus(
         const iconObject = resolveIcons && iconName ? await getFocusIcon(iconName, gfxFiles) : null;
         styleTable.style('focus-icon-' + normalizeForStyle(iconName ?? '-empty'), () =>
             iconObject
-                ? `background-image: url(${iconObject.uri}); background-size: ${iconObject.width}px;`
+                ? `background-image: url(${iconObject.uri}); background-size: ${iconObject.width}px; background-color: transparent;`
                 : resolveIcons
                     ? `background: grey; background-size: 0px;`
                     : `background-color: rgba(127, 127, 127, 0.25); background-size: 0px;`

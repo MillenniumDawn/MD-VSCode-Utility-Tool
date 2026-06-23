@@ -1,3 +1,12 @@
+v1.1.10
+
+  Functionality:
+  - [ Focus Tree ] Added a topbar button to reset all focus-completion checkboxes. The checkboxes that appear on focuses referenced by an `allow_branch` condition let you preview a tree as if that focus were completed, but if your `allow_branch` logic hides the very focus that owns a ticked checkbox there was no way to untick it again, leaving the preview stuck. The new button clears every checkbox at once (resetting the persisted `checkedFocuses` state and rebuilding the tree, so hidden branches reappear). It is only shown when the file actually uses `allow_branch`, and it does not touch the allow-branch dropdown's manual show/hide selections.
+
+  Bugfixes:
+  - [ Focus Tree ] The focus tree preview now understands the new dynamic focus icon syntax introduced in HOI4 1.19. Previously only the old `icon = { trigger = { ... } value = GFX_focus_x }` form was parsed; the new form puts every alternate icon in a single block as `GFX_focus_x = { <triggers> }` for conditional icons and `GFX_focus_x = yes` for the default. Focuses using the new syntax produced no icon name at all, so the preview drew a grey box with no icon. The parser now reads both forms (and the plain `icon = GFX_focus_x` string form), supports more than two alternate icons per focus, and preserves source order so the first matching condition wins on the client, with the `= yes` default applied last.
+  - [ Focus Tree ] Fixed a grey square showing behind focus icons that did load correctly. The two-phase render registers a translucent grey placeholder (`background-color`) during the fast structural pass and then streams the resolved icon (`background-image`) into a separate style element; because those are different CSS properties they stacked, so the placeholder colour kept showing through the transparent parts of the icon. The resolved-icon rule now also sets `background-color: transparent`, clearing the placeholder once the real icon is in place. The grey fallback for genuinely missing or unresolvable icons is unchanged.
+
 v1.1.9
 
   Functionality:

@@ -35,6 +35,7 @@ const internalTable = /* SOT Do not remove this comment */{
     "focustree.loading.start": "Preparing focus tree...",
     "focustree.nofocustree": "No focus tree.",
     "focustree.reload": "Reload",
+    "focustree.resetcheckboxes": "Reset focus checkboxes",
     "focustree.search": "Search: ",
     "focustree.sharedfocuses": "<Shared focuses>",
     "focustree.warnings": "Toggle warnings",

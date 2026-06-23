@@ -729,7 +729,17 @@ window.addEventListener('load', tryRun(async function() {
             warnings.style.display = visible ? 'none' : 'block';
         });
     }
-    
+
+    // Reset focus-completion checkboxes
+    const resetFocusCheckboxes = document.getElementById('reset-focus-checkboxes') as HTMLButtonElement | null;
+    if (resetFocusCheckboxes) {
+        resetFocusCheckboxes.addEventListener('click', async () => {
+            setState({ checkedFocuses: {} });
+            await buildContent();
+            retriggerSearch();
+        });
+    }
+
     updateSelectedFocusTree(false);
     await buildContent();
     scrollToState();

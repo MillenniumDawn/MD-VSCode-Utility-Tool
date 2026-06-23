@@ -619,18 +619,34 @@ function validateRelativePositionId(focuses: Record<string, Focus>, warnings: Fo
 }
 
 function parseFocusIcon(nodes: Node[], constants: {}, conditionExprs: ConditionItem[]): FocusIconWithCondition[] {
-    return nodes.map(n => parseSingleFocusIcon(n, constants, conditionExprs)).filter((v): v is FocusIconWithCondition => v !== undefined);
+    return flatten(nodes.map(n => parseSingleFocusIcon(n, constants, conditionExprs)));
 }
 
-function parseSingleFocusIcon(node: Node, constants: {}, conditionExprs: ConditionItem[]): FocusIconWithCondition {
+function parseSingleFocusIcon(node: Node, constants: {}, conditionExprs: ConditionItem[]): FocusIconWithCondition[] {
+    // Simple form: icon = GFX_focus_x
     const stringResult = convertNodeToJson<string>(node, 'string', constants);
     if (stringResult) {
-        return { icon: stringResult, condition: true };
+        return [{ icon: stringResult, condition: true }];
     }
-    
-    const iconWithCondition = convertNodeToJson<FocusIconDef>(node, focusIconSchema, constants);
-    return {
-        icon: iconWithCondition.value,
-        condition: iconWithCondition.trigger ? extractConditionValue(iconWithCondition.trigger._raw.value, countryScope, conditionExprs).condition : true,
-    };
+
+    const children = Array.isArray(node.value) ? node.value : [];
+
+    // Old block form: icon = { trigger = { ... }  value = GFX_focus_x }
+    if (children.some(c => c.name === 'value')) {
+        const iconWithCondition = convertNodeToJson<FocusIconDef>(node, focusIconSchema, constants);
+        return [{
+            icon: iconWithCondition.value,
+            condition: iconWithCondition.trigger ? extractConditionValue(iconWithCondition.trigger._raw.value, countryScope, conditionExprs).condition : true,
+        }];
+    }
+
+    // New block form (HOI4 1.19+): icon = { GFX_focus_x = { <triggers> }  GFX_focus_y = yes }
+    // Each child names a GFX sprite; a block value holds its triggers, `= yes` marks the default.
+    // Source order is preserved so the first matching condition wins on the client (the `= yes`
+    // default is conventionally last and always matches).
+    return children
+        .filter((c): c is Node & { name: string } => c.name !== null)
+        .map(c => Array.isArray(c.value)
+            ? { icon: c.name, condition: extractConditionValue(c.value, countryScope, conditionExprs).condition }
+            : { icon: c.name, condition: true });
 }
