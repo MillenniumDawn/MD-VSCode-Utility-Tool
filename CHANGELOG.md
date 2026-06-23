@@ -1,6 +1,7 @@
 v1.1.10
 
   Functionality:
+  - [ World Map ] The state hover tooltip now lists a state's `impassable_ignored_links`. HOI4 1.19.1 added this field to impassable states to name the neighbouring state IDs that are ignored when evaluating the impassable state's ownership and control. The world map loader previously parsed `impassable` but discarded the link list; it is now read as a numeric ID list and shown directly under the red **Impassable** line as `Impassable ignored links=...`. The extra line only appears for impassable states that actually define the field; passable states and impassable states without it are unaffected.
   - [ Focus Tree ] Added a topbar button to reset all focus-completion checkboxes. The checkboxes that appear on focuses referenced by an `allow_branch` condition let you preview a tree as if that focus were completed, but if your `allow_branch` logic hides the very focus that owns a ticked checkbox there was no way to untick it again, leaving the preview stuck. The new button clears every checkbox at once (resetting the persisted `checkedFocuses` state and rebuilding the tree, so hidden branches reappear). It is only shown when the file actually uses `allow_branch`, and it does not touch the allow-branch dropdown's manual show/hide selections.
 
   Bugfixes:
