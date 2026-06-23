@@ -154,7 +154,8 @@ git rev-parse --abbrev-ref HEAD
 - If **not on `main`**: commit on the current branch. Do not switch or create a branch.
 
 Then stage only the files changed for this fix and commit. **Do not add a `Co-Authored-By`
-trailer.**
+trailer, a "Generated with Claude Code" footer, or any other reference to Claude Code,
+Claude, or Anthropic** in the commit message.
 
 ```
 git add <files>
@@ -218,11 +219,12 @@ Closes #<issue number>
 ## Test plan
 - [ ] <how to reproduce the original bug and confirm it is gone>
 - [ ] <any regression check>
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
 ```
+
+**Do not add any "Generated with Claude Code" footer or any other reference to Claude Code,
+Claude, or Anthropic to the PR body.**
 
 Omit the `Closes #...` line when the fix came from a codebase scan with no issue.
 
@@ -232,7 +234,8 @@ second PR.
 - **Preserve every existing `Closes #N` line**, then append a new `Closes #<this issue number>`.
 - **Preserve every existing `## Summary` bullet**; append a new bullet, never replace prior ones.
 - **Preserve every existing `## Test plan` bullet**; append new bullets for the new fix.
-- Keep the `🤖 Generated with [Claude Code]` footer.
+- Do not add a "Generated with Claude Code" footer. If the existing body still contains such
+  a footer (or any Claude Code / Claude / Anthropic reference), remove it while rewriting.
 
 Apply with a heredoc to keep formatting intact:
 
