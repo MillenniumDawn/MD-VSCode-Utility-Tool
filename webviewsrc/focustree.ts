@@ -506,9 +506,7 @@ let retriggerSearch: () => void = () => {};
 window.addEventListener('message', async (event) => {
     const msg = event.data;
 
-    // Deferred focus-icon backgrounds: the structure was rendered with neutral placeholders; fill
-    // in the real icon CSS once the (slow) DDS->PNG conversion finished on the extension side. The
-    // target <style> already carries the page CSP nonce, so we only swap its text. (plan Stap 3)
+    // Fills the nonced <style> with the real focus-icon background CSS once the deferred conversion finishes.
     if (msg.type === 'iconStyles') {
         const styleEl = document.getElementById('ft-progressive-icons');
         if (styleEl) {
@@ -744,7 +742,6 @@ window.addEventListener('load', tryRun(async function() {
     await buildContent();
     scrollToState();
 
-    // Tell the extension the structure is on screen and we can receive deferred focus-icon CSS.
-    // The extension waits for this before posting 'iconStyles' so the message is never dropped.
+    // Tells the extension the structure is on screen so it can post the deferred focus-icon CSS.
     vscode.postMessage({ command: 'ready' });
 }));

@@ -41,12 +41,7 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
         }
 
         const styleTable = new StyleTable();
-        // Live name-mode switch: all four name variants (short/long equipment name, technology
-        // name, raw id) are rendered into the DOM and a "name-mode-*" class on #techtreecontent
-        // (driven by the toolbar dropdown) decides which is visible. The default class is
-        // "name-mode-id" so the raw id is shown until the user picks another mode. display:contents
-        // keeps the instanttextbox absolutely positioned relative to its real ancestor instead of
-        // the wrapper span.
+        // Renders every name variant and reveals one via a "name-mode-*" class on #techtreecontent (default name-mode-id).
         styleTable.raw('.tech-name-variant', 'display: none;');
         styleTable.raw('#techtreecontent.name-mode-short .tech-name-short', 'display: contents;');
         styleTable.raw('#techtreecontent.name-mode-long .tech-name-long', 'display: contents;');
@@ -372,10 +367,7 @@ interface TechNameKeys {
     id: string;
 }
 
-// Resolves the localisation keys HOI4 can use for a technology's tree name, in the forms the
-// name-mode dropdown exposes (short equipment name, long equipment name, technology name).
-// getLocalisedTextQuick returns the key unchanged when missing, so a key is "resolved" only
-// when its localisation differs from the key itself. `id` (the raw token) is always present.
+// Resolves a technology tree name's localisation keys in the dropdown's short/long equipment-name and technology-name forms.
 async function resolveTechNameKeys(technology: Technology, equipmentArchetypes: Record<string, EquipmentArchetype>): Promise<TechNameKeys> {
     const keys: TechNameKeys = { id: technology.id };
 
@@ -410,9 +402,7 @@ async function resolveTechNameKeys(technology: Technology, equipmentArchetypes: 
     return keys;
 }
 
-// Finds the short-name localisation key for an equipment: its archetype `short_name` field
-// (chasing the `archetype` parent when the equipment itself declares none), falling back to
-// the `<equipment>_short` naming convention HOI4 uses by default.
+// Finds an equipment's short-name localisation key from its (or its archetype's) `short_name` field, falling back to the `<equipment>_short` convention.
 function resolveShortNameKey(equipment: string, equipmentArchetypes: Record<string, EquipmentArchetype>): string {
     const direct = equipmentArchetypes[equipment];
     if (direct?.shortName) {

@@ -27,11 +27,7 @@ window.addEventListener('load', tryRun(function() {
 
     const contentElement = document.getElementById('techtreecontent') as HTMLDivElement;
 
-    // Live name-mode switch. Each mode maps to a "name-mode-<value>" class on #techtreecontent
-    // that reveals the matching name variant; the default is "id" (raw token). The persisted
-    // webview state overrides the default so the choice survives folder switches and reloads.
-    // When the localisation index is off, only the id resolves, so any non-id mode surfaces a
-    // warning next to the dropdown.
+    // Applies the selected name-mode as a "name-mode-<value>" class on #techtreecontent, persisted across reloads.
     const nameMode = document.getElementById('tech-name-mode') as HTMLSelectElement | null;
     if (nameMode) {
         const warning = document.getElementById('show-loc-warning');
