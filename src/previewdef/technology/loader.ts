@@ -10,6 +10,8 @@ import { GuiFileLoader } from "../gui/loader";
 import { listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
 import { getConfiguration } from "../../util/vsccommon";
 import { localisationIndex } from "../../util/featureflags";
+import { debug } from "../../util/debug";
+import { PromiseCache } from "../../util/cache";
 
 export interface TechnologyTreeLoaderResult {
     technologyTrees: TechnologyTree[];
@@ -76,15 +78,32 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
     }
 }
 
+interface EquipmentArchetypesResult {
+    equipmentArchetypes: Record<string, EquipmentArchetype>;
+    equipmentFiles: string[];
+}
+
+// A single tech-tree preview renders many technologies, and a workspace can hold many tech-tree
+// files; without caching, every render would re-walk and re-parse all `common/units/equipment`
+// files. A short TTL collapses those repeated parses while staying fresh enough that edits show up
+// within a couple of seconds, mirroring `fileListCache` in fileloader.ts.
+const equipmentArchetypeCache = new PromiseCache<EquipmentArchetypesResult>({
+    factory: () => loadEquipmentArchetypesUncached(),
+    life: 3 * 1000,
+    maxSize: 1,
+});
+
+// Returns the parsed equipment files so they can be registered as preview dependencies (edits refresh).
+function loadEquipmentArchetypes(): Promise<EquipmentArchetypesResult> {
+    return equipmentArchetypeCache.get('');
+}
+
 // Parses every `common/units/equipment/*.txt` file (mod + base game) into a single
 // id -> archetype map so the renderer can resolve equipment short names. Skipped when the
 // localisation index is off, since without it all name modes fall back to the raw id anyway.
-// Returns the parsed files so they can be registered as preview dependencies (edits refresh).
-async function loadEquipmentArchetypes(): Promise<{ equipmentArchetypes: Record<string, EquipmentArchetype>, equipmentFiles: string[] }> {
-    const equipmentArchetypes: Record<string, EquipmentArchetype> = {};
-
+async function loadEquipmentArchetypesUncached(): Promise<EquipmentArchetypesResult> {
     if (!localisationIndex) {
-        return { equipmentArchetypes, equipmentFiles: [] };
+        return { equipmentArchetypes: {}, equipmentFiles: [] };
     }
 
     const relativeFiles = chain(await listFilesFromModOrHOI4(equipmentFolder, { recursively: true }))
@@ -93,14 +112,15 @@ async function loadEquipmentArchetypes(): Promise<{ equipmentArchetypes: Record<
         .uniq()
         .value();
 
-    for (const file of relativeFiles) {
+    const fileArchetypes = await Promise.all(relativeFiles.map(async file => {
         try {
             const [buffer, realPath] = await readFileFromModOrHOI4(file);
-            const archetypes = getEquipmentArchetypes(parseHoi4File(buffer.toString(), localize('infile', 'In file {0}:\n', realPath)));
-            Object.assign(equipmentArchetypes, archetypes);
-        } catch {
+            return getEquipmentArchetypes(parseHoi4File(buffer.toString(), localize('infile', 'In file {0}:\n', realPath)));
+        } catch (e) {
+            debug('Failed to parse equipment file ' + file, e);
+            return {};
         }
-    }
+    }));
 
-    return { equipmentArchetypes, equipmentFiles: relativeFiles };
+    return { equipmentArchetypes: Object.assign({}, ...fileArchetypes), equipmentFiles: relativeFiles };
 }

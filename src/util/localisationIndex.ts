@@ -246,9 +246,7 @@ async function fillLocalisationItems(localisationFile: string, localisationIndex
 }
 
 const langHeaderRegex = /^\s*(l_[a-z_]+):\s*(?:#.*)?$/i;
-// Key, optional version number, then a greedy "(.*)" so the value spans from the first quote to
-// the last quote on the line. Greedy matching preserves quotes embedded in the value and ignores
-// any trailing `# comment`.
+// key: optional version number, then the greedy quoted value (preserves embedded quotes, ignores a trailing `# comment`).
 const localisationEntryRegex = /^\s*([^\s:#][^:]*):\s*\d*\s*"(.*)"/;
 
 // Parses a HOI4 localisation .yml line by line rather than round-tripping through a YAML parser.

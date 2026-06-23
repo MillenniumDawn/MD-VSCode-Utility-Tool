@@ -43,10 +43,9 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
         const styleTable = new StyleTable();
         // Renders every name variant and reveals one via a "name-mode-*" class on #techtreecontent (default name-mode-id).
         styleTable.raw('.tech-name-variant', 'display: none;');
-        styleTable.raw('#techtreecontent.name-mode-short .tech-name-short', 'display: contents;');
-        styleTable.raw('#techtreecontent.name-mode-long .tech-name-long', 'display: contents;');
-        styleTable.raw('#techtreecontent.name-mode-techname .tech-name-techname', 'display: contents;');
-        styleTable.raw('#techtreecontent.name-mode-id .tech-name-id', 'display: contents;');
+        for (const mode of techNameModes) {
+            styleTable.raw(`#techtreecontent.name-mode-${mode.id} .tech-name-${mode.id}`, 'display: contents;');
+        }
         const baseContent = await renderTechnologyFolders(technologyTrees, folders, styleTable, loadResult.result);
 
         return html(
@@ -367,6 +366,15 @@ interface TechNameKeys {
     id: string;
 }
 
+// The tech-tree name-mode dropdown, in tooltip-preference order. `key` selects the
+// localisation key from the resolved TechNameKeys; undefined => fall back to the raw id.
+const techNameModes: { id: string; key: (k: TechNameKeys) => string | undefined }[] = [
+    { id: 'short', key: k => k.shortKey ?? k.longKey ?? k.techKey },
+    { id: 'long', key: k => k.longKey ?? k.shortKey ?? k.techKey },
+    { id: 'techname', key: k => k.techKey },
+    { id: 'id', key: () => undefined },
+];
+
 // Resolves a technology tree name's localisation keys in the dropdown's short/long equipment-name and technology-name forms.
 async function resolveTechNameKeys(technology: Technology, equipmentArchetypes: Record<string, EquipmentArchetype>): Promise<TechNameKeys> {
     const keys: TechNameKeys = { id: technology.id };
@@ -381,18 +389,16 @@ async function resolveTechNameKeys(technology: Technology, equipmentArchetypes: 
     }
 
     for (const equipment of technology.enableEquipmentNames) {
-        if (keys.shortKey === undefined) {
-            const shortKey = resolveShortNameKey(equipment, equipmentArchetypes);
-            const shortLoc = await getLocalisedTextQuick(shortKey);
-            if (shortLoc && shortLoc !== shortKey) {
-                keys.shortKey = shortKey;
-            }
+        const shortKey = resolveShortNameKey(equipment, equipmentArchetypes);
+        const [shortLoc, longLoc] = await Promise.all([
+            keys.shortKey === undefined ? getLocalisedTextQuick(shortKey) : undefined,
+            keys.longKey === undefined ? getLocalisedTextQuick(equipment) : undefined,
+        ]);
+        if (keys.shortKey === undefined && shortLoc && shortLoc !== shortKey) {
+            keys.shortKey = shortKey;
         }
-        if (keys.longKey === undefined) {
-            const longLoc = await getLocalisedTextQuick(equipment);
-            if (longLoc && longLoc !== equipment) {
-                keys.longKey = equipment;
-            }
+        if (keys.longKey === undefined && longLoc && longLoc !== equipment) {
+            keys.longKey = equipment;
         }
         if (keys.shortKey !== undefined && keys.longKey !== undefined) {
             break;
@@ -432,11 +438,9 @@ async function renderTechnology(
     }
 
     const nameKeys = await resolveTechNameKeys(technology, equipmentArchetypes);
-    // Per-mode fallback chains (see the name-mode dropdown). undefined => fall back to the raw id.
-    const shortMode = nameKeys.shortKey ?? nameKeys.longKey ?? nameKeys.techKey;
-    const longMode = nameKeys.longKey ?? nameKeys.shortKey ?? nameKeys.techKey;
-    const techMode = nameKeys.techKey;
-    const bestNameKey = shortMode ?? longMode ?? techMode ?? technology.id;
+    // Resolve each dropdown mode's localisation key (undefined => fall back to the raw id).
+    const modeKeys = techNameModes.map(m => ({ id: m.id, key: m.key(nameKeys) }));
+    const bestNameKey = modeKeys.map(m => m.key).find(k => k !== undefined) ?? technology.id;
     const subSlotRegex = /^sub_technology_slot_(\d)$/;
     const containerWindow = await renderContainerWindow(item, parentInfo, {
         ...commonOptions,
@@ -453,18 +457,13 @@ async function renderTechnology(
                 if (childname === 'bonus') {
                     return '';
                 } else if (childname === 'name') {
-                    // A box per dropdown mode; when a mode has no key it falls back to the raw id.
-                    const makeBox = (key: string | undefined) => key !== undefined
-                        ? renderInstantTextBox({ ...text, text: key }, parentInfo, commonOptions)
-                        : renderInstantTextBox({ ...text, text: technology.id }, parentInfo, { ...commonOptions, rawText: true });
-                    const [shortBox, longBox, techBox, idBox] = await Promise.all([
-                        makeBox(shortMode), makeBox(longMode), makeBox(techMode),
-                        renderInstantTextBox({ ...text, text: technology.id }, parentInfo, { ...commonOptions, rawText: true }),
-                    ]);
-                    return `<span class="tech-name-variant tech-name-short">${shortBox}</span>`
-                        + `<span class="tech-name-variant tech-name-long">${longBox}</span>`
-                        + `<span class="tech-name-variant tech-name-techname">${techBox}</span>`
-                        + `<span class="tech-name-variant tech-name-id">${idBox}</span>`;
+                    // A box per dropdown mode; a mode with no key reuses the single raw-id box.
+                    const idBox = await renderInstantTextBox({ ...text, text: technology.id }, parentInfo, { ...commonOptions, rawText: true });
+                    const boxes = await Promise.all(modeKeys.map(m => m.key !== undefined
+                        ? renderInstantTextBox({ ...text, text: m.key }, parentInfo, commonOptions)
+                        : Promise.resolve(idBox)));
+                    return modeKeys.map((m, i) =>
+                        `<span class="tech-name-variant tech-name-${m.id}">${boxes[i]}</span>`).join('');
                 }
             }
 
