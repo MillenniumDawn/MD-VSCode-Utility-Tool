@@ -4,36 +4,27 @@ import {
 } from '../util/loader/loader';
 import { UserError } from '../util/common';
 
-// RecordingLoader: counts loadImpl/shouldReloadImpl/beforeLoadImpl calls and returns a
-// programmable result. Stalls on demand so concurrent load() calls overlap in the
-// dedup window. disableTelemetry is forced on so the test never depends on
+// RecordingLoader counts loadImpl calls and can stall mid-load so concurrent load() calls
+// overlap in the dedup window. disableTelemetry is forced on so the test never depends on
 // telemetry state.
 class RecordingLoader extends Loader<{ id: number }> {
     public loadImplCalls = 0;
-    public shouldReloadImplCalls = 0;
-    public beforeLoadImplCalls = 0;
-    public nextResult: LoadResultOD<{ id: number }> = { result: { id: 1 } };
-    public shouldReloadReturn: boolean = false;
-    private loadGate: { resolve(): void } | undefined;
+    public shouldReloadReturn = false;
+    private loadGate: { promise: Promise<void>; resolve(v: void): void } | undefined;
 
-    stall() { this.loadGate = { resolve: () => undefined }; }
+    stall() { this.loadGate = deferred<void>(); }
     release() { this.loadGate!.resolve(); this.loadGate = undefined; }
 
     protected async shouldReloadImpl(_session: LoaderSession): Promise<boolean> {
-        this.shouldReloadImplCalls++;
         return this.shouldReloadReturn;
-    }
-
-    protected beforeLoadImpl(_session: LoaderSession): void {
-        this.beforeLoadImplCalls++;
     }
 
     protected async loadImpl(_session: LoaderSession): Promise<LoadResult<{ id: number }>> {
         this.loadImplCalls++;
         if (this.loadGate) {
-            await new Promise<void>(resolve => { this.loadGate!.resolve = resolve; });
+            await this.loadGate.promise;
         }
-        return { ...this.nextResult, dependencies: [] };
+        return { result: { id: 1 }, dependencies: [] };
     }
 
     constructor() {

@@ -57,13 +57,47 @@ describe('util/featureflags', () => {
     });
 
     describe('registerFeatureFlags', () => {
-        it('returns a Disposable that has a dispose function', () => {
+        // Capture the change handler registerFeatureFlags subscribes, so a synthetic
+        // configuration-change event can drive the affectsConfiguration gate.
+        const originalOnDidChange = (vscode.workspace as any).onDidChangeConfiguration;
+        let firedHandler: ((e: { affectsConfiguration(key: string): boolean }) => void) | undefined;
+
+        beforeEach(() => {
+            firedHandler = undefined;
+            (vscode.workspace as any).onDidChangeConfiguration = (handler: any) => {
+                firedHandler = handler;
+                return { dispose: () => undefined };
+            };
+        });
+
+        afterEach(() => {
+            (vscode.workspace as any).onDidChangeConfiguration = originalOnDidChange;
+        });
+
+        it('refreshes flags when a change affecting the extension config fires', () => {
             const disp = featureflags.registerFeatureFlags();
-            try {
-                assert.strictEqual(typeof disp.dispose, 'function');
-            } finally {
-                disp.dispose();
-            }
+            config = { useConditionInFocus: true };
+            firedHandler!({ affectsConfiguration: () => true });
+
+            assert.strictEqual(featureflags.useConditionInFocus, true);
+            disp.dispose();
+        });
+
+        it('ignores changes that do not affect the extension config', () => {
+            featureflags.registerFeatureFlags();
+            config = { useConditionInFocus: true };
+            featureflags.refreshFeatureFlags();
+
+            config = { useConditionInFocus: false };
+            firedHandler!({ affectsConfiguration: () => false });
+
+            assert.strictEqual(featureflags.useConditionInFocus, true);
+        });
+
+        it('returns a Disposable', () => {
+            const disp = featureflags.registerFeatureFlags();
+            assert.strictEqual(typeof disp.dispose, 'function');
+            disp.dispose();
         });
     });
 });
