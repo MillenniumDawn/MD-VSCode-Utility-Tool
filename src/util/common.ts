@@ -68,7 +68,7 @@ export function slice<T>(array: T[] | undefined, start: number, end: number): T[
     if (realStart < 0) {
         realStart = len + realStart;
     }
-    if (realStart < 0) realStart = 0;
+    if (realStart < 0) {realStart = 0;}
 
     let realEnd = end;
     if (realEnd < 0) {

@@ -1,3 +1,8 @@
+v1.1.11
+
+  Bugfixes:
+  - [ Build ] Fixed the automated Release workflow failing on the *Publish to VS Code Marketplace*
+
 v1.1.10
 
   Functionality:

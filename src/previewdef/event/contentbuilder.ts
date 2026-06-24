@@ -448,11 +448,11 @@ async function makeEventNode(scope: string, eventNode: EventNode | string, edge:
         let contentText = '';
         if (localisationIndex) {
             let localizedTitle = await getLocalisedTextQuick(eventId);
-            if (localizedTitle !== eventId && localizedTitle != null) {
+            if (localizedTitle !== eventId && localizedTitle !== null && localizedTitle !== undefined) {
                 contentText += `<br/>${localizedTitle}`;
             } else {
                 localizedTitle = await getLocalisedTextQuick(`${eventId}.t`);
-                if (localizedTitle !== `${eventId}.t` && localizedTitle != null) {
+                if (localizedTitle !== `${eventId}.t` && localizedTitle !== null && localizedTitle !== undefined) {
                     contentText += `<br/>${localizedTitle}`;
                 }
             }

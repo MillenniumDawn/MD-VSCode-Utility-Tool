@@ -24,7 +24,7 @@ function canPreviewFocusTree(document: vscode.TextDocument) {
 }
 
 function toolbarFlagsEqual(a: ToolbarFlags | undefined, b: ToolbarFlags | undefined): boolean {
-    if (a === undefined || b === undefined) return a === b;
+    if (a === undefined || b === undefined) {return a === b;}
     return a.hasCustomTitlebar === b.hasCustomTitlebar &&
         a.hasFocusOverlay === b.hasFocusOverlay &&
         a.hasInlayWindows === b.hasInlayWindows;

@@ -90,18 +90,18 @@ async function loadMioFrame(): Promise<MioFrame | undefined> {
             let result: HOIPartial<ContainerWindowType> | undefined;
             const walk = (windows: HOIPartial<ContainerWindowType>[]) => {
                 for (const w of windows) {
-                    if (!w) continue;
+                    if (!w) {continue;}
                     if (w.name === name) {
                         result = w;
                         return;
                     }
                     if (w.containerwindowtype) {
                         walk(w.containerwindowtype);
-                        if (result) return;
+                        if (result) {return;}
                     }
                     if (w.windowtype) {
                         walk(w.windowtype);
-                        if (result) return;
+                        if (result) {return;}
                     }
                 }
             };
@@ -111,9 +111,9 @@ async function loadMioFrame(): Promise<MioFrame | undefined> {
 
         const topLevelWindows: HOIPartial<ContainerWindowType>[] = [];
         for (const g of guiFile.guitypes) {
-            if (!g) continue;
-            if (g.containerwindowtype) topLevelWindows.push(...g.containerwindowtype);
-            if (g.windowtype) topLevelWindows.push(...g.windowtype);
+            if (!g) {continue;}
+            if (g.containerwindowtype) {topLevelWindows.push(...g.containerwindowtype);}
+            if (g.windowtype) {topLevelWindows.push(...g.windowtype);}
         }
 
         const found = findByName(topLevelWindows, mioFrameWindowName);
