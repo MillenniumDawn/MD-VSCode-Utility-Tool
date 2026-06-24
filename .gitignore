@@ -53,6 +53,9 @@ jspm_packages/
 # Output of 'npm pack'
 *.tgz
 
+# Packaged extension produced by `vsce package`
+*.vsix
+
 # Yarn Integrity file
 .yarn-integrity
 

@@ -68,7 +68,7 @@ describe('webview/util/event', function () {
             select.appendChild(opt2);
             document.body.appendChild(select);
 
-            const bs = toBehaviorSubject(select, 'x');
+            const bs = toBehaviorSubject<string>(select, 'x');
             const sub = bs.subscribe(v => {
                 if (v === 'y') {
                     sub.unsubscribe();
