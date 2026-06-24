@@ -153,6 +153,50 @@ describe('Cache', () => {
         assert.deepStrictEqual(keys(cache), []);
         assert.doesNotThrow(() => cache.dispose());
     });
+
+    it('tryClean evicts entries whose lastAccess is older than life', () => {
+        const cache = track(new Cache<string>({ factory: key => key, life: 1000 }));
+        cache.get('stale');
+        cache.get('fresh');
+
+        (cache as any)._cache['stale'].lastAccess = Date.now() - 5000;
+        (cache as any).tryClean();
+
+        assert.deepStrictEqual(keys(cache), ['fresh']);
+    });
+
+    it('evicts when either maxSize or maxBytes is exceeded', () => {
+        // Both limits set; maxBytes is the binding one here.
+        const cache = track(new Cache<string>({
+            factory: key => key.repeat(10), // each value weighs 10
+            weigher: value => value.length,
+            life: 60_000,
+            maxSize: 5,
+            maxBytes: 25,
+        }));
+
+        cache.get('a');
+        cache.get('b');
+        cache.get('c'); // 30 -> over 25, evict LRU 'a'
+
+        assert.deepStrictEqual(keys(cache), ['b', 'c']);
+    });
+
+    it('treats an undefined weigher result as zero weight', () => {
+        const cache = track(new Cache<string>({
+            factory: key => key,
+            weigher: () => undefined as unknown as number,
+            life: 60_000,
+            maxBytes: 5,
+        }));
+
+        cache.get('a');
+        cache.get('b');
+        cache.get('c');
+
+        // Every weight is 0, so the byte limit is never exceeded and nothing is evicted.
+        assert.deepStrictEqual(keys(cache), ['a', 'b', 'c']);
+    });
 });
 
 describe('PromiseCache', () => {
@@ -235,5 +279,51 @@ describe('PromiseCache', () => {
         cache.clear();
 
         assert.deepStrictEqual(keys(cache), []);
+    });
+
+    it('serves from cache within nonExpireLife without consulting expireWhenChange', async () => {
+        let calls = 0;
+        let tokenCalls = 0;
+        const cache = track(new PromiseCache<number>({
+            factory: async () => ++calls,
+            expireWhenChange: () => ++tokenCalls,
+            life: 60_000,
+            nonExpireLife: 10_000,
+        }));
+
+        await cache.get('a');
+        await cache.get('a');
+
+        assert.strictEqual(calls, 1);
+        assert.strictEqual(tokenCalls, 1); // consulted once at creation, skipped on the in-window hit
+    });
+
+    it('reuses the cached promise while the expiry token is unchanged', async () => {
+        let calls = 0;
+        const cache = track(new PromiseCache<number>({
+            factory: async () => ++calls,
+            expireWhenChange: () => 'stable',
+            life: 60_000,
+            nonExpireLife: 0,
+        }));
+
+        assert.strictEqual(await cache.get('a'), 1);
+        assert.strictEqual(await cache.get('a'), 1);
+        assert.strictEqual(calls, 1);
+    });
+
+    it('refetches when the expiry token changes', async () => {
+        let calls = 0;
+        let token = 0;
+        const cache = track(new PromiseCache<number>({
+            factory: async () => ++calls,
+            expireWhenChange: () => ++token,
+            life: 60_000,
+            nonExpireLife: 0,
+        }));
+
+        assert.strictEqual(await cache.get('a'), 1);
+        assert.strictEqual(await cache.get('a'), 2);
+        assert.strictEqual(calls, 2);
     });
 });

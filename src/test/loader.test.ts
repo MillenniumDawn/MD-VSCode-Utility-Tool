@@ -141,6 +141,16 @@ describe('util/loader/loader', () => {
             assert.strictEqual(child.loadingLoader.length, 2);
         });
 
+        it('forChild shares loadedLoader so a child marking loaded is visible to the parent', () => {
+            const parent = new LoaderSession(false);
+            const loader = {} as Loader<unknown, unknown>;
+
+            const child = parent.forChild();
+            child.setLoaded(loader);
+
+            assert.strictEqual(parent.isLoaded(loader), true);
+        });
+
         it('throwIfCancelled does nothing when no callback is set', () => {
             const session = new LoaderSession(false);
             assert.doesNotThrow(() => session.throwIfCancelled());
@@ -312,6 +322,16 @@ describe('util/loader/loader', () => {
             await loader.load(new LoaderSession(false));
 
             assert.strictEqual(loader.postLoadCalls.length, 1);
+        });
+
+        it('throws a UserError when the same file is already loading in the session (circular dependency)', async () => {
+            const loader = new CapturingContentLoader('cycle.txt', async () => 'x', false);
+            const session = new LoaderSession(false);
+            // Simulate an ancestor loader already loading the same file. beforeLoadImpl walks
+            // session.loadingLoader and rejects a self-referential load.
+            session.loadingLoader.push({ file: 'cycle.txt' } as unknown as Loader<unknown, unknown>);
+
+            await assert.rejects(loader.load(session), (e: unknown) => e instanceof UserError);
         });
     });
 
