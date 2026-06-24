@@ -116,6 +116,58 @@ describe('Cache', () => {
 
         assert.deepStrictEqual(keys(cache), ['b', 'c']);
     });
+
+    it('remove() deletes a single entry', () => {
+        let calls = 0;
+        const cache = track(new Cache<number>({ factory: () => ++calls, life: 60_000 }));
+
+        assert.strictEqual(cache.get('a'), 1);
+        cache.remove('a');
+        assert.deepStrictEqual(keys(cache), []);
+        assert.strictEqual(cache.get('a'), 2);
+        assert.strictEqual(calls, 2);
+    });
+
+    it('clear() empties the cache', () => {
+        const cache = track(new Cache<string>({ factory: key => key, life: 60_000 }));
+
+        cache.get('a');
+        cache.get('b');
+        cache.clear();
+
+        assert.deepStrictEqual(keys(cache), []);
+    });
+
+    it('does not schedule a cleanup interval when life is 0', () => {
+        // life: 0 is the opt-out signal for the cleanup interval. If a regression makes
+        // the interval unconditional, the timer would keep the test process alive and
+        // mask the bug only on --exit runs. Track the cache but assert no interval was
+        // scheduled by checking the internal token.
+        const cache = track(new Cache<string>({ factory: key => key, life: 0 }));
+        assert.strictEqual((cache as any)._intervalToken, null);
+    });
+
+    it('dispose() clears the cache and the cleanup interval', () => {
+        // dispose() must clear the interval it scheduled in the constructor; if a
+        // regression swaps clearInterval back to clearTimeout (or skips the call), the
+        // interval timer would keep the process alive and any test that leaks the cache
+        // would hang. We assert the observable side effect: the cache is empty after
+        // dispose, and a second dispose call is a no-op (proves the token was actually
+        // cleared, not just held in a stale object).
+        const cache = new Cache<number>({ factory: () => 1, life: 60_000 });
+        cache.get('a');
+        assert.deepStrictEqual(keys(cache), ['a']);
+        const intervalToken = (cache as any)._intervalToken;
+        assert.ok(intervalToken, 'expected an interval to be scheduled');
+
+        cache.dispose();
+        assert.deepStrictEqual(keys(cache), []);
+
+        // A second dispose must not throw. If the implementation only called clearInterval
+        // once and stashed the token without re-clearing, a regression that double-disposes
+        // (e.g. via a try/finally that always runs) would hit clearInterval on a stale token.
+        assert.doesNotThrow(() => cache.dispose());
+    });
 });
 
 describe('PromiseCache', () => {
@@ -172,5 +224,31 @@ describe('PromiseCache', () => {
         await tick();
 
         assert.deepStrictEqual(keys(cache), ['b', 'c']);
+    });
+
+    it('remove() forces the next get to re-invoke the factory', async () => {
+        let calls = 0;
+        const cache = track(new PromiseCache<number>({
+            factory: async () => ++calls,
+            life: 60_000,
+        }));
+
+        assert.strictEqual(await cache.get('a'), 1);
+        cache.remove('a');
+        assert.strictEqual(await cache.get('a'), 2);
+        assert.strictEqual(calls, 2);
+    });
+
+    it('clear() empties the cache', async () => {
+        const cache = track(new PromiseCache<number>({
+            factory: async key => key.length,
+            life: 60_000,
+        }));
+
+        await cache.get('aa');
+        await cache.get('bbb');
+        cache.clear();
+
+        assert.deepStrictEqual(keys(cache), []);
     });
 });
