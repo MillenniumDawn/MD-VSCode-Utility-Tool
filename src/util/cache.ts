@@ -87,7 +87,7 @@ export class Cache<V> {
     public dispose(): void {
         this._cache = {};
         if (this._intervalToken) {
-            clearTimeout(this._intervalToken);
+            clearInterval(this._intervalToken);
         }
     }
 

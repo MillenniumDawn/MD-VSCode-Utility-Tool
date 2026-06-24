@@ -10,6 +10,8 @@
 		"outDir": "out-test",
 		"rootDir": ".",
 		"sourceMap": true,
+		"incremental": true,
+		"tsBuildInfoFile": "./out-test/.tsbuildinfo",
 		"strict": true,
 		"noFallthroughCasesInSwitch": true,
 		"esModuleInterop": true,

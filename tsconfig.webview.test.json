@@ -11,6 +11,8 @@
 		"outDir": "out-test-webview",
 		"rootDir": ".",
 		"sourceMap": true,
+		"incremental": true,
+		"tsBuildInfoFile": "./out-test-webview/.tsbuildinfo",
 		"strict": true,
 		"noFallthroughCasesInSwitch": true,
 		"esModuleInterop": true,
