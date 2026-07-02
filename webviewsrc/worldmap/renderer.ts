@@ -1166,16 +1166,8 @@ function resourcesHandler(resources: number): number {
     return Math.pow(resources, 0.2);
 }
 
-function valueToColorRYG(value: number): number {
-    return value < 0.5 ? (0xFF0000 | (Math.floor(255 * 2 * value) << 8)) : (0xFF00 | (Math.floor(255 * 2 * (1 - value)) << 16));
-}
-
 function valueToColorGYR(value: number): number {
     return value < 0.5 ? (0xFF00 | (Math.floor(255 * 2 * value) << 16)) : (0xFF0000 | (Math.floor(255 * 2 * (1 - value)) << 8));
-}
-
-function valueToColorBCG(value: number): number {
-    return value < 0.5 ? (0xFF | (Math.floor(255 * 2 * value) << 8)) : (0xFF00 | Math.floor(255 * 2 * (1 - value)));
 }
 
 function valueToColorGreyScale(value: number): number {

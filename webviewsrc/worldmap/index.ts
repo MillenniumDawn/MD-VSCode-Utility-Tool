@@ -13,7 +13,7 @@ fromEvent(window, 'load').subscribe(function() {
     const mainCanvas = document.getElementById('main-canvas') as HTMLCanvasElement;
     const viewPoint = new ViewPoint(mainCanvas, loader, topBarHeight, state.viewPoint || { x: 0, y: -topBarHeight, scale: 1 });
     const topBar = new TopBar(mainCanvas, viewPoint, loader, state);
-    const renderer = new Renderer(mainCanvas, viewPoint, loader, topBar);
+    new Renderer(mainCanvas, viewPoint, loader, topBar);
 
     fromEvent(mainCanvas, 'contextmenu').subscribe(event => event.preventDefault());
 
