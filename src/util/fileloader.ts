@@ -258,10 +258,6 @@ const fileListCache = new PromiseCache<string[]>({
     maxSize: 300,
 });
 
-export async function clearFileListCache() {
-    fileListCache.clear();
-}
-
 export function listFilesFromModOrHOI4(relativePath: string, options?: { mod?: boolean, hoi4?: boolean, recursively?: boolean }): Promise<string[]> {
     return fileListCache.get(JSON.stringify([relativePath, options ?? null]));
 }
