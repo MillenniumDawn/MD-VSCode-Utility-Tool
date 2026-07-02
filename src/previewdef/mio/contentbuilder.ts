@@ -13,6 +13,7 @@ import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { Mio, MioTrait, TraitEffect } from './schema';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { localisationIndex } from "../../util/featureflags";
+import { LoaderRender } from '../loaderpreview';
 
 const defaultTraitIcon = 'gfx/interface/goals/goal_unknown.dds';
 const traitEffectIconMap: Record<TraitEffect, string> = {
@@ -21,7 +22,7 @@ const traitEffectIconMap: Record<TraitEffect, string> = {
     organization: 'GFX_organization_modifier_icon',
 };
 
-export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
+export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<LoaderRender> {
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -40,10 +41,10 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
         const styleTable = new StyleTable();
         const jsCodes: string[] = [];
         const styleNonce = randomString(32);
-        const baseContent = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file, loadResult.result.frame);
+        const { baseContent, data } = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file, loadResult.result.frame);
         jsCodes.push(i18nTableAsScript());
 
-        return html(
+        const fullHtml = html(
             webview,
             baseContent,
             [
@@ -55,10 +56,18 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
             [
                 'codicon.css',
                 'common.css',
-                styleTable,
+                // Addressable id so an in-place updateBody can refresh the trait-icon CSS (this is the
+                // server StyleTable the rendered trait HTML references) without a full webview reload.
+                { content: styleTable.toRawCss(), id: 'mio-server-styles' },
                 { nonce: styleNonce },
             ],
         );
+
+        // Parts for the in-place update. styleNonce is deliberately not resent: it stays the original
+        // so the CSP-authorized <style> the webview's buildContent re-injects keeps validating. The
+        // webview refreshes these globals + the trait-icon <style>, then re-runs buildContent to
+        // redraw the tree and the tree_header_text layer, preserving scroll and client state.
+        return { html: fullHtml, update: { styleCss: styleTable.toRawCss(), data } };
 
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
@@ -71,7 +80,7 @@ const topPadding = 50;
 const xGridSize = 87;
 const yGridSize = 117;
 
-async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string, frame: MioFrame | undefined): Promise<string> {
+async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string, frame: MioFrame | undefined): Promise<{ baseContent: string; data: Record<string, unknown> }> {
 
     const gridBox: HOIPartial<GridBoxType> = {
         position: { x: toNumberLike(leftPadding), y: toNumberLike(topPadding) },
@@ -103,7 +112,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     const frameHtml = frame ? await renderFrame(frame, gfxFiles, styleTable) : '';
     jsCodes.push('window.mioFrameAvailable = ' + JSON.stringify(!!frame));
 
-    return (
+    const baseContent = (
         `<div id="dragger" class="${styleTable.oneTimeStyle('dragger', () => `
             width: 100vw;
             height: 100vh;
@@ -117,6 +126,14 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
         frameHtml +
         await renderToolBar(mios, styleTable)
     );
+
+    return {
+        baseContent,
+        // The globals the webview's buildContent re-renders from. gridBox/xGridSize are constants
+        // and mioFrameAvailable follows the gui, not the edited file, but resending them keeps the
+        // update self-contained (they don't destabilize the change hash since they never vary).
+        data: { mios, renderedTrait, renderedHeaders, gridBox, xGridSize, mioFrameAvailable: !!frame },
+    };
 }
 
 // Names of the dynamic panels inside industrial_organisation_detail_window that the game fills at

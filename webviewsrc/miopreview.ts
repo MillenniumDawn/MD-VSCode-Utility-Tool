@@ -8,9 +8,10 @@ import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
 import { toNumberLike } from "../src/hoiformat/schema";
 import { feLocalize } from './util/i18n';
+import { vscode } from "./util/vscode";
 import { Mio, MioTrait } from "../src/previewdef/mio/schema";
 
-const mios: Mio[] = (window as any).mios;
+let mios: Mio[] = (window as any).mios;
 const mioFrameAvailable: boolean = !!(window as any).mioFrameAvailable;
 
 let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
@@ -256,6 +257,58 @@ function traitToGridItem(
         connections,
     };
 }
+
+// In-place update pushed by LoaderPreview when the previewed file changed: refresh the globals
+// buildContent renders from and the server trait-icon <style>, then redraw without a full reload
+// so scroll, zoom and the selected mio / conditions survive. The toolbar controls and their load-
+// time listeners are left intact (only the placeholder grid and headers are rebuilt). Falls back
+// to a full reload if the DOM the swap needs is gone (e.g. the webview shows the "no mio" page).
+window.addEventListener('message', tryRun(async (event: MessageEvent) => {
+    const msg = event.data;
+    if (!msg || msg.type !== 'updateBody') {
+        return;
+    }
+
+    const placeholder = document.getElementById('miopreviewplaceholder') as HTMLDivElement | null;
+    if (!placeholder) {
+        vscode.postMessage({ command: 'reload' });
+        return;
+    }
+
+    if (typeof msg.styleCss === 'string') {
+        const serverStyles = document.getElementById('mio-server-styles');
+        if (serverStyles) {
+            serverStyles.textContent = msg.styleCss;
+        }
+    }
+
+    const data = msg.data ?? {};
+    if (data.mios) {
+        mios = data.mios;
+        (window as any).mios = mios;
+    }
+    if (data.renderedTrait) { (window as any).renderedTrait = data.renderedTrait; }
+    if (data.renderedHeaders) { (window as any).renderedHeaders = data.renderedHeaders; }
+    if (data.gridBox) { (window as any).gridBox = data.gridBox; }
+    if (data.xGridSize !== undefined) { (window as any).xGridSize = data.xGridSize; }
+
+    // Clamp if the mio set shrank so buildContent never indexes an undefined mio.
+    if (selectedMioIndex >= mios.length) {
+        selectedMioIndex = Math.max(0, mios.length - 1);
+        setState({ selectedMioIndex });
+        const mioSelect = document.getElementById('mios') as HTMLSelectElement | null;
+        if (mioSelect) {
+            mioSelect.value = selectedMioIndex.toString();
+        }
+    }
+
+    // buildContent replaces the placeholder's content, which can shift layout; pin the viewport.
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    updateSelectedMio(false);
+    await buildContent();
+    window.scrollTo(scrollX, scrollY);
+}));
 
 window.addEventListener('load', tryRun(async function() {
     // Mio selection
