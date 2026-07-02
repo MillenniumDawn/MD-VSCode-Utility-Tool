@@ -286,9 +286,14 @@ class FocusTreePreview extends PreviewBase {
         if (!full || this.isDisposed) {
             return;
         }
+        // Advance the generation so a still-in-flight background pushIconStyles from an earlier load
+        // fails its post-await guard instead of overwriting this newer icon CSS (and the cache).
+        // The bump + tag + post run without an await between them, so the older push can only post
+        // before the bump (then this fresh post lands after it) or drop after seeing the new value.
+        const generation = ++this.iconRenderGeneration;
         const css = full.styleTable.toRawCss();
         this.lastPushedIconCss = css;
-        this.lastPushedIconGeneration = this.iconRenderGeneration;
+        this.lastPushedIconGeneration = generation;
         this.panel.webview.postMessage({ type: 'iconStyles', css });
     }
 }
