@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import * as vscode from 'vscode';
 import {
     hashHtml,
     shouldReplaceHtml,
@@ -6,6 +7,8 @@ import {
     serializeUpdate,
     decideLoaderRender,
     LoaderRenderResult,
+    LoaderRender,
+    LoaderPreview,
 } from '../previewdef/loaderpreview';
 
 // The LoaderPreview class itself is bound to a live WebviewPanel, so the tests exercise
@@ -72,19 +75,19 @@ describe('previewdef/loaderpreview', () => {
     });
 
     describe('decideLoaderRender', () => {
-        it('posts (not assigns) when there is no prior hash but the panel is visible and update-capable', () => {
+        it('posts (not assigns) when there is no prior hash but the panel is visible, update-capable, and the loaded page has the listener', () => {
             // The initial full assign is done by getContent; once initialized, a first differing
-            // sendPartialUpdate against an update-capable, visible panel posts in place.
+            // sendPartialUpdate against an update-capable, visible page posts in place.
             const rendered: LoaderRenderResult = { html: '<h/>', update: { styleCss: '.a{}' } };
-            const d = decideLoaderRender(rendered, undefined, true);
+            const d = decideLoaderRender(rendered, undefined, true, true);
             assert.strictEqual(d.kind, 'post');
         });
 
         it('posts an in-place update when the content changed and the panel is visible', () => {
             const rendered: LoaderRenderResult = { html: '<h/>', update: { styleCss: '.a{}' } };
-            const first = decideLoaderRender(rendered, undefined, true);
+            const first = decideLoaderRender(rendered, undefined, true, true);
             const changed: LoaderRenderResult = { html: '<h2/>', update: { styleCss: '.b{}' } };
-            const d = decideLoaderRender(changed, first.hash, true);
+            const d = decideLoaderRender(changed, first.hash, true, true);
             assert.strictEqual(d.kind, 'post');
             if (d.kind === 'post') {
                 assert.strictEqual(d.message.type, 'updateBody');
@@ -93,23 +96,113 @@ describe('previewdef/loaderpreview', () => {
         });
 
         it('skips when the update payload is unchanged (even if the html nonces differ)', () => {
-            const first = decideLoaderRender({ html: '<a nonce="1"/>', update: { styleCss: '.a{}' } }, undefined, true);
-            // Same update parts, different html (fresh nonce): must still skip.
-            const d = decideLoaderRender({ html: '<a nonce="2"/>', update: { styleCss: '.a{}' } }, first.hash, true);
+            const first = decideLoaderRender({ html: '<a nonce="1"/>', update: { styleCss: '.a{}' } }, undefined, true, true);
+            // Same update parts, different html (fresh nonce), same page kind: must still skip.
+            const d = decideLoaderRender({ html: '<a nonce="2"/>', update: { styleCss: '.a{}' } }, first.hash, true, true);
             assert.strictEqual(d.kind, 'skip');
         });
 
         it('assigns html (no in-place post) for an update-capable preview when the panel is hidden', () => {
-            const first = decideLoaderRender({ html: '<a/>', update: { styleCss: '.a{}' } }, undefined, true);
-            const d = decideLoaderRender({ html: '<b/>', update: { styleCss: '.b{}' } }, first.hash, false);
+            const first = decideLoaderRender({ html: '<a/>', update: { styleCss: '.a{}' } }, undefined, true, true);
+            const d = decideLoaderRender({ html: '<b/>', update: { styleCss: '.b{}' } }, first.hash, false, true);
             assert.strictEqual(d.kind, 'assign');
         });
 
         it('assigns full html for a plain-string preview (no update support) and skips when unchanged', () => {
-            const changed = decideLoaderRender(normalizeRender('<div>a</div>'), undefined, true);
+            const changed = decideLoaderRender(normalizeRender('<div>a</div>'), undefined, true, false);
             assert.strictEqual(changed.kind, 'assign');
-            const same = decideLoaderRender(normalizeRender('<div>a</div>'), changed.hash, true);
+            const same = decideLoaderRender(normalizeRender('<div>a</div>'), changed.hash, true, false);
             assert.strictEqual(same.kind, 'skip');
+        });
+
+        it('assigns (never posts) when the loaded page has no listener, even though the render is update-capable, visible', () => {
+            // Loaded page is the no-mio / error page (not update-capable). A post here would be
+            // dropped and strand the preview, so the fixed render must full-reload.
+            const rendered: LoaderRenderResult = { html: '<full/>', update: { styleCss: '.a{}' } };
+            const d = decideLoaderRender(rendered, undefined, true, false);
+            assert.strictEqual(d.kind, 'assign');
+            if (d.kind === 'assign') {
+                assert.strictEqual(d.updateCapable, true);
+            }
+        });
+
+        it('assigns (does not skip) when the hash matches but the loaded page kind flipped', () => {
+            const rendered: LoaderRenderResult = { html: '<full/>', update: { styleCss: '.a{}' } };
+            // Get this render's hash, then feed it back with a not-update-capable loaded page: the
+            // hash matches but the kind differs, so it must not be treated as an already-applied skip.
+            const seed = decideLoaderRender(rendered, undefined, true, true);
+            const d = decideLoaderRender(rendered, seed.hash, true, false);
+            assert.strictEqual(d.kind, 'assign');
+        });
+
+        it('after an error-page assign, the next valid render assigns (regains the listener)', () => {
+            // Error page: plain string, assign, page becomes not update-capable.
+            const err = decideLoaderRender(normalizeRender('<pre>Error</pre>'), 123, true, true);
+            assert.strictEqual(err.kind, 'assign');
+            assert.strictEqual(err.kind === 'assign' && err.updateCapable, false);
+            // Error fixed: update-capable render, visible, but the loaded page has no listener.
+            const valid: LoaderRenderResult = { html: '<full/>', update: { styleCss: '.a{}', data: {} } };
+            const next = decideLoaderRender(valid, err.hash, true, err.kind === 'assign' ? err.updateCapable : true);
+            assert.strictEqual(next.kind, 'assign');
+        });
+    });
+
+    // Exercises the instance state-advance ordering: bookkeeping is advanced only after the apply
+    // succeeds, so a throwing apply leaves lastRenderHash un-advanced and the next render retries.
+    describe('LoaderPreview.sendPartialUpdate ordering', () => {
+        class TestPreview extends LoaderPreview<any> {
+            public run(document: any): Promise<void> {
+                return this.sendPartialUpdate(document);
+            }
+        }
+
+        function makePreview(render: () => Promise<LoaderRender>) {
+            let htmlSetCount = 0;
+            let lastAssignedHtml: string | undefined;
+            const webview = {
+                postMessage: () => Promise.resolve(true),
+                get html() { return lastAssignedHtml ?? ''; },
+                set html(v: string) {
+                    htmlSetCount++;
+                    if (htmlSetCount === 1) {
+                        throw new Error('apply failed');
+                    }
+                    lastAssignedHtml = v;
+                },
+                onDidReceiveMessage: () => ({ dispose() { /* no-op */ } }),
+                asWebviewUri: (u: unknown) => u,
+                cspSource: '',
+            };
+            const panel = {
+                webview,
+                visible: false, // hidden -> the changed render takes the assign path
+                onDidChangeViewState: () => ({ dispose() { /* no-op */ } }),
+                onDidDispose: () => ({ dispose() { /* no-op */ } }),
+            };
+            const createLoader = () => ({ onLoadDone: () => ({ dispose() { /* no-op */ } }), file: 'x' });
+            const preview = new TestPreview(
+                vscode.Uri.file('/tmp/mio.txt'),
+                panel as any,
+                createLoader as any,
+                render as any,
+            );
+            return { preview, get htmlSetCount() { return htmlSetCount; }, get lastAssignedHtml() { return lastAssignedHtml; } };
+        }
+
+        it('leaves lastRenderHash un-advanced when the apply throws, so the next render retries', async () => {
+            const render = () => Promise.resolve('<div>x</div>' as LoaderRender);
+            const h = makePreview(render);
+            const document = { getText: () => 'source', uri: vscode.Uri.file('/tmp/mio.txt') };
+
+            // First apply throws (html setter throws on the first assignment).
+            await assert.rejects(() => h.preview.run(document));
+            assert.strictEqual(h.htmlSetCount, 1);
+
+            // Same content again: had the hash been advanced before the throw, this would skip and
+            // never re-assign. It must retry the assign instead.
+            await h.preview.run(document);
+            assert.strictEqual(h.htmlSetCount, 2);
+            assert.strictEqual(h.lastAssignedHtml, '<div>x</div>');
         });
     });
 });

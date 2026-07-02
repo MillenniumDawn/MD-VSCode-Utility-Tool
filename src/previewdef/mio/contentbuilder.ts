@@ -112,6 +112,12 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     const frameHtml = frame ? await renderFrame(frame, gfxFiles, styleTable) : '';
     jsCodes.push('window.mioFrameAvailable = ' + JSON.stringify(!!frame));
 
+    // The mio dropdown <option> list. Built once and shared between the initial toolbar render and
+    // the update payload, so an in-place update refreshes the (localised) labels and add/remove of
+    // organizations without a full reload. The labels use server-only localisation, so the webview
+    // can't rebuild them from `mios` alone — it swaps this html into the stable <select>.
+    const mioOptionsHtml = renderMioOptions(mios);
+
     const baseContent = (
         `<div id="dragger" class="${styleTable.oneTimeStyle('dragger', () => `
             width: 100vw;
@@ -124,7 +130,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
             <div id="miopreviewplaceholder"></div>
         </div>` +
         frameHtml +
-        await renderToolBar(mios, styleTable)
+        await renderToolBar(mios, styleTable, mioOptionsHtml)
     );
 
     return {
@@ -132,8 +138,16 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
         // The globals the webview's buildContent re-renders from. gridBox/xGridSize are constants
         // and mioFrameAvailable follows the gui, not the edited file, but resending them keeps the
         // update self-contained (they don't destabilize the change hash since they never vary).
-        data: { mios, renderedTrait, renderedHeaders, gridBox, xGridSize, mioFrameAvailable: !!frame },
+        // mioOptionsHtml lets the webview refresh the dropdown while keeping the element + listener.
+        data: { mios, renderedTrait, renderedHeaders, gridBox, xGridSize, mioFrameAvailable: !!frame, mioOptionsHtml },
     };
+}
+
+function renderMioOptions(mios: Mio[]): string {
+    return mios.map((mio, i) => {
+        const localizedText = localisationIndex ? `(${mio.id}) ${getLocalisedTextQuick(mio.id)}` : mio.id;
+        return `<option value="${i}">${localizedText}</option>`;
+    }).join('');
 }
 
 // Names of the dynamic panels inside industrial_organisation_detail_window that the game fills at
@@ -251,16 +265,18 @@ async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: Styl
     </div>`;
 }
 
-async function renderToolBar(mios: Mio[], styleTable: StyleTable): Promise<string> {
-    const mioSelect = mios.length <= 1 ? '' : `
-        <label for="mios" class="${styleTable.style('miosLabel', () => `margin-right:5px`)}">${localize('miopreview.mio', 'Military Industrial Organization: ')}</label>
-        <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
-            <select id="mios" class="select multiple-select" tabindex="0" role="combobox">
-                ${mios.map((mio, i) => {
-                    const localizedText = localisationIndex ? `(${mio.id}) ${getLocalisedTextQuick(mio.id)}` : mio.id;
-                    return `<option value="${i}">${localizedText}</option>`;
-                }).join('')}
-            </select>
+async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml: string): Promise<string> {
+    // Always render the dropdown (wrapped like #condition-container so it stays one toolbar flex
+    // item) so an in-place update can refresh its options and its change listener never re-binds.
+    // Hidden for the single-org case; the webview toggles this via #mio-select-container.
+    const mioSelect = `
+        <div id="mio-select-container" class="${mios.length <= 1 ? styleTable.style('mio-select-hidden', () => `display:none`) : ''}">
+            <label for="mios" class="${styleTable.style('miosLabel', () => `margin-right:5px`)}">${localize('miopreview.mio', 'Military Industrial Organization: ')}</label>
+            <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
+                <select id="mios" class="select multiple-select" tabindex="0" role="combobox">
+                    ${mioOptionsHtml}
+                </select>
+            </div>
         </div>`;
 
     const conditions = `

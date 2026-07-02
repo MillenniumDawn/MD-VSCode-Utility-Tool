@@ -296,10 +296,21 @@ window.addEventListener('message', tryRun(async (event: MessageEvent) => {
     if (selectedMioIndex >= mios.length) {
         selectedMioIndex = Math.max(0, mios.length - 1);
         setState({ selectedMioIndex });
-        const mioSelect = document.getElementById('mios') as HTMLSelectElement | null;
-        if (mioSelect) {
-            mioSelect.value = selectedMioIndex.toString();
+    }
+
+    // Refresh the dropdown options (server sends the localised <option> list) and keep the selected
+    // index. The <select> element and its change listener are untouched, so nothing re-binds. The
+    // container is shown/hidden explicitly (block/none) so it survives the single-org boundary.
+    const mioSelect = document.getElementById('mios') as HTMLSelectElement | null;
+    if (mioSelect) {
+        if (typeof data.mioOptionsHtml === 'string') {
+            mioSelect.innerHTML = data.mioOptionsHtml;
         }
+        mioSelect.value = selectedMioIndex.toString();
+    }
+    const mioSelectContainer = document.getElementById('mio-select-container');
+    if (mioSelectContainer) {
+        mioSelectContainer.style.display = mios.length <= 1 ? 'none' : 'block';
     }
 
     // buildContent replaces the placeholder's content, which can shift layout; pin the viewport.
