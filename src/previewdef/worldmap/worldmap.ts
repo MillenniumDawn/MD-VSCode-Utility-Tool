@@ -6,14 +6,13 @@ import { html } from '../../util/html';
 import { error, debug } from '../../util/debug';
 import { WorldMapMessage, ProgressReporter, WorldMapData, MapItemMessage, RequestMapItemMessage } from './definitions';
 import { matchPathEnd } from '../../util/nodecommon';
-import { writeFile } from '../../util/vsccommon';
+import { writeFile, getConfiguration } from '../../util/vsccommon';
 import { slice, debounceByInput, forceError } from '../../util/common';
 import { openOrCopyHoiFile } from '../../util/previewfileopener';
 import { WorldMapLoader } from './loader/worldmaploader';
 import { isEqual } from 'lodash';
 import { LoaderSession } from '../../util/loader/loader';
 import { TelemetryMessage, sendByMessage } from '../../util/telemetry';
-import { getConfiguration } from '../../util/vsccommon';
 
 export class WorldMap {
     public panel: vscode.WebviewPanel | undefined;
@@ -69,7 +68,7 @@ export class WorldMap {
             }
 
             if (this.worldMapDependencies.some(d => matchPathEnd(uri.toString(), d.split('/')))) {
-                this.sendProvinceMapSummaryToWebview(false);
+                void this.sendProvinceMapSummaryToWebview(false);
             }
         },
         uri => uri.toString(),

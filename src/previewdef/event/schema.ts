@@ -1,5 +1,5 @@
 import { Node, Token } from "../../hoiformat/hoiparser";
-import { Raw, SchemaDef, convertNodeToJson, HOIPartial, isSymbolNode, NumberLike } from "../../hoiformat/schema";
+import { Raw, SchemaDef, convertNodeToJson, HOIPartial, isSymbolNode } from "../../hoiformat/schema";
 import { extractEffectValue, EffectItem, EffectComplexExpr } from "../../hoiformat/effect";
 import { Scope, ScopeType } from "../../hoiformat/scope";
 import { uniqBy } from "lodash";

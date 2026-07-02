@@ -10,7 +10,7 @@ function canPreviewWorldmap(document: vscode.TextDocument) {
     return matchPathEnd(uri.toString().toLowerCase(), ['map', 'default.map']) ? 0 : undefined;
 }
 
-function onPreviewWorldmap(document: vscode.TextDocument): Promise<void> {
+function onPreviewWorldmap(_document: vscode.TextDocument): Promise<void> {
     return worldMap.openPreview();
 }
 

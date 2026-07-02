@@ -80,7 +80,7 @@ export abstract class PreviewBase {
                                 viewColumn: vscode.ViewColumn.One
                             });
                         } else {
-                            this.openOrCopyFile(msg.file, msg.start, msg.end);
+                            void this.openOrCopyFile(msg.file, msg.start, msg.end);
                         }
                     }
                     break;
@@ -123,7 +123,7 @@ export abstract class PreviewBase {
         }
 
         this.panelInitialized = false;
-        this.onDocumentChange(document);
+        void this.onDocumentChange(document);
     }
 
     protected abstract getContent(document: vscode.TextDocument): Promise<string>;

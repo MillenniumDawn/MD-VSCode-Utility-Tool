@@ -67,7 +67,7 @@ export class CountriesLoader extends Loader<Country[]> {
     }
 
     protected async loadImpl(session: LoaderSession): Promise<LoadResult<Country[]>> {
-        this.fireOnProgressEvent(localize('worldmap.progress.loadingcountries', 'Loading countries...'));
+        await this.fireOnProgressEvent(localize('worldmap.progress.loadingcountries', 'Loading countries...'));
 
         const tagsResult = await this.countryTagsLoader.load(session);
         const countryTags = tagsResult.result;
@@ -93,7 +93,7 @@ export class CountriesLoader extends Loader<Country[]> {
 
         const countries = countriesResult.map(r => r.result).filter((c): c is Country => c !== undefined);
 
-        applyColorFromColorTxt(countries, colorsFileResult.result);
+        await applyColorFromColorTxt(countries, colorsFileResult.result);
 
         const allResults = [tagsResult, colorsFileResult, ...countriesResult];
 

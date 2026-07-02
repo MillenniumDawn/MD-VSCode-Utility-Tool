@@ -28,7 +28,7 @@ export function registerGfxIndex(): vscode.Disposable {
         const estimatedSize: [number] = [0];
         const task = Promise.all([ buildGlobalGfxIndex(estimatedSize), buildWorkspaceGfxIndex(estimatedSize) ]);
         vscode.window.setStatusBarMessage('$(loading~spin) ' + localize('gfxindex.building', 'Building GFX index...'), task);
-        task.then(() => {
+        void task.then(() => {
             vscode.window.showInformationMessage(localize('gfxindex.builddone', 'Building GFX index done.'));
             sendEvent('gfxIndex', { size: estimatedSize[0].toString() });
         });
@@ -170,7 +170,7 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
     const estimatedSize: [number] = [0];
     const task = buildWorkspaceGfxIndex(estimatedSize);
     vscode.window.setStatusBarMessage('$(loading~spin) ' + localize('gfxindex.workspace.building', 'Building workspace GFX index...'), task);
-    task.then(() => {
+    void task.then(() => {
         vscode.window.showInformationMessage(localize('gfxindex.workspace.builddone', 'Building workspace GFX index done.'));
         sendEvent('gfxIndex.workspace', { size: estimatedSize[0].toString() });
     });
@@ -243,7 +243,7 @@ function addWorkspaceGfxIndex(file: vscode.Uri) {
     if (wsFolder) {
         const relative = path.relative(wsFolder.uri.path, file.path).replace(/\\+/g, '/');
         if (relative && relative.startsWith('interface/')) {
-            fillGfxItems(relative, workspaceGfxIndex, workspaceGfxFileToKeys, { hoi4: false });
+            void fillGfxItems(relative, workspaceGfxIndex, workspaceGfxFileToKeys, { hoi4: false });
         }
     }
 }

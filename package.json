@@ -261,7 +261,8 @@
 		"@types/node": "^20",
 		"@types/pngjs": "^3.4.2",
 		"@types/vscode": "^1.74.0",
-		"@typescript-eslint/parser": "^8.62.0",
+		"@typescript-eslint/eslint-plugin": "^8.62.1",
+		"@typescript-eslint/parser": "^8.62.1",
 		"@vscode/vsce": "^3.9.2",
 		"copy-webpack-plugin": "^9.1.0",
 		"eslint": "^10.1.0",
@@ -279,7 +280,6 @@
 	},
 	"dependencies": {
 		"@vscode/codicons": "^0.0.33",
-		"@vscode/extension-telemetry": "^0.4.6",
 		"adm-zip": "^0.4.14",
 		"assert": "^2.0.0",
 		"browserify-zlib": "^0.2.0",

@@ -365,7 +365,7 @@ const flagIcons: string[] = [
 
 async function makeEventNode(scope: string, eventNode: EventNode | string, edge: EventEdge | undefined, eventsLoaderResult: EventsLoaderResult, styleTable: StyleTable): Promise<string> {
     if (typeof eventNode === 'object') {
-        const { localizationDict, gfxFiles } = eventsLoaderResult;
+        const { gfxFiles } = eventsLoaderResult;
         const event = eventNode.event;
         const eventId = event.id;
         const title = `${event.type}_event\n${localize('eventtree.eventid', 'Event ID: ')}${eventId}\n` +

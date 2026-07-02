@@ -26,7 +26,7 @@ async function loadAdjacencies(adjacenciesFile: string, progressReporter: Progre
     return adjecencies.map(row => convertRowToAdjacencies(row, warnings)).filter((v): v is ProvinceEdgeAdjacency => !!v);
 }
 
-function convertRowToAdjacencies(adjacency: string[], warnings: WorldMapWarning[]): ProvinceEdgeAdjacency | undefined {
+function convertRowToAdjacencies(adjacency: string[], _warnings: WorldMapWarning[]): ProvinceEdgeAdjacency | undefined {
     const from = parseInt(adjacency[0]);
     const to = parseInt(adjacency[1]);
     const type = adjacency[2];

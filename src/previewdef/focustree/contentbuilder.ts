@@ -5,21 +5,19 @@ import { localize, i18nTableAsScript } from '../../util/i18n';
 import { forceError, randomString, mapLimit } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
-import { GridBoxType } from '../../hoiformat/gui';
+import { GridBoxType, IconType, ButtonType } from '../../hoiformat/gui';
 import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug, error } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
-import { useConditionInFocus } from '../../util/featureflags';
+import { useConditionInFocus, localisationIndex } from '../../util/featureflags';
 import { flatMap } from 'lodash';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
-import { localisationIndex } from "../../util/featureflags";
 import { getFocusTitlebarImage, getFocusOverlayImage, loadFocusTitlebarStyles } from "./titlebar";
 import { renderContainerWindow, RenderChildTypeMap } from "../../util/hoi4gui/containerwindow";
 import { calculateBBox, ParentInfo } from "../../util/hoi4gui/common";
 import { renderInstantTextBox } from "../../util/hoi4gui/instanttextbox";
 import { renderSprite } from "../../util/hoi4gui/nodecommon";
-import { ContainerWindowType, IconType, ButtonType } from "../../hoiformat/gui";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
 

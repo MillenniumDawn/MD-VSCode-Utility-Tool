@@ -1,4 +1,4 @@
-interface TelemetryReporterInterface {
+export interface TelemetryReporterInterface {
     sendTelemetryEvent(eventName: string, properties?: {
         [key: string]: string;
     }, measurements?: {
@@ -29,7 +29,7 @@ export function registerTelemetryReporter() {
     // Telemetry is disabled: no reporter is constructed, so every send* call is a no-op.
     return {
         dispose: () => {
-            telemetryReporter?.dispose();
+            void telemetryReporter?.dispose();
             telemetryReporter = undefined;
         }
     };

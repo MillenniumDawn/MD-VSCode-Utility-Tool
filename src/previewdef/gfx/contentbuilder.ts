@@ -1,9 +1,8 @@
 import * as vscode from 'vscode';
 import { parseHoi4File } from '../../hoiformat/hoiparser';
-import { getSpriteTypes } from '../../hoiformat/spritetype';
+import { getSpriteTypes, SpriteType } from '../../hoiformat/spritetype';
 import { getImageByPath } from '../../util/image/imagecache';
 import { localize } from '../../util/i18n';
-import { SpriteType } from '../../hoiformat/spritetype';
 import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { StyleTable } from '../../util/styletable';
 import { forceError } from '../../util/common';

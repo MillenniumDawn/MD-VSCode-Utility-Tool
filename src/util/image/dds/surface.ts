@@ -141,7 +141,7 @@ export class Surface {
     }
 };
 
-const colors: Uint8Array[] = new Array(8).fill([]).map(v => new Uint8Array(4));
+const colors: Uint8Array[] = new Array(8).fill([]).map(_v => new Uint8Array(4));
 function r5g6b5ToRgb(value: number, result: Uint8Array): void {
     result[0] = Math.floor(((value & 0xF800) >> 11) * 255 / 0x1F);
     result[1] = Math.floor(((value & 0x07E0) >> 5) * 255 / 0x3F);
@@ -348,7 +348,7 @@ function sintNormalizer(value: number, max: number): number {
         (value <= midValue ? value / midValue : -(max - value + 1) / midValue);
 }
 
-function floatNormalizer(value: number, max: number): number {
+function floatNormalizer(value: number, _max: number): number {
     return value;
 }
 

@@ -1,4 +1,4 @@
-import { ConditionComplexExpr, ConditionItem, extractConditionValue, extractConditionValues } from "../../hoiformat/condition";
+import { ConditionComplexExpr, ConditionItem, extractConditionValue } from "../../hoiformat/condition";
 import { Node, Token } from "../../hoiformat/hoiparser";
 import { CustomMap, Enum, HOIPartial, Raw, SchemaDef, convertNodeToJson } from "../../hoiformat/schema";
 import { Warning, randomString } from "../../util/common";

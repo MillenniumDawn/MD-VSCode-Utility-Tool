@@ -1,11 +1,10 @@
 import * as vscode from 'vscode';
 import { PNG } from 'pngjs';
 import { parseHoi4File } from '../../hoiformat/hoiparser';
-import { getSpriteTypes } from '../../hoiformat/spritetype';
+import { getSpriteTypes, SpriteType, CorneredTileSpriteType } from '../../hoiformat/spritetype';
 import { readFileFromModOrHOI4, hoiFileExpiryToken, expiryToken } from '../fileloader';
 import { PromiseCache } from '../cache';
 import { decodeImageToPng } from './imagedecoder';
-import { SpriteType, CorneredTileSpriteType } from '../../hoiformat/spritetype';
 import { Sprite, Image, CorneredTileSprite } from './sprite';
 import { localize } from '../i18n';
 import { error } from '../debug';

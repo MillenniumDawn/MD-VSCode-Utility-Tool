@@ -1,4 +1,4 @@
-import { WorldMapData, ProgressReporter, ProvinceMap } from "../definitions";
+import { WorldMapData, ProvinceMap } from "../definitions";
 import { CountriesLoader } from "./countries";
 import { Loader, LoadResult, mergeInLoadResult } from "./common";
 import { StatesLoader } from "./states";

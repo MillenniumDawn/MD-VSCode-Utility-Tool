@@ -26,7 +26,7 @@ export class RiverLoader extends FileLoader<RiverBmp> {
 }
 
 async function loadRivers(file: string, progressReporter: ProgressReporter, warnings: WorldMapWarning[]): Promise<RiverBmp> {
-    progressReporter(localize('worldmap.progress.loadingrivers', 'Loading rivers...'));
+    await progressReporter(localize('worldmap.progress.loadingrivers', 'Loading rivers...'));
     
     const [riversImageBuffer] = await readFileFromModOrHOI4(file);
     const riversImage = parseBmp(riversImageBuffer.buffer as ArrayBuffer, riversImageBuffer.byteOffset);

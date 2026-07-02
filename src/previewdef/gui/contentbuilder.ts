@@ -1,7 +1,7 @@
 import { chain } from 'lodash';
 import * as vscode from 'vscode';
 import { ContainerWindowType } from '../../hoiformat/gui';
-import { HOIPartial, NumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
+import { HOIPartial, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { arrayToMap, forceError } from '../../util/common';
 import { debug } from '../../util/debug';
 import { getHeight, getWidth } from '../../util/hoi4gui/common';

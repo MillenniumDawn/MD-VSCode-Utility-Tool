@@ -41,7 +41,7 @@ async function selectHoiFolder(): Promise<void> {
 
     const uri = result[0];
     installPathContainer.current = uri;
-    clearDlcZipCache();
+    void clearDlcZipCache();
 
     if (!IS_WEB_EXT && isFileScheme(uri)) {
         const conf = getConfiguration();
@@ -52,7 +52,7 @@ async function selectHoiFolder(): Promise<void> {
 function onChangeWorkspaceConfiguration(e: vscode.ConfigurationChangeEvent): void {
     if (e.affectsConfiguration(`${ConfigurationKey}.installPath`)) {
         installPathContainer.current = null;
-        clearDlcZipCache();
+        void clearDlcZipCache();
     }
 }
 
@@ -61,7 +61,7 @@ class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
 
     onDidChangeFile: vscode.Event<vscode.FileChangeEvent[]> = this.onDidChangeFileEventEmitter.event;
 
-    watch(uri: vscode.Uri, options: { recursive: boolean; excludes: string[]; }): vscode.Disposable {
+    watch(_uri: vscode.Uri, _options: { recursive: boolean; excludes: string[]; }): vscode.Disposable {
         // TODO empty implementation
         return { dispose: () => {} };
     }
@@ -82,7 +82,7 @@ class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
         return vscode.workspace.fs.readFile(vscode.Uri.joinPath(this.getInstallPath(), trimStart(uri.path, '/')));
     }
     
-    writeFile(uri: vscode.Uri, content: Uint8Array, options: { create: boolean; overwrite: boolean; }): void | Thenable<void> {
+    writeFile(uri: vscode.Uri, content: Uint8Array, _options: { create: boolean; overwrite: boolean; }): void | Thenable<void> {
         return vscode.workspace.fs.writeFile(vscode.Uri.joinPath(this.getInstallPath(), trimStart(uri.path, '/')), content);
     }
 
