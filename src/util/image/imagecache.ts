@@ -4,12 +4,11 @@ import { parseHoi4File } from '../../hoiformat/hoiparser';
 import { getSpriteTypes } from '../../hoiformat/spritetype';
 import { readFileFromModOrHOI4, hoiFileExpiryToken, expiryToken } from '../fileloader';
 import { PromiseCache } from '../cache';
-import { ddsToPng, tgaToPng } from './converter';
+import { decodeImageToPng } from './imagedecoder';
 import { SpriteType, CorneredTileSpriteType } from '../../hoiformat/spritetype';
 import { Sprite, Image, CorneredTileSprite } from './sprite';
 import { localize } from '../i18n';
 import { error } from '../debug';
-import { DDS } from './dds';
 import { UserError } from '../common';
 import { getGfxContainerFile } from '../gfxindex';
 import { gfxIndex } from '../featureflags';
@@ -164,23 +163,25 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
 
     try {
         const [buffer, realPath] = readFileResult ?? await readFileFromModOrHOI4(relativePath);
-        let png: PNG;
         let pngBuffer: Buffer;
+        let width: number;
+        let height: number;
 
         relativePath = relativePath.toLowerCase();
         const decodeStart = Date.now();
         if (relativePath.endsWith('.dds')) {
-            const dds = DDS.parse(buffer.buffer as ArrayBuffer, buffer.byteOffset);
-            png = ddsToPng(dds);
-            pngBuffer = PNG.sync.write(png);
+            ({ pngBuffer, width, height } = await decodeImageToPng(buffer, 'dds'));
 
         } else if (relativePath.endsWith('.tga')) {
-            png = tgaToPng(buffer);
-            pngBuffer = PNG.sync.write(png);
+            ({ pngBuffer, width, height } = await decodeImageToPng(buffer, 'tga'));
 
         } else if (relativePath.endsWith('.png')) {
+            // PNG passthrough: the buffer is already PNG, so only its dimensions are read here (a
+            // cheap header decode, not the heavy DXT/PNG re-encode the worker handles for dds/tga).
             pngBuffer = buffer;
-            png = PNG.sync.read(buffer);
+            const png = PNG.sync.read(buffer);
+            width = png.width;
+            height = png.height;
 
         } else {
             throw new UserError('Unsupported image type: ' + relativePath);
@@ -188,7 +189,7 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
         iconResolveStats.imageDecodes++;
         iconResolveStats.imageDecodeMs += Date.now() - decodeStart;
 
-        return new Image(pngBuffer, png.width, png.height, realPath);
+        return new Image(pngBuffer, width, height, realPath);
 
     } catch (e) {
         if (!(e instanceof UserError)) {

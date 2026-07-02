@@ -73,6 +73,59 @@ const mainConfig = {
 };
 
 /**@type {import('webpack').Configuration}*/
+const imageWorkerConfig = {
+  name: 'imageWorker',
+  target: 'node', // runs as a worker_threads worker in the desktop extension host
+
+  entry: './src/util/image/imageworker.ts',
+  output: {
+    // emitted next to extension.js so the bundle resolves it via path.join(__dirname, 'imageWorker.js')
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'imageWorker.js',
+    libraryTarget: 'commonjs2',
+    devtoolModuleFilenameTemplate: '../[resource-path]'
+  },
+  devtool: 'source-map',
+  externals: {
+    vscode: 'commonjs vscode',
+    'original-fs': 'original-fs',
+  },
+  resolve: {
+    extensions: ['.ts', '.js']
+  },
+  module: {
+    rules: [
+      {
+        test: /\.ts$/,
+        exclude: /node_modules/,
+        use: [
+          {
+            loader: 'ts-loader'
+          }
+        ]
+      }
+    ]
+  },
+  plugins: [
+    new webpack.DefinePlugin({
+      EXTENSION_ID: JSON.stringify(require("./package.json").name),
+      VERSION: JSON.stringify(require("./package.json").version),
+      IS_WEB_EXT: false,
+    }),
+  ],
+  optimization: {
+    minimizer: [
+      new TerserPlugin({
+        terserOptions: {
+          keep_classnames: /\w*Loader$/,
+        },
+        extractComments: false,
+      })
+    ]
+  }
+};
+
+/**@type {import('webpack').Configuration}*/
 const mainWebConfig = {
   target: 'webworker', // vscode extensions run in a Node.js-context 📖 -> https://webpack.js.org/configuration/node/
 
@@ -222,4 +275,4 @@ const webviewJsConfig = {
   }
 };
 
-module.exports = [ mainConfig, mainWebConfig, webviewJsConfig ];
+module.exports = [ mainConfig, imageWorkerConfig, mainWebConfig, webviewJsConfig ];
