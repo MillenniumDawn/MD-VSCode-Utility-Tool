@@ -1,6 +1,7 @@
 .vscode/**
 .vscode-test/**
 .claude/**
+.superpowers/**
 out/**
 out-test/**
 out-test-webview/**
@@ -20,3 +21,4 @@ scripts/**
 webviewsrc/**
 resource/**
 .github/**
+original/**

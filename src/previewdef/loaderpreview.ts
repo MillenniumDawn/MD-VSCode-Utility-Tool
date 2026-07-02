@@ -51,6 +51,15 @@ export function serializeUpdate(update: LoaderUpdateMessage): string {
     return JSON.stringify(update);
 }
 
+// The full html embeds a fresh randomString nonce per render (util/html.ts) — in each script/style
+// tag's nonce="..." attribute and in the CSP meta's 'nonce-...' directive — so two otherwise
+// identical plain-string renders never hash equal and the skip never fires. Normalize the nonces to
+// a constant before hashing so unchanged content is detected. Only the hash input is normalized; the
+// html actually assigned to the webview keeps its real nonces.
+export function normalizeNoncesForHash(html: string): string {
+    return html.replace(/nonce="[^"]+"/g, 'nonce=""').replace(/'nonce-[^']+'/g, "'nonce-'");
+}
+
 export type LoaderUpdateAction =
     | { kind: 'skip'; hash: number }
     | { kind: 'post'; message: LoaderUpdateMessage & { type: 'updateBody' }; hash: number }
@@ -70,7 +79,7 @@ export function decideLoaderRender(
     lastPageUpdateCapable: boolean,
 ): LoaderUpdateAction {
     const updateCapable = rendered.update !== undefined;
-    const hash = rendered.update ? hashHtml(serializeUpdate(rendered.update)) : hashHtml(rendered.html);
+    const hash = rendered.update ? hashHtml(serializeUpdate(rendered.update)) : hashHtml(normalizeNoncesForHash(rendered.html));
     // Skip only when the content is unchanged AND the loaded page is the same kind (update-capable
     // or not) as this render. If the page kind flipped, the hash is computed over a different domain
     // (update payload vs full html) and a match could falsely skip, stranding a stale page.
@@ -126,7 +135,7 @@ export abstract class LoaderPreview<TLoader extends Loader<unknown, unknown>> ex
         this.content = undefined;
         // PreviewBase assigns the returned html to the webview, so the loaded page's capability is
         // this render's capability.
-        this.lastRenderHash = rendered.update ? hashHtml(serializeUpdate(rendered.update)) : hashHtml(rendered.html);
+        this.lastRenderHash = rendered.update ? hashHtml(serializeUpdate(rendered.update)) : hashHtml(normalizeNoncesForHash(rendered.html));
         this.lastPageUpdateCapable = rendered.update !== undefined;
         this.latestHtml = rendered.html;
         this.htmlPropertyStale = false;
@@ -146,12 +155,23 @@ export abstract class LoaderPreview<TLoader extends Loader<unknown, unknown>> ex
         // Advance bookkeeping only after the apply succeeds. If the post/assign throws, the state
         // stays un-advanced so the next render retries instead of skipping on a matching hash.
         if (decision.kind === 'post') {
-            this.panel.webview.postMessage(decision.message);
+            const delivered = await this.panel.webview.postMessage(decision.message);
+            if (delivered) {
+                this.latestHtml = rendered.html;
+                // The live page keeps its listener (not reloaded), so capability is unchanged; the html
+                // property still holds the pre-update document, so mark it for flush on hide.
+                this.htmlPropertyStale = true;
+                this.lastRenderHash = decision.hash;
+                return;
+            }
+            // The post was dropped (webview not ready/gone): fall back to a full html assign so the
+            // stored state reflects what actually got applied. The assigned html is update-capable
+            // (post is only chosen for update renders), so the reloaded page keeps its listener.
+            this.panel.webview.html = rendered.html;
             this.latestHtml = rendered.html;
-            // The live page keeps its listener (not reloaded), so capability is unchanged; the html
-            // property still holds the pre-update document, so mark it for flush on hide.
-            this.htmlPropertyStale = true;
+            this.htmlPropertyStale = false;
             this.lastRenderHash = decision.hash;
+            this.lastPageUpdateCapable = true;
         } else {
             this.panel.webview.html = decision.html;
             this.latestHtml = rendered.html;

@@ -146,7 +146,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
 function renderMioOptions(mios: Mio[]): string {
     return mios.map((mio, i) => {
         const localizedText = localisationIndex ? `(${mio.id}) ${getLocalisedTextQuick(mio.id)}` : mio.id;
-        return `<option value="${i}">${localizedText}</option>`;
+        return `<option value="${i}">${htmlEscape(localizedText)}</option>`;
     }).join('');
 }
 

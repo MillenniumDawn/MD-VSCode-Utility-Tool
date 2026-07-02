@@ -5,6 +5,7 @@ import {
     shouldReplaceHtml,
     normalizeRender,
     serializeUpdate,
+    normalizeNoncesForHash,
     decideLoaderRender,
     LoaderRenderResult,
     LoaderRender,
@@ -74,7 +75,40 @@ describe('previewdef/loaderpreview', () => {
         });
     });
 
+    describe('normalizeNoncesForHash', () => {
+        it('collapses script/style tag nonces and CSP directive nonces to a constant', () => {
+            const a = normalizeNoncesForHash(`<meta content="script-src 'nonce-AAA'; style-src 'nonce-BBB'"><script nonce="AAA"></script><style nonce="BBB"></style>`);
+            const b = normalizeNoncesForHash(`<meta content="script-src 'nonce-CCC'; style-src 'nonce-DDD'"><script nonce="CCC"></script><style nonce="DDD"></style>`);
+            assert.strictEqual(a, b);
+        });
+
+        it('leaves non-nonce content intact so real changes still differ', () => {
+            const a = normalizeNoncesForHash('<script nonce="AAA">bodyA</script>');
+            const b = normalizeNoncesForHash('<script nonce="BBB">bodyB</script>');
+            assert.notStrictEqual(a, b);
+        });
+    });
+
     describe('decideLoaderRender', () => {
+        it('skips a plain-string render that differs only by nonce values', () => {
+            // Two event/gui/technology renders with identical content but fresh CSP nonces: the html
+            // strings differ, but normalizing the nonces out makes them hash equal so the skip fires.
+            const a = normalizeRender(`<meta content="script-src 'nonce-AAA'"><script nonce="AAA">same</script>`);
+            const first = decideLoaderRender(a, undefined, true, false);
+            assert.strictEqual(first.kind, 'assign');
+            const b = normalizeRender(`<meta content="script-src 'nonce-BBB'"><script nonce="BBB">same</script>`);
+            const d = decideLoaderRender(b, first.hash, true, false);
+            assert.strictEqual(d.kind, 'skip');
+        });
+
+        it('does not skip a plain-string render whose content changed (beyond the nonce)', () => {
+            const a = normalizeRender('<script nonce="AAA">bodyA</script>');
+            const first = decideLoaderRender(a, undefined, true, false);
+            const b = normalizeRender('<script nonce="BBB">bodyB</script>');
+            const d = decideLoaderRender(b, first.hash, true, false);
+            assert.strictEqual(d.kind, 'assign');
+        });
+
         it('posts (not assigns) when there is no prior hash but the panel is visible, update-capable, and the loaded page has the listener', () => {
             // The initial full assign is done by getContent; once initialized, a first differing
             // sendPartialUpdate against an update-capable, visible page posts in place.
@@ -203,6 +237,84 @@ describe('previewdef/loaderpreview', () => {
             await h.preview.run(document);
             assert.strictEqual(h.htmlSetCount, 2);
             assert.strictEqual(h.lastAssignedHtml, '<div>x</div>');
+        });
+    });
+
+    // A post whose postMessage resolves false (webview not ready/gone) must fall back to a full html
+    // assign so the stored state reflects what actually got applied.
+    describe('LoaderPreview.sendPartialUpdate dropped post', () => {
+        class TestPreview extends LoaderPreview<any> {
+            public run(document: any): Promise<void> {
+                return this.sendPartialUpdate(document);
+            }
+        }
+
+        function makePreview(postResult: boolean, render: () => Promise<LoaderRender>) {
+            let htmlSetCount = 0;
+            let postCount = 0;
+            let lastAssignedHtml: string | undefined;
+            const webview = {
+                postMessage: () => { postCount++; return Promise.resolve(postResult); },
+                get html() { return lastAssignedHtml ?? ''; },
+                set html(v: string) { htmlSetCount++; lastAssignedHtml = v; },
+                onDidReceiveMessage: () => ({ dispose() { /* no-op */ } }),
+                asWebviewUri: (u: unknown) => u,
+                cspSource: '',
+            };
+            const panel = {
+                webview,
+                visible: true, // visible + update-capable + listener present -> the post path
+                onDidChangeViewState: () => ({ dispose() { /* no-op */ } }),
+                onDidDispose: () => ({ dispose() { /* no-op */ } }),
+            };
+            const createLoader = () => ({ onLoadDone: () => ({ dispose() { /* no-op */ } }), file: 'x' });
+            const preview = new TestPreview(
+                vscode.Uri.file('/tmp/mio.txt'),
+                panel as any,
+                createLoader as any,
+                render as any,
+            );
+            return {
+                preview,
+                get htmlSetCount() { return htmlSetCount; },
+                get postCount() { return postCount; },
+                get lastAssignedHtml() { return lastAssignedHtml; },
+            };
+        }
+
+        // The first run assigns (the freshly-constructed page has no listener yet), which flips the
+        // instance to update-capable; the second changed run takes the post path.
+        function makeRender() {
+            let call = 0;
+            return () => {
+                call++;
+                return Promise.resolve({ html: `<full nonce="${call}">body${call}</full>`, update: { styleCss: `.a${call}{}`, data: {} } } as LoaderRender);
+            };
+        }
+
+        it('falls back to a full html assign when postMessage resolves false', async () => {
+            const h = makePreview(false, makeRender());
+            const document = { getText: () => 'source', uri: vscode.Uri.file('/tmp/mio.txt') };
+
+            await h.preview.run(document); // assign (page not yet update-capable)
+            assert.strictEqual(h.htmlSetCount, 1);
+
+            await h.preview.run(document); // post -> dropped -> assign fallback
+            assert.strictEqual(h.postCount, 1);
+            assert.strictEqual(h.htmlSetCount, 2);
+            assert.strictEqual(h.lastAssignedHtml, '<full nonce="2">body2</full>');
+        });
+
+        it('does not assign again when postMessage resolves true', async () => {
+            const h = makePreview(true, makeRender());
+            const document = { getText: () => 'source', uri: vscode.Uri.file('/tmp/mio.txt') };
+
+            await h.preview.run(document); // assign (page not yet update-capable)
+            assert.strictEqual(h.htmlSetCount, 1);
+
+            await h.preview.run(document); // post -> delivered -> no fallback assign
+            assert.strictEqual(h.postCount, 1);
+            assert.strictEqual(h.htmlSetCount, 1);
         });
     });
 });

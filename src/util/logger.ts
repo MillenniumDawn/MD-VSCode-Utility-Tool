@@ -39,10 +39,4 @@ export class Logger {
     public static error(message: string) {
         Logger.logMessage(LogLevel.ERROR, message);
     }
-
-    public static show() {
-        if (Logger.outputChannel) {
-            Logger.outputChannel.show();
-        }
-    }
 }

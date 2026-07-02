@@ -41,8 +41,9 @@ const gfxMapCache = new PromiseCache({
 });
 
 // Diagnostic counters for profiling focus-tree icon resolution (plan Stap 1). They separate
-// "searching" cost (index misses + fallback-scan iterations) from "conversion" cost (synchronous
-// DDS->PNG decodes). Reset before a render and dumped after, behind the debug() flag.
+// "searching" cost (index misses + fallback-scan iterations) from "conversion" cost (DDS/TGA->PNG
+// decodes, offloaded to a worker with a sync fallback). Reset before a render and dumped after,
+// behind the debug() flag.
 export const iconResolveStats = {
     indexMiss: 0,
     scanIterations: 0,
