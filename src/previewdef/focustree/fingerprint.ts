@@ -18,15 +18,21 @@ export interface FocusTreeStructureInput {
 // icon-resolution pass has to produce.
 const iconKeyPrefixes = ['st-focus-icon-', 'st-focus-titlebar-', 'st-focus-overlay-', 'st-inlay-gfx-'];
 
+// Serialize a record with its keys in sorted order so insertion order (which varies under the
+// 8-way concurrent render) does not change the fingerprint.
+function sortedRecordEntries(record: Record<string, string>): [string, string][] {
+    return Object.keys(record).sort().map(k => [k, record[k]] as [string, string]);
+}
+
 export function computeStructuralFingerprint(input: FocusTreeStructureInput): string {
     return JSON.stringify([
         input.focusTrees,
-        input.renderedFocus,
-        input.renderedInlayWindows,
+        sortedRecordEntries(input.renderedFocus),
+        sortedRecordEntries(input.renderedInlayWindows),
         input.gridBox,
         input.useConditionInFocus,
         input.xGridSize,
-        input.styleRecords,
+        sortedRecordEntries(input.styleRecords),
     ]);
 }
 

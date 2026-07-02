@@ -54,6 +54,20 @@ describe('previewdef/focustree/fingerprint', () => {
             }));
             assert.notStrictEqual(before, after);
         });
+
+        it('is independent of record insertion order (the 8-way render varies it)', () => {
+            const inOrder = computeStructuralFingerprint(structureInput({
+                renderedFocus: { a: 'A', b: 'B' },
+                renderedInlayWindows: { w1: 'W1', w2: 'W2' },
+                styleRecords: { 'st-focus-common': 'position: relative;', 'st-focus-icon-goal_a': 'x' },
+            }));
+            const reversed = computeStructuralFingerprint(structureInput({
+                renderedFocus: { b: 'B', a: 'A' },
+                renderedInlayWindows: { w2: 'W2', w1: 'W1' },
+                styleRecords: { 'st-focus-icon-goal_a': 'x', 'st-focus-common': 'position: relative;' },
+            }));
+            assert.strictEqual(inOrder, reversed);
+        });
     });
 
     describe('computeIconSourceFingerprint', () => {

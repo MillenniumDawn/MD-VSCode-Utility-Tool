@@ -26,20 +26,20 @@ export abstract class PreviewBase {
         this.registerEvents(panel);
     }
 
-    public async onDocumentChange(document: vscode.TextDocument): Promise<void> {
+    public async onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
         try {
             if (!this.panelInitialized) {
                 this.panel.webview.html = await this.getContent(document);
                 this.panelInitialized = true;
             } else {
-                await this.sendPartialUpdate(document);
+                await this.sendPartialUpdate(document, dependencyChanged);
             }
         } catch(e) {
             error(e);
         }
     }
 
-    protected async sendPartialUpdate(document: vscode.TextDocument): Promise<void> {
+    protected async sendPartialUpdate(document: vscode.TextDocument, _dependencyChanged = false): Promise<void> {
         this.panel.webview.html = await this.getContent(document);
     }
     

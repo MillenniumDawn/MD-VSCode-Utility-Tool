@@ -257,7 +257,10 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
                 }
                 const otherDocument = getDocumentByUri(otherPreview.uri);
                 if (otherDocument) {
-                    void otherPreview.onDocumentChange(otherDocument);
+                    // A dependency (not the preview's own file) changed. Flag it so a preview whose
+                    // fingerprints can't see the change (e.g. a focus tree when a dependency .gfx
+                    // swaps a sprite's texturefile) still refreshes instead of skipping.
+                    void otherPreview.onDocumentChange(otherDocument, true);
                 }
             }
         },

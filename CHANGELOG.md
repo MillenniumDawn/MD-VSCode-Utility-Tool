@@ -17,6 +17,10 @@ v1.1.12
   - [ Build ] The minimum VS Code version is now 1.74 (November 2022). The five `onCommand` activation events that VS Code generates automatically since 1.74 were removed, `@types/vscode` and `@types/node` were brought up to date, and the dead `test-ui` scripts plus their orphaned `@vscode/test-electron` dependency are gone. Telemetry is disabled: the reporter (which only ever had a placeholder key) is no longer constructed and `@vscode/extension-telemetry` was dropped.
   - [ Tooling ] ESLint now actually type-checks: the `@typescript-eslint` plugin was added with `no-unused-vars`, `no-duplicate-imports` and typed `no-floating-promises`, and every surfaced violation was fixed (including two progress callbacks that were genuinely missing their `await`). The test tsconfigs were aligned to es2022 and the TS deprecation suppression removed; `noUnusedLocals` is on and the dead code it found was deleted.
   - [ Cleanup ] Removed dead code and duplication across the extension: the unused `clearFileListCache` and `scaleCopy` functions, a broken development-only command that required a nonexistent module, two unrunnable helper scripts, an eight-times-duplicated webview script literal (now one helper), the world map's copy of the open-or-copy-file logic (now shared with the previews), and a long-standing `previewContructor` typo. The output channel no longer steals focus on activation, the README documents the correct `mdHoi4Utilities.*` settings prefix, and stale `.vscodeignore` entries were pruned.
+
+v1.1.11
+
+  Bugfixes:
   - [ Build ] Fixed the automated Release workflow failing on the *Publish to VS Code Marketplace*
 
 v1.1.10

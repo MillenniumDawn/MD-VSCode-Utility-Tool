@@ -45,6 +45,13 @@ class FocusTreePreview extends PreviewBase {
     // generation it belongs to so a cache from a superseded load is never re-pushed.
     private lastPushedIconCss: string | undefined = undefined;
     private lastPushedIconGeneration = -1;
+    // An in-place `update` post patches the DOM but never refreshes the stored panel.webview.html,
+    // so a hide->show reload (no retainContextWhenHidden) restores the pre-update structure. Cache
+    // the last posted update and re-post it when the reloaded webview signals `ready`, tagged with
+    // the generation so a full reload (which bumps the generation and re-renders fresh html that
+    // already embeds the current structure) invalidates it.
+    private lastUpdateMessage: (FocusTreeUpdatePayload & { type: string }) | undefined = undefined;
+    private lastUpdateGeneration = -1;
     // Serializes updates so two loads can never run concurrently against the same loader.
     private updateQueue: Promise<void> = Promise.resolve();
     // Generation token: each full (re)load bumps it so a slow background icon push from an earlier
@@ -67,7 +74,11 @@ class FocusTreePreview extends PreviewBase {
             if (msg?.command === 'ready') {
                 this.signalWebviewReady();
                 // Bug #36: the webview re-posts `ready` after VS Code reloads it (e.g. on hide->show),
-                // which drops the pushed icon CSS. Re-push the cached CSS so icons don't vanish.
+                // which drops both the in-place structural update and the pushed icon CSS. Restore the
+                // update first (it rebuilds #focustreeplaceholder) then the icon CSS: #ft-progressive-icons
+                // lives outside that element and survives the rebuild, so this mirrors a fresh load
+                // (structure, then icons stream in) and both orders would in fact work.
+                this.repushCachedUpdate();
                 this.repushCachedIconStyles();
             }
         });
@@ -82,6 +93,12 @@ class FocusTreePreview extends PreviewBase {
     private repushCachedIconStyles(): void {
         if (this.lastPushedIconCss !== undefined && this.lastPushedIconGeneration === this.iconRenderGeneration && !this.isDisposed) {
             this.panel.webview.postMessage({ type: 'iconStyles', css: this.lastPushedIconCss });
+        }
+    }
+
+    private repushCachedUpdate(): void {
+        if (this.lastUpdateMessage !== undefined && this.lastUpdateGeneration === this.iconRenderGeneration && !this.isDisposed) {
+            this.panel.webview.postMessage(this.lastUpdateMessage);
         }
     }
 
@@ -103,10 +120,10 @@ class FocusTreePreview extends PreviewBase {
         };
     }
 
-    public onDocumentChange(document: vscode.TextDocument): Promise<void> {
+    public onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
         // Chain onto the previous update so renders are serialized. By the time a queued
         // render runs it reads the live document text, coalescing intermediate edits.
-        const run = this.updateQueue.then(() => super.onDocumentChange(document));
+        const run = this.updateQueue.then(() => super.onDocumentChange(document, dependencyChanged));
         this.updateQueue = run.catch(() => undefined);
         return run;
     }
@@ -114,6 +131,9 @@ class FocusTreePreview extends PreviewBase {
     protected async getContent(document: vscode.TextDocument): Promise<string> {
         this.content = document.getText();
         const generation = ++this.iconRenderGeneration;
+        // A full (re)render embeds the current structure directly in the returned html, so any cached
+        // in-place update belongs to a superseded page and must never be re-posted over this render.
+        this.lastUpdateMessage = undefined;
         this.webviewReady = new Promise<void>(resolve => { this.signalWebviewReady = resolve; });
         const progress = (message: string, current?: number, total?: number) => {
             this.panel.webview.postMessage({ type: 'progress', message, current, total });
@@ -152,6 +172,14 @@ class FocusTreePreview extends PreviewBase {
             // Timeout or unexpected failure: show a recoverable panel with a Reload button
             // instead of leaving the user stuck on a dead loading spinner.
             error(e);
+            // The error page carries no update listener, so reset the structure state (mirroring the
+            // no-tree branch above). Clearing lastToolbarFlags makes the next edit take the full-reload
+            // path via the toolbar-flags mismatch instead of posting into a listener-less page or
+            // skipping forever on a stale fingerprint. (lastUpdateMessage was already cleared on entry.)
+            this.lastStructuralFingerprint = undefined;
+            this.lastIconSourceFingerprint = undefined;
+            this.lastToolbarFlags = undefined;
+            this.lastGoodHadFocusTrees = false;
             return buildFocusTreeErrorHtml(this.panel.webview, document.uri, e);
         } finally {
             this.focusTreeLoader.setProgressListener(undefined);
@@ -188,7 +216,18 @@ class FocusTreePreview extends PreviewBase {
         return loadingShellHtml(localize('focustree.loading.start', 'Preparing focus tree...'));
     }
 
-    protected async sendPartialUpdate(document: vscode.TextDocument): Promise<void> {
+    protected async sendPartialUpdate(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
+        if (!this.panel.visible) {
+            // A hidden panel silently drops posted messages and never refreshes the stored
+            // webview.html, so an in-place update would be lost while its advanced fingerprint made
+            // later identical edits skip forever, and a re-show would restore stale structure. Take
+            // the full-reload path: getContent writes webview.html directly (works while hidden) and
+            // re-derives the fingerprints; its phase-2 icon push waits on webviewReady, which fires
+            // from the `ready` handler when the panel is shown and the reloaded webview loads.
+            this.panelInitialized = false;
+            await super.onDocumentChange(document);
+            return;
+        }
         this.content = document.getText();
         try {
             // Cheap structure-only pass: the rendered focus/inlay HTML is identical to a full render,
@@ -236,7 +275,14 @@ class FocusTreePreview extends PreviewBase {
                     : { structural: this.lastStructuralFingerprint, iconSource: this.lastIconSourceFingerprint };
             const decision = decideFocusTreeUpdate(previous, fingerprints);
 
-            if (!decision.postUpdate && !decision.pushIcons) {
+            // A dependency .gfx edit can swap a sprite's texturefile without changing the structure
+            // or the icon identity (same GFX name -> same icon key), so neither fingerprint moves.
+            // previewmanager re-invokes us with our OWN document even for a dependency change, so the
+            // document identity can't flag it; the dependencyChanged signal, threaded from the
+            // subscription path, is what forces the (expensive) icon re-resolution in that case.
+            const forceIcons = dependencyChanged;
+
+            if (!decision.postUpdate && !decision.pushIcons && !forceIcons) {
                 // Nothing the webview renders changed (the common while-typing case): skip entirely.
                 this.lastGoodHadFocusTrees = true;
                 return;
@@ -258,10 +304,20 @@ class FocusTreePreview extends PreviewBase {
                     xGridSize: structure.xGridSize,
                 };
                 this.panel.webview.postMessage(updateMsg);
+                this.lastUpdateMessage = updateMsg;
             }
 
-            if (decision.pushIcons) {
+            if (decision.pushIcons || forceIcons) {
                 await this.repushResolvedIconStyles();
+            }
+
+            // Re-tag the cached update with the current generation (bumped by repushResolvedIconStyles
+            // if it ran) so it stays in lockstep with the icon cache and a later full reload, which
+            // bumps the generation, invalidates it. The cached update still reflects the current
+            // structure here: a full reload would have cleared it, and decision.postUpdate === false
+            // only when the structure is unchanged from the last render.
+            if (this.lastUpdateMessage !== undefined) {
+                this.lastUpdateGeneration = this.iconRenderGeneration;
             }
         } finally {
             this.content = undefined;
