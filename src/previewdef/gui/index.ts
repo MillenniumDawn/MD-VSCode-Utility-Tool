@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
 import { PreviewProviderDef } from '../previewmanager';
-import { PreviewBase } from '../previewbase';
+import { LoaderPreview } from '../loaderpreview';
 import { GuiFileLoader } from './loader';
-import { getRelativePathInWorkspace } from '../../util/vsccommon';
 import { renderGuiFile } from './contentbuilder';
 
 function canPreviewGui(document: vscode.TextDocument) {
@@ -10,21 +9,9 @@ function canPreviewGui(document: vscode.TextDocument) {
     return uri.path.toLowerCase().endsWith('.gui') ? 0 : undefined;
 }
 
-class GuiPreview extends PreviewBase {
-    private guiFileLoader: GuiFileLoader;
-    private content: string | undefined;
-
+class GuiPreview extends LoaderPreview<GuiFileLoader> {
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
-        super(uri, panel);
-        this.guiFileLoader = new GuiFileLoader(getRelativePathInWorkspace(this.uri), () => Promise.resolve(this.content ?? ''));
-        this.guiFileLoader.onLoadDone(r => this.updateDependencies(r.dependencies));
-    }
-
-    protected async getContent(document: vscode.TextDocument): Promise<string> {
-        this.content = document.getText();
-        const result = await renderGuiFile(this.guiFileLoader, document.uri, this.panel.webview);
-        this.content = undefined;
-        return result;
+        super(uri, panel, (file, contentProvider) => new GuiFileLoader(file, contentProvider), renderGuiFile);
     }
 }
 
