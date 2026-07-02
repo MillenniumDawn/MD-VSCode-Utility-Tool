@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { EventsLoader, EventsLoaderResult } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug } from '../../util/debug';
-import { html, htmlEscape } from '../../util/html';
+import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { localize } from '../../util/i18n';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { HOIEvent, HOIEventType } from './schema';
@@ -17,8 +17,6 @@ import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { localisationIndex } from "../../util/featureflags";
 
 export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
-    
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -32,7 +30,7 @@ export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, web
             webview,
             baseContent,
             [
-                setPreviewFileUriScript,
+                previewedFileUriScript(uri),
                 'common.js',
                 'eventtree.js',
             ],
@@ -44,7 +42,7 @@ export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, web
 
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
     }
 
 }

@@ -4,22 +4,20 @@ import { getSpriteTypes } from '../../hoiformat/spritetype';
 import { getImageByPath } from '../../util/image/imagecache';
 import { localize } from '../../util/i18n';
 import { SpriteType } from '../../hoiformat/spritetype';
-import { html, htmlEscape } from '../../util/html';
+import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { StyleTable } from '../../util/styletable';
 import { forceError } from '../../util/common';
 
 export async function renderGfxFile(fileContent: string, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
-
     try {
         const spriteTypes = getSpriteTypes(parseHoi4File(fileContent, localize('infile', 'In file {0}:\n', uri.toString())));
         const styleTable = new StyleTable();
         const baseContent = await renderSpriteTypes(spriteTypes, styleTable);
         return html(
             webview,
-            baseContent, 
+            baseContent,
             [
-                setPreviewFileUriScript,
+                previewedFileUriScript(uri),
                 'common.js',
                 'gfx.js',
             ],
@@ -31,7 +29,7 @@ export async function renderGfxFile(fileContent: string, uri: vscode.Uri, webvie
 
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
     }
 }
 

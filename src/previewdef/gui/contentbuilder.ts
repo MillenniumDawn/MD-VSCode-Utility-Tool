@@ -7,7 +7,7 @@ import { debug } from '../../util/debug';
 import { getHeight, getWidth } from '../../util/hoi4gui/common';
 import { RenderContainerWindowOptions, renderContainerWindow } from '../../util/hoi4gui/containerwindow';
 import { RenderNodeCommonOptions } from '../../util/hoi4gui/nodecommon';
-import { html, htmlEscape } from '../../util/html';
+import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { localize } from '../../util/i18n';
 import { getSpriteByGfxName } from '../../util/image/imagecache';
 import { LoaderSession } from '../../util/loader/loader';
@@ -15,7 +15,6 @@ import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { GuiFileLoader, GuiFileLoaderResult } from "./loader";
 
 export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -27,7 +26,7 @@ export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webv
         
         if (containerWindows.length === 0) {
             const baseContent = localize('guipreview.nocontainerwindows', 'No containerwindowtype in gui file.');
-            return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+            return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
         }
 
         const styleTable = new StyleTable();
@@ -37,7 +36,7 @@ export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webv
             webview,
             baseContent,
             [
-                setPreviewFileUriScript,
+                previewedFileUriScript(uri),
                 { content: 'window.containerWindowToggles = ' + JSON.stringify(makeToggleContainerWindowCheckboxes(containerWindows, styleTable)) + ';' },
                 'common.js',
                 'guipreview.js',
@@ -51,7 +50,7 @@ export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webv
 
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
     }
 }
 

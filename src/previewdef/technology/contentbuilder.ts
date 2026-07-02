@@ -9,7 +9,7 @@ import { ParentInfo, RenderCommonOptions } from '../../util/hoi4gui/common';
 import { renderGridBox, GridBoxItem, GridBoxConnection, GridBoxConnectionItem } from '../../util/hoi4gui/gridbox';
 import { renderInstantTextBox } from '../../util/hoi4gui/instanttextbox';
 import { renderIcon } from '../../util/hoi4gui/icon';
-import { html, htmlEscape } from '../../util/html';
+import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { ContainerWindowType, GridBoxType, IconType, InstantTextBoxType, Format } from '../../hoiformat/gui';
 import { TechnologyTreeLoader, TechnologyTreeLoaderResult } from './loader';
 import { EquipmentArchetype } from './equipmentschema';
@@ -25,7 +25,6 @@ const techTreeViewName = 'countrytechtreeview';
 const doctrineTreeViewName = 'countrydoctrineview';
 
 export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -37,7 +36,7 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
         
         if (folders.length === 0) {
             const baseContent = localize('techtree.notechtree', 'No technology tree.');
-            return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+            return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
         }
 
         const styleTable = new StyleTable();
@@ -52,7 +51,7 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
             webview,
             baseContent,
             [
-                setPreviewFileUriScript,
+                previewedFileUriScript(uri),
                 'common.js',
                 'techtree.js',
             ],
@@ -65,7 +64,7 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
 
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
     }
 }
 

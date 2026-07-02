@@ -4,7 +4,7 @@ import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconR
 import { localize, i18nTableAsScript } from '../../util/i18n';
 import { forceError, randomString, mapLimit } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { html, htmlEscape } from '../../util/html';
+import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
 import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
@@ -149,8 +149,6 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
  * time, halving the heavy image work on the initial load.
  */
 export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.Webview, uri: vscode.Uri): string {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
-
     const jsCodes: string[] = [];
     jsCodes.push('window.focusTrees = ' + JSON.stringify(payload.focusTrees));
     jsCodes.push('window.renderedFocus = ' + JSON.stringify(payload.renderedFocus));
@@ -167,7 +165,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
         webview,
         baseContent,
         [
-            setPreviewFileUriScript,
+            previewedFileUriScript(uri),
             ...jsCodes.map(c => ({ content: c })),
             'common.js',
             'focustree.js',
@@ -183,9 +181,8 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
 
 /** HTML shown when the file legitimately contains no focus tree. */
 export function buildNoFocusTreeHtml(webview: vscode.Webview, uri: vscode.Uri): string {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
     const baseContent = localize('focustree.nofocustree', 'No focus tree.');
-    return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+    return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
 }
 
 /**
@@ -193,7 +190,6 @@ export function buildNoFocusTreeHtml(webview: vscode.Webview, uri: vscode.Uri): 
  * never stuck in a dead loading spinner when a render is too slow or fails.
  */
 export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri, e: unknown): string {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
     const reloadScript = {
         content: `(function(){
             var api = acquireVsCodeApi();
@@ -209,7 +205,7 @@ export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri
         <pre style="white-space:pre-wrap; opacity:0.8;">${message}</pre>
         <button id="ft-reload">${reloadLabel}</button>
     </div>`;
-    return html(webview, baseContent, [ setPreviewFileUriScript, reloadScript ], []);
+    return html(webview, baseContent, [ previewedFileUriScript(uri), reloadScript ], []);
 }
 
 const leftPaddingBase = 50;

@@ -12,6 +12,11 @@ export interface NonceOnly {
     nonce: string;
 }
 
+// Inline script exposing the previewed file's URI to the webview as window.previewedFileUri.
+export function previewedFileUriScript(uri: vscode.Uri): DynamicScript {
+    return { content: `window.previewedFileUri = "${uri.toString()}";` };
+}
+
 export function html(webview: vscode.Webview, body: string, scripts: (string | DynamicScript)[], styles?: (string | StyleTable | DynamicScript | NonceOnly)[]): string {
     const preparedScripts = scripts.map<[string, string]>(script => {
         if (typeof script === 'string') {

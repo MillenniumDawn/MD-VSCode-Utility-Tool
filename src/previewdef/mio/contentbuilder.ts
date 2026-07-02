@@ -3,7 +3,7 @@ import { getSpriteByGfxName, Image, getImageByPath } from '../../util/image/imag
 import { localize, i18nTableAsScript } from '../../util/i18n';
 import { forceError, randomString } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { html, htmlEscape } from '../../util/html';
+import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { ContainerWindowType, GridBoxType } from '../../hoiformat/gui';
 import { renderContainerWindow } from '../../util/hoi4gui/containerwindow';
 import { MioFrame, MioLoader } from './loader';
@@ -22,8 +22,6 @@ const traitEffectIconMap: Record<TraitEffect, string> = {
 };
 
 export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
-
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -34,7 +32,7 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
 
         if (mios.length === 0) {
             const baseContent = localize('miopreview.nomio', 'No military industrial organization defined.');
-            return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+            return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
         }
 
         mios.sort((a, b) => a.id.localeCompare(b.id));
@@ -49,7 +47,7 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
             webview,
             baseContent,
             [
-                setPreviewFileUriScript,
+                previewedFileUriScript(uri),
                 ...jsCodes.map(c => ({ content: c })),
                 'common.js',
                 'miopreview.js',
@@ -64,7 +62,7 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
 
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
     }
 }
 
