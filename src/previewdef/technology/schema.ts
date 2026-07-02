@@ -162,10 +162,13 @@ function getTechnologiesByTree(technologiesInOneFolder: Technology[]): Record<st
     return trees;
 }
 
-// A technology belongs to a special project when it carries a `CAT_sp_*` category
-// (seen in the mod data: CAT_sp_aa, CAT_sp_arty, CAT_sp_r_arty).
-export function isSpecialProjectTech(categories: string[]): boolean {
-    return categories.some(category => /^cat_sp_/i.test(category));
+// A technology is a special project only when BOTH hold: its id is `sp_`/`SP_` prefixed AND it
+// carries a `CAT_sp_*` category. In the mod data the genuine SP techs (SP_Anti_Air_*, SP_arty_*,
+// SP_R_arty_*) satisfy both. Requiring both avoids false positives: ordinary upgrade techs
+// (Arty_upgrade_3..5, nsb_Arty_upgrade_3..6) carry a CAT_sp_* category but are not SP, while
+// `sp_double_shot_rifle_tech` has an sp_ id but no CAT_sp_ category.
+export function isSpecialProjectTech(id: string, categories: string[]): boolean {
+    return /^sp_/i.test(id) && categories.some(category => /^cat_sp_/i.test(category));
 }
 
 function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Record<string, Technology> {
@@ -181,7 +184,7 @@ function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Rec
         const enableEquipmentNames = technology.enable_equipments._values.filter((p): p is string => p !== undefined);
         const enableEquipments = enableEquipmentNames.length > 0;
         const categories = technology.categories._values.filter((p): p is string => p !== undefined);
-        const isSpecialProject = isSpecialProjectTech(categories);
+        const isSpecialProject = isSpecialProjectTech(id, categories);
         const folders: Record<string, TechnologyFolder> = {};
         
         for (const folder of technology.folder) {

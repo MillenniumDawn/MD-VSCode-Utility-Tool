@@ -439,7 +439,7 @@ async function renderTechnology(
     const subSlotRegex = /^sub_technology_slot_(\d)$/;
     // Subtle SP marker on the item background, so special-project techs stand out even when the SP gfx asset is missing.
     const specialProjectClass = technology.isSpecialProject
-        ? commonOptions.styleTable.style('techSpecialProject', () => `box-shadow: inset 0 0 6px 1px rgba(160, 100, 230, 0.6);`)
+        ? technologySpecialProjectClass(commonOptions.styleTable)
         : undefined;
     const containerWindow = await renderContainerWindow(item, parentInfo, {
         ...commonOptions,
@@ -545,15 +545,18 @@ async function renderSubTechnology(
         return '';
     }
 
+    // Sub-techs render through this path only (they carry no `folder` field), so the SP tint must be applied
+    // here too or genuine SP sub-techs (SP_Anti_Air_*, SP_arty_*, SP_R_arty_*) would never be marked.
+    const specialProjectClass = subTechnology.isSpecialProject
+        ? technologySpecialProjectClass(commonOptions.styleTable)
+        : undefined;
     const containerWindowResult = await renderContainerWindow(containerWindow, parentInfo, {
         ...commonOptions,
+        classNames: specialProjectClass,
         getSprite: (sprite, callerType, callerName) => {
             let imageTryList = [sprite];
             if (callerType === 'bg' && callerName === containerWindow.background?.name) {
-                imageTryList = [
-                    `GFX_subtechnology_${folder}_available_item_bg`,
-                    `GFX_subtechnology_available_item_bg`,
-                ];
+                imageTryList = getSubTechnologySpriteNames(folder.name, subTechnology.isSpecialProject);
             } else if (callerType === 'icon' && callerName?.toLowerCase() === 'picture') {
                 return getTechnologyIcon(sprite, gfxFiles);
             }
@@ -648,6 +651,30 @@ async function renderLineItem(
     });
 
     return containerWindow;
+}
+
+// Subtle inner-glow marker shared by SP techs and SP sub-techs. The style key is stable so both call
+// sites resolve to the same generated class.
+function technologySpecialProjectClass(styleTable: StyleTable): string {
+    return styleTable.style('techSpecialProject', () => `box-shadow: inset 0 0 6px 1px rgba(160, 100, 230, 0.6);`);
+}
+
+// Sprite-name try-list for a sub-technology background. For an SP sub-tech a `_special_project` variant is
+// prepended (mirroring the top-level tech background); the mod defines no such subtechnology sprite today, so
+// it is a harmless forward-compatible fallback and the visible SP treatment is the CSS tint. The non-SP list is
+// unchanged from before the SP feature.
+export function getSubTechnologySpriteNames(folder: string, isSpecialProject: boolean): string[] {
+    const baseNames = [
+        `GFX_subtechnology_${folder}_available_item_bg`,
+        `GFX_subtechnology_available_item_bg`,
+    ];
+    if (!isSpecialProject) {
+        return baseNames;
+    }
+    return [
+        `GFX_subtechnology_${folder}_special_project_available_item_bg`,
+        ...baseNames,
+    ];
 }
 
 async function getSpriteFromTryList(tryList: string[], gfxFiles: string[]): Promise<Sprite | undefined> {
