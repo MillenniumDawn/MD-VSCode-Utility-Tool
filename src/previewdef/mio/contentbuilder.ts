@@ -233,10 +233,10 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable): Promise<strin
         <label for="mios" class="${styleTable.style('miosLabel', () => `margin-right:5px`)}">${localize('miopreview.mio', 'Military Industrial Organization: ')}</label>
         <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
             <select id="mios" class="select multiple-select" tabindex="0" role="combobox">
-                ${await Promise.all(mios.map(async (mio, i) => {
-                    const localizedText = localisationIndex ? `(${mio.id}) ${await getLocalisedTextQuick(mio.id)}` : mio.id;
+                ${mios.map((mio, i) => {
+                    const localizedText = localisationIndex ? `(${mio.id}) ${getLocalisedTextQuick(mio.id)}` : mio.id;
                     return `<option value="${i}">${localizedText}</option>`;
-                })).then(options => options.join(''))}
+                }).join('')}
             </select>
         </div>`;
 
@@ -312,7 +312,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
         start="${trait.token?.start}"
         end="${trait.token?.end}"
         ${file === trait.file ? '' : `file="${trait.file}"`}
-        title="${trait.id}${localisationIndex ? `\n${await getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
+        title="${trait.id}${localisationIndex ? `\n${getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
             <div class="
                 ${styleTable.style('effect-host', () => `
                     text-align: center;
@@ -356,7 +356,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
                 position: relative;
                 z-index: 5;
             `)}">
-            ${localisationIndex ? `${await getLocalisedTextQuick(trait.name)}` : ''}
+            ${localisationIndex ? `${getLocalisedTextQuick(trait.name)}` : ''}
             </span>
         </div>
     </div>`;

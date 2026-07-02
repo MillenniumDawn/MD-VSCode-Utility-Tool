@@ -379,7 +379,7 @@ async function makeEventNode(scope: string, eventNode: EventNode | string, edge:
                     `${edge.randomDays > 0 ? `${edge.days}-${edge.days + edge.randomDays}` : edge.days} ${localize('days', 'day(s)')}` :
                     `${edge.randomHours > 0 ? `${edge.hours}-${edge.hours + edge.randomHours}` : edge.hours} ${localize('hours', 'hour(s)')}`) + '\n' :
                 '') +
-            `${localize('eventtree.scope', 'Scope: ')}${scope}\n${localize('eventtree.title', 'Title: ')}${localisationIndex ? await getLocalisedTextQuick(event.title) : event.title}`;
+            `${localize('eventtree.scope', 'Scope: ')}${scope}\n${localize('eventtree.title', 'Title: ')}${localisationIndex ? getLocalisedTextQuick(event.title) : event.title}`;
 
         const flags = [event.hidden, event.fire_only_once, event.major, eventNode.loop];
         const content = `<p class="
@@ -401,7 +401,7 @@ async function makeEventNode(scope: string, eventNode: EventNode | string, edge:
                     : ''}
             </p>
             <p class="${styleTable.style('paragraph', () => 'margin: 5px 0; text-overflow: ellipsis; overflow: hidden;')}">
-                ${localisationIndex? await getLocalisedTextQuick(event.title) : event.title}
+                ${localisationIndex? getLocalisedTextQuick(event.title) : event.title}
             </p>`;
         
         const extraAttributes = [];
@@ -445,11 +445,11 @@ async function makeEventNode(scope: string, eventNode: EventNode | string, edge:
         const title = `${localize('eventtree.eventid', 'Event ID: ')}${eventId}\n${localize('eventtree.scope', 'Scope: ')}${scope}`;
         let contentText = '';
         if (localisationIndex) {
-            let localizedTitle = await getLocalisedTextQuick(eventId);
+            let localizedTitle = getLocalisedTextQuick(eventId);
             if (localizedTitle !== eventId && localizedTitle !== null && localizedTitle !== undefined) {
                 contentText += `<br/>${localizedTitle}`;
             } else {
-                localizedTitle = await getLocalisedTextQuick(`${eventId}.t`);
+                localizedTitle = getLocalisedTextQuick(`${eventId}.t`);
                 if (localizedTitle !== `${eventId}.t` && localizedTitle !== null && localizedTitle !== undefined) {
                     contentText += `<br/>${localizedTitle}`;
                 }
@@ -478,7 +478,7 @@ async function makeOptionNode(option: OptionNode, eventsLoaderResult: EventsLoad
     let content = option.optionName;
     let title = option.optionName;
     if (localisationIndex){
-        const optionName = await getLocalisedTextQuick(option.optionName);
+        const optionName = getLocalisedTextQuick(option.optionName);
         content = `${option.optionName} <br/> ${optionName}`;
         title = `${option.optionName} \n ${optionName}`;
     }

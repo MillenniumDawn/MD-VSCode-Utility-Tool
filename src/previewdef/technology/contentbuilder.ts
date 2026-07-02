@@ -109,12 +109,10 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
 }
 
 async function renderFolderSelector(folders: string[], styleTable: StyleTable): Promise<string> {
-    const folderOptions = await Promise.all(
-        folders.map(async (folder) => {
-            const localizedText = localisationIndex ? `${await getLocalisedTextQuick(folder)} (${folder})` : folder;
-            return `<option value="techfolder_${folder}">${localizedText}</option>`;
-        })
-    );
+    const folderOptions = folders.map((folder) => {
+        const localizedText = localisationIndex ? `${getLocalisedTextQuick(folder)} (${folder})` : folder;
+        return `<option value="techfolder_${folder}">${localizedText}</option>`;
+    });
 
     return `<div
     class="${styleTable.oneTimeStyle('folderSelectorBar', () => `
@@ -382,17 +380,15 @@ async function resolveTechNameKeys(technology: Technology, equipmentArchetypes: 
         return keys;
     }
 
-    const techLoc = await getLocalisedTextQuick(technology.id);
+    const techLoc = getLocalisedTextQuick(technology.id);
     if (techLoc && techLoc !== technology.id) {
         keys.techKey = technology.id;
     }
 
     for (const equipment of technology.enableEquipmentNames) {
         const shortKey = resolveShortNameKey(equipment, equipmentArchetypes);
-        const [shortLoc, longLoc] = await Promise.all([
-            keys.shortKey === undefined ? getLocalisedTextQuick(shortKey) : undefined,
-            keys.longKey === undefined ? getLocalisedTextQuick(equipment) : undefined,
-        ]);
+        const shortLoc = keys.shortKey === undefined ? getLocalisedTextQuick(shortKey) : undefined;
+        const longLoc = keys.longKey === undefined ? getLocalisedTextQuick(equipment) : undefined;
         if (keys.shortKey === undefined && shortLoc && shortLoc !== shortKey) {
             keys.shortKey = shortKey;
         }
@@ -482,7 +478,7 @@ async function renderTechnology(
         data-tech-id="${technology.id}" data-tech-small="${technology.enableEquipments ? '0' : '1'}"
         start="${technology.token?.start}"
         end="${technology.token?.end}"
-        title="${technology.id}${localisationIndex ? `\n${await getLocalisedTextQuick(bestNameKey)}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${technology.id}${localisationIndex ? `\n${getLocalisedTextQuick(bestNameKey)}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `
@@ -555,7 +551,7 @@ async function renderSubTechnology(
         data-subtech-id="${subTechnology.id}"
         start="${subTechnology.token?.start}"
         end="${subTechnology.token?.end}"
-        title="${subTechnology.id}${localisationIndex ? `\n${await getLocalisedTextQuick(subTechnology.id)}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${subTechnology.id}${localisationIndex ? `\n${getLocalisedTextQuick(subTechnology.id)}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `

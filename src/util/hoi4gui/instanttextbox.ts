@@ -44,6 +44,6 @@ export async function renderInstantTextBox(textbox: HOIPartial<InstantTextBoxTyp
         `)}
         ${options.enableNavigator ? 'navigator navigator-highlight' : ''}
     ">
-        ${htmlEscape(localisationIndex && !options.rawText ? (await getLocalisedTextQuick(textbox.text) ?? ' ') : (textbox.text ?? ''))}
+        ${htmlEscape(localisationIndex && !options.rawText ? (getLocalisedTextQuick(textbox.text) ?? ' ') : (textbox.text ?? ''))}
     </div>`;
 }

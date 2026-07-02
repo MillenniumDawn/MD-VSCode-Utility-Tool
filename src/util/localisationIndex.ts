@@ -68,7 +68,7 @@ export function registerLocalisationIndex(): vscode.Disposable {
     return vscode.Disposable.from(...disposables);
 }
 
-export async function getLocalisedTextQuick(localisationKey: string | undefined): Promise<string | undefined> {
+export function getLocalisedTextQuick(localisationKey: string | undefined): string | undefined {
     const previewLocalisation = vscode.workspace.getConfiguration(ConfigurationKey).previewLocalisation;
     if (previewLocalisation){
         return getLocalisedText(localisationKey, localeISOMapping[previewLocalisation]?? vscode.env.language);
@@ -76,7 +76,7 @@ export async function getLocalisedTextQuick(localisationKey: string | undefined)
     return getLocalisedText(localisationKey, vscode.env.language);
 }
 
-export async function getLocalisedText(localisationKey: string | undefined, language: string): Promise<string | undefined> {
+export function getLocalisedText(localisationKey: string | undefined, language: string): string | undefined {
     if (!localisationKey) {
         return localisationKey;
     }
