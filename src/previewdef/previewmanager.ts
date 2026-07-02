@@ -22,7 +22,7 @@ export type PreviewProviderDef = PreviewProviderDefNormal | PreviewProviderDefAl
 interface PreviewProviderDefNormal {
     type: string;
     canPreview(document: vscode.TextDocument): number | undefined;
-    previewContructor: new (uri: vscode.Uri, panel: vscode.WebviewPanel) => PreviewBase;
+    previewConstructor: new (uri: vscode.Uri, panel: vscode.WebviewPanel) => PreviewBase;
 }
 
 interface PreviewProviderDefAlternative {
@@ -184,7 +184,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             };
         }
 
-        const previewItem = new previewProvider.previewContructor(uri, panel);
+        const previewItem = new previewProvider.previewConstructor(uri, panel);
         this._previews[key] = previewItem;
 
         previewItem.onDispose(() => {

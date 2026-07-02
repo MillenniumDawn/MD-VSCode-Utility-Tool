@@ -37,5 +37,5 @@ class TechnologyTreePreview extends PreviewBase {
 export const technologyPreviewDef: PreviewProviderDef = {
     type: 'technology',
     canPreview: canPreviewTechnology,
-    previewContructor: TechnologyTreePreview,
+    previewConstructor: TechnologyTreePreview,
 };

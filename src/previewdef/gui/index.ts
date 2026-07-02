@@ -31,5 +31,5 @@ class GuiPreview extends PreviewBase {
 export const guiPreviewDef: PreviewProviderDef = {
     type: 'gui',
     canPreview: canPreviewGui,
-    previewContructor: GuiPreview,
+    previewConstructor: GuiPreview,
 };

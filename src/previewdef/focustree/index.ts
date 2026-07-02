@@ -202,5 +202,5 @@ class FocusTreePreview extends PreviewBase {
 export const focusTreePreviewDef: PreviewProviderDef = {
     type: 'focustree',
     canPreview: canPreviewFocusTree,
-    previewContructor: FocusTreePreview,
+    previewConstructor: FocusTreePreview,
 };

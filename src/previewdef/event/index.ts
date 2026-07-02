@@ -54,5 +54,5 @@ class EventPreview extends PreviewBase {
 export const eventPreviewDef: PreviewProviderDef = {
     type: 'event',
     canPreview: canPreviewEvent,
-    previewContructor: EventPreview,
+    previewConstructor: EventPreview,
 };

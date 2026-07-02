@@ -17,5 +17,5 @@ class GfxPreview extends PreviewBase {
 export const gfxPreviewDef: PreviewProviderDef = {
     type: 'gfx',
     canPreview: canPreviewGfx,
-    previewContructor: GfxPreview,
+    previewConstructor: GfxPreview,
 };

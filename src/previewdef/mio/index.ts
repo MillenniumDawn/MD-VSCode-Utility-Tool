@@ -36,5 +36,5 @@ class MioPreview extends PreviewBase {
 export const mioPreviewDef: PreviewProviderDef = {
     type: 'mio',
     canPreview: canPreviewMio,
-    previewContructor: MioPreview,
+    previewConstructor: MioPreview,
 };
