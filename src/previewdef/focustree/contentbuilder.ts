@@ -4,22 +4,20 @@ import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconR
 import { localize, i18nTableAsScript } from '../../util/i18n';
 import { forceError, randomString, mapLimit } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { html, htmlEscape } from '../../util/html';
-import { GridBoxType } from '../../hoiformat/gui';
+import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
+import { GridBoxType, IconType, ButtonType } from '../../hoiformat/gui';
 import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug, error } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
-import { useConditionInFocus } from '../../util/featureflags';
+import { useConditionInFocus, localisationIndex } from '../../util/featureflags';
 import { flatMap } from 'lodash';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
-import { localisationIndex } from "../../util/featureflags";
 import { getFocusTitlebarImage, getFocusOverlayImage, loadFocusTitlebarStyles } from "./titlebar";
 import { renderContainerWindow, RenderChildTypeMap } from "../../util/hoi4gui/containerwindow";
 import { calculateBBox, ParentInfo } from "../../util/hoi4gui/common";
 import { renderInstantTextBox } from "../../util/hoi4gui/instanttextbox";
 import { renderSprite } from "../../util/hoi4gui/nodecommon";
-import { ContainerWindowType, IconType, ButtonType } from "../../hoiformat/gui";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
 
@@ -39,7 +37,6 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
     styleTable: StyleTable;
     styleNonce: string;
     toolbarFlags: ToolbarFlags;
-    cssFingerprint: string;
 }
 
 export type { ToolbarFlags };
@@ -123,8 +120,6 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             slotsize: { width: toNumberLike(xGridSize), height: toNumberLike(yGridSize) },
         } as HOIPartial<GridBoxType>;
 
-        const cssFingerprint = JSON.stringify((styleTable as any).records);
-
         return {
             focusTrees,
             renderedFocus,
@@ -135,7 +130,6 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             styleTable,
             styleNonce,
             toolbarFlags,
-            cssFingerprint,
         };
     } catch (e) {
         error(e);
@@ -149,8 +143,6 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
  * time, halving the heavy image work on the initial load.
  */
 export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.Webview, uri: vscode.Uri): string {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
-
     const jsCodes: string[] = [];
     jsCodes.push('window.focusTrees = ' + JSON.stringify(payload.focusTrees));
     jsCodes.push('window.renderedFocus = ' + JSON.stringify(payload.renderedFocus));
@@ -167,7 +159,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
         webview,
         baseContent,
         [
-            setPreviewFileUriScript,
+            previewedFileUriScript(uri),
             ...jsCodes.map(c => ({ content: c })),
             'common.js',
             'focustree.js',
@@ -183,9 +175,8 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
 
 /** HTML shown when the file legitimately contains no focus tree. */
 export function buildNoFocusTreeHtml(webview: vscode.Webview, uri: vscode.Uri): string {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
     const baseContent = localize('focustree.nofocustree', 'No focus tree.');
-    return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+    return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
 }
 
 /**
@@ -193,7 +184,6 @@ export function buildNoFocusTreeHtml(webview: vscode.Webview, uri: vscode.Uri): 
  * never stuck in a dead loading spinner when a render is too slow or fails.
  */
 export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri, e: unknown): string {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
     const reloadScript = {
         content: `(function(){
             var api = acquireVsCodeApi();
@@ -209,7 +199,7 @@ export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri
         <pre style="white-space:pre-wrap; opacity:0.8;">${message}</pre>
         <button id="ft-reload">${reloadLabel}</button>
     </div>`;
-    return html(webview, baseContent, [ setPreviewFileUriScript, reloadScript ], []);
+    return html(webview, baseContent, [ previewedFileUriScript(uri), reloadScript ], []);
 }
 
 const leftPaddingBase = 50;
@@ -309,7 +299,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const customTitlebars = !flags.hasCustomTitlebar ? '' : `
         <div class="${styleTable.style('customTitlebarsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
-            <label for="show-custom-titlebars">${localize('TODO', 'Custom titlebars')}</label>
+            <label for="show-custom-titlebars">${localize('focustree.customtitlebars', 'Custom titlebars')}</label>
             <input
                 id="show-custom-titlebars"
                 type="checkbox"
@@ -318,7 +308,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const focusOverlays = !flags.hasFocusOverlay ? '' : `
         <div class="${styleTable.style('focusOverlaysContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
-            <label for="show-focus-overlays">${localize('TODO', 'Focus overlays')}</label>
+            <label for="show-focus-overlays">${localize('focustree.focusoverlays', 'Focus overlays')}</label>
             <input
                 id="show-focus-overlays"
                 type="checkbox"
@@ -327,7 +317,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const inlayWindowsToggle = !flags.hasInlayWindows ? '' : `
         <div id="show-inlay-windows-container" class="${styleTable.style('inlayWindowsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
-            <label for="show-inlay-windows">${localize('TODO', 'Inlay windows')}</label>
+            <label for="show-inlay-windows">${localize('focustree.inlaywindows', 'Inlay windows')}</label>
             <input
                 id="show-inlay-windows"
                 type="checkbox"
@@ -336,7 +326,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const inlayWindows = !flags.hasInlayWindows ? '' : `
         <div id="inlay-window-container">
-            <label for="inlay-windows" class="${styleTable.style('inlayWindowsLabel', () => `margin-right:5px`)}">${localize('TODO', 'Inlay window: ')}</label>
+            <label for="inlay-windows" class="${styleTable.style('inlayWindowsLabel', () => `margin-right:5px`)}">${localize('focustree.inlaywindow', 'Inlay window: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
                 <select id="inlay-windows" class="select multiple-select" tabindex="0" role="combobox"></select>
             </div>
@@ -354,7 +344,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const conditions = `
         <div id="condition-container">
-            <label for="conditions" class="${styleTable.style('conditionsLabel', () => `margin-right:5px`)}">${localize('TODO', 'Focus conditions: ')}</label>
+            <label for="conditions" class="${styleTable.style('conditionsLabel', () => `margin-right:5px`)}">${localize('focustree.focusconditions', 'Focus conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
                 <div id="conditions" class="select multiple-select" tabindex="0" role="combobox" class="${styleTable.style('conditionsLabel', () => `max-width:400px`)}">
                     <span class="value"></span>
@@ -364,7 +354,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const inlayConditions = `
         <div id="inlay-condition-container">
-            <label for="inlay-conditions" class="${styleTable.style('inlayConditionsLabel', () => `margin-right:5px`)}">${localize('TODO', 'Inlay conditions: ')}</label>
+            <label for="inlay-conditions" class="${styleTable.style('inlayConditionsLabel', () => `margin-right:5px`)}">${localize('focustree.inlayconditions', 'Inlay conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
                 <div id="inlay-conditions" class="select multiple-select" tabindex="0" role="combobox">
                     <span class="value"></span>
@@ -602,10 +592,10 @@ async function renderFocus(
 
     let textContent = focus.id;
     if (localisationIndex){
-        let localizedText = await getLocalisedTextQuick(focus.id);
+        let localizedText = getLocalisedTextQuick(focus.id);
         if (localizedText === focus.id || !localizedText){
             if (focus.text){
-                localizedText = await getLocalisedTextQuick(focus.text);
+                localizedText = getLocalisedTextQuick(focus.text);
                 if (localizedText !== focus.text && localizedText !== null){
                     textContent += `<br/>${localizedText}`;
                 }

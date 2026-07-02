@@ -2,14 +2,13 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { PromiseCache } from './cache';
 import { isSamePath } from './nodecommon';
-import { getLastModifiedAsync, readDirFiles, isFile, isDirectory, readFile, readDir, isSameUri, fileOrUriStringToUri, ensureFileScheme, readDirFilesRecursively } from './vsccommon';
+import { getLastModifiedAsync, readDirFiles, isFile, isDirectory, readFile, readDir, isSameUri, fileOrUriStringToUri, ensureFileScheme, readDirFilesRecursively, getConfiguration, getDocumentByUri } from './vsccommon';
 import { parseHoi4File } from '../hoiformat/hoiparser';
 import { localize } from './i18n';
 import { convertNodeToJson, SchemaDef, HOIPartial } from '../hoiformat/schema';
 import { error } from './debug';
 import { updateSelectedModFileStatus, workspaceModFilesCache } from './modfile';
-import { getConfiguration, getDocumentByUri } from './vsccommon';
-import { UserError } from './common';
+import { UserError, memoizeWithTtl } from './common';
 import type * as AdmZip from 'adm-zip';
 import { Hoi4FsSchema } from '../constants';
 import { trimStart } from 'lodash';
@@ -174,18 +173,31 @@ export async function hoiFileExpiryToken(relativePath: string): Promise<string> 
     return await expiryToken(await getFilePathFromModOrHOI4(relativePath));;
 }
 
+// Short-TTL memo over the filesystem stat used to build a file's on-disk expiry token. A single
+// preview render can resolve hundreds of icons, each re-checking its mtime; within EXPIRY_STAT_TTL
+// the memoized mtime is reused so those hundreds of stat calls collapse to one per file. Opened/
+// dirty documents never reach this memo (they take the Date.now() branch in expiryToken), so it
+// can never make an edited document look unchanged.
+const EXPIRY_STAT_TTL = 500;
+const getLastModifiedMemo = memoizeWithTtl(
+    (key: string) => getLastModifiedAsync(vscode.Uri.parse(key)),
+    { ttl: EXPIRY_STAT_TTL },
+);
+
 export async function expiryToken(realPath: vscode.Uri | undefined): Promise<string> {
     if (!realPath) {
         return '';
     }
 
     if (isHoiFileOpened(realPath)) {
+        // Opened/dirty documents must always look fresh: return a token that changes every call so
+        // the content cache never serves stale editor text. This branch bypasses the stat memo.
         return realPath.toString() + '@' + Date.now();
     } else if (isHoiFileFromDlc(realPath)) {
-        return realPath.with({ fragment: '' }).toString() + '@' + await getLastModifiedAsync(realPath);
+        return realPath.with({ fragment: '' }).toString() + '@' + await getLastModifiedMemo(realPath.toString());
     }
 
-    return realPath.toString() + '@' + await getLastModifiedAsync(realPath);
+    return realPath.toString() + '@' + await getLastModifiedMemo(realPath.toString());
 }
 
 export async function readFileFromPath(realPath: vscode.Uri, relativePath?: string): Promise<[Buffer, vscode.Uri]> {
@@ -257,10 +269,6 @@ const fileListCache = new PromiseCache<string[]>({
     life: 3 * 1000,
     maxSize: 300,
 });
-
-export async function clearFileListCache() {
-    fileListCache.clear();
-}
 
 export function listFilesFromModOrHOI4(relativePath: string, options?: { mod?: boolean, hoi4?: boolean, recursively?: boolean }): Promise<string[]> {
     return fileListCache.get(JSON.stringify([relativePath, options ?? null]));

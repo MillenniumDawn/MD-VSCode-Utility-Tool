@@ -4,7 +4,7 @@ import { registerContextContainer, setVscodeContext } from './context';
 import { DDSViewProvider, TGAViewProvider } from './ddsviewprovider';
 import { registerModFile } from './util/modfile';
 import { worldMap } from './previewdef/worldmap';
-import { ViewType, ContextName, Commands } from './constants';
+import { ViewType, ContextName } from './constants';
 import { registerTelemetryReporter, sendEvent } from './util/telemetry';
 import { registerScanReferencesCommand } from './util/dependency';
 import { registerHoiFs } from './util/hoifs';
@@ -22,7 +22,6 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     Logger.initialize();
-    Logger.show();
 
     loadI18n(locale);
 
@@ -44,15 +43,6 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(registerGfxIndex());
     context.subscriptions.push(registerLocalisationIndex());
 
-    if (process.env.NODE_ENV !== 'production') {
-        vscode.commands.registerCommand(Commands.Test, () => {
-            const debugModule = require('./util/debug.shouldignore');
-            debugModule.testCommand();
-        });
-
-        setVscodeContext(ContextName.Hoi4MUInDev, true);
-    }
-    
     setVscodeContext(ContextName.Hoi4MULoaded, true);
 }
 

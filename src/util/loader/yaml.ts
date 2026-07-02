@@ -7,7 +7,7 @@ export class YamlLoader extends ContentLoader<any> {
         this.readDependency = false;
     }
 
-    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: any, session: LoaderSession): Promise<LoadResultOD<any>> {
+    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: any, _session: LoaderSession): Promise<LoadResultOD<any>> {
         if (error || (content === undefined)) {
             throw error;
         }

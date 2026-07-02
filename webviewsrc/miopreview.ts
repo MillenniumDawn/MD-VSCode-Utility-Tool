@@ -2,15 +2,16 @@ import { getState, setState, arrayToMap, subscribeNavigators, scrollToState, try
 import { DivDropdown } from "./util/dropdown";
 import { minBy } from "lodash";
 import { renderGridBoxCommon, GridBoxItem, GridBoxConnection } from "../src/util/hoi4gui/gridboxcommon";
-import { StyleTable, normalizeForStyle } from "../src/util/styletable";
+import { StyleTable } from "../src/util/styletable";
 import { applyCondition, ConditionItem } from "../src/hoiformat/condition";
 import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
 import { toNumberLike } from "../src/hoiformat/schema";
 import { feLocalize } from './util/i18n';
+import { vscode } from "./util/vscode";
 import { Mio, MioTrait } from "../src/previewdef/mio/schema";
 
-const mios: Mio[] = (window as any).mios;
+let mios: Mio[] = (window as any).mios;
 const mioFrameAvailable: boolean = !!(window as any).mioFrameAvailable;
 
 let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
@@ -60,14 +61,19 @@ async function buildContent() {
         cornerPosition: 0.5,
     });
 
-    miopreviewplaceholder.innerHTML = traitPreviewContent + styleTable.toStyleElement((window as any).styleNonce);
+    // Column headers (tree_header_text). Server-rendered and localised per mio; each header carries
+    // only its column offset (left = x * xGridSize). We wrap them in a layer anchored to the same
+    // origin as the grid (leftPadding is computed above, so headers track the grid when it shifts).
+    const headerHtml: string = ((window as any).renderedHeaders ?? {})[mio.id] ?? '';
+    const headerTop = gridbox.position.y._value - 30;
+    const headerLayer = headerHtml
+        ? `<div class="${styleTable.oneTimeStyle('mio-header-layer', () => `position:absolute; left:${leftPadding}px; top:${headerTop}px;`)}">${headerHtml}</div>`
+        : '';
+
+    miopreviewplaceholder.innerHTML = traitPreviewContent + headerLayer + styleTable.toStyleElement((window as any).styleNonce);
 
     applyFrameState();
     subscribeNavigators();
-}
-
-function escapeHtml(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function applyFrameState() {
@@ -251,6 +257,69 @@ function traitToGridItem(
         connections,
     };
 }
+
+// In-place update pushed by LoaderPreview when the previewed file changed: refresh the globals
+// buildContent renders from and the server trait-icon <style>, then redraw without a full reload
+// so scroll, zoom and the selected mio / conditions survive. The toolbar controls and their load-
+// time listeners are left intact (only the placeholder grid and headers are rebuilt). Falls back
+// to a full reload if the DOM the swap needs is gone (e.g. the webview shows the "no mio" page).
+window.addEventListener('message', tryRun(async (event: MessageEvent) => {
+    const msg = event.data;
+    if (!msg || msg.type !== 'updateBody') {
+        return;
+    }
+
+    const placeholder = document.getElementById('miopreviewplaceholder') as HTMLDivElement | null;
+    if (!placeholder) {
+        vscode.postMessage({ command: 'reload' });
+        return;
+    }
+
+    if (typeof msg.styleCss === 'string') {
+        const serverStyles = document.getElementById('mio-server-styles');
+        if (serverStyles) {
+            serverStyles.textContent = msg.styleCss;
+        }
+    }
+
+    const data = msg.data ?? {};
+    if (data.mios) {
+        mios = data.mios;
+        (window as any).mios = mios;
+    }
+    if (data.renderedTrait) { (window as any).renderedTrait = data.renderedTrait; }
+    if (data.renderedHeaders) { (window as any).renderedHeaders = data.renderedHeaders; }
+    if (data.gridBox) { (window as any).gridBox = data.gridBox; }
+    if (data.xGridSize !== undefined) { (window as any).xGridSize = data.xGridSize; }
+
+    // Clamp if the mio set shrank so buildContent never indexes an undefined mio.
+    if (selectedMioIndex >= mios.length) {
+        selectedMioIndex = Math.max(0, mios.length - 1);
+        setState({ selectedMioIndex });
+    }
+
+    // Refresh the dropdown options (server sends the localised <option> list) and keep the selected
+    // index. The <select> element and its change listener are untouched, so nothing re-binds. The
+    // container is shown/hidden explicitly (block/none) so it survives the single-org boundary.
+    const mioSelect = document.getElementById('mios') as HTMLSelectElement | null;
+    if (mioSelect) {
+        if (typeof data.mioOptionsHtml === 'string') {
+            mioSelect.innerHTML = data.mioOptionsHtml;
+        }
+        mioSelect.value = selectedMioIndex.toString();
+    }
+    const mioSelectContainer = document.getElementById('mio-select-container');
+    if (mioSelectContainer) {
+        mioSelectContainer.style.display = mios.length <= 1 ? 'none' : 'block';
+    }
+
+    // buildContent replaces the placeholder's content, which can shift layout; pin the viewport.
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    updateSelectedMio(false);
+    await buildContent();
+    window.scrollTo(scrollX, scrollY);
+}));
 
 window.addEventListener('load', tryRun(async function() {
     // Mio selection

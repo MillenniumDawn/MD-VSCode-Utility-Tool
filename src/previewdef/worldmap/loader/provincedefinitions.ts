@@ -26,7 +26,7 @@ async function loadDefinitions(definitionsFile: string, progressReporter: Progre
     return definition.map(row => convertRowToProvince(row, warnings));
 }
 
-function convertRowToProvince(row: string[], warnings: WorldMapWarning[]): ProvinceDefinition {
+function convertRowToProvince(row: string[], _warnings: WorldMapWarning[]): ProvinceDefinition {
     const r = parseInt(row[1]);
     const g = parseInt(row[2]);
     const b = parseInt(row[3]);

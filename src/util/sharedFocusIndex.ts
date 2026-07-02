@@ -33,7 +33,7 @@ export function registerSharedFocusIndex(): vscode.Disposable {
         ]);
 
         vscode.window.setStatusBarMessage('$(loading~spin) ' + localize('sharedFocusIndex.building', 'Building Shared Focus index...'), task);
-        task.then(() => {
+        void task.then(() => {
             vscode.window.showInformationMessage(localize('sharedFocusIndex.builddone', 'Building Shared Focus index done.'));
             sendEvent('sharedFocusIndex', { size: estimatedSize[0].toString() });
         });
@@ -116,7 +116,7 @@ async function buildFocusIndexWithCache(
 }
 
 async function fillFocusItems(focusFile: string, focusIndex: FocusIndex, reverseMap: Map<string, string>, options: { mod?: boolean; hoi4?: boolean }, estimatedSize?: [number]): Promise<void> {
-    const [fileBuffer, uri] = await readFileFromModOrHOI4(focusFile, options);
+    const [fileBuffer] = await readFileFromModOrHOI4(focusFile, options);
     const fileContent = fileBuffer.toString();
 
     // Skip files that don't contain any focus type definitions
@@ -160,7 +160,7 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
     const estimatedSize: [number] = [0];
     const task = buildWorkspaceFocusIndex(estimatedSize);
     vscode.window.setStatusBarMessage('$(loading~spin) ' + localize('sharedFocusIndex.workspace.building', 'Building workspace Focus index...'), task);
-    task.then(() => {
+    void task.then(() => {
         vscode.window.showInformationMessage(localize('sharedFocusIndex.workspace.builddone', 'Building workspace Focus index done.'));
         sendEvent('sharedFocusIndex.workspace', { size: estimatedSize[0].toString() });
     });
@@ -235,7 +235,7 @@ function addWorkspaceFocusIndex(file: vscode.Uri) {
     if (wsFolder) {
         const relative = path.relative(wsFolder.uri.path, file.path).replace(/\\+/g, '/');
         if (relative && relative.startsWith('common/national_focus/')) {
-            fillFocusItems(relative, workspaceFocusIndex, workspaceFocusKeyToFile, { hoi4: false });
+            void fillFocusItems(relative, workspaceFocusIndex, workspaceFocusKeyToFile, { hoi4: false });
         }
     }
 }

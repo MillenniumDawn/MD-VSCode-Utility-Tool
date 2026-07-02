@@ -190,6 +190,62 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, in
     return results;
 }
 
+/**
+ * Wraps an async, single-string-keyed function with a short-lived per-key memo. Within `ttl`
+ * milliseconds of a key's last computation the memoized promise is returned as-is; after the TTL
+ * the value is recomputed. Collapses IO bursts (e.g. the hundreds of fs.stat calls a single
+ * preview render makes while re-checking the same files' expiry tokens) without a background
+ * timer. Rejections are not memoized, so a transient failure is retried on the next call. The
+ * map is bounded: over `maxSize`, expired entries are pruned first and then the oldest.
+ * `now` is injectable for tests.
+ */
+export function memoizeWithTtl<T>(
+    fn: (key: string) => Promise<T>,
+    options: { ttl: number; maxSize?: number; now?: () => number },
+): (key: string) => Promise<T> {
+    const { ttl } = options;
+    const maxSize = options.maxSize ?? 500;
+    const now = options.now ?? (() => Date.now());
+    const entries = new Map<string, { value: Promise<T>; time: number }>();
+
+    return (key: string): Promise<T> => {
+        const current = now();
+        const existing = entries.get(key);
+        if (existing && current - existing.time < ttl) {
+            return existing.value;
+        }
+
+        const value = fn(key);
+        const entry = { value, time: current };
+        // Re-insert at the end so Map iteration order tracks recency for eviction below.
+        entries.delete(key);
+        entries.set(key, entry);
+
+        value.catch(() => {
+            if (entries.get(key) === entry) {
+                entries.delete(key);
+            }
+        });
+
+        if (entries.size > maxSize) {
+            for (const [k, e] of entries) {
+                if (current - e.time >= ttl) {
+                    entries.delete(k);
+                }
+            }
+            while (entries.size > maxSize) {
+                const oldest = entries.keys().next().value as string | undefined;
+                if (oldest === undefined) {
+                    break;
+                }
+                entries.delete(oldest);
+            }
+        }
+
+        return value;
+    };
+}
+
 export class UserError extends Error {
     constructor (message: string) {
       super(message);

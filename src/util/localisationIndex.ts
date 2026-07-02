@@ -53,7 +53,7 @@ export function registerLocalisationIndex(): vscode.Disposable {
             buildWorkspaceLocalisationIndex(estimatedSize)
         ]);
         vscode.window.setStatusBarMessage('$(loading~spin) ' + localize('localisationIndex.building', 'Building Localisation index...'), task);
-        task.then(() => {
+        void task.then(() => {
             vscode.window.showInformationMessage(localize('localisationIndex.builddone', 'Building Localisation index done.'));
             sendEvent('localisationIndex', {size: estimatedSize[0].toString()});
         });
@@ -68,7 +68,7 @@ export function registerLocalisationIndex(): vscode.Disposable {
     return vscode.Disposable.from(...disposables);
 }
 
-export async function getLocalisedTextQuick(localisationKey: string | undefined): Promise<string | undefined> {
+export function getLocalisedTextQuick(localisationKey: string | undefined): string | undefined {
     const previewLocalisation = vscode.workspace.getConfiguration(ConfigurationKey).previewLocalisation;
     if (previewLocalisation){
         return getLocalisedText(localisationKey, localeISOMapping[previewLocalisation]?? vscode.env.language);
@@ -76,7 +76,7 @@ export async function getLocalisedTextQuick(localisationKey: string | undefined)
     return getLocalisedText(localisationKey, vscode.env.language);
 }
 
-export async function getLocalisedText(localisationKey: string | undefined, language: string): Promise<string | undefined> {
+export function getLocalisedText(localisationKey: string | undefined, language: string): string | undefined {
     if (!localisationKey) {
         return localisationKey;
     }
@@ -204,7 +204,7 @@ async function fillLocalisationItems(localisationFile: string, localisationIndex
     mod?: boolean,
     hoi4?: boolean
 }, estimatedSize?: [number]): Promise<void> {
-    const [fileBuffer, uri] = await readFileFromModOrHOI4(localisationFile, options);
+    const [fileBuffer] = await readFileFromModOrHOI4(localisationFile, options);
     const content = fileBuffer.toString();
     try {
         const localisations = parseLocalisation(content);
@@ -293,7 +293,7 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
     const estimatedSize: [number] = [0];
     const task = buildWorkspaceLocalisationIndex(estimatedSize);
     vscode.window.setStatusBarMessage('$(loading~spin) ' + localize('localisationIndex.workspace.building', 'Building workspace Localisation index...'), task);
-    task.then(() => {
+    void task.then(() => {
         vscode.window.showInformationMessage(localize('localisationIndex.workspace.builddone', 'Building workspace Localisation index done.'));
         sendEvent('localisationIndex.workspace', {size: estimatedSize[0].toString()});
     });
@@ -367,7 +367,7 @@ function addWorkspaceLocalisationIndex(file: vscode.Uri) {
     if (wsFolder) {
         const relative = path.relative(wsFolder.uri.path, file.path).replace(/\\+/g, '/');
         if (relative && relative.startsWith('localisation/')) {
-            fillLocalisationItems(relative, workspaceLocalisationIndex, workspaceLocalisationFileMap, {hoi4: false});
+            void fillLocalisationItems(relative, workspaceLocalisationIndex, workspaceLocalisationFileMap, {hoi4: false});
         }
     }
 }

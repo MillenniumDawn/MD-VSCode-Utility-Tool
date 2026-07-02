@@ -1,7 +1,7 @@
 import { Enum, SchemaDef } from "../../../hoiformat/schema";
 import { Token } from "../../../hoiformat/hoiparser";
 import { FileLoader, FolderLoader, LoadResult, mergeInLoadResult, sortItems, mergeRegion, LoadResultOD } from "./common";
-import { WorldMapWarning, SupplyArea, Region, ProgressReporter, State, WorldMapWarningSource, Province } from "../definitions";
+import { WorldMapWarning, SupplyArea, Region, State, WorldMapWarningSource, Province } from "../definitions";
 import { readFileFromModOrHOI4AsJson } from "../../../util/fileloader";
 import { localize } from "../../../util/i18n";
 import { error } from "../../../util/debug";

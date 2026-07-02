@@ -12,6 +12,7 @@
 		"rootDir": ".",
 		"strict": true,
 		"noFallthroughCasesInSwitch": true,
+		"noUnusedLocals": true,
 		"importHelpers": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true

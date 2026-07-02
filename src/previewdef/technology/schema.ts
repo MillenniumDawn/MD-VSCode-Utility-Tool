@@ -16,6 +16,8 @@ export interface Technology {
     startYear: number;
     enableEquipments: boolean;
     enableEquipmentNames: string[];
+    categories: string[];
+    isSpecialProject: boolean;
     subTechnologies: Technology[];
     token: Token | undefined;
 }
@@ -35,6 +37,7 @@ interface TechnologyDef {
     start_year: number;
     xor: Enum;
     sub_technologies: Enum;
+    categories: Enum;
     _token: Token;
 }
 
@@ -69,6 +72,7 @@ const technologySchema: SchemaDef<TechnologyDef> = {
     start_year: "number",
     xor: "enum",
     sub_technologies: "enum",
+    categories: "enum",
 };
 
 const technologiesSchema: SchemaDef<TechnologiesDef> = {
@@ -158,6 +162,15 @@ function getTechnologiesByTree(technologiesInOneFolder: Technology[]): Record<st
     return trees;
 }
 
+// A technology is a special project only when BOTH hold: its id is `sp_`/`SP_` prefixed AND it
+// carries a `CAT_sp_*` category. In the mod data the genuine SP techs (SP_Anti_Air_*, SP_arty_*,
+// SP_R_arty_*) satisfy both. Requiring both avoids false positives: ordinary upgrade techs
+// (Arty_upgrade_3..5, nsb_Arty_upgrade_3..6) carry a CAT_sp_* category but are not SP, while
+// `sp_double_shot_rifle_tech` has an sp_ id but no CAT_sp_ category.
+export function isSpecialProjectTech(id: string, categories: string[]): boolean {
+    return /^sp_/i.test(id) && categories.some(category => /^cat_sp_/i.test(category));
+}
+
 function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Record<string, Technology> {
     const result: Record<string, Technology> = {};
 
@@ -170,6 +183,8 @@ function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Rec
         const xor = technology.xor._values;
         const enableEquipmentNames = technology.enable_equipments._values.filter((p): p is string => p !== undefined);
         const enableEquipments = enableEquipmentNames.length > 0;
+        const categories = technology.categories._values.filter((p): p is string => p !== undefined);
+        const isSpecialProject = isSpecialProjectTech(id, categories);
         const folders: Record<string, TechnologyFolder> = {};
         
         for (const folder of technology.folder) {
@@ -183,7 +198,7 @@ function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Rec
         }
 
         result[id] = {
-            id, token, startYear, leadsToTechs, xor, enableEquipments, enableEquipmentNames, folders,
+            id, token, startYear, leadsToTechs, xor, enableEquipments, enableEquipmentNames, categories, isSpecialProject, folders,
             subTechnologies: [],
         };
     }

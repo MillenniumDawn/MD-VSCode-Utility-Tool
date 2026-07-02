@@ -6,10 +6,18 @@ import { localize } from './i18n';
 
 export interface DynamicScript {
     content: string;
+    // Optional id for an inline <style>, so the webview can address it later and refresh its
+    // textContent in place (e.g. LoaderPreview's updateBody path) instead of a full reload.
+    id?: string;
 }
 
 export interface NonceOnly {
     nonce: string;
+}
+
+// Inline script exposing the previewed file's URI to the webview as window.previewedFileUri.
+export function previewedFileUriScript(uri: vscode.Uri): DynamicScript {
+    return { content: `window.previewedFileUri = "${uri.toString()}";` };
 }
 
 export function html(webview: vscode.Webview, body: string, scripts: (string | DynamicScript)[], styles?: (string | StyleTable | DynamicScript | NonceOnly)[]): string {
@@ -47,7 +55,7 @@ export function html(webview: vscode.Webview, body: string, scripts: (string | D
                     ];
                 } else {
                     return [
-                        `<style nonce="${nonce}">${style.content}</style>`,
+                        `<style${style.id ? ` id="${style.id}"` : ''} nonce="${nonce}">${style.content}</style>`,
                         `'nonce-${nonce}'`,
                     ];
                 }

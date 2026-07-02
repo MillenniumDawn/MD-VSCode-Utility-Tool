@@ -6,14 +6,13 @@ import { html } from '../../util/html';
 import { error, debug } from '../../util/debug';
 import { WorldMapMessage, ProgressReporter, WorldMapData, MapItemMessage, RequestMapItemMessage } from './definitions';
 import { matchPathEnd } from '../../util/nodecommon';
-import { writeFile, mkdirs, getDocumentByUri, dirUri } from '../../util/vsccommon';
+import { writeFile, getConfiguration } from '../../util/vsccommon';
 import { slice, debounceByInput, forceError } from '../../util/common';
-import { getFilePathFromMod, getHoiOpenedFileOriginalUri, readFileFromModOrHOI4 } from '../../util/fileloader';
+import { openOrCopyHoiFile } from '../../util/previewfileopener';
 import { WorldMapLoader } from './loader/worldmaploader';
 import { isEqual } from 'lodash';
 import { LoaderSession } from '../../util/loader/loader';
 import { TelemetryMessage, sendByMessage } from '../../util/telemetry';
-import { getConfiguration } from '../../util/vsccommon';
 
 export class WorldMap {
     public panel: vscode.WebviewPanel | undefined;
@@ -69,7 +68,7 @@ export class WorldMap {
             }
 
             if (this.worldMapDependencies.some(d => matchPathEnd(uri.toString(), d.split('/')))) {
-                this.sendProvinceMapSummaryToWebview(false);
+                void this.sendProvinceMapSummaryToWebview(false);
             }
         },
         uri => uri.toString(),
@@ -194,48 +193,12 @@ export class WorldMap {
     }
 
     private async openFile(file: string, type: 'state' | 'strategicregion' | 'supplyarea', start: number | undefined, end: number | undefined): Promise<void> {
-        // TODO duplicate with previewbase.ts
-        const filePathInMod = await getFilePathFromMod(file);
-        if (filePathInMod !== undefined) {
-            const filePathInModWithoutOpened = getHoiOpenedFileOriginalUri(filePathInMod);
-            const document = getDocumentByUri(filePathInModWithoutOpened) ?? await vscode.workspace.openTextDocument(filePathInModWithoutOpened);
-            await vscode.window.showTextDocument(document, {
-                selection: start !== undefined && end !== undefined ? new vscode.Range(document.positionAt(start), document.positionAt(end)) : undefined,
-            });
-            return;
-        }
-
         const typeName = localize('worldmap.openfiletype.' + type as any, type);
-        
-        if (!vscode.workspace.workspaceFolders?.length) {
-            await vscode.window.showErrorMessage(localize('worldmap.mustopenafolder', 'Must open a folder before opening {0} file.', typeName));
-            return;
-        }
-
-        let targetFolderUri = vscode.workspace.workspaceFolders[0].uri;
-        if (vscode.workspace.workspaceFolders.length >= 1) {
-            const folder = await vscode.window.showWorkspaceFolderPick({ placeHolder: localize('worldmap.selectafolder', 'Select a folder to copy {0} file', typeName) });
-            if (!folder) {
-                return;
-            }
-
-            targetFolderUri = folder.uri;
-        }
-
-        try {
-            const [buffer] = await readFileFromModOrHOI4(file);
-            const targetPath = vscode.Uri.joinPath(targetFolderUri, file);
-            await mkdirs(dirUri(targetPath));
-            await writeFile(targetPath, buffer);
-
-            const document = await vscode.workspace.openTextDocument(targetPath);
-            await vscode.window.showTextDocument(document, {
-                selection: start !== undefined && end !== undefined ? new vscode.Range(document.positionAt(start), document.positionAt(end)) : undefined,
-            });
-
-        } catch (e) {
-            await vscode.window.showErrorMessage(localize('worldmap.failedtoopenstate', 'Failed to open {0} file: {1}.', typeName, forceError(e).toString()));
-        }
+        await openOrCopyHoiFile(file, start, end, {
+            mustOpenFolderMessage: localize('worldmap.mustopenafolder', 'Must open a folder before opening {0} file.', typeName),
+            selectFolderMessage: localize('worldmap.selectafolder', 'Select a folder to copy {0} file', typeName),
+            failedToOpenMessage: (errorMessage) => localize('worldmap.failedtoopenstate', 'Failed to open {0} file: {1}.', typeName, errorMessage),
+        });
     }
 
     private async sendDifferences(cachedWorldMap: WorldMapData, worldMap: WorldMapData): Promise<boolean> {

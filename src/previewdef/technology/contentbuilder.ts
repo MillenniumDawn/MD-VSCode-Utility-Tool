@@ -9,7 +9,7 @@ import { ParentInfo, RenderCommonOptions } from '../../util/hoi4gui/common';
 import { renderGridBox, GridBoxItem, GridBoxConnection, GridBoxConnectionItem } from '../../util/hoi4gui/gridbox';
 import { renderInstantTextBox } from '../../util/hoi4gui/instanttextbox';
 import { renderIcon } from '../../util/hoi4gui/icon';
-import { html, htmlEscape } from '../../util/html';
+import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { ContainerWindowType, GridBoxType, IconType, InstantTextBoxType, Format } from '../../hoiformat/gui';
 import { TechnologyTreeLoader, TechnologyTreeLoaderResult } from './loader';
 import { EquipmentArchetype } from './equipmentschema';
@@ -25,7 +25,6 @@ const techTreeViewName = 'countrytechtreeview';
 const doctrineTreeViewName = 'countrydoctrineview';
 
 export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -37,7 +36,7 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
         
         if (folders.length === 0) {
             const baseContent = localize('techtree.notechtree', 'No technology tree.');
-            return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+            return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
         }
 
         const styleTable = new StyleTable();
@@ -52,7 +51,7 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
             webview,
             baseContent,
             [
-                setPreviewFileUriScript,
+                previewedFileUriScript(uri),
                 'common.js',
                 'techtree.js',
             ],
@@ -65,7 +64,7 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
 
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
     }
 }
 
@@ -110,12 +109,10 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
 }
 
 async function renderFolderSelector(folders: string[], styleTable: StyleTable): Promise<string> {
-    const folderOptions = await Promise.all(
-        folders.map(async (folder) => {
-            const localizedText = localisationIndex ? `${await getLocalisedTextQuick(folder)} (${folder})` : folder;
-            return `<option value="techfolder_${folder}">${localizedText}</option>`;
-        })
-    );
+    const folderOptions = folders.map((folder) => {
+        const localizedText = localisationIndex ? `${getLocalisedTextQuick(folder)} (${folder})` : folder;
+        return `<option value="techfolder_${folder}">${localizedText}</option>`;
+    });
 
     return `<div
     class="${styleTable.oneTimeStyle('folderSelectorBar', () => `
@@ -383,17 +380,15 @@ async function resolveTechNameKeys(technology: Technology, equipmentArchetypes: 
         return keys;
     }
 
-    const techLoc = await getLocalisedTextQuick(technology.id);
+    const techLoc = getLocalisedTextQuick(technology.id);
     if (techLoc && techLoc !== technology.id) {
         keys.techKey = technology.id;
     }
 
     for (const equipment of technology.enableEquipmentNames) {
         const shortKey = resolveShortNameKey(equipment, equipmentArchetypes);
-        const [shortLoc, longLoc] = await Promise.all([
-            keys.shortKey === undefined ? getLocalisedTextQuick(shortKey) : undefined,
-            keys.longKey === undefined ? getLocalisedTextQuick(equipment) : undefined,
-        ]);
+        const shortLoc = keys.shortKey === undefined ? getLocalisedTextQuick(shortKey) : undefined;
+        const longLoc = keys.longKey === undefined ? getLocalisedTextQuick(equipment) : undefined;
         if (keys.shortKey === undefined && shortLoc && shortLoc !== shortKey) {
             keys.shortKey = shortKey;
         }
@@ -442,9 +437,14 @@ async function renderTechnology(
     const modeKeys = techNameModes.map(m => ({ id: m.id, key: m.key(nameKeys) }));
     const bestNameKey = modeKeys.map(m => m.key).find(k => k !== undefined) ?? technology.id;
     const subSlotRegex = /^sub_technology_slot_(\d)$/;
+    // Subtle SP marker on the item background, so special-project techs stand out even when the SP gfx asset is missing.
+    const specialProjectClass = technology.isSpecialProject
+        ? technologySpecialProjectClass(commonOptions.styleTable)
+        : undefined;
     const containerWindow = await renderContainerWindow(item, parentInfo, {
         ...commonOptions,
         noSize: true,
+        classNames: specialProjectClass,
         getSprite: (sprite, callerType, callerName) => getTechnologySprite(sprite, technology, folder.name, callerType, callerName, gfxFiles),
         onRenderChild: async (type, child, parentInfo) => {
             if (type === 'icon' && child.name === 'bonus_icon') {
@@ -483,7 +483,7 @@ async function renderTechnology(
         data-tech-id="${technology.id}" data-tech-small="${technology.enableEquipments ? '0' : '1'}"
         start="${technology.token?.start}"
         end="${technology.token?.end}"
-        title="${technology.id}${localisationIndex ? `\n${await getLocalisedTextQuick(bestNameKey)}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${technology.id}${localisationIndex ? `\n${getLocalisedTextQuick(bestNameKey)}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `
@@ -512,6 +512,16 @@ async function getTechnologySprite(sprite: string, technology: Technology, folde
             `GFX_technology_${folder}_available_item_bg`,
             `GFX_technology_available_item_bg`,
         ];
+        if (technology.isSpecialProject) {
+            // SP techs use folder-specific `_special_project` backgrounds; prepend them so the SP art wins, keeping the regular backgrounds as fallback.
+            const specialProjectVariants = technology.enableEquipments ? [
+                `GFX_technology_${folder}_special_project_available_item_bg`,
+            ] : [
+                `GFX_technology_${folder}_special_project_small_available_item_bg`,
+                `GFX_technology_${folder}_special_project_available_item_bg`,
+            ];
+            imageTryList = [...specialProjectVariants, ...imageTryList];
+        }
     } else if (sprite === 'GFX_technology_medium' && callerType === 'icon') {
         const result = await getSpriteByGfxName(`GFX_${technology.id}_medium`, gfxFiles);
         if (result !== undefined) { return result; }
@@ -535,15 +545,18 @@ async function renderSubTechnology(
         return '';
     }
 
+    // Sub-techs render through this path only (they carry no `folder` field), so the SP tint must be applied
+    // here too or genuine SP sub-techs (SP_Anti_Air_*, SP_arty_*, SP_R_arty_*) would never be marked.
+    const specialProjectClass = subTechnology.isSpecialProject
+        ? technologySpecialProjectClass(commonOptions.styleTable)
+        : undefined;
     const containerWindowResult = await renderContainerWindow(containerWindow, parentInfo, {
         ...commonOptions,
+        classNames: specialProjectClass,
         getSprite: (sprite, callerType, callerName) => {
             let imageTryList = [sprite];
             if (callerType === 'bg' && callerName === containerWindow.background?.name) {
-                imageTryList = [
-                    `GFX_subtechnology_${folder}_available_item_bg`,
-                    `GFX_subtechnology_available_item_bg`,
-                ];
+                imageTryList = getSubTechnologySpriteNames(folder.name, subTechnology.isSpecialProject);
             } else if (callerType === 'icon' && callerName?.toLowerCase() === 'picture') {
                 return getTechnologyIcon(sprite, gfxFiles);
             }
@@ -556,7 +569,7 @@ async function renderSubTechnology(
         data-subtech-id="${subTechnology.id}"
         start="${subTechnology.token?.start}"
         end="${subTechnology.token?.end}"
-        title="${subTechnology.id}${localisationIndex ? `\n${await getLocalisedTextQuick(subTechnology.id)}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${subTechnology.id}${localisationIndex ? `\n${getLocalisedTextQuick(subTechnology.id)}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `
@@ -638,6 +651,30 @@ async function renderLineItem(
     });
 
     return containerWindow;
+}
+
+// Subtle inner-glow marker shared by SP techs and SP sub-techs. The style key is stable so both call
+// sites resolve to the same generated class.
+function technologySpecialProjectClass(styleTable: StyleTable): string {
+    return styleTable.style('techSpecialProject', () => `box-shadow: inset 0 0 6px 1px rgba(160, 100, 230, 0.6);`);
+}
+
+// Sprite-name try-list for a sub-technology background. For an SP sub-tech a `_special_project` variant is
+// prepended (mirroring the top-level tech background); the mod defines no such subtechnology sprite today, so
+// it is a harmless forward-compatible fallback and the visible SP treatment is the CSS tint. The non-SP list is
+// unchanged from before the SP feature.
+export function getSubTechnologySpriteNames(folder: string, isSpecialProject: boolean): string[] {
+    const baseNames = [
+        `GFX_subtechnology_${folder}_available_item_bg`,
+        `GFX_subtechnology_available_item_bg`,
+    ];
+    if (!isSpecialProject) {
+        return baseNames;
+    }
+    return [
+        `GFX_subtechnology_${folder}_special_project_available_item_bg`,
+        ...baseNames,
+    ];
 }
 
 async function getSpriteFromTryList(tryList: string[], gfxFiles: string[]): Promise<Sprite | undefined> {

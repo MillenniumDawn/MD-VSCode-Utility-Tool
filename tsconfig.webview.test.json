@@ -1,11 +1,10 @@
 {
 	"compilerOptions": {
 		"module": "commonjs",
-		"moduleResolution": "node",
-		"ignoreDeprecations": "6.0",
-		"target": "es2020",
+		"moduleResolution": "bundler",
+		"target": "es2022",
 		"lib": [
-			"es2020",
+			"es2022",
 			"DOM"
 		],
 		"outDir": "out-test-webview",
@@ -23,7 +22,7 @@
 		]
 	},
 	"include": [
-    "src/def.d.ts",
-    "src/test/webview/**/*.ts",
+		"src/def.d.ts",
+		"src/test/webview/**/*.ts"
 	]
 }

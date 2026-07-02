@@ -2,12 +2,6 @@ import * as assert from 'assert';
 import { parseHoi4File } from '../../hoiformat/hoiparser';
 import { getSpriteTypes } from '../../hoiformat/spritetype';
 
-function child(node: any, name: string): any {
-    const found = (node.value as any[]).find(n => n.name === name);
-    assert.ok(found, `expected a child named ${name}`);
-    return found;
-}
-
 describe('hoiformat/spritetype', () => {
     describe('getSpriteTypes', () => {
         it('extracts a single spritetype with default noofframes = 1', () => {

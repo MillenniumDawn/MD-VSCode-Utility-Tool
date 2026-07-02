@@ -1,13 +1,11 @@
 import * as vscode from 'vscode';
 import { localize } from '../util/i18n';
 import { error, debug } from '../util/debug';
-import { dirUri, getDocumentByUri } from '../util/vsccommon';
+import { getDocumentByUri } from '../util/vsccommon';
 import { isEqual } from 'lodash';
-import { getFilePathFromMod, getHoiOpenedFileOriginalUri, readFileFromModOrHOI4 } from '../util/fileloader';
-import { mkdirs, writeFile } from '../util/vsccommon';
 import { sendByMessage } from '../util/telemetry';
-import { forceError } from '../util/common';
 import { loadingShellHtml } from '../util/html';
+import { openOrCopyHoiFile } from '../util/previewfileopener';
 
 export abstract class PreviewBase {
     private cachedDependencies: string[] | undefined = undefined;
@@ -28,20 +26,20 @@ export abstract class PreviewBase {
         this.registerEvents(panel);
     }
 
-    public async onDocumentChange(document: vscode.TextDocument): Promise<void> {
+    public async onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
         try {
             if (!this.panelInitialized) {
                 this.panel.webview.html = await this.getContent(document);
                 this.panelInitialized = true;
             } else {
-                await this.sendPartialUpdate(document);
+                await this.sendPartialUpdate(document, dependencyChanged);
             }
         } catch(e) {
             error(e);
         }
     }
 
-    protected async sendPartialUpdate(document: vscode.TextDocument): Promise<void> {
+    protected async sendPartialUpdate(document: vscode.TextDocument, _dependencyChanged = false): Promise<void> {
         this.panel.webview.html = await this.getContent(document);
     }
     
@@ -82,7 +80,7 @@ export abstract class PreviewBase {
                                 viewColumn: vscode.ViewColumn.One
                             });
                         } else {
-                            this.openOrCopyFile(msg.file, msg.start, msg.end);
+                            void this.openOrCopyFile(msg.file, msg.start, msg.end);
                         }
                     }
                     break;
@@ -110,48 +108,12 @@ export abstract class PreviewBase {
     }
 
     protected async openOrCopyFile(file: string, start: number | undefined, end: number | undefined): Promise<void> {
-        const filePathInMod = await getFilePathFromMod(file);
-        if (filePathInMod !== undefined) {
-            const filePathInModWithoutOpened = getHoiOpenedFileOriginalUri(filePathInMod);
-            const document = getDocumentByUri(filePathInModWithoutOpened) ?? await vscode.workspace.openTextDocument(filePathInModWithoutOpened);
-            await vscode.window.showTextDocument(document, {
-                selection: start !== undefined && end !== undefined ? new vscode.Range(document.positionAt(start), document.positionAt(end)) : undefined,
-                viewColumn: vscode.ViewColumn.One,
-            });
-            return;
-        }
-        
-        if (!vscode.workspace.workspaceFolders?.length) {
-            await vscode.window.showErrorMessage(localize('preview.mustopenafolder', 'Must open a folder before opening "{0}".', file));
-            return;
-        }
-
-        let targetFolderUri = vscode.workspace.workspaceFolders[0].uri;
-        if (vscode.workspace.workspaceFolders.length >= 1) {
-            const folder = await vscode.window.showWorkspaceFolderPick({ placeHolder: localize('preview.selectafolder', 'Select a folder to copy "{0}"', file) });
-            if (!folder) {
-                return;
-            }
-
-            targetFolderUri = folder.uri;
-        }
-
-        try {
-            const targetFolder = targetFolderUri;
-            const [buffer] = await readFileFromModOrHOI4(file);
-            const targetPath = vscode.Uri.joinPath(targetFolder, file);
-            await mkdirs(dirUri(targetPath));
-            await writeFile(targetPath, buffer);
-
-            const document = await vscode.workspace.openTextDocument(targetPath);
-            await vscode.window.showTextDocument(document, {
-                selection: start !== undefined && end !== undefined ? new vscode.Range(document.positionAt(start), document.positionAt(end)) : undefined,
-                viewColumn: vscode.ViewColumn.One,
-            });
-
-        } catch (e) {
-            await vscode.window.showErrorMessage(localize('preview.failedtoopen', 'Failed to open file "{0}": {1}.', file, forceError(e).toString()));
-        }
+        await openOrCopyHoiFile(file, start, end, {
+            viewColumn: vscode.ViewColumn.One,
+            mustOpenFolderMessage: localize('preview.mustopenafolder', 'Must open a folder before opening "{0}".', file),
+            selectFolderMessage: localize('preview.selectafolder', 'Select a folder to copy "{0}"', file),
+            failedToOpenMessage: (errorMessage) => localize('preview.failedtoopen', 'Failed to open file "{0}": {1}.', file, errorMessage),
+        });
     }
 
     protected reload() {
@@ -161,7 +123,7 @@ export abstract class PreviewBase {
         }
 
         this.panelInitialized = false;
-        this.onDocumentChange(document);
+        void this.onDocumentChange(document);
     }
 
     protected abstract getContent(document: vscode.TextDocument): Promise<string>;

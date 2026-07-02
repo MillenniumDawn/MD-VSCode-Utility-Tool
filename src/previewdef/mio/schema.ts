@@ -1,4 +1,4 @@
-import { ConditionComplexExpr, ConditionItem, extractConditionValue, extractConditionValues } from "../../hoiformat/condition";
+import { ConditionComplexExpr, ConditionItem, extractConditionValue } from "../../hoiformat/condition";
 import { Node, Token } from "../../hoiformat/hoiparser";
 import { CustomMap, Enum, HOIPartial, Raw, SchemaDef, convertNodeToJson } from "../../hoiformat/schema";
 import { Warning, randomString } from "../../util/common";
@@ -7,8 +7,14 @@ import { localize } from "../../util/i18n";
 export interface Mio {
     id: string;
     traits: Record<string, MioTrait>;
+    textHeaders: MioTextHeader[];
     conditionExprs: ConditionItem[];
     warnings: MioWarning[];
+}
+
+export interface MioTextHeader {
+    text: string;
+    x: number;
 }
 
 export interface MioWarning extends Warning<string> {
@@ -46,6 +52,12 @@ interface MioDef {
     add_trait: MioTraitDef[];
     override_trait: MioTraitDef[];
     remove_trait: Enum;
+    tree_header_text: MioTreeHeaderDef[];
+}
+
+interface MioTreeHeaderDef {
+    text: string;
+    x: number;
 }
 
 interface MioTraitDef {
@@ -97,6 +109,11 @@ const mioTraitSchema: SchemaDef<MioTraitDef> = {
     organization_modifier: "raw",
 };
 
+const mioTreeHeaderSchema: SchemaDef<MioTreeHeaderDef> = {
+    text: "string",
+    x: "number",
+};
+
 const mioSchema: SchemaDef<MioDef> = {
     include: "string",
     trait: {
@@ -112,6 +129,10 @@ const mioSchema: SchemaDef<MioDef> = {
         _type: "array",
     },
     remove_trait: "enum",
+    tree_header_text: {
+        _innerType: mioTreeHeaderSchema,
+        _type: "array",
+    },
 };
 
 const mioFileSchema: SchemaDef<MioFile> = {
@@ -148,8 +169,16 @@ function getMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }, depend
     const mioDef = mioDefItem._value;
     const baseMio = mioDef.include ? dependentMios.find(m => m.id === mioDef.include) : undefined;
     const traits = baseMio?.traits ? {...baseMio.traits} : {};
+    const textHeaders: MioTextHeader[] = baseMio?.textHeaders ? [...baseMio.textHeaders] : [];
     const conditionExprs = baseMio?.conditionExprs ? [...baseMio.conditionExprs] : [];
     const warnings: MioWarning[] = [];
+
+    for (const headerDef of mioDef.tree_header_text) {
+        if (headerDef.text === undefined) {
+            continue;
+        }
+        textHeaders.push({ text: headerDef.text, x: headerDef.x ?? 0 });
+    }
 
     if (mioDef.include && mioDef.trait.length > 0) {
         warnings.push({
@@ -196,6 +225,7 @@ function getMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }, depend
     return {
         id,
         traits,
+        textHeaders,
         conditionExprs,
         warnings,
     };

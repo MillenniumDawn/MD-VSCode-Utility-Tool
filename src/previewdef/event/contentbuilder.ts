@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { EventsLoader, EventsLoaderResult } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug } from '../../util/debug';
-import { html, htmlEscape } from '../../util/html';
+import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { localize } from '../../util/i18n';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { HOIEvent, HOIEventType } from './schema';
@@ -17,8 +17,6 @@ import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { localisationIndex } from "../../util/featureflags";
 
 export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
-    
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -32,7 +30,7 @@ export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, web
             webview,
             baseContent,
             [
-                setPreviewFileUriScript,
+                previewedFileUriScript(uri),
                 'common.js',
                 'eventtree.js',
             ],
@@ -44,7 +42,7 @@ export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, web
 
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
     }
 
 }
@@ -367,7 +365,7 @@ const flagIcons: string[] = [
 
 async function makeEventNode(scope: string, eventNode: EventNode | string, edge: EventEdge | undefined, eventsLoaderResult: EventsLoaderResult, styleTable: StyleTable): Promise<string> {
     if (typeof eventNode === 'object') {
-        const { localizationDict, gfxFiles } = eventsLoaderResult;
+        const { gfxFiles } = eventsLoaderResult;
         const event = eventNode.event;
         const eventId = event.id;
         const title = `${event.type}_event\n${localize('eventtree.eventid', 'Event ID: ')}${eventId}\n` +
@@ -381,7 +379,7 @@ async function makeEventNode(scope: string, eventNode: EventNode | string, edge:
                     `${edge.randomDays > 0 ? `${edge.days}-${edge.days + edge.randomDays}` : edge.days} ${localize('days', 'day(s)')}` :
                     `${edge.randomHours > 0 ? `${edge.hours}-${edge.hours + edge.randomHours}` : edge.hours} ${localize('hours', 'hour(s)')}`) + '\n' :
                 '') +
-            `${localize('eventtree.scope', 'Scope: ')}${scope}\n${localize('eventtree.title', 'Title: ')}${localisationIndex ? await getLocalisedTextQuick(event.title) : event.title}`;
+            `${localize('eventtree.scope', 'Scope: ')}${scope}\n${localize('eventtree.title', 'Title: ')}${localisationIndex ? getLocalisedTextQuick(event.title) : event.title}`;
 
         const flags = [event.hidden, event.fire_only_once, event.major, eventNode.loop];
         const content = `<p class="
@@ -403,7 +401,7 @@ async function makeEventNode(scope: string, eventNode: EventNode | string, edge:
                     : ''}
             </p>
             <p class="${styleTable.style('paragraph', () => 'margin: 5px 0; text-overflow: ellipsis; overflow: hidden;')}">
-                ${localisationIndex? await getLocalisedTextQuick(event.title) : event.title}
+                ${localisationIndex? getLocalisedTextQuick(event.title) : event.title}
             </p>`;
         
         const extraAttributes = [];
@@ -447,11 +445,11 @@ async function makeEventNode(scope: string, eventNode: EventNode | string, edge:
         const title = `${localize('eventtree.eventid', 'Event ID: ')}${eventId}\n${localize('eventtree.scope', 'Scope: ')}${scope}`;
         let contentText = '';
         if (localisationIndex) {
-            let localizedTitle = await getLocalisedTextQuick(eventId);
+            let localizedTitle = getLocalisedTextQuick(eventId);
             if (localizedTitle !== eventId && localizedTitle !== null && localizedTitle !== undefined) {
                 contentText += `<br/>${localizedTitle}`;
             } else {
-                localizedTitle = await getLocalisedTextQuick(`${eventId}.t`);
+                localizedTitle = getLocalisedTextQuick(`${eventId}.t`);
                 if (localizedTitle !== `${eventId}.t` && localizedTitle !== null && localizedTitle !== undefined) {
                     contentText += `<br/>${localizedTitle}`;
                 }
@@ -480,7 +478,7 @@ async function makeOptionNode(option: OptionNode, eventsLoaderResult: EventsLoad
     let content = option.optionName;
     let title = option.optionName;
     if (localisationIndex){
-        const optionName = await getLocalisedTextQuick(option.optionName);
+        const optionName = getLocalisedTextQuick(option.optionName);
         content = `${option.optionName} <br/> ${optionName}`;
         title = `${option.optionName} \n ${optionName}`;
     }

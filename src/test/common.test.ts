@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { hsvToRgb, slice, clipNumber, withTimeout, mapLimit, forceError, arrayToMap, TimeoutError, UserError, randomString, debounceByInput } from '../util/common';
+import { hsvToRgb, slice, clipNumber, withTimeout, mapLimit, forceError, arrayToMap, TimeoutError, UserError, randomString, debounceByInput, memoizeWithTtl } from '../util/common';
 
 describe('util/common', function () {
     describe('arrayToMap', function () {
@@ -158,6 +158,81 @@ describe('util/common', function () {
         it('throws when the key is neither string nor number', function () {
             const items = [{ key: { foo: 1 } }];
             assert.throws(() => arrayToMap(items, 'key' as any));
+        });
+    });
+
+    describe('memoizeWithTtl', function () {
+        // A hand-driven clock so the TTL boundary is exercised deterministically, with no sleeps.
+        function fakeClock(start = 0) {
+            let t = start;
+            return { now: () => t, advance: (ms: number) => { t += ms; } };
+        }
+
+        it('returns the memoized value within the TTL without recomputing', async function () {
+            const clock = fakeClock();
+            let calls = 0;
+            const memo = memoizeWithTtl(async (k: string) => { calls++; return `${k}:${calls}`; }, { ttl: 500, now: clock.now });
+
+            const a = await memo('x');
+            clock.advance(499);
+            const b = await memo('x');
+
+            assert.strictEqual(a, 'x:1');
+            assert.strictEqual(b, 'x:1');
+            assert.strictEqual(calls, 1);
+        });
+
+        it('recomputes once the TTL has elapsed', async function () {
+            const clock = fakeClock();
+            let calls = 0;
+            const memo = memoizeWithTtl(async (k: string) => { calls++; return `${k}:${calls}`; }, { ttl: 500, now: clock.now });
+
+            const a = await memo('x');
+            clock.advance(500);
+            const b = await memo('x');
+
+            assert.strictEqual(a, 'x:1');
+            assert.strictEqual(b, 'x:2');
+            assert.strictEqual(calls, 2);
+        });
+
+        it('keys are independent', async function () {
+            const clock = fakeClock();
+            let calls = 0;
+            const memo = memoizeWithTtl(async (k: string) => { calls++; return `${k}:${calls}`; }, { ttl: 500, now: clock.now });
+
+            await memo('a');
+            await memo('b');
+            await memo('a');
+
+            assert.strictEqual(calls, 2);
+        });
+
+        it('does not memoize rejections', async function () {
+            const clock = fakeClock();
+            let calls = 0;
+            const memo = memoizeWithTtl(async () => { calls++; throw new Error('boom'); }, { ttl: 500, now: clock.now });
+
+            await assert.rejects(memo('x'), /boom/);
+            // Still within the TTL, but the failure was evicted so the next call retries.
+            await assert.rejects(memo('x'), /boom/);
+            assert.strictEqual(calls, 2);
+        });
+
+        it('bounds the map to maxSize, recomputing the evicted oldest key', async function () {
+            const clock = fakeClock();
+            let calls = 0;
+            const memo = memoizeWithTtl(async (k: string) => { calls++; return k; }, { ttl: 10_000, now: clock.now, maxSize: 2 });
+
+            await memo('a'); // calls=1
+            clock.advance(1);
+            await memo('b'); // calls=2
+            clock.advance(1);
+            await memo('c'); // calls=3, evicts 'a'
+            await memo('c'); // cached, no call
+            await memo('a'); // 'a' evicted -> calls=4
+
+            assert.strictEqual(calls, 4);
         });
     });
 

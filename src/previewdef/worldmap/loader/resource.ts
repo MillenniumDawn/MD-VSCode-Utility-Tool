@@ -30,7 +30,7 @@ export class ResourceDefinitionLoader extends FolderLoader<Resource[], Resource[
         super('common/resources', ResourceFileLoader);
     }
     
-    protected mergeFiles(fileResults: LoadResult<Resource[], MapLoaderExtra>[], session: LoaderSession): Promise<LoadResult<Resource[], MapLoaderExtra>> {
+    protected mergeFiles(fileResults: LoadResult<Resource[], MapLoaderExtra>[], _session: LoaderSession): Promise<LoadResult<Resource[], MapLoaderExtra>> {
         const results =  mergeInLoadResult(fileResults, 'result');
         const resourceMap: Record<string, Resource> = {};
         const warnings = mergeInLoadResult(fileResults, 'warnings');

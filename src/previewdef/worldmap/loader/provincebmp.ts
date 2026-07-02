@@ -3,7 +3,7 @@ import { readFileFromModOrHOI4 } from "../../../util/fileloader";
 import { localize } from "../../../util/i18n";
 import { BMP, parseBmp } from "../../../util/image/bmp/bmpparser";
 import { Point, ProgressReporter, ProvinceBmp, ProvinceEdgeGraph, ProvinceGraph, Region, WorldMapWarning, Zone } from "../definitions";
-import { FileLoader, LoadResult, LoadResultOD, mergeRegions, pointEqual } from "./common";
+import { FileLoader, LoadResult, LoadResultOD, mergeRegions } from "./common";
 
 export class ProvinceBmpLoader extends FileLoader<ProvinceBmp> {
     protected async loadFromFile(): Promise<LoadResultOD<ProvinceBmp>> {
@@ -32,7 +32,7 @@ async function loadProvincesBmp(provincesFile: string, progressReporter: Progres
     await progressReporter(localize('worldmap.progress.loadingprovincebmp', 'Loading province bmp...',));
 
     const [provinceMapImageBuffer] = await readFileFromModOrHOI4(provincesFile);
-    const provinceMapImage = parseBmp(provinceMapImageBuffer.buffer, provinceMapImageBuffer.byteOffset);
+    const provinceMapImage = parseBmp(provinceMapImageBuffer.buffer as ArrayBuffer, provinceMapImageBuffer.byteOffset);
     
     await progressReporter(localize('worldmap.progress.calculatingregion', 'Calculating province region...'));
 
@@ -164,7 +164,7 @@ function fillProvinceZones<T extends ColorContainer>(
 }
 
 type EdgeDef = { edges: ProvinceEdgeGraph[] };
-function fillEdges<T extends ColorContainer>(
+export function fillEdges<T extends ColorContainer>(
     provincesWithoutEdges: (T & Partial<EdgeDef>)[],
     colorToProvinceWithoutEdges: Record<number, T & Partial<EdgeDef>>,
     colorByPosition: Uint32Array,
@@ -193,7 +193,7 @@ function fillEdges<T extends ColorContainer>(
     return provinces as (T & EdgeDef)[];
 }
 
-function fillEdgesOfProvince<T extends EdgeDef>(
+export function fillEdgesOfProvince<T extends EdgeDef>(
     index: number,
     colorToProvince: Record<number, T>,
     colorByPosition: Uint32Array,
@@ -213,14 +213,22 @@ function fillEdgesOfProvince<T extends EdgeDef>(
     });
 
     const province = colorToProvince[color]!;
+    const edgeSetByColor = new Map<number, ProvinceEdgeGraph>();
+    for (const edgeSet of province.edges) {
+        edgeSetByColor.set(edgeSet.toColor, edgeSet);
+    }
     for (const [key, value] of Object.entries(edgePixelsByAdjecentProvince)) {
         const numKey = parseInt(key);
-        const edgeSetIndex = province.edges.findIndex(e => e.toColor === numKey);
-        const edgeSet: ProvinceEdgeGraph = edgeSetIndex !== -1 ? province.edges[edgeSetIndex] : { toColor: numKey, path: [] };
+        let edgeSet = edgeSetByColor.get(numKey);
+        const isNew = edgeSet === undefined;
+        if (edgeSet === undefined) {
+            edgeSet = { toColor: numKey, path: [] };
+        }
         const concatedEdges = concatEdges(value);
         edgeSet.path.push(...concatedEdges);
-        if (edgeSetIndex === -1) {
+        if (isNew) {
             province.edges.push(edgeSet);
+            edgeSetByColor.set(numKey, edgeSet);
         }
     }
 }
@@ -270,9 +278,41 @@ function findEdgePixels(index: number, accessedPixels: Uint8Array, color: number
     return edgePixels;
 }
 
-function concatEdges(edges: [Point, Point][]): Point[][] {
+type EdgeBucket = { idx: number[], ptr: number };
+export function concatEdges(edges: [Point, Point][]): Point[][] {
     const result: Point[][] = [];
     const accessedEdges = new Array<boolean>(edges.length).fill(false);
+
+    // Index segments by endpoint coordinates so joining is O(1) amortized per join
+    // instead of a linear findIndex scan. byTail keys a point to the ascending list
+    // of edges whose tail (e[1]) is that point; byHead keys by head (e[0]). Each
+    // bucket keeps a pointer that only skips forward past already-consumed edges, so
+    // firstUnaccessed returns the same lowest-index unconsumed match findIndex did.
+    const pointKey = (p: Point): string => `${p.x},${p.y}`;
+    const byTail = new Map<string, EdgeBucket>();
+    const byHead = new Map<string, EdgeBucket>();
+    const pushInto = (map: Map<string, EdgeBucket>, key: string, i: number): void => {
+        let bucket = map.get(key);
+        if (bucket === undefined) {
+            map.set(key, bucket = { idx: [], ptr: 0 });
+        }
+        bucket.idx.push(i);
+    };
+    for (let i = 0; i < edges.length; i++) {
+        pushInto(byHead, pointKey(edges[i][0]), i);
+        pushInto(byTail, pointKey(edges[i][1]), i);
+    }
+    const firstUnaccessed = (map: Map<string, EdgeBucket>, key: string): number => {
+        const bucket = map.get(key);
+        if (bucket === undefined) {
+            return -1;
+        }
+        while (bucket.ptr < bucket.idx.length && accessedEdges[bucket.idx[bucket.ptr]]) {
+            bucket.ptr++;
+        }
+        return bucket.ptr < bucket.idx.length ? bucket.idx[bucket.ptr] : -1;
+    };
+
     for (let i = 0; i < edges.length; i++) {
         if (accessedEdges[i]) {
             continue;
@@ -284,13 +324,13 @@ function concatEdges(edges: [Point, Point][]): Point[][] {
         let foundNew = true;
         while (foundNew) {
             foundNew = false;
-            const headTail = edges.findIndex((e, i) => !accessedEdges[i] && pointEqual(edge[0], e[1]));
+            const headTail = firstUnaccessed(byTail, pointKey(edge[0]));
             if (headTail !== -1) {
                 accessedEdges[headTail] = foundNew = true;
                 edge.unshift(edges[headTail][0]);
             }
 
-            const tailHead = edges.findIndex((e, i) => !accessedEdges[i] && pointEqual(edge[edge.length - 1], e[0]));
+            const tailHead = firstUnaccessed(byHead, pointKey(edge[edge.length - 1]));
             if (tailHead !== -1) {
                 accessedEdges[tailHead] = foundNew = true;
                 edge.push(edges[tailHead][1]);

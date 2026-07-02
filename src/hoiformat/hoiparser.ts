@@ -197,10 +197,6 @@ function parseNode(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node {
             nextToken = tokens.peek();
         }
 
-        let nameValue = name.value;
-        if (name.type === 'string') {
-            nameValue = nameValue.substr(1, nameValue.length - 2).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-        }
         return {
             name: name.value,
             nameToken: keepTokens ? name : null,

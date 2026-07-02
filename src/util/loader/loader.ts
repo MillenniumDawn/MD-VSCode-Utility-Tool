@@ -138,11 +138,11 @@ export abstract class Loader<T, E = {}> {
         return result;
     };
 
-    protected shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+    protected shouldReloadImpl(_session: LoaderSession): Promise<boolean> {
         return Promise.resolve(true);
     }
 
-    protected beforeLoadImpl(session: LoaderSession): void {
+    protected beforeLoadImpl(_session: LoaderSession): void {
     }
 
     protected async fireOnProgressEvent(progress: string): Promise<void> {
@@ -150,7 +150,7 @@ export abstract class Loader<T, E = {}> {
         await new Promise(resolve => setTimeout(resolve, 0));
     }
 
-    protected extraMesurements(result: LoadResult<T, E>): Record<string, number> {
+    protected extraMesurements(_result: LoadResult<T, E>): Record<string, number> {
         return {};
     };
 
@@ -164,7 +164,7 @@ export abstract class FileLoader<T, E={}> extends Loader<T, E> {
         super();
     }
 
-    public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+    public async shouldReloadImpl(_session: LoaderSession): Promise<boolean> {
         return await hoiFileExpiryToken(this.file) !== this.expiryToken;
     }
 

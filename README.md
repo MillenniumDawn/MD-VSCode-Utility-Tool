@@ -32,12 +32,11 @@ Very big shoutout to my friend AngriestBird for helping this project!
 
 |Setting|Type|Description|
 |-------|----------|--------|
-|`hoi4ModUtilities.installPath`|`string`|Hearts of Iron IV install path. Without this, most features are broken.|
-|`hoi4ModUtilities.loadDlcContents`|`boolean`|Whether to load DLC images when previewing files. Enabling this will use more memory (All DLCs are around 600MB).|
-|`hoi4ModUtilities.modFile`|`string`|Path to the working `.mod` file. This file is used to read replace_path. If not specified, will use first `.mod` file in first folder of the workspace.|
-|`hoi4ModUtilities.enableSupplyArea`|`boolean`|If you are developing mod for HOI4(version<=1.10). Use this to check enable supply area.|
-|`hoi4ModUtilities.previewLocalisation`|`enum`|Language of content in event tree preview.|
-|`hoi4ModUtilities.featureFlags`|`array` of `string`|Feature flags are used to disable or enable features. Reloading is required after changing this.
+|`mdHoi4Utilities.installPath`|`string`|Hearts of Iron IV install path. Without this, most features are broken.|
+|`mdHoi4Utilities.loadDlcContents`|`boolean`|Whether to load DLC images when previewing files. Enabling this will use more memory (All DLCs are around 600MB).|
+|`mdHoi4Utilities.modFile`|`string`|Path to the working `.mod` file. This file is used to read replace_path. If not specified, will use first `.mod` file in first folder of the workspace.|
+|`mdHoi4Utilities.enableSupplyArea`|`boolean`|If you are developing mod for HOI4(version<=1.10). Use this to check enable supply area.|
+|`mdHoi4Utilities.previewLocalisation`|`enum`|Language of content in event tree preview.|
 
 ## Known Issues
 

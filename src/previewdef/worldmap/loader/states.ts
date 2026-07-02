@@ -1,4 +1,4 @@
-import { State, Province, WorldMapWarning, WorldMapWarningSource, Region, StateCategory, Resource } from "../definitions";
+import { State, Province, WorldMapWarning, WorldMapWarningSource, Region, StateCategory } from "../definitions";
 import { Enum, SchemaDef, CustomMap, DetailValue } from "../../../hoiformat/schema";
 import { readFileFromModOrHOI4AsJson } from "../../../util/fileloader";
 import { error } from "../../../util/debug";
@@ -379,7 +379,7 @@ function validateProvinceInState(provinces: (Province | undefined | null)[], sta
     }
 }
 
-async function loadStateCategory(file: string, warning: WorldMapWarning[]): Promise<StateCategory[]> {
+async function loadStateCategory(file: string, _warning: WorldMapWarning[]): Promise<StateCategory[]> {
     try {
         const data = await readFileFromModOrHOI4AsJson<StateCategoryFile>(file, stateCategoryFileSchema);
         const result: StateCategory[] = [];

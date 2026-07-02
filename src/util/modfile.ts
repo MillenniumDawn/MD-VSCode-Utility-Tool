@@ -3,8 +3,7 @@ import * as path from 'path';
 import { ConfigurationKey, Commands } from '../constants';
 import { PromiseCache } from './cache';
 import { localize } from './i18n';
-import { basename, fileOrUriStringToUri, getConfiguration, uriToFilePathWhenPossible } from './vsccommon';
-import { isFile, readDir } from './vsccommon';
+import { basename, fileOrUriStringToUri, getConfiguration, uriToFilePathWhenPossible, isFile, readDir } from './vsccommon';
 
 export const modFileStatusContainer: { current: vscode.StatusBarItem | null } = {
     current: null,
@@ -23,7 +22,7 @@ export function registerModFile(): vscode.Disposable {
     disposables.push(new vscode.Disposable(() => { modFileStatusContainer.current = null; }));
 
     // Initial status bar
-    checkAndUpdateModFileStatus(fileOrUriStringToUri(getConfiguration().modFile));
+    void checkAndUpdateModFileStatus(fileOrUriStringToUri(getConfiguration().modFile));
     return vscode.Disposable.from(...disposables);
 }
 
@@ -47,7 +46,7 @@ export function updateSelectedModFileStatus(modFile: vscode.Uri | undefined, err
 
 function onChangeWorkspaceConfiguration(e: vscode.ConfigurationChangeEvent): void {
     if (e.affectsConfiguration(`${ConfigurationKey}.modFile`)) {
-        checkAndUpdateModFileStatus(fileOrUriStringToUri(getConfiguration().modFile));
+        void checkAndUpdateModFileStatus(fileOrUriStringToUri(getConfiguration().modFile));
     }
 }
 
@@ -128,7 +127,7 @@ async function selectModFile(): Promise<void> {
             conf.update('modFile', modPath, vscode.ConfigurationTarget.Workspace);
         }
 
-        checkAndUpdateModFileStatus(modPath ? fileOrUriStringToUri(modPath): undefined);
+        void checkAndUpdateModFileStatus(modPath ? fileOrUriStringToUri(modPath): undefined);
     }
 }
 

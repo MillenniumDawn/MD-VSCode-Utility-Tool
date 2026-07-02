@@ -22,7 +22,7 @@ export type PreviewProviderDef = PreviewProviderDefNormal | PreviewProviderDefAl
 interface PreviewProviderDefNormal {
     type: string;
     canPreview(document: vscode.TextDocument): number | undefined;
-    previewContructor: new (uri: vscode.Uri, panel: vscode.WebviewPanel) => PreviewBase;
+    previewConstructor: new (uri: vscode.Uri, panel: vscode.WebviewPanel) => PreviewBase;
 }
 
 interface PreviewProviderDefAlternative {
@@ -184,7 +184,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             };
         }
 
-        const previewItem = new previewProvider.previewContructor(uri, panel);
+        const previewItem = new previewProvider.previewConstructor(uri, panel);
         this._previews[key] = previewItem;
 
         previewItem.onDispose(() => {
@@ -200,7 +200,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             this.addPreviewToSubscription(previewItem, newDep);
         });
 
-        previewItem.initializePanelContent(document);
+        void previewItem.initializePanelContent(document);
     }
 
     private findPreviewProvider(document: vscode.TextDocument): PreviewProviderDef | undefined {
@@ -257,7 +257,10 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
                 }
                 const otherDocument = getDocumentByUri(otherPreview.uri);
                 if (otherDocument) {
-                    otherPreview.onDocumentChange(otherDocument);
+                    // A dependency (not the preview's own file) changed. Flag it so a preview whose
+                    // fingerprints can't see the change (e.g. a focus tree when a dependency .gfx
+                    // swaps a sprite's texturefile) still refreshes instead of skipping.
+                    void otherPreview.onDocumentChange(otherDocument, true);
                 }
             }
         },
@@ -268,7 +271,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
     private updatePreviewItem = debounceByInput(
         (previewItem: PreviewBase, document: vscode.TextDocument) => {
             if (!previewItem.isDisposed) {
-                previewItem.onDocumentChange(document);
+                void previewItem.onDocumentChange(document);
             }
         },
         (preview) => preview.uri.toString(),

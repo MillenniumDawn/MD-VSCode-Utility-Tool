@@ -3,7 +3,7 @@ import { getSpriteByGfxName, Image, getImageByPath } from '../../util/image/imag
 import { localize, i18nTableAsScript } from '../../util/i18n';
 import { forceError, randomString } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { html, htmlEscape } from '../../util/html';
+import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { ContainerWindowType, GridBoxType } from '../../hoiformat/gui';
 import { renderContainerWindow } from '../../util/hoi4gui/containerwindow';
 import { MioFrame, MioLoader } from './loader';
@@ -13,6 +13,7 @@ import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { Mio, MioTrait, TraitEffect } from './schema';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { localisationIndex } from "../../util/featureflags";
+import { LoaderRender } from '../loaderpreview';
 
 const defaultTraitIcon = 'gfx/interface/goals/goal_unknown.dds';
 const traitEffectIconMap: Record<TraitEffect, string> = {
@@ -21,9 +22,7 @@ const traitEffectIconMap: Record<TraitEffect, string> = {
     organization: 'GFX_organization_modifier_icon',
 };
 
-export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
-    const setPreviewFileUriScript = { content: `window.previewedFileUri = "${uri.toString()}";` };
-
+export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<LoaderRender> {
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -34,7 +33,7 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
 
         if (mios.length === 0) {
             const baseContent = localize('miopreview.nomio', 'No military industrial organization defined.');
-            return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+            return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
         }
 
         mios.sort((a, b) => a.id.localeCompare(b.id));
@@ -42,14 +41,14 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
         const styleTable = new StyleTable();
         const jsCodes: string[] = [];
         const styleNonce = randomString(32);
-        const baseContent = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file, loadResult.result.frame);
+        const { baseContent, data } = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file, loadResult.result.frame);
         jsCodes.push(i18nTableAsScript());
 
-        return html(
+        const fullHtml = html(
             webview,
             baseContent,
             [
-                setPreviewFileUriScript,
+                previewedFileUriScript(uri),
                 ...jsCodes.map(c => ({ content: c })),
                 'common.js',
                 'miopreview.js',
@@ -57,14 +56,22 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
             [
                 'codicon.css',
                 'common.css',
-                styleTable,
+                // Addressable id so an in-place updateBody can refresh the trait-icon CSS (this is the
+                // server StyleTable the rendered trait HTML references) without a full webview reload.
+                { content: styleTable.toRawCss(), id: 'mio-server-styles' },
                 { nonce: styleNonce },
             ],
         );
 
+        // Parts for the in-place update. styleNonce is deliberately not resent: it stays the original
+        // so the CSP-authorized <style> the webview's buildContent re-injects keeps validating. The
+        // webview refreshes these globals + the trait-icon <style>, then re-runs buildContent to
+        // redraw the tree and the tree_header_text layer, preserving scroll and client state.
+        return { html: fullHtml, update: { styleCss: styleTable.toRawCss(), data } };
+
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ setPreviewFileUriScript ], []);
+        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
     }
 }
 
@@ -73,7 +80,7 @@ const topPadding = 50;
 const xGridSize = 87;
 const yGridSize = 117;
 
-async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string, frame: MioFrame | undefined): Promise<string> {
+async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string, frame: MioFrame | undefined): Promise<{ baseContent: string; data: Record<string, unknown> }> {
 
     const gridBox: HOIPartial<GridBoxType> = {
         position: { x: toNumberLike(leftPadding), y: toNumberLike(topPadding) },
@@ -90,8 +97,14 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
             renderedTraitForMio[trait.id] = (await renderTrait(trait, styleTable, gfxFiles, file)).replace(/\s\s+/g, ' ')));
     }
 
+    const renderedHeaders: Record<string, string> = {};
+    for (const mio of mios) {
+        renderedHeaders[mio.id] = renderTreeHeaders(mio, styleTable).replace(/\s\s+/g, ' ');
+    }
+
     jsCodes.push('window.mios = ' + JSON.stringify(mios));
     jsCodes.push('window.renderedTrait = ' + JSON.stringify(renderedTrait));
+    jsCodes.push('window.renderedHeaders = ' + JSON.stringify(renderedHeaders));
     jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
     jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
@@ -99,7 +112,13 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     const frameHtml = frame ? await renderFrame(frame, gfxFiles, styleTable) : '';
     jsCodes.push('window.mioFrameAvailable = ' + JSON.stringify(!!frame));
 
-    return (
+    // The mio dropdown <option> list. Built once and shared between the initial toolbar render and
+    // the update payload, so an in-place update refreshes the (localised) labels and add/remove of
+    // organizations without a full reload. The labels use server-only localisation, so the webview
+    // can't rebuild them from `mios` alone — it swaps this html into the stable <select>.
+    const mioOptionsHtml = renderMioOptions(mios);
+
+    const baseContent = (
         `<div id="dragger" class="${styleTable.oneTimeStyle('dragger', () => `
             width: 100vw;
             height: 100vh;
@@ -111,8 +130,24 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
             <div id="miopreviewplaceholder"></div>
         </div>` +
         frameHtml +
-        await renderToolBar(mios, styleTable)
+        await renderToolBar(mios, styleTable, mioOptionsHtml)
     );
+
+    return {
+        baseContent,
+        // The globals the webview's buildContent re-renders from. gridBox/xGridSize are constants
+        // and mioFrameAvailable follows the gui, not the edited file, but resending them keeps the
+        // update self-contained (they don't destabilize the change hash since they never vary).
+        // mioOptionsHtml lets the webview refresh the dropdown while keeping the element + listener.
+        data: { mios, renderedTrait, renderedHeaders, gridBox, xGridSize, mioFrameAvailable: !!frame, mioOptionsHtml },
+    };
+}
+
+function renderMioOptions(mios: Mio[]): string {
+    return mios.map((mio, i) => {
+        const localizedText = localisationIndex ? `(${mio.id}) ${getLocalisedTextQuick(mio.id)}` : mio.id;
+        return `<option value="${i}">${htmlEscape(localizedText)}</option>`;
+    }).join('');
 }
 
 // Names of the dynamic panels inside industrial_organisation_detail_window that the game fills at
@@ -230,16 +265,18 @@ async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: Styl
     </div>`;
 }
 
-async function renderToolBar(mios: Mio[], styleTable: StyleTable): Promise<string> {
-    const mioSelect = mios.length <= 1 ? '' : `
-        <label for="mios" class="${styleTable.style('miosLabel', () => `margin-right:5px`)}">${localize('miopreview.mio', 'Military Industrial Organization: ')}</label>
-        <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
-            <select id="mios" class="select multiple-select" tabindex="0" role="combobox">
-                ${await Promise.all(mios.map(async (mio, i) => {
-                    const localizedText = localisationIndex ? `(${mio.id}) ${await getLocalisedTextQuick(mio.id)}` : mio.id;
-                    return `<option value="${i}">${localizedText}</option>`;
-                })).then(options => options.join(''))}
-            </select>
+async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml: string): Promise<string> {
+    // Always render the dropdown (wrapped like #condition-container so it stays one toolbar flex
+    // item) so an in-place update can refresh its options and its change listener never re-binds.
+    // Hidden for the single-org case; the webview toggles this via #mio-select-container.
+    const mioSelect = `
+        <div id="mio-select-container" class="${mios.length <= 1 ? styleTable.style('mio-select-hidden', () => `display:none`) : ''}">
+            <label for="mios" class="${styleTable.style('miosLabel', () => `margin-right:5px`)}">${localize('miopreview.mio', 'Military Industrial Organization: ')}</label>
+            <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
+                <select id="mios" class="select multiple-select" tabindex="0" role="combobox">
+                    ${mioOptionsHtml}
+                </select>
+            </div>
         </div>`;
 
     const conditions = `
@@ -265,6 +302,30 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable): Promise<strin
             ${toggles}
         </div>
     </div>`;
+}
+
+// Column headers declared by `tree_header_text` blocks. Each sits above the trait grid at its
+// column x. The header text is localised here (server side); the raw key is the fallback. The
+// containing layer is positioned client side so it lines up with the dynamically-computed grid
+// origin, so each header only carries its column offset (left = x * xGridSize).
+function renderTreeHeaders(mio: Mio, styleTable: StyleTable): string {
+    return mio.textHeaders.map(header => {
+        const text = getLocalisedTextQuick(header.text) ?? header.text;
+        return `<div class="
+            ${styleTable.style('mio-tree-header', () => `
+                position: absolute;
+                top: 0;
+                width: ${xGridSize}px;
+                text-align: center;
+                font-size: 11px;
+                line-height: 1.1;
+                opacity: 0.7;
+                white-space: nowrap;
+                pointer-events: none;
+            `)}
+            ${styleTable.oneTimeStyle('mio-tree-header-pos', () => `left: ${header.x * xGridSize}px;`)}
+        ">${htmlEscape(text)}</div>`;
+    }).join('');
 }
 
 async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: string[], file: string): Promise<string> {
@@ -314,7 +375,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
         start="${trait.token?.start}"
         end="${trait.token?.end}"
         ${file === trait.file ? '' : `file="${trait.file}"`}
-        title="${trait.id}${localisationIndex ? `\n${await getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
+        title="${trait.id}${localisationIndex ? `\n${getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
             <div class="
                 ${styleTable.style('effect-host', () => `
                     text-align: center;
@@ -358,7 +419,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
                 position: relative;
                 z-index: 5;
             `)}">
-            ${localisationIndex ? `${await getLocalisedTextQuick(trait.name)}` : ''}
+            ${localisationIndex ? `${getLocalisedTextQuick(trait.name)}` : ''}
             </span>
         </div>
     </div>`;

@@ -32,7 +32,7 @@ export class TerrainDefinitionLoader extends FolderLoader<Terrain[], Terrain[]> 
         super('common/terrain', TerrainFileLoader);
     }
     
-    protected mergeFiles(fileResults: LoadResult<Terrain[], MapLoaderExtra>[], session: LoaderSession): Promise<LoadResult<Terrain[], MapLoaderExtra>> {
+    protected mergeFiles(fileResults: LoadResult<Terrain[], MapLoaderExtra>[], _session: LoaderSession): Promise<LoadResult<Terrain[], MapLoaderExtra>> {
         const results =  mergeInLoadResult(fileResults, 'result');
         const terrainMap: Record<string, Terrain> = {};
         const warnings = mergeInLoadResult(fileResults, 'warnings');
