@@ -60,7 +60,16 @@ async function buildContent() {
         cornerPosition: 0.5,
     });
 
-    miopreviewplaceholder.innerHTML = traitPreviewContent + styleTable.toStyleElement((window as any).styleNonce);
+    // Column headers (tree_header_text). Server-rendered and localised per mio; each header carries
+    // only its column offset (left = x * xGridSize). We wrap them in a layer anchored to the same
+    // origin as the grid (leftPadding is computed above, so headers track the grid when it shifts).
+    const headerHtml: string = ((window as any).renderedHeaders ?? {})[mio.id] ?? '';
+    const headerTop = gridbox.position.y._value - 30;
+    const headerLayer = headerHtml
+        ? `<div class="${styleTable.oneTimeStyle('mio-header-layer', () => `position:absolute; left:${leftPadding}px; top:${headerTop}px;`)}">${headerHtml}</div>`
+        : '';
+
+    miopreviewplaceholder.innerHTML = traitPreviewContent + headerLayer + styleTable.toStyleElement((window as any).styleNonce);
 
     applyFrameState();
     subscribeNavigators();

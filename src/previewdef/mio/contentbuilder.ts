@@ -88,8 +88,14 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
             renderedTraitForMio[trait.id] = (await renderTrait(trait, styleTable, gfxFiles, file)).replace(/\s\s+/g, ' ')));
     }
 
+    const renderedHeaders: Record<string, string> = {};
+    for (const mio of mios) {
+        renderedHeaders[mio.id] = renderTreeHeaders(mio, styleTable).replace(/\s\s+/g, ' ');
+    }
+
     jsCodes.push('window.mios = ' + JSON.stringify(mios));
     jsCodes.push('window.renderedTrait = ' + JSON.stringify(renderedTrait));
+    jsCodes.push('window.renderedHeaders = ' + JSON.stringify(renderedHeaders));
     jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
     jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
@@ -263,6 +269,30 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable): Promise<strin
             ${toggles}
         </div>
     </div>`;
+}
+
+// Column headers declared by `tree_header_text` blocks. Each sits above the trait grid at its
+// column x. The header text is localised here (server side); the raw key is the fallback. The
+// containing layer is positioned client side so it lines up with the dynamically-computed grid
+// origin, so each header only carries its column offset (left = x * xGridSize).
+function renderTreeHeaders(mio: Mio, styleTable: StyleTable): string {
+    return mio.textHeaders.map(header => {
+        const text = getLocalisedTextQuick(header.text) ?? header.text;
+        return `<div class="
+            ${styleTable.style('mio-tree-header', () => `
+                position: absolute;
+                top: 0;
+                width: ${xGridSize}px;
+                text-align: center;
+                font-size: 11px;
+                line-height: 1.1;
+                opacity: 0.7;
+                white-space: nowrap;
+                pointer-events: none;
+            `)}
+            ${styleTable.oneTimeStyle('mio-tree-header-pos', () => `left: ${header.x * xGridSize}px;`)}
+        ">${htmlEscape(text)}</div>`;
+    }).join('');
 }
 
 async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: string[], file: string): Promise<string> {
