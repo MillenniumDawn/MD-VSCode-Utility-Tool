@@ -437,9 +437,14 @@ async function renderTechnology(
     const modeKeys = techNameModes.map(m => ({ id: m.id, key: m.key(nameKeys) }));
     const bestNameKey = modeKeys.map(m => m.key).find(k => k !== undefined) ?? technology.id;
     const subSlotRegex = /^sub_technology_slot_(\d)$/;
+    // Subtle SP marker on the item background, so special-project techs stand out even when the SP gfx asset is missing.
+    const specialProjectClass = technology.isSpecialProject
+        ? commonOptions.styleTable.style('techSpecialProject', () => `box-shadow: inset 0 0 6px 1px rgba(160, 100, 230, 0.6);`)
+        : undefined;
     const containerWindow = await renderContainerWindow(item, parentInfo, {
         ...commonOptions,
         noSize: true,
+        classNames: specialProjectClass,
         getSprite: (sprite, callerType, callerName) => getTechnologySprite(sprite, technology, folder.name, callerType, callerName, gfxFiles),
         onRenderChild: async (type, child, parentInfo) => {
             if (type === 'icon' && child.name === 'bonus_icon') {
@@ -507,6 +512,16 @@ async function getTechnologySprite(sprite: string, technology: Technology, folde
             `GFX_technology_${folder}_available_item_bg`,
             `GFX_technology_available_item_bg`,
         ];
+        if (technology.isSpecialProject) {
+            // SP techs use folder-specific `_special_project` backgrounds; prepend them so the SP art wins, keeping the regular backgrounds as fallback.
+            const specialProjectVariants = technology.enableEquipments ? [
+                `GFX_technology_${folder}_special_project_available_item_bg`,
+            ] : [
+                `GFX_technology_${folder}_special_project_small_available_item_bg`,
+                `GFX_technology_${folder}_special_project_available_item_bg`,
+            ];
+            imageTryList = [...specialProjectVariants, ...imageTryList];
+        }
     } else if (sprite === 'GFX_technology_medium' && callerType === 'icon') {
         const result = await getSpriteByGfxName(`GFX_${technology.id}_medium`, gfxFiles);
         if (result !== undefined) { return result; }

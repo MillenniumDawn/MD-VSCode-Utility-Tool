@@ -16,6 +16,8 @@ export interface Technology {
     startYear: number;
     enableEquipments: boolean;
     enableEquipmentNames: string[];
+    categories: string[];
+    isSpecialProject: boolean;
     subTechnologies: Technology[];
     token: Token | undefined;
 }
@@ -35,6 +37,7 @@ interface TechnologyDef {
     start_year: number;
     xor: Enum;
     sub_technologies: Enum;
+    categories: Enum;
     _token: Token;
 }
 
@@ -69,6 +72,7 @@ const technologySchema: SchemaDef<TechnologyDef> = {
     start_year: "number",
     xor: "enum",
     sub_technologies: "enum",
+    categories: "enum",
 };
 
 const technologiesSchema: SchemaDef<TechnologiesDef> = {
@@ -158,6 +162,12 @@ function getTechnologiesByTree(technologiesInOneFolder: Technology[]): Record<st
     return trees;
 }
 
+// A technology belongs to a special project when it carries a `CAT_sp_*` category
+// (seen in the mod data: CAT_sp_aa, CAT_sp_arty, CAT_sp_r_arty).
+export function isSpecialProjectTech(categories: string[]): boolean {
+    return categories.some(category => /^cat_sp_/i.test(category));
+}
+
 function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Record<string, Technology> {
     const result: Record<string, Technology> = {};
 
@@ -170,6 +180,8 @@ function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Rec
         const xor = technology.xor._values;
         const enableEquipmentNames = technology.enable_equipments._values.filter((p): p is string => p !== undefined);
         const enableEquipments = enableEquipmentNames.length > 0;
+        const categories = technology.categories._values.filter((p): p is string => p !== undefined);
+        const isSpecialProject = isSpecialProjectTech(categories);
         const folders: Record<string, TechnologyFolder> = {};
         
         for (const folder of technology.folder) {
@@ -183,7 +195,7 @@ function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Rec
         }
 
         result[id] = {
-            id, token, startYear, leadsToTechs, xor, enableEquipments, enableEquipmentNames, folders,
+            id, token, startYear, leadsToTechs, xor, enableEquipments, enableEquipmentNames, categories, isSpecialProject, folders,
             subTechnologies: [],
         };
     }
