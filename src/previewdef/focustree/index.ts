@@ -9,6 +9,7 @@ import { localize } from '../../util/i18n';
 import { loadingShellHtml } from '../../util/html';
 import { withTimeout, TimeoutError } from '../../util/common';
 import { error } from '../../util/debug';
+import { computeStructuralFingerprint, computeIconSourceFingerprint, decideFocusTreeUpdate, FocusTreeFingerprints } from './fingerprint';
 
 // A render taking longer than this is treated as stuck. The underlying load keeps running
 // in the background, but the user gets a recoverable panel instead of an endless spinner.
@@ -33,9 +34,17 @@ function toolbarFlagsEqual(a: ToolbarFlags | undefined, b: ToolbarFlags | undefi
 class FocusTreePreview extends PreviewBase {
     private focusTreeLoader: FocusTreeLoader;
     private content: string | undefined;
-    private lastCssFingerprint: string | undefined = undefined;
+    // Fingerprints of the last rendered structure-only payload. structuralFingerprint drives the
+    // in-place `update`; iconSourceFingerprint drives the (expensive) icon re-resolution + re-push.
+    private lastStructuralFingerprint: string | undefined = undefined;
+    private lastIconSourceFingerprint: string | undefined = undefined;
     private lastToolbarFlags: ToolbarFlags | undefined = undefined;
     private lastGoodHadFocusTrees = false;
+    // Bug #36: the most recent real-icon CSS pushed to the webview, re-posted when the webview is
+    // reloaded (hide->show tears it down) or the panel becomes visible again. Tagged with the
+    // generation it belongs to so a cache from a superseded load is never re-pushed.
+    private lastPushedIconCss: string | undefined = undefined;
+    private lastPushedIconGeneration = -1;
     // Serializes updates so two loads can never run concurrently against the same loader.
     private updateQueue: Promise<void> = Promise.resolve();
     // Generation token: each full (re)load bumps it so a slow background icon push from an earlier
@@ -57,8 +66,41 @@ class FocusTreePreview extends PreviewBase {
         this.panel.webview.onDidReceiveMessage(msg => {
             if (msg?.command === 'ready') {
                 this.signalWebviewReady();
+                // Bug #36: the webview re-posts `ready` after VS Code reloads it (e.g. on hide->show),
+                // which drops the pushed icon CSS. Re-push the cached CSS so icons don't vanish.
+                this.repushCachedIconStyles();
             }
         });
+        // Belt-and-suspenders for bug #36: also restore icons when the panel becomes visible again.
+        this.panel.onDidChangeViewState(() => {
+            if (this.panel.visible) {
+                this.repushCachedIconStyles();
+            }
+        });
+    }
+
+    private repushCachedIconStyles(): void {
+        if (this.lastPushedIconCss !== undefined && this.lastPushedIconGeneration === this.iconRenderGeneration && !this.isDisposed) {
+            this.panel.webview.postMessage({ type: 'iconStyles', css: this.lastPushedIconCss });
+        }
+    }
+
+    private fingerprintsFor(payload: FocusTreePayload): FocusTreeFingerprints {
+        // Always computed from a structure-only payload so the same edit fingerprints identically
+        // whether or not the (real-icon) background pass has run.
+        const styleRecords = (payload.styleTable as any).records as Record<string, string>;
+        return {
+            structural: computeStructuralFingerprint({
+                focusTrees: payload.focusTrees,
+                renderedFocus: payload.renderedFocus,
+                renderedInlayWindows: payload.renderedInlayWindows,
+                gridBox: payload.gridBox,
+                useConditionInFocus: payload.useConditionInFocus,
+                xGridSize: payload.xGridSize,
+                styleRecords,
+            }),
+            iconSource: computeIconSourceFingerprint(styleRecords),
+        };
     }
 
     public onDocumentChange(document: vscode.TextDocument): Promise<void> {
@@ -90,7 +132,9 @@ class FocusTreePreview extends PreviewBase {
                 },
             );
             if (structure) {
-                this.lastCssFingerprint = structure.cssFingerprint;
+                const fingerprints = this.fingerprintsFor(structure);
+                this.lastStructuralFingerprint = fingerprints.structural;
+                this.lastIconSourceFingerprint = fingerprints.iconSource;
                 this.lastToolbarFlags = structure.toolbarFlags;
                 this.lastGoodHadFocusTrees = true;
                 // Phase 2 (background): resolve the real focus icons and stream their CSS into the
@@ -99,7 +143,8 @@ class FocusTreePreview extends PreviewBase {
                 return buildFocusTreeHtml(structure, this.panel.webview, document.uri);
             }
 
-            this.lastCssFingerprint = undefined;
+            this.lastStructuralFingerprint = undefined;
+            this.lastIconSourceFingerprint = undefined;
             this.lastToolbarFlags = undefined;
             this.lastGoodHadFocusTrees = false;
             return buildNoFocusTreeHtml(this.panel.webview, document.uri);
@@ -130,11 +175,10 @@ class FocusTreePreview extends PreviewBase {
             if (generation !== this.iconRenderGeneration || this.isDisposed) {
                 return;
             }
-            // Record the real-icon fingerprint so a later partial update that doesn't change icons
-            // can use the fast in-place update path instead of forcing a full reload.
-            this.lastCssFingerprint = full.cssFingerprint;
-            this.lastToolbarFlags = full.toolbarFlags;
-            this.panel.webview.postMessage({ type: 'iconStyles', css: full.styleTable.toRawCss() });
+            const css = full.styleTable.toRawCss();
+            this.lastPushedIconCss = css;
+            this.lastPushedIconGeneration = generation;
+            this.panel.webview.postMessage({ type: 'iconStyles', css });
         } catch (e) {
             error(e);
         }
@@ -146,56 +190,106 @@ class FocusTreePreview extends PreviewBase {
 
     protected async sendPartialUpdate(document: vscode.TextDocument): Promise<void> {
         this.content = document.getText();
-        let payload: FocusTreePayload | null = null;
         try {
-            payload = await withTimeout(buildFocusTreePayload(this.focusTreeLoader), focusTreeRenderTimeout);
-        } catch (e) {
-            // Slow/stuck transient render: keep the current preview rather than flipping to
-            // an error or empty state. A later edit (or reload) will refresh it.
-            error(e);
-            return;
+            // Cheap structure-only pass: the rendered focus/inlay HTML is identical to a full render,
+            // only the styleTable's icon CSS differs. That lets us fingerprint the change without
+            // paying for the expensive DDS->PNG icon resolution on every keystroke (bug #37).
+            let structure: FocusTreePayload | null = null;
+            try {
+                structure = await withTimeout(
+                    buildFocusTreePayload(this.focusTreeLoader, undefined, { resolveIcons: false }),
+                    focusTreeRenderTimeout,
+                );
+            } catch (e) {
+                // Slow/stuck transient render: keep the current preview rather than flipping to
+                // an error or empty state. A later edit (or reload) will refresh it.
+                error(e);
+                return;
+            }
+
+            if (structure === null) {
+                if (this.lastGoodHadFocusTrees) {
+                    // Transient empty result (e.g. mid-save race or in-progress edit). Keep the
+                    // last good render instead of showing "No focus tree".
+                    return;
+                }
+                // No good render yet and the file is genuinely empty: do a full reload so the
+                // "No focus tree" panel is shown. Use the base (non-queued) method to avoid
+                // deadlocking on the update queue we are already running inside.
+                this.panelInitialized = false;
+                await super.onDocumentChange(document);
+                return;
+            }
+
+            if (!toolbarFlagsEqual(structure.toolbarFlags, this.lastToolbarFlags)) {
+                // The toolbar lives in the baked-in shell, not in the updatable content, so a
+                // change to which toggles it shows needs a full HTML reload.
+                this.panelInitialized = false;
+                await super.onDocumentChange(document);
+                return;
+            }
+
+            const fingerprints = this.fingerprintsFor(structure);
+            const previous: FocusTreeFingerprints | undefined =
+                this.lastStructuralFingerprint === undefined || this.lastIconSourceFingerprint === undefined
+                    ? undefined
+                    : { structural: this.lastStructuralFingerprint, iconSource: this.lastIconSourceFingerprint };
+            const decision = decideFocusTreeUpdate(previous, fingerprints);
+
+            if (!decision.postUpdate && !decision.pushIcons) {
+                // Nothing the webview renders changed (the common while-typing case): skip entirely.
+                this.lastGoodHadFocusTrees = true;
+                return;
+            }
+
+            this.lastStructuralFingerprint = fingerprints.structural;
+            this.lastIconSourceFingerprint = fingerprints.iconSource;
+            this.lastToolbarFlags = structure.toolbarFlags;
+            this.lastGoodHadFocusTrees = true;
+
+            if (decision.postUpdate) {
+                const updateMsg: FocusTreeUpdatePayload & { type: string } = {
+                    type: 'update',
+                    focusTrees: structure.focusTrees,
+                    renderedFocus: structure.renderedFocus,
+                    renderedInlayWindows: structure.renderedInlayWindows,
+                    gridBox: structure.gridBox,
+                    useConditionInFocus: structure.useConditionInFocus,
+                    xGridSize: structure.xGridSize,
+                };
+                this.panel.webview.postMessage(updateMsg);
+            }
+
+            if (decision.pushIcons) {
+                await this.repushResolvedIconStyles();
+            }
         } finally {
             this.content = undefined;
         }
+    }
 
-        if (payload === null) {
-            if (this.lastGoodHadFocusTrees) {
-                // Transient empty result (e.g. mid-save race or in-progress edit). Keep the
-                // last good render instead of showing "No focus tree".
-                return;
-            }
-            // No good render yet and the file is genuinely empty: do a full reload so the
-            // "No focus tree" panel is shown. Use the base (non-queued) method to avoid
-            // deadlocking on the update queue we are already running inside.
-            this.panelInitialized = false;
-            await super.onDocumentChange(document);
+    /**
+     * Icon identities changed: resolve the real icons and refresh the pushed CSS. Awaited (not
+     * backgrounded) so it stays on the update queue and never runs a second concurrent load against
+     * the loader. The `#ft-progressive-icons` element the CSS lands in survives the webview's
+     * in-place DOM rebuild, so this needs no full reload.
+     */
+    private async repushResolvedIconStyles(): Promise<void> {
+        let full: FocusTreePayload | null = null;
+        try {
+            full = await withTimeout(buildFocusTreePayload(this.focusTreeLoader), focusTreeRenderTimeout);
+        } catch (e) {
+            // Slow icon pass: keep the previously pushed icons rather than blanking them.
+            error(e);
             return;
         }
-
-        if (
-            payload.cssFingerprint !== this.lastCssFingerprint ||
-            !toolbarFlagsEqual(payload.toolbarFlags, this.lastToolbarFlags)
-        ) {
-            // Structure changed (styles/toolbar): fall back to a full HTML reload.
-            this.panelInitialized = false;
-            await super.onDocumentChange(document);
+        if (!full || this.isDisposed) {
             return;
         }
-
-        this.lastCssFingerprint = payload.cssFingerprint;
-        this.lastToolbarFlags = payload.toolbarFlags;
-        this.lastGoodHadFocusTrees = true;
-
-        const updateMsg: FocusTreeUpdatePayload & { type: string } = {
-            type: 'update',
-            focusTrees: payload.focusTrees,
-            renderedFocus: payload.renderedFocus,
-            renderedInlayWindows: payload.renderedInlayWindows,
-            gridBox: payload.gridBox,
-            useConditionInFocus: payload.useConditionInFocus,
-            xGridSize: payload.xGridSize,
-        };
-        this.panel.webview.postMessage(updateMsg);
+        const css = full.styleTable.toRawCss();
+        this.lastPushedIconCss = css;
+        this.lastPushedIconGeneration = this.iconRenderGeneration;
+        this.panel.webview.postMessage({ type: 'iconStyles', css });
     }
 }
 

@@ -39,7 +39,6 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
     styleTable: StyleTable;
     styleNonce: string;
     toolbarFlags: ToolbarFlags;
-    cssFingerprint: string;
 }
 
 export type { ToolbarFlags };
@@ -123,8 +122,6 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             slotsize: { width: toNumberLike(xGridSize), height: toNumberLike(yGridSize) },
         } as HOIPartial<GridBoxType>;
 
-        const cssFingerprint = JSON.stringify((styleTable as any).records);
-
         return {
             focusTrees,
             renderedFocus,
@@ -135,7 +132,6 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             styleTable,
             styleNonce,
             toolbarFlags,
-            cssFingerprint,
         };
     } catch (e) {
         error(e);
@@ -305,7 +301,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const customTitlebars = !flags.hasCustomTitlebar ? '' : `
         <div class="${styleTable.style('customTitlebarsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
-            <label for="show-custom-titlebars">${localize('TODO', 'Custom titlebars')}</label>
+            <label for="show-custom-titlebars">${localize('focustree.customtitlebars', 'Custom titlebars')}</label>
             <input
                 id="show-custom-titlebars"
                 type="checkbox"
@@ -314,7 +310,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const focusOverlays = !flags.hasFocusOverlay ? '' : `
         <div class="${styleTable.style('focusOverlaysContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
-            <label for="show-focus-overlays">${localize('TODO', 'Focus overlays')}</label>
+            <label for="show-focus-overlays">${localize('focustree.focusoverlays', 'Focus overlays')}</label>
             <input
                 id="show-focus-overlays"
                 type="checkbox"
@@ -323,7 +319,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const inlayWindowsToggle = !flags.hasInlayWindows ? '' : `
         <div id="show-inlay-windows-container" class="${styleTable.style('inlayWindowsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
-            <label for="show-inlay-windows">${localize('TODO', 'Inlay windows')}</label>
+            <label for="show-inlay-windows">${localize('focustree.inlaywindows', 'Inlay windows')}</label>
             <input
                 id="show-inlay-windows"
                 type="checkbox"
@@ -332,7 +328,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const inlayWindows = !flags.hasInlayWindows ? '' : `
         <div id="inlay-window-container">
-            <label for="inlay-windows" class="${styleTable.style('inlayWindowsLabel', () => `margin-right:5px`)}">${localize('TODO', 'Inlay window: ')}</label>
+            <label for="inlay-windows" class="${styleTable.style('inlayWindowsLabel', () => `margin-right:5px`)}">${localize('focustree.inlaywindow', 'Inlay window: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
                 <select id="inlay-windows" class="select multiple-select" tabindex="0" role="combobox"></select>
             </div>
@@ -350,7 +346,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const conditions = `
         <div id="condition-container">
-            <label for="conditions" class="${styleTable.style('conditionsLabel', () => `margin-right:5px`)}">${localize('TODO', 'Focus conditions: ')}</label>
+            <label for="conditions" class="${styleTable.style('conditionsLabel', () => `margin-right:5px`)}">${localize('focustree.focusconditions', 'Focus conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
                 <div id="conditions" class="select multiple-select" tabindex="0" role="combobox" class="${styleTable.style('conditionsLabel', () => `max-width:400px`)}">
                     <span class="value"></span>
@@ -360,7 +356,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     const inlayConditions = `
         <div id="inlay-condition-container">
-            <label for="inlay-conditions" class="${styleTable.style('inlayConditionsLabel', () => `margin-right:5px`)}">${localize('TODO', 'Inlay conditions: ')}</label>
+            <label for="inlay-conditions" class="${styleTable.style('inlayConditionsLabel', () => `margin-right:5px`)}">${localize('focustree.inlayconditions', 'Inlay conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
                 <div id="inlay-conditions" class="select multiple-select" tabindex="0" role="combobox">
                     <span class="value"></span>

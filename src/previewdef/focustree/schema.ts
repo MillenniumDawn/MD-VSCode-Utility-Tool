@@ -317,7 +317,7 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
 
 function getJointFocusTreeId(filePath: string): string {
     const fileName = path.basename(filePath, path.extname(filePath));
-    const label = localize('TODO', '<Joint focus tree>');
+    const label = localize('focustree.jointfocustree', '<Joint focus tree>');
     return fileName ? `${label} (${fileName})` : label;
 }
 
