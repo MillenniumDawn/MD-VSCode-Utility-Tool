@@ -1,8 +1,3 @@
-import TelemetryReporter from '@vscode/extension-telemetry';
-
-declare const EXTENSION_ID: string;
-declare const VERSION: string;
-
 interface TelemetryReporterInterface {
     sendTelemetryEvent(eventName: string, properties?: {
         [key: string]: string;
@@ -31,13 +26,7 @@ export interface TelemetryMessage {
 }
 
 export function registerTelemetryReporter() {
-    const isDev = process.env.NODE_ENV !== 'production';
-    if (!isDev) {
-        telemetryReporter = new TelemetryReporter(EXTENSION_ID, VERSION, 'a1b2c3d4-e5f6-7890-abcd-ef1234567890');
-    } else {
-        telemetryReporter = new DevTelemetryReporter();
-    }
-
+    // Telemetry is disabled: no reporter is constructed, so every send* call is a no-op.
     return {
         dispose: () => {
             telemetryReporter?.dispose();
@@ -75,22 +64,5 @@ export function sendByMessage(message: TelemetryMessage) {
             args[0] = error;
             sendException(...(args as Parameters<typeof sendException>));
             break;
-    }
-}
-
-class DevTelemetryReporter implements TelemetryReporterInterface {
-    sendTelemetryEvent(eventName: string, properties?: { [key: string]: string; } | undefined, measurements?: { [key: string]: number; } | undefined): void {
-        console.log('TelemetryEvent', eventName, JSON.stringify(properties), JSON.stringify(measurements));
-    }
-
-    sendTelemetryErrorEvent(eventName: string, properties?: { [key: string]: string; } | undefined, measurements?: { [key: string]: number; } | undefined, errorProps?: string[] | undefined): void {
-        console.error('TelemetryErrorEvent', eventName, JSON.stringify(properties), JSON.stringify(measurements), JSON.stringify(errorProps));
-    }
-
-    sendTelemetryException(error: Error, properties?: { [key: string]: string; } | undefined, measurements?: { [key: string]: number; } | undefined): void {
-        console.error('TelemetryException', error, JSON.stringify(properties), JSON.stringify(measurements));
-    }
-
-    async dispose(): Promise<any> {
     }
 }
