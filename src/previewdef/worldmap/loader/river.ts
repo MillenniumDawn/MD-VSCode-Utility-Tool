@@ -29,7 +29,7 @@ async function loadRivers(file: string, progressReporter: ProgressReporter, warn
     progressReporter(localize('worldmap.progress.loadingrivers', 'Loading rivers...'));
     
     const [riversImageBuffer] = await readFileFromModOrHOI4(file);
-    const riversImage = parseBmp(riversImageBuffer.buffer, riversImageBuffer.byteOffset);
+    const riversImage = parseBmp(riversImageBuffer.buffer as ArrayBuffer, riversImageBuffer.byteOffset);
     const result: RiverBmp = {
         width: riversImage.width,
         height: riversImage.height,

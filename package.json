@@ -11,7 +11,7 @@
 		"url": "https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool"
 	},
 	"engines": {
-		"vscode": "^1.52.0"
+		"vscode": "^1.74.0"
 	},
 	"categories": [
 		"Other"
@@ -23,11 +23,6 @@
 		"Heart of Iron"
 	],
 	"activationEvents": [
-		"onCommand:mdhoi4utilities.preview",
-		"onCommand:mdhoi4utilities.previewworld",
-		"onCommand:mdhoi4utilities.scanreferences",
-		"onCommand:mdhoi4utilities.selectmodfile",
-		"onCommand:mdhoi4utilities.selecthoifolder",
 		"onCustomEditor:mdhoi4utilities.dds",
 		"onCustomEditor:mdhoi4utilities.tga",
 		"onWebviewPanel:mdftpreview",
@@ -181,11 +176,6 @@
 				"command": "mdhoi4utilities.selecthoifolder",
 				"title": "%hoi4modutilities.selecthoifolder.title%",
 				"category": "%hoi4modutilities.category%"
-			},
-			{
-				"command": "mdhoi4utilities.test",
-				"title": "HOI4 test",
-				"category": "%hoi4modutilities.category%"
 			}
 		],
 		"customEditors": [
@@ -238,10 +228,6 @@
 				},
 				{
 					"command": "mdhoi4utilities.selecthoifolder"
-				},
-				{
-					"command": "mdhoi4utilities.test",
-					"when": "mdHoi4MUInDev"
 				}
 			]
 		}
@@ -258,8 +244,6 @@
 		"compile-test-webview": "tsc -p ./tsconfig.webview.test.json",
 		"pretest": "tsc -p ./tsconfig.test.json & tsc -p ./tsconfig.webview.test.json & wait",
 		"test": "mocha --exit --require ./out-test/src/test/_vscode_stub.js './out-test/src/test/**/*.test.js' './out-test-webview/src/test/webview/**/*.test.js'",
-		"pretest-ui": "npm run compile-ts && npm run lint",
-		"test-ui": "node ./out/test-ui/runTest.js",
 		"clean": "rimraf dist out static",
 		"geni18n": "npm run compile-ts && node scripts/genzhi18n.js",
 		"package": "vsce package",
@@ -274,11 +258,10 @@
 		"@types/jsdom": "^28.0.3",
 		"@types/lodash": "^4.14.149",
 		"@types/mocha": "^7.0.2",
-		"@types/node": "^13.11.0",
+		"@types/node": "^20",
 		"@types/pngjs": "^3.4.2",
-		"@types/vscode": "^1.52.0",
+		"@types/vscode": "^1.74.0",
 		"@typescript-eslint/parser": "^8.62.0",
-		"@vscode/test-electron": "^2.5.2",
 		"@vscode/vsce": "^3.9.2",
 		"copy-webpack-plugin": "^9.1.0",
 		"eslint": "^10.1.0",

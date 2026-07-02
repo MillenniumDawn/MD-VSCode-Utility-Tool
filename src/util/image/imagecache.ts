@@ -170,7 +170,7 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
         relativePath = relativePath.toLowerCase();
         const decodeStart = Date.now();
         if (relativePath.endsWith('.dds')) {
-            const dds = DDS.parse(buffer.buffer, buffer.byteOffset);
+            const dds = DDS.parse(buffer.buffer as ArrayBuffer, buffer.byteOffset);
             png = ddsToPng(dds);
             pngBuffer = PNG.sync.write(png);
 

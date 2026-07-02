@@ -59,7 +59,7 @@ export class DDSViewProvider extends CommonViewProvider {
     }
 
     protected getPng(buffer: Buffer): PNG {
-        const dds = DDS.parse(buffer.buffer, buffer.byteOffset);
+        const dds = DDS.parse(buffer.buffer as ArrayBuffer, buffer.byteOffset);
         return ddsToPng(dds);
     }
 }
