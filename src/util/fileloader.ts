@@ -23,11 +23,54 @@ const dlcPathsCache = new PromiseCache({
     life: 10 * 60 * 1000,
 });
 
-let dlcZipCache: PromiseCache<AdmZip> | null = null;
+// Cached DLC zip with two lazily built indexes (one getEntries pass): entryName -> entry and
+// directory -> file basenames. Lives on the cached instance, so mtime expiry rebuilds it for free.
+export class DlcZip {
+    private nameIndex?: Map<string, AdmZip.IZipEntry>;
+    private dirIndex?: Map<string, string[]>;
+
+    constructor(private readonly zip: AdmZip) {}
+
+    getEntry(name: string): AdmZip.IZipEntry | null {
+        this.ensureIndex();
+        return this.nameIndex!.get(name) ?? null;
+    }
+
+    // Basenames of the non-directory entries directly under relativePath, matched the same way the
+    // old getEntries loop did: leading slash/backslash stripped, path.resolve + lowercase compare.
+    listDir(relativePath: string): string[] {
+        this.ensureIndex();
+        return this.dirIndex!.get(path.resolve(relativePath).toLowerCase()) ?? [];
+    }
+
+    private ensureIndex(): void {
+        if (this.nameIndex !== undefined) {
+            return;
+        }
+        const nameIndex = new Map<string, AdmZip.IZipEntry>();
+        const dirIndex = new Map<string, string[]>();
+        for (const entry of this.zip.getEntries()) {
+            nameIndex.set(entry.entryName, entry);
+            if (!entry.isDirectory) {
+                const dir = path.resolve(path.dirname(entry.entryName.replace(/^[\\/]/, ''))).toLowerCase();
+                const basenames = dirIndex.get(dir);
+                if (basenames) {
+                    basenames.push(path.basename(entry.name));
+                } else {
+                    dirIndex.set(dir, [path.basename(entry.name)]);
+                }
+            }
+        }
+        this.nameIndex = nameIndex;
+        this.dirIndex = dirIndex;
+    }
+}
+
+let dlcZipCache: PromiseCache<DlcZip> | null = null;
 
 if (!IS_WEB_EXT) {
     // adm-zip requires fs, which doesn't work on web.
-    function getDlcZip(dlcZipPath: string): Promise<AdmZip> {
+    function getDlcZip(dlcZipPath: string): Promise<DlcZip> {
         const uri = vscode.Uri.parse(dlcZipPath);
         if (uri.scheme === Hoi4FsSchema) {
             dlcZipPath = path.join(getConfiguration().installPath, trimStart(uri.path, '/'));
@@ -37,14 +80,14 @@ if (!IS_WEB_EXT) {
         }
 
         const AdmZip = require('adm-zip');
-        return Promise.resolve(new AdmZip(dlcZipPath));
+        return Promise.resolve(new DlcZip(new AdmZip(dlcZipPath)));
     }
 
     dlcZipCache = new PromiseCache({
         factory: getDlcZip,
         expireWhenChange: key => getLastModifiedAsync(vscode.Uri.parse(key)),
-        life: 15 * 1000,
-        maxSize: 8,
+        life: 10 * 60 * 1000,
+        maxSize: 64,
     });
 }
 
@@ -326,11 +369,7 @@ async function listFilesFromModOrHOI4Impl(relativePath: string, options?: { mod?
                 const dlcZip = await dlcZipCache.get(dlc.toString());
                 const folderEntry = dlcZip.getEntry(relativePath);
                 if (folderEntry && folderEntry.isDirectory) {
-                    for (const entry of dlcZip.getEntries()) {
-                        if (isSamePath(path.dirname(entry.entryName.replace(/^[\\/]/, '')), relativePath) && !entry.isDirectory) {
-                            result.push(path.basename(entry.name));
-                        }
-                    }
+                    result.push(...dlcZip.listDir(relativePath));
                 }
             }
         }

@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { expiryToken } from '../util/fileloader';
+import { expiryToken, DlcZip } from '../util/fileloader';
 
 // EXPIRY_STAT_TTL in fileloader.ts is 500ms; tests advance the stubbed clock past that.
 const TTL = 500;
@@ -69,5 +69,48 @@ describe('util/fileloader expiryToken', function () {
         assert.strictEqual(b, 'file:///doc.txt#opened@5001');
         assert.notStrictEqual(a, b); // the dirty-doc branch is never memoized
         assert.strictEqual(statCalls, 0); // and never touches the stat memo
+    });
+});
+
+// The DLC-zip wrapper indexes a zip's central directory once and answers lookups/listings from
+// those maps. These tests pin the normalization it must preserve from the old getEntry/getEntries
+// code: exact-name lookup, leading slash/backslash stripping, and skipping directory entries.
+describe('util/fileloader DlcZip', function () {
+    const AdmZip = require('adm-zip');
+
+    function makeZip(): DlcZip {
+        const zip = new AdmZip();
+        zip.addFile('gfx/interface/foo.dds', Buffer.from('foo'));
+        zip.addFile('gfx/interface/bar.dds', Buffer.from('bar'));
+        zip.addFile('/gfx/interface/slashfront.dds', Buffer.from('s')); // leading slash
+        zip.addFile('\\gfx/interface/backfront.dds', Buffer.from('b')); // leading backslash
+        zip.addFile('gfx/other.dds', Buffer.from('o'));
+        zip.addFile('gfx/interface/', Buffer.alloc(0)); // directory entry
+        return new DlcZip(zip);
+    }
+
+    it('looks up an entry by its exact name and returns null otherwise', function () {
+        const dlcZip = makeZip();
+        assert.strictEqual(dlcZip.getEntry('gfx/interface/foo.dds')!.entryName, 'gfx/interface/foo.dds');
+        assert.strictEqual(dlcZip.getEntry('gfx/interface/missing.dds'), null);
+    });
+
+    it('reports a directory entry via isDirectory (the listing guard relies on it)', function () {
+        const dir = makeZip().getEntry('gfx/interface/');
+        assert.ok(dir);
+        assert.strictEqual(dir!.isDirectory, true);
+    });
+
+    it('lists file basenames in a directory, stripping leading slash/backslash and skipping directories', function () {
+        assert.deepStrictEqual(
+            makeZip().listDir('gfx/interface/').sort(),
+            ['backfront.dds', 'bar.dds', 'foo.dds', 'slashfront.dds']);
+    });
+
+    it('resolves the query path so a trailing slash lists the same directory', function () {
+        const dlcZip = makeZip();
+        const expected = ['backfront.dds', 'bar.dds', 'foo.dds', 'slashfront.dds'];
+        assert.deepStrictEqual(dlcZip.listDir('gfx/interface').sort(), expected);
+        assert.deepStrictEqual(dlcZip.listDir('gfx/interface/').sort(), expected);
     });
 });
