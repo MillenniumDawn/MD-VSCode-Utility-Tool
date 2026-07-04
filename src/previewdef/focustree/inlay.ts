@@ -1,11 +1,11 @@
 import { GuiFile, guiFileSchema, ContainerWindowType } from "../../hoiformat/gui";
 import { extractConditionValue, extractConditionalExprs, ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
-import { Node, parseHoi4File, resolveScriptVariables } from "../../hoiformat/hoiparser";
+import { Node } from "../../hoiformat/hoiparser";
 import { countryScope } from "../../hoiformat/scope";
 import { convertNodeToJson, positionSchema, Position, HOIPartial } from "../../hoiformat/schema";
 import { localize } from "../../util/i18n";
 import type { FocusInlayGfxOption, FocusInlayImageSlot, FocusTreeInlay, FocusTreeInlayButtonMeta, FocusTreeInlayRef, FocusWarning } from "./schema";
-import { listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
+import { listFilesFromModOrHOI4, parseAndResolveHoi4FileCached, parseHoi4FileCached } from "../../util/fileloader";
 import { getConfiguration } from "../../util/vsccommon";
 import { getSpriteTypes } from "../../hoiformat/spritetype";
 import { getGfxContainerFile } from "../../util/gfxindex";
@@ -30,8 +30,7 @@ export async function loadFocusInlayWindows(): Promise<ParsedInlayFile> {
     for (const file of files.filter(f => f.toLowerCase().endsWith(".txt"))) {
         const relativePath = `${focusInlayWindowsFolder}/${file}`.replace(/\\+/g, "/");
         try {
-            const [buffer, uri] = await readFileFromModOrHOI4(relativePath);
-            const node = parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize("infile", "In file {0}:\n", uri.toString()));
+            const node = await parseHoi4FileCached(relativePath);
             const parsed = parseInlayNode(node, relativePath);
             inlays.push(...parsed.inlays);
             warnings.push(...parsed.warnings);
@@ -218,8 +217,7 @@ export async function resolveInlayGuiWindows(inlays: FocusTreeInlay[]): Promise<
             break;
         }
         try {
-            const [buffer, uri] = await readFileFromModOrHOI4(guiFile);
-            const guiNode = resolveScriptVariables(parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize("infile", "In file {0}:\n", uri.toString())));
+            const guiNode = await parseAndResolveHoi4FileCached(guiFile);
             const guiFileData = convertNodeToJson<GuiFile>(guiNode, guiFileSchema);
             const windows = collectContainerWindows(guiFileData);
             for (const name of Object.keys(windows)) {
@@ -265,7 +263,7 @@ async function listGuiFiles(): Promise<string[]> {
     }
 }
 
-async function listGuiGfxFiles(): Promise<string[]> {
+export async function listGuiGfxFiles(): Promise<string[]> {
     try {
         const files = await listFilesFromModOrHOI4(guiInterfaceFolder, { recursively: true });
         return files
@@ -339,8 +337,7 @@ export async function resolveInlayGfxFiles(inlays: FocusTreeInlay[]): Promise<In
             break;
         }
         try {
-            const [buffer, uri] = await readFileFromModOrHOI4(candidateFile);
-            const spriteTypes = getSpriteTypes(parseHoi4File(buffer.toString().replace(/^\uFEFF/, ""), localize("infile", "In file {0}:\n", uri.toString()), { keepTokens: false }));
+            const spriteTypes = getSpriteTypes(await parseHoi4FileCached(candidateFile, { keepTokens: false }));
             for (const spriteType of spriteTypes) {
                 if (unresolved.has(spriteType.name) && !(spriteType.name in gfxFileByName)) {
                     gfxFileByName[spriteType.name] = candidateFile;
