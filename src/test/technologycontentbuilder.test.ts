@@ -1,0 +1,69 @@
+import * as assert from 'assert';
+import * as vscode from 'vscode';
+import { renderTechnologyFile } from '../previewdef/technology/contentbuilder';
+import { serializeUpdate, LoaderRenderResult } from '../previewdef/loaderpreview';
+
+// renderTechnologyFile returns the in-place update parts { html, update } on success and a plain html
+// string on the no-tree / error branches. These drive it against a stub loader (a countrytechtreeview
+// with no folder children, so every folder takes the deterministic "can't find folder" fallback) to
+// assert the return shape and that serializeUpdate is stable for identical input -- the property the
+// LoaderPreview skip relies on -- and differs when the input changed.
+
+const webview = { asWebviewUri: (u: unknown) => u, cspSource: '' } as unknown as vscode.Webview;
+const uri = vscode.Uri.file('/tmp/common/technologies/test.txt');
+
+function loaderFor(folders: string[]): any {
+    return {
+        load: async () => ({
+            result: {
+                technologyTrees: folders.map(folder => ({ startTechnology: `${folder}_start`, folder, technologies: [] })),
+                guiFiles: [{
+                    file: 'countrytechtreeview.gui',
+                    data: { guitypes: [{ containerwindowtype: [{ name: 'countrytechtreeview', containerwindowtype: [] }] }] },
+                }],
+                gfxFiles: [],
+                equipmentArchetypes: {},
+            },
+        }),
+    };
+}
+
+describe('previewdef/technology renderTechnologyFile in-place update', () => {
+    it('returns { html, update } carrying contentHtml, folderOptionsHtml and folders', async () => {
+        const rendered = await renderTechnologyFile(loaderFor(['artillery', 'infantry']), uri, webview) as LoaderRenderResult;
+        assert.strictEqual(typeof rendered, 'object');
+        assert.strictEqual(typeof rendered.html, 'string');
+        assert.ok(rendered.update);
+        assert.strictEqual(typeof rendered.update.styleCss, 'string');
+        const data = rendered.update.data as { contentHtml: string; folderOptionsHtml: string; folders: string[] };
+        assert.strictEqual(typeof data.contentHtml, 'string');
+        assert.strictEqual(typeof data.folderOptionsHtml, 'string');
+        assert.deepStrictEqual(data.folders, ['artillery', 'infantry']);
+    });
+
+    it('serializeUpdate is stable for identical input, even though the full html nonces differ', async () => {
+        const a = await renderTechnologyFile(loaderFor(['artillery', 'infantry']), uri, webview) as LoaderRenderResult;
+        const b = await renderTechnologyFile(loaderFor(['artillery', 'infantry']), uri, webview) as LoaderRenderResult;
+        // The full html carries fresh CSP nonces per render so it never hashes equal; the update parts
+        // must be byte-identical so a no-op edit skips.
+        assert.notStrictEqual(a.html, b.html);
+        assert.strictEqual(serializeUpdate(a.update!), serializeUpdate(b.update!));
+    });
+
+    it('serializeUpdate differs when the input changed', async () => {
+        const a = await renderTechnologyFile(loaderFor(['artillery', 'infantry']), uri, webview) as LoaderRenderResult;
+        const c = await renderTechnologyFile(loaderFor(['artillery', 'armor']), uri, webview) as LoaderRenderResult;
+        assert.notStrictEqual(serializeUpdate(a.update!), serializeUpdate(c.update!));
+    });
+
+    it('returns a plain string (no update parts) for the no-technology-tree page', async () => {
+        const rendered = await renderTechnologyFile(loaderFor([]), uri, webview);
+        assert.strictEqual(typeof rendered, 'string');
+    });
+
+    it('returns a plain string for the error page when the loader throws', async () => {
+        const throwing: any = { load: async () => { throw new Error('boom'); } };
+        const rendered = await renderTechnologyFile(throwing, uri, webview);
+        assert.strictEqual(typeof rendered, 'string');
+    });
+});

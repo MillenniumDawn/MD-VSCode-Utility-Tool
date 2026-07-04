@@ -20,11 +20,12 @@ import { StyleTable } from '../../util/styletable';
 import { RenderNodeCommonOptions } from '../../util/hoi4gui/nodecommon';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { localisationIndex } from "../../util/featureflags";
+import { LoaderRender } from '../loaderpreview';
 
 const techTreeViewName = 'countrytechtreeview';
 const doctrineTreeViewName = 'countrydoctrineview';
 
-export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
+export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<LoaderRender> {
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -33,7 +34,7 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
 
         const technologyTrees = loadResult.result.technologyTrees;
         const folders = uniq(technologyTrees.map(tt => tt.folder));
-        
+
         if (folders.length === 0) {
             const baseContent = localize('techtree.notechtree', 'No technology tree.');
             return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
@@ -45,9 +46,9 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
         for (const mode of techNameModes) {
             styleTable.raw(`#techtreecontent.name-mode-${mode.id} .tech-name-${mode.id}`, 'display: contents;');
         }
-        const baseContent = await renderTechnologyFolders(technologyTrees, folders, styleTable, loadResult.result);
+        const { baseContent, contentHtml, folderOptionsHtml } = await renderTechnologyFolders(technologyTrees, folders, styleTable, loadResult.result);
 
-        return html(
+        const fullHtml = html(
             webview,
             baseContent,
             [
@@ -58,9 +59,22 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
             [
                 'common.css',
                 'codicon.css',
-                styleTable,
+                // Addressable id so an in-place updateBody can refresh the server StyleTable (the tech
+                // markup references its classes) by mutating this <style>.textContent instead of a full
+                // reload. Tech injects no client-side <style>, so no extra style nonce is reserved.
+                { content: styleTable.toRawCss(), id: 'tech-server-styles' },
             ],
         );
+
+        // Parts for the in-place update. The tree is rendered on the host, so unlike MIO the payload
+        // ships the server-rendered #techtreecontent inner markup and the <option> list, not data
+        // globals; the webview swaps them in and re-applies folder visibility. The parts are
+        // deterministic for identical input (fresh StyleTable per render, stable folder order), so an
+        // unchanged edit hashes equal and the LoaderPreview skips.
+        return {
+            html: fullHtml,
+            update: { styleCss: styleTable.toRawCss(), data: { contentHtml, folderOptionsHtml, folders } },
+        };
 
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
@@ -68,7 +82,17 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
     }
 }
 
-async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folders: string[], styleTable: StyleTable, loadResult: TechnologyTreeLoaderResult): Promise<string> {
+interface TechnologyFoldersRender {
+    // Full baseline body (folder selector bar + dragger + the #techtreecontent wrapper).
+    baseContent: string;
+    // The #techtreecontent INNER markup only (the joined per-folder divs); the update swaps this into
+    // the persistent wrapper's innerHTML, so the wrapper (and its name-mode class) is not part of it.
+    contentHtml: string;
+    // The <option> list for #folderSelector, shared between the baseline select and the update.
+    folderOptionsHtml: string;
+}
+
+async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folders: string[], styleTable: StyleTable, loadResult: TechnologyTreeLoaderResult): Promise<TechnologyFoldersRender> {
     const guiFiles = loadResult.guiFiles.map(f => f.file);
     const guiTypes = flatMap(loadResult.guiFiles, f => f.data.guitypes);
 
@@ -81,9 +105,13 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
     const gfxFiles = loadResult.gfxFiles;
     const equipmentArchetypes = loadResult.equipmentArchetypes;
     const techFolders = (await Promise.all(folders.map(folder => renderTechnologyFolder(technologyTrees, folder, techTreeViews, containerWindowTypes, styleTable, guiFiles, gfxFiles, equipmentArchetypes)))).join('');
+    // Collapse whitespace exactly as html() does to the whole body, so the innerHTML the update swaps
+    // in is byte-identical to what the baseline reload renders inside #techtreecontent.
+    const contentHtml = techFolders.replace(/\s\s+/g, ' ');
+    const folderOptionsHtml = renderFolderOptions(folders);
 
-    return `
-    ${await renderFolderSelector(folders, styleTable)}
+    const baseContent = `
+    ${await renderFolderSelector(folderOptionsHtml, styleTable)}
     <div
     id="dragger"
     class="${styleTable.oneTimeStyle('dragger', () => `
@@ -106,14 +134,18 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
     `)}">
         ${techFolders}
     </div>`;
+
+    return { baseContent, contentHtml, folderOptionsHtml };
 }
 
-async function renderFolderSelector(folders: string[], styleTable: StyleTable): Promise<string> {
-    const folderOptions = folders.map((folder) => {
+function renderFolderOptions(folders: string[]): string {
+    return folders.map((folder) => {
         const localizedText = localisationIndex ? `${getLocalisedTextQuick(folder)} (${folder})` : folder;
         return `<option value="techfolder_${folder}">${localizedText}</option>`;
-    });
+    }).join('');
+}
 
+async function renderFolderSelector(folderOptionsHtml: string, styleTable: StyleTable): Promise<string> {
     return `<div
     class="${styleTable.oneTimeStyle('folderSelectorBar', () => `
         position: fixed;
@@ -136,7 +168,7 @@ async function renderFolderSelector(folders: string[], styleTable: StyleTable): 
                 type="text"
                 class="${styleTable.oneTimeStyle('folderSelector', () => `min-width:200px`)}"
             >
-                ${folderOptions.join('')}
+                ${folderOptionsHtml}
             </select>
         </div>
         <div class="${styleTable.oneTimeStyle('showTechLocContainer', () => `display:inline-flex; align-items:center; margin-left:15px`)}">
