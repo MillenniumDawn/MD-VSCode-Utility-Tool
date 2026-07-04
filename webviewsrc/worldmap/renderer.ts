@@ -6,7 +6,7 @@ import { TopBar, topBarHeight, ColorSet, ViewMode } from "./topbar";
 import { Subscriber } from "../util/event";
 import { arrayToMap } from "../util/common";
 import { feLocalize } from "../util/i18n";
-import { chain, max, padStart } from "lodash";
+import { chain, max } from "lodash";
 import { combineLatest, fromEvent } from 'rxjs';
 import { distinctUntilChanged } from 'rxjs/operators';
 
@@ -66,6 +66,7 @@ export class Renderer extends Subscriber {
         this.resizeCanvas();
 
         this.addSubscription(loader.worldMap$.subscribe(this.reloadImages));
+        // Direct (not rAF-coalesced) so the load-completion emit always renders, even on a hidden panel.
         this.addSubscription(loader.worldMap$.subscribe(this.renderCanvas));
         this.addSubscription(
             combineLatest([
@@ -85,9 +86,23 @@ export class Renderer extends Subscriber {
                 topBar.display.selectedValues$,
             ]).pipe(
                 distinctUntilChanged((x, y) => x.every((v, i) => v === y[i]))
-            ).subscribe(this.renderCanvas)
+            ).subscribe(this.scheduleRender)
         );
     }
+
+    private renderScheduled = false;
+    // Coalesces bursts of triggers into one render per frame; renderCanvas reads current state at
+    // rAF time, so a coalesced render never paints stale data.
+    private scheduleRender = () => {
+        if (this.renderScheduled) {
+            return;
+        }
+        this.renderScheduled = true;
+        requestAnimationFrame(() => {
+            this.renderScheduled = false;
+            this.renderCanvas();
+        });
+    };
 
     private reloadImages = () => {
         for (const resource of this.loader.worldMap.resources) {
@@ -586,7 +601,7 @@ export class Renderer extends Subscriber {
         this.addSubscription(fromEvent<MouseEvent>(this.mainCanvas, 'mousemove').subscribe((e) => {
             this.cursorX = e.pageX;
             this.cursorY = e.pageY;
-            this.renderCanvas();
+            this.scheduleRender();
         }));
     }
 
@@ -943,7 +958,7 @@ ${worldMap.getSupplyAreaWarnings(supplyArea).map(v => '|r|' + v).join('\n')}`);
 }
 
 function toColor(colorNum: number) {
-    return '#' + padStart(colorNum.toString(16), 6, '0');
+    return '#' + colorNum.toString(16).padStart(6, '0');
 }
 
 function findNearestPoints(start: Point | undefined, end: Point | undefined, a: Province, b: Province | undefined): [Point, Point] {

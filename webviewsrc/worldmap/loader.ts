@@ -199,19 +199,42 @@ export class Loader extends Subscriber {
 
     private loadNext(updateMap: boolean = true) {
         this.progress = 1 - this.loadingQueue.length / this.loadingQueueStartLength;
-    
-        if (updateMap) {
-            this.worldMap = new FEWorldMapClass(this.loadingProvinceMap!);
-            this.writableWorldMap$.next(this.worldMap);
-        }
-    
+
         if (this.loadingQueue.length === 0) {
+            // Final emit is synchronous against the now-complete arrays: guarantees the last frame is
+            // never a partial one and covers hidden panels, where the rAF path never fires.
+            if (updateMap) {
+                this.emitWorldMap();
+            }
             this.loading$.next(false);
         } else {
+            // Keep the request pump immediate; only the map emit is rAF-coalesced.
             vscode.postMessage(this.loadingQueue.shift());
+            if (updateMap) {
+                this.scheduleWorldMapEmit();
+            }
         }
 
         this.writableProgress$.next({ progressText: this.progressText, progress: this.progress });
+    }
+
+    private pendingEmit = false;
+    private scheduleWorldMapEmit(): void {
+        if (this.pendingEmit) {
+            return;
+        }
+        this.pendingEmit = true;
+        requestAnimationFrame(() => {
+            if (this.pendingEmit) {
+                this.emitWorldMap();
+            }
+        });
+    }
+
+    private emitWorldMap(): void {
+        this.pendingEmit = false;
+        this.worldMap = new FEWorldMapClass(this.loadingProvinceMap!);
+        this.writableWorldMap$.next(this.worldMap);
     }
     
     private receiveData<T>(arr: T[] | undefined, start: number, end: number, data: string): void {
@@ -221,7 +244,7 @@ export class Loader extends Subscriber {
     }
 }
 
-class FEWorldMapClass implements FEWorldMap {
+export class FEWorldMapClass implements FEWorldMap {
     width!: number;
     height!: number;
     countries!: Country[];
@@ -248,6 +271,15 @@ class FEWorldMapClass implements FEWorldMap {
     private supplyAreas!: (SupplyArea | null | undefined)[];
     private railways!: (Railway | null | undefined)[];
     private supplyNodes!: (SupplyNode | null | undefined)[];
+
+    // Reverse-lookup maps, memoized per instance. Lifetime is strictly this instance: the loader
+    // builds a fresh FEWorldMapClass per emit, so a memo built mid-load is discarded next emit and
+    // the final post-load instance memoizes against complete arrays.
+    private provinceToStateMemo: Record<number, number | undefined> | undefined = undefined;
+    private provinceToStrategicRegionMemo: Record<number, number | undefined> | undefined = undefined;
+    private stateToSupplyAreaMemo: Record<number, number | undefined> | undefined = undefined;
+    private provinceToRailwayLevelMemo: Record<number, number | undefined> | undefined = undefined;
+    private provinceToSupplyNodeMemo: Record<number, SupplyNode | undefined> | undefined = undefined;
 
     constructor(worldMap?: WorldMapData & ExtraMapData) {
         Object.assign(this, worldMap ?? ({
@@ -277,57 +309,42 @@ class FEWorldMapClass implements FEWorldMap {
     };
 
     public getStateByProvinceId(provinceId: number): State | undefined {
-        let resultState: State | undefined = undefined;
-        this.forEachState(state => {
-            if (state.provinces.includes(provinceId)) {
-                resultState = state;
-                return true;
-            }
-        });
-        return resultState;
+        return this.getStateById(this.getProvinceToStateMap()[provinceId]);
     }
-    
+
     public getStrategicRegionByProvinceId(provinceId: number): StrategicRegion | undefined {
-        let resultStrategicRegion: StrategicRegion | undefined = undefined;
-        this.forEachStrategicRegion(strategicRegion => {
-            if (strategicRegion.provinces.includes(provinceId)) {
-                resultStrategicRegion = strategicRegion;
-                return true;
-            }
-        });
-        return resultStrategicRegion;
+        return this.getStrategicRegionById(this.getProvinceToStrategicRegionMap()[provinceId]);
     }
 
     public getSupplyAreaByStateId(stateId: number): SupplyArea | undefined {
-        let resultSupplyArea: SupplyArea | undefined = undefined;
-        this.forEachSupplyArea(supplyArea => {
-            if (supplyArea.states.includes(stateId)) {
-                resultSupplyArea = supplyArea;
-                return true;
-            }
-        });
-        return resultSupplyArea;
+        return this.getSupplyAreaById(this.getStateToSupplyAreaMap()[stateId]);
     }
 
     public getRailwayLevelByProvinceId(provinceId: number): number | undefined {
-        let resultRailwayLevel = -1;
-        this.forEachRailway(railway => {
-            if (railway.provinces.includes(provinceId)) {
-                resultRailwayLevel = Math.max(resultRailwayLevel, railway.level);
-            }
-        });
-        return resultRailwayLevel === -1 ? undefined : resultRailwayLevel;
+        if (this.provinceToRailwayLevelMemo === undefined) {
+            const result: Record<number, number | undefined> = {};
+            this.forEachRailway(railway =>
+                railway.provinces.forEach(p => {
+                    const existing = result[p];
+                    result[p] = existing === undefined ? railway.level : Math.max(existing, railway.level);
+                })
+            );
+            this.provinceToRailwayLevelMemo = result;
+        }
+        return this.provinceToRailwayLevelMemo[provinceId];
     }
 
     public getSupplyNodeByProvinceId(provinceId: number): SupplyNode | undefined {
-        let resultSupplyNode: SupplyNode | undefined = undefined;
-        this.forEachSupplyNode(supplyNode => {
-            if (supplyNode.province === provinceId) {
-                resultSupplyNode = supplyNode;
-                return true;
-            }
-        });
-        return resultSupplyNode;
+        if (this.provinceToSupplyNodeMemo === undefined) {
+            const result: Record<number, SupplyNode | undefined> = {};
+            this.forEachSupplyNode(supplyNode => {
+                if (result[supplyNode.province] === undefined) {
+                    result[supplyNode.province] = supplyNode;
+                }
+            });
+            this.provinceToSupplyNodeMemo = result;
+        }
+        return this.provinceToSupplyNodeMemo[provinceId];
     }
     
     public getProvinceByPosition(x: number, y: number): Province | undefined {
@@ -343,39 +360,42 @@ class FEWorldMapClass implements FEWorldMap {
     }
 
     public getProvinceToStateMap(): Record<number, number | undefined> {
-        const result: Record<number, number | undefined> = {};
-
-        this.forEachState(state =>
-            state.provinces.forEach(p => {
-                result[p] = state.id;
-            })
-        );
-    
-        return result;
+        if (this.provinceToStateMemo === undefined) {
+            const result: Record<number, number | undefined> = {};
+            this.forEachState(state =>
+                state.provinces.forEach(p => {
+                    result[p] = state.id;
+                })
+            );
+            this.provinceToStateMemo = result;
+        }
+        return this.provinceToStateMemo;
     }
 
     public getProvinceToStrategicRegionMap(): Record<number, number | undefined> {
-        const result: Record<number, number | undefined> = {};
-
-        this.forEachStrategicRegion(strategicRegion =>
-            strategicRegion.provinces.forEach(p => {
-                result[p] = strategicRegion.id;
-            })
-        );
-    
-        return result;
+        if (this.provinceToStrategicRegionMemo === undefined) {
+            const result: Record<number, number | undefined> = {};
+            this.forEachStrategicRegion(strategicRegion =>
+                strategicRegion.provinces.forEach(p => {
+                    result[p] = strategicRegion.id;
+                })
+            );
+            this.provinceToStrategicRegionMemo = result;
+        }
+        return this.provinceToStrategicRegionMemo;
     }
 
     public getStateToSupplyAreaMap(): Record<number, number | undefined> {
-        const result: Record<number, number | undefined> = {};
-
-        this.forEachSupplyArea(supplyArea =>
-            supplyArea.states.forEach(s => {
-                result[s] = supplyArea.id;
-            })
-        );
-    
-        return result;
+        if (this.stateToSupplyAreaMemo === undefined) {
+            const result: Record<number, number | undefined> = {};
+            this.forEachSupplyArea(supplyArea =>
+                supplyArea.states.forEach(s => {
+                    result[s] = supplyArea.id;
+                })
+            );
+            this.stateToSupplyAreaMemo = result;
+        }
+        return this.stateToSupplyAreaMemo;
     }
 
     public forEachProvince(callback: (province: Province) => boolean | void) {
