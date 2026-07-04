@@ -1,13 +1,11 @@
 import * as vscode from 'vscode';
-import { ddsToPng, tgaToPng } from './util/image/converter';
-import { PNG } from 'pngjs';
 import { localize } from './util/i18n';
-import { DDS } from './util/image/dds';
 import { html, htmlEscape, loadingShellHtml } from './util/html';
 import { StyleTable } from './util/styletable';
 import { sendEvent } from './util/telemetry';
 import { forceError } from './util/common';
 import { readFile } from './util/vsccommon';
+import { decodeImageToPng } from './util/image/imagedecoder';
 
 abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider {
     public async openCustomDocument(uri: vscode.Uri) {
@@ -32,13 +30,23 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
                 return;
             }
 
-            const png = this.getPng(Buffer.from(buffer));
-            const pngBuffer = PNG.sync.write(png);
+            // Decoding runs off the host thread in the image worker; race it against cancellation so a
+            // panel torn down mid-decode isn't reassigned html after disposal.
+            const decoded = await Promise.race([
+                decodeImageToPng(Buffer.from(buffer), this.imageKind),
+                new Promise<null>(resolve => token.onCancellationRequested(_ => resolve(null))),
+            ]);
+
+            if (decoded === null) {
+                return;
+            }
+
+            const { pngBuffer, width, height } = decoded;
             const styleTable = new StyleTable();
 
             webviewPanel.webview.html = html(
                 webviewPanel.webview,
-                `<div class="${styleTable.oneTimeStyle('imagePreview', () => `width:${png.width}px;height:${png.height}px;`)}">
+                `<div class="${styleTable.oneTimeStyle('imagePreview', () => `width:${width}px;height:${height}px;`)}">
                     <img src="data:image/png;base64,${pngBuffer.toString('base64')}"/>
                 </div>`,
                 [],
@@ -50,26 +58,21 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
     }
 
     protected abstract onOpen(): void;
-    protected abstract getPng(buffer: Buffer): PNG;
+    protected abstract readonly imageKind: 'dds' | 'tga';
 }
 
 export class DDSViewProvider extends CommonViewProvider {
+    protected readonly imageKind: 'dds' | 'tga' = 'dds';
+
     protected onOpen(): void {
         sendEvent('preview.dds');
-    }
-
-    protected getPng(buffer: Buffer): PNG {
-        const dds = DDS.parse(buffer.buffer as ArrayBuffer, buffer.byteOffset);
-        return ddsToPng(dds);
     }
 }
 
 export class TGAViewProvider extends CommonViewProvider {
+    protected readonly imageKind: 'dds' | 'tga' = 'tga';
+
     protected onOpen(): void {
         sendEvent('preview.tga');
-    }
-
-    protected getPng(buffer: Buffer): PNG {
-        return tgaToPng(buffer);
     }
 }
