@@ -3,6 +3,10 @@ import { vscode } from "./util/vscode";
 
 initCommon();
 
+// Marker on every hover-picture popup (appended to body, outside #eventtreecontent) so an in-place
+// update can sweep any that were stranded by replacing their host node mid-hover.
+const hoverPictureClass = 'event-hover-picture';
+
 // In-place update pushed by LoaderPreview when the previewed file changed: refresh the server-rendered
 // tree markup without a full reload, so scroll and zoom survive. The tree is rendered on the host, so
 // the payload carries HTML (contentHtml). Only #eventtreecontent's inner markup is replaced. Falls back
@@ -35,6 +39,9 @@ window.addEventListener('message', tryRun(function(event: MessageEvent) {
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
     if (typeof data.contentHtml === 'string') {
+        // Replacing the inner markup orphans any node currently being hovered, so its mouseleave never
+        // fires and its popup (parented to body) would be left stranded. Sweep them before the swap.
+        document.querySelectorAll('.' + hoverPictureClass).forEach(el => el.remove());
         contentElement.innerHTML = data.contentHtml;
     }
     showPictureWhenHover();
@@ -74,7 +81,7 @@ function showPictureWhenHoverElement(eventNode: HTMLDivElement) {
     eventNode.addEventListener('mouseenter', () => {
         const position = eventNode.getBoundingClientRect();
         hoverElement = document.createElement('div');
-        hoverElement.className = pictureKey;
+        hoverElement.className = pictureKey + ' ' + hoverPictureClass;
         hoverElement.style.position = 'absolute';
         hoverElement.style.left = (position.left + window.scrollX - (pictureWidth - position.width) / 2) + 'px';
         hoverElement.style.top = (position.top + position.height + window.scrollY) + 'px';
