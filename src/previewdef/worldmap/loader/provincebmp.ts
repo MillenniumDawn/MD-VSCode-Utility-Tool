@@ -358,19 +358,16 @@ export function concatEdges(edges: [Point, Point][]): Point[][] {
     return result;
 }
 
-function validateProvince(colorByPosition: Uint32Array, width: number, height: number, file: string, warnings: WorldMapWarning[]) {
-    const i = new Array(4);
+export function validateProvince(colorByPosition: Uint32Array, width: number, height: number, file: string, warnings: WorldMapWarning[]) {
     for (let y = 1, y0 = width, index = width; y < height; y++, y0 += width) {
         for (let x = 0; x < width; x++, index++) {
-            i[0] = index;
-            i[1] = index + (x === width - 1 ? -width : 0) + 1;
-            i[2] = i[0] - width;
-            i[3] = i[1] - width;
-            i.forEach((v, i0) => {
-                i[i0] = colorByPosition[v];
-            });
-            if (i[0] !== i[1] && i[0] !== i[2] && i[0] !== i[3] && i[1] !== i[2] && i[1] !== i[3] && i[2] !== i[3]) {
-                const colors = i.filter((v, i, a) => a.indexOf(v) === i);
+            const i1 = index + (x === width - 1 ? -width : 0) + 1;
+            const c0 = colorByPosition[index];
+            const c1 = colorByPosition[i1];
+            const c2 = colorByPosition[index - width];
+            const c3 = colorByPosition[i1 - width];
+            if (c0 !== c1 && c0 !== c2 && c0 !== c3 && c1 !== c2 && c1 !== c3 && c2 !== c3) {
+                const colors = [c0, c1, c2, c3];
                 warnings.push({
                     source: colors.map(color => ({ color, id: -1, type: 'province' })),
                     relatedFiles: [file],

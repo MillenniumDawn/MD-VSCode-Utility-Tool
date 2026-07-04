@@ -1,6 +1,7 @@
 import * as assert from 'assert';
-import { Point, ProvinceEdgeGraph } from '../previewdef/worldmap/definitions';
-import { concatEdges, fillEdges } from '../previewdef/worldmap/loader/provincebmp';
+import { Point, ProvinceEdgeGraph, WorldMapWarning } from '../previewdef/worldmap/definitions';
+import { concatEdges, fillEdges, validateProvince } from '../previewdef/worldmap/loader/provincebmp';
+import { localize } from '../util/i18n';
 
 function pt(x: number, y: number): Point {
     return { x, y };
@@ -152,5 +153,81 @@ describe('worldmap/provincebmp edge joining', function () {
                 { toColor: -1, path: [[pt(4, 4), pt(0, 4)]] },
             ]);
         });
+    });
+});
+
+describe('worldmap/provincebmp X-crossing validation', function () {
+    // Naive reference matching the pre-optimization implementation (per-pixel
+    // 4-element array + forEach + filter). The de-closured validateProvince must
+    // produce byte-identical warnings for the same input.
+    function validateProvinceReference(colorByPosition: Uint32Array, width: number, height: number, file: string): WorldMapWarning[] {
+        const warnings: WorldMapWarning[] = [];
+        const i: number[] = new Array(4);
+        for (let y = 1, y0 = width, index = width; y < height; y++, y0 += width) {
+            for (let x = 0; x < width; x++, index++) {
+                i[0] = index;
+                i[1] = index + (x === width - 1 ? -width : 0) + 1;
+                i[2] = i[0] - width;
+                i[3] = i[1] - width;
+                i.forEach((v, i0) => {
+                    i[i0] = colorByPosition[v];
+                });
+                if (i[0] !== i[1] && i[0] !== i[2] && i[0] !== i[3] && i[1] !== i[2] && i[1] !== i[3] && i[2] !== i[3]) {
+                    const colors = i.filter((v, i, a) => a.indexOf(v) === i);
+                    warnings.push({
+                        source: colors.map(color => ({ color, id: -1, type: 'province' })),
+                        relatedFiles: [file],
+                        text: localize('worldmap.warnings.xcrossing', 'Map invalid X crossing at: ({0}, {1}).', x, y - 1),
+                    });
+                }
+            }
+        }
+        return warnings;
+    }
+
+    function run(colors: number[][], file = 'map/provinces.bmp'): WorldMapWarning[] {
+        const grid = buildGrid(colors);
+        const warnings: WorldMapWarning[] = [];
+        validateProvince(grid.colorByPosition, grid.width, grid.height, file, warnings);
+        return warnings;
+    }
+
+    // bg is uniform; A/B over C/D form a single 2x2 block of four distinct colors.
+    const bg = 1, A = 10, B = 11, C = 12, D = 13;
+
+    it('matches the reference on an interior X-crossing plus uniform pixels', function () {
+        const colors = [
+            [bg, A, B, bg],
+            [bg, C, D, bg],
+            [bg, bg, bg, bg],
+            [bg, bg, bg, bg],
+        ];
+        const grid = buildGrid(colors);
+        assert.deepStrictEqual(run(colors), validateProvinceReference(grid.colorByPosition, grid.width, grid.height, 'map/provinces.bmp'));
+    });
+
+    it('matches the reference on a wrap-around X-crossing at the last column', function () {
+        // Column x=3 wraps to x=0: the four corner colors W/X/Y/Z are all distinct.
+        const W = 20, X = 21, Y = 22, Z = 23;
+        const colors = [
+            [W, bg, bg, X],
+            [Y, bg, bg, Z],
+        ];
+        const grid = buildGrid(colors);
+        assert.deepStrictEqual(run(colors), validateProvinceReference(grid.colorByPosition, grid.width, grid.height, 'map/provinces.bmp'));
+    });
+
+    it('produces exactly one warning with the expected source and coords for a lone crossing', function () {
+        const warnings = run([
+            [bg, A, B, bg],
+            [bg, C, D, bg],
+            [bg, bg, bg, bg],
+            [bg, bg, bg, bg],
+        ]);
+        assert.deepStrictEqual(warnings, [{
+            source: [C, D, A, B].map(color => ({ color, id: -1, type: 'province' })),
+            relatedFiles: ['map/provinces.bmp'],
+            text: 'Map invalid X crossing at: (1, 0).',
+        }]);
     });
 });
