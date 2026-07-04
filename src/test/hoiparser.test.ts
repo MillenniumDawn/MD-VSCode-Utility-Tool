@@ -122,6 +122,13 @@ describe('parseHoi4File', () => {
     it('throws when an unterminated block is left open', () => {
         assert.throws(() => parseHoi4File('a = { b = 1'), /Expect a '}'|Invalid token/);
     });
+
+    it('parses two sequential inputs, resetting the shared sticky regex', () => {
+        // The token regex is a module-level sticky constant reused across parses; a
+        // stale lastIndex would derail the second parse if it were not reset.
+        assert.strictEqual(child(parseHoi4File('a = 1'), 'a').value, 1);
+        assert.strictEqual(child(parseHoi4File('b = 2'), 'b').value, 2);
+    });
 });
 
 describe('resolveScriptVariables', () => {
