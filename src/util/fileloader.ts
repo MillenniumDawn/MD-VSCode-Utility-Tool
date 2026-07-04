@@ -110,13 +110,32 @@ export async function clearDlcZipCache() {
     dlcZipCache?.clear();
     fileContentCache.clear();
     fileListCache.clear();
+    getFilePathMemo.clear();
 }
 
 export function getFilePathFromMod(relativePath: string): Promise<vscode.Uri | undefined> {
     return getFilePathFromModOrHOI4(relativePath, { hoi4: false });
 }
 
-export async function getFilePathFromModOrHOI4(relativePath: string, options?: { mod?: boolean, hoi4?: boolean }): Promise<vscode.Uri | undefined> {
+// Every icon lookup and every expiry-token check resolves a path through here, doing several
+// fs.stats each; a single render does this hundreds of times over the same paths. Collapse the
+// repeats to one resolution per path/options within the same 500ms window getLastModifiedMemo
+// uses. Keyed only on the mod/hoi4 fields the resolver reads, so unrelated option fields and key
+// order don't split the cache. Cleared by clearDlcZipCache on folder/config change.
+const getFilePathMemo = memoizeWithTtl(
+    (key: string): Promise<vscode.Uri | undefined> => {
+        const [relativePath, mod, hoi4] = JSON.parse(key) as [string, boolean | null, boolean | null];
+        return getFilePathFromModOrHOI4Impl(relativePath, { mod: mod ?? undefined, hoi4: hoi4 ?? undefined });
+    },
+    { ttl: 500, maxSize: 1000 },
+);
+
+export function getFilePathFromModOrHOI4(relativePath: string, options?: { mod?: boolean, hoi4?: boolean }): Promise<vscode.Uri | undefined> {
+    const normalizedPath = relativePath.replace(/\/\/+|\\+/g, '/');
+    return getFilePathMemo(JSON.stringify([normalizedPath, options?.mod ?? null, options?.hoi4 ?? null]));
+}
+
+async function getFilePathFromModOrHOI4Impl(relativePath: string, options?: { mod?: boolean, hoi4?: boolean }): Promise<vscode.Uri | undefined> {
     relativePath = relativePath.replace(/\/\/+|\\+/g, '/');
     let absolutePath: vscode.Uri | undefined = undefined;
 

@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { expiryToken, DlcZip } from '../util/fileloader';
+import { expiryToken, DlcZip, getFilePathFromModOrHOI4, clearDlcZipCache } from '../util/fileloader';
 
 // EXPIRY_STAT_TTL in fileloader.ts is 500ms; tests advance the stubbed clock past that.
 const TTL = 500;
@@ -69,6 +69,48 @@ describe('util/fileloader expiryToken', function () {
         assert.strictEqual(b, 'file:///doc.txt#opened@5001');
         assert.notStrictEqual(a, b); // the dirty-doc branch is never memoized
         assert.strictEqual(statCalls, 0); // and never touches the stat memo
+    });
+});
+
+// getFilePathFromModOrHOI4 resolves a relative path against the workspace/HOI4/DLCs with several
+// fs.stats per call; a render hits the same paths hundreds of times. A 500ms memo collapses those.
+// A workspace folder whose files all exist means one stat resolves the path, so the stat count is
+// our proof the resolution ran once within the TTL and again after it. Mirrors the getLastModifiedMemo test above.
+describe('util/fileloader getFilePathFromModOrHOI4', function () {
+    let statCalls = 0;
+    const realStat = (vscode.workspace.fs as any).stat;
+    const realNow = Date.now;
+    const realFolders = (vscode.workspace as any).workspaceFolders;
+
+    beforeEach(function () {
+        statCalls = 0;
+        (vscode.workspace.fs as any).stat = async () => { statCalls++; return { type: vscode.FileType.File, mtime: 0, ctime: 0, size: 0 }; };
+        (vscode.workspace as any).workspaceFolders = [
+            { uri: { fsPath: '/ws', path: '/ws', scheme: 'file', toString: () => 'file:///ws' } },
+        ];
+    });
+
+    afterEach(async function () {
+        (vscode.workspace.fs as any).stat = realStat;
+        (vscode.workspace as any).workspaceFolders = realFolders;
+        Date.now = realNow;
+        await clearDlcZipCache(); // drop the path memo so it doesn't leak into other tests
+    });
+
+    it('resolves once within the TTL and re-resolves after it expires', async function () {
+        Date.now = () => 2000;
+        const first = await getFilePathFromModOrHOI4('common/foo.txt');
+        const second = await getFilePathFromModOrHOI4('common/foo.txt');
+
+        assert.strictEqual(first!.toString(), 'file:///ws/common/foo.txt');
+        assert.strictEqual(second!.toString(), first!.toString());
+        assert.strictEqual(statCalls, 1); // second resolution served from the memo
+
+        Date.now = () => 2000 + TTL + 1;
+        const third = await getFilePathFromModOrHOI4('common/foo.txt');
+
+        assert.strictEqual(third!.toString(), first!.toString());
+        assert.strictEqual(statCalls, 2); // past the TTL it re-resolves
     });
 });
 
