@@ -170,17 +170,17 @@ export class Loader extends Subscriber {
     
         this.loadingQueue.length = 0;
     
-        this.queueLoadingRequest('requestcountries', this.loadingProvinceMap.countriesCount, 300);
-        this.queueLoadingRequest('requeststrategicregions', this.loadingProvinceMap.strategicRegionsCount, 300);
-        this.queueLoadingRequest('requeststrategicregions', -this.loadingProvinceMap.badStrategicRegionsCount, 300, this.loadingProvinceMap.badStrategicRegionsCount);
-        this.queueLoadingRequest('requestsupplyareas', this.loadingProvinceMap.supplyAreasCount, 300);
-        this.queueLoadingRequest('requestsupplyareas', -this.loadingProvinceMap.badSupplyAreasCount, 300, this.loadingProvinceMap.badSupplyAreasCount);
-        this.queueLoadingRequest('requeststates', this.loadingProvinceMap.statesCount, 300);
-        this.queueLoadingRequest('requeststates', -this.loadingProvinceMap.badStatesCount, 300, this.loadingProvinceMap.badStatesCount);
-        this.queueLoadingRequest('requestprovinces', this.loadingProvinceMap.provincesCount, 300);
-        this.queueLoadingRequest('requestprovinces', -this.loadingProvinceMap.badProvincesCount, 300, this.loadingProvinceMap.badProvincesCount);
-        this.queueLoadingRequest('requestrailways', this.loadingProvinceMap.railwaysCount, 1000);
-        this.queueLoadingRequest('requestsupplynodes', this.loadingProvinceMap.supplyNodesCount, 2000);
+        this.queueLoadingRequest('requestcountries', this.loadingProvinceMap.countriesCount, 750);
+        this.queueLoadingRequest('requeststrategicregions', this.loadingProvinceMap.strategicRegionsCount, 750);
+        this.queueLoadingRequest('requeststrategicregions', -this.loadingProvinceMap.badStrategicRegionsCount, 750, this.loadingProvinceMap.badStrategicRegionsCount);
+        this.queueLoadingRequest('requestsupplyareas', this.loadingProvinceMap.supplyAreasCount, 750);
+        this.queueLoadingRequest('requestsupplyareas', -this.loadingProvinceMap.badSupplyAreasCount, 750, this.loadingProvinceMap.badSupplyAreasCount);
+        this.queueLoadingRequest('requeststates', this.loadingProvinceMap.statesCount, 750);
+        this.queueLoadingRequest('requeststates', -this.loadingProvinceMap.badStatesCount, 750, this.loadingProvinceMap.badStatesCount);
+        this.queueLoadingRequest('requestprovinces', this.loadingProvinceMap.provincesCount, 750);
+        this.queueLoadingRequest('requestprovinces', -this.loadingProvinceMap.badProvincesCount, 750, this.loadingProvinceMap.badProvincesCount);
+        this.queueLoadingRequest('requestrailways', this.loadingProvinceMap.railwaysCount, 2500);
+        this.queueLoadingRequest('requestsupplynodes', this.loadingProvinceMap.supplyNodesCount, 5000);
 
         this.loadingQueueStartLength = this.loadingQueue.length;
         this.progressText = '';
