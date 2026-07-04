@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { expiryToken, DlcZip, getFilePathFromModOrHOI4, clearDlcZipCache } from '../util/fileloader';
+import { expiryToken, DlcZip, getFilePathFromModOrHOI4, clearDlcZipCache, parseHoi4FileCached, parseAndResolveHoi4FileCached } from '../util/fileloader';
+import { Node, SymbolNode } from '../hoiformat/hoiparser';
 
 // EXPIRY_STAT_TTL in fileloader.ts is 500ms; tests advance the stubbed clock past that.
 const TTL = 500;
@@ -154,5 +155,76 @@ describe('util/fileloader DlcZip', function () {
         const expected = ['backfront.dds', 'bar.dds', 'foo.dds', 'slashfront.dds'];
         assert.deepStrictEqual(dlcZip.listDir('gfx/interface').sort(), expected);
         assert.deepStrictEqual(dlcZip.listDir('gfx/interface/').sort(), expected);
+    });
+});
+
+// The parse cache stores the tokenized Node tree so unchanged files aren't re-parsed every render.
+// A workspace file (fs.stat says File, no matching open document) is on-disk, so it caches; we stub
+// fs.readFile to count reads and return content, and fix Date.now so the cache serves within its
+// nonExpireLife window.
+describe('util/fileloader parseHoi4FileCached', function () {
+    let readCalls = 0;
+    let content = '';
+    const realStat = (vscode.workspace.fs as any).stat;
+    const realReadFile = (vscode.workspace.fs as any).readFile;
+    const realNow = Date.now;
+    const realFolders = (vscode.workspace as any).workspaceFolders;
+
+    beforeEach(function () {
+        readCalls = 0;
+        content = 'a = 1\nb = "two"';
+        Date.now = () => 4000;
+        (vscode.workspace.fs as any).stat = async () => ({ type: vscode.FileType.File, mtime: 111, ctime: 0, size: 0 });
+        (vscode.workspace.fs as any).readFile = async () => { readCalls++; return Buffer.from(content); };
+        (vscode.workspace as any).workspaceFolders = [
+            { uri: { fsPath: '/ws', path: '/ws', scheme: 'file', toString: () => 'file:///ws' } },
+        ];
+    });
+
+    afterEach(async function () {
+        (vscode.workspace.fs as any).stat = realStat;
+        (vscode.workspace.fs as any).readFile = realReadFile;
+        Date.now = realNow;
+        (vscode.workspace as any).workspaceFolders = realFolders;
+        await clearDlcZipCache(); // drop the parse/content/path caches so entries don't leak between tests
+    });
+
+    function child(node: Node, name: string): Node {
+        const found = (node.value as Node[]).find(n => n.name === name);
+        assert.ok(found, `expected a child named ${name}`);
+        return found!;
+    }
+
+    it('parses an unchanged file once across repeated calls (shared cached tree)', async function () {
+        const first = await parseHoi4FileCached('common/pc-a.txt');
+        const second = await parseHoi4FileCached('common/pc-a.txt');
+
+        assert.strictEqual(second, first); // same Node instance => parsed once, not re-tokenized
+        assert.strictEqual(readCalls, 1); // and the buffer was read once
+        assert.strictEqual(child(first, 'a').value, 1);
+    });
+
+    it('keys the options variant separately from the default parse', async function () {
+        const withTokens = await parseHoi4FileCached('common/pc-b.txt');
+        const withoutTokens = await parseHoi4FileCached('common/pc-b.txt', { keepTokens: false });
+
+        assert.notStrictEqual(withoutTokens, withTokens); // distinct cache entries
+        assert.notStrictEqual(child(withTokens, 'a').nameToken, null); // default keeps position tokens
+        assert.strictEqual(child(withoutTokens, 'a').nameToken, null); // keepTokens:false dropped them
+    });
+
+    it('resolves script variables without corrupting the plain cache entry', async function () {
+        content = '@A = 5\nx = @A';
+
+        const plain = await parseHoi4FileCached('common/pc-c.txt');
+        const resolved = await parseAndResolveHoi4FileCached('common/pc-c.txt');
+
+        assert.notStrictEqual(resolved, plain); // resolved variant is its own entry
+        assert.strictEqual(child(resolved, 'x').value, 5); // @A substituted in the resolved tree
+        assert.strictEqual((child(plain, 'x').value as SymbolNode).name, '@A'); // plain tree still holds the symbol
+
+        const plainAgain = await parseHoi4FileCached('common/pc-c.txt');
+        assert.strictEqual(plainAgain, plain); // same cached instance, untouched by the resolve pass
+        assert.strictEqual((child(plainAgain, 'x').value as SymbolNode).name, '@A');
     });
 });

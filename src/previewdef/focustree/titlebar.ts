@@ -1,8 +1,6 @@
-import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { convertNodeToJson, SchemaDef } from "../../hoiformat/schema";
 import { getSpriteByGfxName, Image } from "../../util/image/imagecache";
-import { localize } from "../../util/i18n";
-import { readFileFromModOrHOI4 } from "../../util/fileloader";
+import { parseHoi4FileCached } from "../../util/fileloader";
 
 export const focusTitlebarStylesFile = 'common/national_focus/00_titlebar_styles.txt';
 export const nationalFocusViewGfxFile = 'interface/nationalfocusview.gfx';
@@ -31,8 +29,7 @@ const titlebarStyleFileSchema: SchemaDef<TitlebarStyleFile> = {
 
 export async function loadFocusTitlebarStyles(): Promise<Record<string, string>> {
     try {
-        const [buffer, realPath] = await readFileFromModOrHOI4(focusTitlebarStylesFile);
-        const node = parseHoi4File(buffer.toString(), localize('infile', 'In file {0}:\n', realPath));
+        const node = await parseHoi4FileCached(focusTitlebarStylesFile);
         const file = convertNodeToJson<TitlebarStyleFile>(node, titlebarStyleFileSchema);
         const result: Record<string, string> = {};
 

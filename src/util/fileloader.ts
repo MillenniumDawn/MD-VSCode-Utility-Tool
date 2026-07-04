@@ -3,7 +3,7 @@ import * as path from 'path';
 import { PromiseCache } from './cache';
 import { isSamePath } from './nodecommon';
 import { getLastModifiedAsync, readDirFiles, isFile, isDirectory, readFile, readDir, isSameUri, fileOrUriStringToUri, ensureFileScheme, readDirFilesRecursively, getConfiguration, getDocumentByUri } from './vsccommon';
-import { parseHoi4File } from '../hoiformat/hoiparser';
+import { parseHoi4File, resolveScriptVariables, Node, ParseOptions } from '../hoiformat/hoiparser';
 import { localize } from './i18n';
 import { convertNodeToJson, SchemaDef, HOIPartial } from '../hoiformat/schema';
 import { error } from './debug';
@@ -111,6 +111,7 @@ export async function clearDlcZipCache() {
     fileContentCache.clear();
     fileListCache.clear();
     getFilePathMemo.clear();
+    parseCache.clear();
 }
 
 export function getFilePathFromMod(relativePath: string): Promise<vscode.Uri | undefined> {
@@ -320,6 +321,53 @@ export async function readFileFromModOrHOI4AsJson<T>(relativePath: string, schem
     const [buffer, realPath] = await readFileFromModOrHOI4(relativePath);
     const nodes = parseHoi4File(buffer.toString(), localize('infile', 'In file {0}:\n', realPath));
     return convertNodeToJson<T>(nodes, schema);
+}
+
+// Buffers are cached (fileContentCache), but every call site re-tokenizes them into a Node tree.
+// This caches the parsed tree so unchanged files aren't re-parsed on every render. The returned Node
+// is shared and must be treated as read-only: consumers like convertNodeToJson/getSpriteTypes only
+// read it. resolveScriptVariables rewrites node.value in place, so the resolved variant parses a
+// fresh tree in the factory under its own key and never touches a plain entry. Keyed by relativePath
+// + parse options + resolve flag; opened/dirty documents bypass this cache (see
+// parseHoi4FileCachedImpl). Node trees run ~5-10x the buffer size, so this is bounded by entry count.
+const parseCache = new PromiseCache<Node>({
+    factory: parseHoi4FileForCache,
+    expireWhenChange: key => hoiFileExpiryToken(JSON.parse(key)[0]),
+    life: 60 * 1000,
+    maxSize: 64,
+});
+
+async function parseHoi4FileForCache(key: string): Promise<Node> {
+    const [relativePath, options, resolve] = JSON.parse(key) as [string, ParseOptions | null, boolean];
+    const [buffer, realPath] = await readFileFromModOrHOI4(relativePath);
+    return parseHoi4Buffer(buffer, realPath, options ?? undefined, resolve);
+}
+
+function parseHoi4Buffer(buffer: Buffer, realPath: vscode.Uri, options: ParseOptions | undefined, resolve: boolean): Node {
+    const node = parseHoi4File(buffer.toString().replace(/^\uFEFF/, ''), localize('infile', 'In file {0}:\n', realPath), options);
+    return resolve ? resolveScriptVariables(node) : node;
+}
+
+// Returns the shared, read-only parsed tree for a file. Opened/dirty documents bypass the cache and
+// parse the live editor text directly (mirrors readFileFromPath), so per-keystroke edits never churn
+// or stale it.
+export function parseHoi4FileCached(relativePath: string, options?: ParseOptions): Promise<Node> {
+    return parseHoi4FileCachedImpl(relativePath, options, false);
+}
+
+// Like parseHoi4FileCached but resolves @script constants. resolveScriptVariables mutates its Node in
+// place, so this gets its own cache entry; never hand a plain parseHoi4FileCached tree to it.
+export function parseAndResolveHoi4FileCached(relativePath: string): Promise<Node> {
+    return parseHoi4FileCachedImpl(relativePath, undefined, true);
+}
+
+async function parseHoi4FileCachedImpl(relativePath: string, options: ParseOptions | undefined, resolve: boolean): Promise<Node> {
+    const realPath = await getFilePathFromModOrHOI4(relativePath);
+    if (realPath && isHoiFileOpened(realPath)) {
+        const [buffer, openedPath] = await readFileFromPath(realPath, relativePath);
+        return parseHoi4Buffer(buffer, openedPath, options, resolve);
+    }
+    return parseCache.get(JSON.stringify([relativePath, options ?? null, resolve]));
 }
 
 // Short-lived cache of directory listings. listFilesFromModOrHOI4 walks the workspace, the HOI4
