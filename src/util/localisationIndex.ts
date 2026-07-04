@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { debounceByInput } from './common';
+import { debounceByInput, mapLimit } from './common';
 import { localisationIndex } from './featureflags';
 import { getFilePathFromModOrHOI4, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from './fileloader';
 import { localize } from './i18n';
@@ -178,7 +178,7 @@ async function buildLocalisationIndexWithCache(
     }
     timer.mark('cache');
 
-    await Promise.all(filesToParse.map(f => fillLocalisationItems(f, targetIndex, fileMap, options, estimatedSize)));
+    await mapLimit(filesToParse, 8, f => fillLocalisationItems(f, targetIndex, fileMap, options, estimatedSize));
     timer.mark('parse');
     timer.log(locFiles.length, filesToParse.length);
 

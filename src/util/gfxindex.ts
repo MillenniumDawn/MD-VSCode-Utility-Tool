@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseHoi4File } from '../hoiformat/hoiparser';
 import { getSpriteTypes } from '../hoiformat/spritetype';
-import { debounceByInput, forceError, UserError } from './common';
+import { debounceByInput, forceError, mapLimit, UserError } from './common';
 import { error } from './debug';
 import { gfxIndex } from './featureflags';
 import { getFilePathFromModOrHOI4, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from './fileloader';
@@ -120,7 +120,7 @@ async function buildGfxIndexWithCache(
     }
     timer.mark('cache');
 
-    await Promise.all(filesToParse.map(f => fillGfxItems(f, targetIndex, fileToKeysMap, options, estimatedSize)));
+    await mapLimit(filesToParse, 8, f => fillGfxItems(f, targetIndex, fileToKeysMap, options, estimatedSize));
     timer.mark('parse');
     timer.log(gfxFiles.length, filesToParse.length);
 
