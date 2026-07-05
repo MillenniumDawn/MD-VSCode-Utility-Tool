@@ -23,15 +23,15 @@ const dlcPathsCache = new PromiseCache({
     life: 10 * 60 * 1000,
 });
 
-// Cached DLC zip with two lazily built indexes (one getEntries pass): entryName -> entry and
-// directory -> file basenames. Lives on the cached instance, so mtime expiry rebuilds it for free.
+// Cached DLC zip that retains only a lightweight index (entryName -> isDirectory and directory ->
+// file basenames), never the zip buffer; reads reopen the archive transiently via readEntryData.
 export class DlcZip {
-    private nameIndex?: Map<string, AdmZip.IZipEntry>;
+    private nameIndex?: Map<string, { isDirectory: boolean }>;
     private dirIndex?: Map<string, string[]>;
 
-    constructor(private readonly zip: AdmZip) {}
+    constructor(private readonly openZip: () => AdmZip) {}
 
-    getEntry(name: string): AdmZip.IZipEntry | null {
+    getEntry(name: string): { isDirectory: boolean } | null {
         this.ensureIndex();
         return this.nameIndex!.get(name) ?? null;
     }
@@ -43,14 +43,24 @@ export class DlcZip {
         return this.dirIndex!.get(path.resolve(relativePath).toLowerCase()) ?? [];
     }
 
+    // Reopens the archive to read one entry's data. The index holds no buffers, so this pays a
+    // transient re-open; repeated reads are served upstream by fileContentCache.
+    async readEntryData(name: string): Promise<Buffer | null> {
+        const entry = this.openZip().getEntry(name);
+        if (!entry) {
+            return null;
+        }
+        return await new Promise<Buffer>(resolve => entry.getDataAsync(resolve));
+    }
+
     private ensureIndex(): void {
         if (this.nameIndex !== undefined) {
             return;
         }
-        const nameIndex = new Map<string, AdmZip.IZipEntry>();
+        const nameIndex = new Map<string, { isDirectory: boolean }>();
         const dirIndex = new Map<string, string[]>();
-        for (const entry of this.zip.getEntries()) {
-            nameIndex.set(entry.entryName, entry);
+        for (const entry of this.openZip().getEntries()) {
+            nameIndex.set(entry.entryName, { isDirectory: entry.isDirectory });
             if (!entry.isDirectory) {
                 const dir = path.resolve(path.dirname(entry.entryName.replace(/^[\\/]/, ''))).toLowerCase();
                 const basenames = dirIndex.get(dir);
@@ -80,7 +90,7 @@ if (!IS_WEB_EXT) {
         }
 
         const AdmZip = require('adm-zip');
-        return Promise.resolve(new DlcZip(new AdmZip(dlcZipPath)));
+        return Promise.resolve(new DlcZip(() => new AdmZip(dlcZipPath)));
     }
 
     dlcZipCache = new PromiseCache({
@@ -295,9 +305,9 @@ async function readFileFromPathImpl(realPath: vscode.Uri, relativePath?: string)
             const { uri: dlc, entryPath: filePath } = getHoiDlcFileOriginalUri(realPath);
 
             const dlcZip = await dlcZipCache.get(dlc.toString());
-            const entry = dlcZip.getEntry(filePath);
-            if (entry !== null) {
-                return [await new Promise<Buffer>(resolve => entry.getDataAsync(resolve)), realPath];
+            const data = await dlcZip.readEntryData(filePath);
+            if (data !== null) {
+                return [data, realPath];
             }
         }
 

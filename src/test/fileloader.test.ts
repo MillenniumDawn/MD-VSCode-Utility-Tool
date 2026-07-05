@@ -129,13 +129,26 @@ describe('util/fileloader DlcZip', function () {
         zip.addFile('\\gfx/interface/backfront.dds', Buffer.from('b')); // leading backslash
         zip.addFile('gfx/other.dds', Buffer.from('o'));
         zip.addFile('gfx/interface/', Buffer.alloc(0)); // directory entry
-        return new DlcZip(zip);
+        return new DlcZip(() => zip);
     }
 
     it('looks up an entry by its exact name and returns null otherwise', function () {
         const dlcZip = makeZip();
-        assert.strictEqual(dlcZip.getEntry('gfx/interface/foo.dds')!.entryName, 'gfx/interface/foo.dds');
+        assert.strictEqual(dlcZip.getEntry('gfx/interface/foo.dds')!.isDirectory, false);
         assert.strictEqual(dlcZip.getEntry('gfx/interface/missing.dds'), null);
+    });
+
+    it('reopens the archive per read and resolves an entry\'s data via getDataAsync', async function () {
+        const fakeEntry = { getDataAsync: (cb: (data: Buffer) => void) => cb(Buffer.from('payload')) };
+        let opens = 0;
+        const dlcZip = new DlcZip(() => {
+            opens++;
+            return { getEntry: (name: string) => name === 'a/b.dds' ? fakeEntry : null } as any;
+        });
+
+        assert.strictEqual((await dlcZip.readEntryData('a/b.dds'))!.toString(), 'payload');
+        assert.strictEqual(await dlcZip.readEntryData('a/missing.dds'), null);
+        assert.strictEqual(opens, 2); // reopened per read, retaining no buffer
     });
 
     it('reports a directory entry via isDirectory (the listing guard relies on it)', function () {
