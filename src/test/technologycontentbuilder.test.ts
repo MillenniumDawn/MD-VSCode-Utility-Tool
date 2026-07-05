@@ -28,6 +28,13 @@ function loaderFor(folders: string[]): any {
     };
 }
 
+// The class list on an element carrying id="<id>", read out of the rendered html.
+function classOf(html: string, id: string): string {
+    const m = new RegExp(`id="${id}"[^>]*?class="([^"]*)"`).exec(html);
+    assert.ok(m, `expected an element with id="${id}"`);
+    return m![1].trim();
+}
+
 describe('previewdef/technology renderTechnologyFile in-place update', () => {
     it('returns { html, update } carrying contentHtml, folderOptionsHtml and folders', async () => {
         const rendered = await renderTechnologyFile(loaderFor(['artillery', 'infantry']), uri, webview) as LoaderRenderResult;
@@ -54,6 +61,23 @@ describe('previewdef/technology renderTechnologyFile in-place update', () => {
         const a = await renderTechnologyFile(loaderFor(['artillery', 'infantry']), uri, webview) as LoaderRenderResult;
         const c = await renderTechnologyFile(loaderFor(['artillery', 'armor']), uri, webview) as LoaderRenderResult;
         assert.notStrictEqual(serializeUpdate(a.update!), serializeUpdate(c.update!));
+    });
+
+    it('gives the shell elements suffix-free stable class names carried by the pushed styleCss', async () => {
+        // The shell (folder toolbar, #dragger, #techtreecontent wrapper) lives outside the swapped
+        // content, so its classes must be suffix-free style() names, not per-render oneTimeStyle ids,
+        // or an in-place update's styleCss would have no rule for the class still on the live element.
+        const a = await renderTechnologyFile(loaderFor(['artillery', 'infantry']), uri, webview) as LoaderRenderResult;
+        const b = await renderTechnologyFile(loaderFor(['artillery', 'armor']), uri, webview) as LoaderRenderResult;
+
+        for (const rendered of [a, b]) {
+            const styleCss = rendered.update!.styleCss!;
+            assert.strictEqual(classOf(rendered.html, 'dragger'), 'st-dragger');
+            assert.ok(classOf(rendered.html, 'techtreecontent').split(' ').includes('st-mainContent'));
+            assert.ok(styleCss.includes('.st-dragger {'));
+            assert.ok(styleCss.includes('.st-mainContent {'));
+            assert.ok(styleCss.includes('.st-folderSelectorBar {'));
+        }
     });
 
     it('returns a plain string (no update parts) for the no-technology-tree page', async () => {

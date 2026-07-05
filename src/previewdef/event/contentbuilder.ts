@@ -101,14 +101,14 @@ async function renderEvents(eventsLoaderResult: EventsLoaderResult, styleTable: 
     const contentHtml = renderedGridBox.replace(/\s\s+/g, ' ');
 
     const baseContent = `
-        <div id="dragger" class="${styleTable.oneTimeStyle('dragger', () => `
+        <div id="dragger" class="${styleTable.style('dragger', () => `
             width: 100vw;
             height: 100vh;
             position: fixed;
             left:0;
             top:0;
         `)}"></div>
-        <div id="eventtreecontent" class="${styleTable.oneTimeStyle('eventtreecontent', () => `
+        <div id="eventtreecontent" class="${styleTable.style('eventtreecontent', () => `
             left: -20px;
             position: relative;
         `)}">

@@ -62,14 +62,18 @@ window.addEventListener('message', tryRun(function(event: MessageEvent) {
     // transform: scale(); the name-mode-* class also lives on the element (not its children). Both
     // survive because the element itself is not replaced. The .techfolder children are fresh, so
     // folderChange must re-apply block/none, and the fresh .navigator nodes need their click handlers.
-    const scrollX = window.scrollX;
-    const scrollY = window.scrollY;
+    // Guard the swap and rebind on contentHtml so a styleCss-only message never double-binds; still
+    // run folderChange (which persists the selection via setState) when the folder fell back.
     if (typeof data.contentHtml === 'string') {
+        const scrollX = window.scrollX;
+        const scrollY = window.scrollY;
         contentElement.innerHTML = data.contentHtml;
+        folderChange(target);
+        subscribeNavigators();
+        window.scrollTo(scrollX, scrollY);
+    } else if (target !== previous) {
+        folderChange(target);
     }
-    folderChange(target);
-    subscribeNavigators();
-    window.scrollTo(scrollX, scrollY);
 }));
 
 window.addEventListener('load', tryRun(function() {

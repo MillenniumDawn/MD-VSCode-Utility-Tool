@@ -114,7 +114,7 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
     ${await renderFolderSelector(folderOptionsHtml, styleTable)}
     <div
     id="dragger"
-    class="${styleTable.oneTimeStyle('dragger', () => `
+    class="${styleTable.style('dragger', () => `
         width: 100vw;
         height: 100vh;
         position: fixed;
@@ -125,7 +125,7 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
     </div>
     <div
     id="techtreecontent"
-    class="name-mode-id ${styleTable.oneTimeStyle('mainContent', () => `
+    class="name-mode-id ${styleTable.style('mainContent', () => `
         position: absolute;
         left: 0;
         top: 0;
@@ -147,7 +147,7 @@ function renderFolderOptions(folders: string[]): string {
 
 async function renderFolderSelector(folderOptionsHtml: string, styleTable: StyleTable): Promise<string> {
     return `<div
-    class="${styleTable.oneTimeStyle('folderSelectorBar', () => `
+    class="${styleTable.style('folderSelectorBar', () => `
         position: fixed;
         padding-top: 10px;
         padding-left: 20px;
@@ -159,23 +159,23 @@ async function renderFolderSelector(folderOptionsHtml: string, styleTable: Style
         border-bottom: 1px solid var(--vscode-panel-border);
         z-index: 10;
     `)}">
-        <label for="folderSelector" class="${styleTable.oneTimeStyle('folderSelectorLabel', () => `margin-right:5px`)}">
+        <label for="folderSelector" class="${styleTable.style('folderSelectorLabel', () => `margin-right:5px`)}">
             ${localize('techtree.techfolder', 'Technology folder: ')}
         </label>
         <div class="select-container">
             <select
                 id="folderSelector"
                 type="text"
-                class="${styleTable.oneTimeStyle('folderSelector', () => `min-width:200px`)}"
+                class="${styleTable.style('folderSelector', () => `min-width:200px`)}"
             >
                 ${folderOptionsHtml}
             </select>
         </div>
-        <div class="${styleTable.oneTimeStyle('showTechLocContainer', () => `display:inline-flex; align-items:center; margin-left:15px`)}">
+        <div class="${styleTable.style('showTechLocContainer', () => `display:inline-flex; align-items:center; margin-left:15px`)}">
             <label for="tech-name-mode">${localize('techtree.namemode', 'Name')}</label>
             <select
                 id="tech-name-mode"
-                class="${styleTable.oneTimeStyle('techNameMode', () => `margin-left:5px`)}"
+                class="${styleTable.style('techNameMode', () => `margin-left:5px`)}"
                 data-localisation-index="${localisationIndex}"
             >
                 <option value="id">${localize('techtree.namemode.id', 'Id')}</option>
@@ -185,7 +185,7 @@ async function renderFolderSelector(folderOptionsHtml: string, styleTable: Style
             </select>
             <span
                 id="show-loc-warning"
-                class="${styleTable.oneTimeStyle('showLocWarning', () => `color:var(--vscode-editorWarning-foreground); margin-left:8px; display:none`)}"
+                class="${styleTable.style('showLocWarning', () => `color:var(--vscode-editorWarning-foreground); margin-left:8px; display:none`)}"
             >⚠ ${localize('techtree.showlocnoindex', 'Localisation index is off — raw ids are shown. Enable the localisation index setting to see localised names.')}</span>
         </div>
     </div>`;

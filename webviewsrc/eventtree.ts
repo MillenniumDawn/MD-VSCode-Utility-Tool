@@ -34,19 +34,20 @@ window.addEventListener('message', tryRun(function(event: MessageEvent) {
     // Swap the INNER markup only. enableZoom captured this same element and holds the zoom on its
     // transform: scale(); the element itself is not replaced, so the zoom survives. The fresh nodes
     // need their hover-picture and .navigator click handlers re-bound (both were bound on the now-
-    // replaced children).
+    // replaced children). Guard the swap and rebind on contentHtml so a styleCss-only message never
+    // double-binds listeners on the surviving nodes.
     const data = msg.data ?? {};
-    const scrollX = window.scrollX;
-    const scrollY = window.scrollY;
     if (typeof data.contentHtml === 'string') {
+        const scrollX = window.scrollX;
+        const scrollY = window.scrollY;
         // Replacing the inner markup orphans any node currently being hovered, so its mouseleave never
         // fires and its popup (parented to body) would be left stranded. Sweep them before the swap.
         document.querySelectorAll('.' + hoverPictureClass).forEach(el => el.remove());
         contentElement.innerHTML = data.contentHtml;
+        showPictureWhenHover();
+        subscribeNavigators();
+        window.scrollTo(scrollX, scrollY);
     }
-    showPictureWhenHover();
-    subscribeNavigators();
-    window.scrollTo(scrollX, scrollY);
 }));
 
 window.addEventListener('load', tryRun(async function() {

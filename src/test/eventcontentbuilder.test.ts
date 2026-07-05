@@ -11,8 +11,8 @@ import { serializeUpdate, LoaderRenderResult } from '../previewdef/loaderpreview
 const webview = { asWebviewUri: (u: unknown) => u, cspSource: '' } as unknown as vscode.Webview;
 const uri = vscode.Uri.file('/tmp/events/test.txt');
 
-function loaderFor(id: string): any {
-    const event = {
+function loaderFor(ids: string | string[]): any {
+    const events = (Array.isArray(ids) ? ids : [ids]).map(id => ({
         type: 'country',
         id,
         title: `${id}.t`,
@@ -26,16 +26,23 @@ function loaderFor(id: string): any {
         meanTimeToHappenBase: 0,
         fire_only_once: false,
         file: 'test.txt',
-    };
+    }));
     return {
         load: async () => ({
             result: {
-                events: { eventItemsByNamespace: { test: [event] } },
+                events: { eventItemsByNamespace: { test: events } },
                 mainNamespaces: ['test'],
                 gfxFiles: [],
             },
         }),
     };
+}
+
+// The class list on an element carrying id="<id>", read out of the rendered html.
+function classOf(html: string, id: string): string {
+    const m = new RegExp(`id="${id}"[^>]*?class="([^"]*)"`).exec(html);
+    assert.ok(m, `expected an element with id="${id}"`);
+    return m![1].trim();
 }
 
 describe('previewdef/event renderEventFile in-place update', () => {
@@ -62,6 +69,25 @@ describe('previewdef/event renderEventFile in-place update', () => {
         const a = await renderEventFile(loaderFor('test.1'), uri, webview) as LoaderRenderResult;
         const c = await renderEventFile(loaderFor('test.2'), uri, webview) as LoaderRenderResult;
         assert.notStrictEqual(serializeUpdate(a.update!), serializeUpdate(c.update!));
+    });
+
+    it('keeps the shell class names stable across renders so an in-place update never strands them', async () => {
+        // Content oneTimeStyles are allocated per node before the shell styles, so adding an event
+        // would shift a suffixed shell class. The shell must use suffix-free style() names instead, or
+        // the pushed styleCss would carry no rule for the class still on the live #dragger/#eventtreecontent.
+        const one = await renderEventFile(loaderFor('test.1'), uri, webview) as LoaderRenderResult;
+        const two = await renderEventFile(loaderFor(['test.1', 'test.2']), uri, webview) as LoaderRenderResult;
+
+        const draggerOne = classOf(one.html, 'dragger');
+        const contentOne = classOf(one.html, 'eventtreecontent');
+        assert.strictEqual(draggerOne, 'st-dragger');
+        assert.strictEqual(contentOne, 'st-eventtreecontent');
+        assert.strictEqual(classOf(two.html, 'dragger'), draggerOne);
+        assert.strictEqual(classOf(two.html, 'eventtreecontent'), contentOne);
+
+        const styleCss = two.update!.styleCss!;
+        assert.ok(styleCss.includes(`.${draggerOne} {`));
+        assert.ok(styleCss.includes(`.${contentOne} {`));
     });
 
     it('returns a plain string for the error page when the loader throws', async () => {
