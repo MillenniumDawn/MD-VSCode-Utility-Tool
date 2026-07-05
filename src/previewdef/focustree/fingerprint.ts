@@ -15,8 +15,10 @@ export interface FocusTreeStructureInput {
 }
 
 // styleTable keys whose identity (not the resolved image bytes) decides what the expensive
-// icon-resolution pass has to produce.
-const iconKeyPrefixes = ['st-focus-icon-', 'st-focus-titlebar-', 'st-focus-overlay-', 'st-inlay-gfx-'];
+// icon-resolution pass has to produce. st-inlay-gui-slot- keys are counter-suffixed geometry
+// classes embedded in the persistent inlay markup; a count change mints new class names whose
+// rules only reach the webview through the icon-CSS repush, so they must move this fingerprint.
+const iconKeyPrefixes = ['st-focus-icon-', 'st-focus-titlebar-', 'st-focus-overlay-', 'st-inlay-gfx-', 'st-inlay-gui-slot-'];
 
 // Serialize a record with its keys in sorted order so insertion order (which varies under the
 // 8-way concurrent render) does not change the fingerprint.

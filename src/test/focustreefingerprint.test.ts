@@ -103,6 +103,12 @@ describe('previewdef/focustree/fingerprint', () => {
             assert.notStrictEqual(before, computeIconSourceFingerprint({ 'st-focus-overlay-o': 'x' }));
             assert.notStrictEqual(before, computeIconSourceFingerprint({ 'st-inlay-gfx-g': 'x' }));
         });
+
+        it('changes when an inlay-gui-slot geometry class is added, so the CSS repush covers its rule', () => {
+            const before = computeIconSourceFingerprint({ 'st-inlay-gfx-g': 'x', 'st-inlay-gui-slot-3': 'left: 10px;' });
+            const after = computeIconSourceFingerprint({ 'st-inlay-gfx-g': 'x', 'st-inlay-gui-slot-3': 'left: 10px;', 'st-inlay-gui-slot-4': 'left: 20px;' });
+            assert.notStrictEqual(before, after);
+        });
     });
 
     function treeObjectInput(overrides: Partial<FocusTreeObjectStructureInput> = {}): FocusTreeObjectStructureInput {
