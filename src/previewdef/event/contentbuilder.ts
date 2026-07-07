@@ -15,8 +15,9 @@ import { Token } from '../../hoiformat/hoiparser';
 import { getSpriteByGfxName } from '../../util/image/imagecache';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { localisationIndex } from "../../util/featureflags";
+import { LoaderRender } from '../loaderpreview';
 
-export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
+export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<LoaderRender> {
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
@@ -24,9 +25,9 @@ export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, web
         debug('Loader session event tree', loadedLoaders);
 
         const styleTable = new StyleTable();
-        const baseContent = await renderEvents(loadResult.result, styleTable);
+        const { baseContent, contentHtml } = await renderEvents(loadResult.result, styleTable);
 
-        return html(
+        const fullHtml = html(
             webview,
             baseContent,
             [
@@ -36,9 +37,18 @@ export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, web
             ],
             [
                 'codicon.css',
-                styleTable
+                // Addressable id so an in-place updateBody can refresh the server StyleTable (the event
+                // node markup references its classes) by mutating this <style>.textContent instead of a
+                // full reload. Event injects no client-side <style>, so no extra style nonce is reserved.
+                { content: styleTable.toRawCss(), id: 'event-server-styles' },
             ],
         );
+
+        // Parts for the in-place update. The tree is rendered on the host, so the payload ships the
+        // server-rendered #eventtreecontent inner markup for the webview to swap into the persistent
+        // wrapper. Deterministic for identical input (fresh StyleTable, stable graph order), so an
+        // unchanged edit hashes equal and the LoaderPreview skips.
+        return { html: fullHtml, update: { styleCss: styleTable.toRawCss(), data: { contentHtml } } };
 
     } catch (e) {
         const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
@@ -52,7 +62,15 @@ const topPaddingBase = 50;
 const xGridSize = 180;
 const yGridSize = 150;
 
-async function renderEvents(eventsLoaderResult: EventsLoaderResult, styleTable: StyleTable): Promise<string> {
+interface EventsRender {
+    // Full baseline body: the #dragger and the #eventtreecontent wrapper.
+    baseContent: string;
+    // The #eventtreecontent INNER markup only (the rendered grid box); the update swaps this into the
+    // persistent wrapper's innerHTML, so the wrapper (and its class) is not part of it.
+    contentHtml: string;
+}
+
+async function renderEvents(eventsLoaderResult: EventsLoaderResult, styleTable: StyleTable): Promise<EventsRender> {
     const leftPadding = leftPaddingBase;
     const topPadding = topPaddingBase;
 
@@ -78,21 +96,27 @@ async function renderEvents(eventsLoaderResult: EventsLoaderResult, styleTable: 
         cornerPosition: 0.5,
     });
 
-    return `
-        <div id="dragger" class="${styleTable.oneTimeStyle('dragger', () => `
+    // Collapse whitespace exactly as html() does to the whole body, so the innerHTML the update swaps
+    // in is byte-identical to what the baseline reload renders inside #eventtreecontent.
+    const contentHtml = renderedGridBox.replace(/\s\s+/g, ' ');
+
+    const baseContent = `
+        <div id="dragger" class="${styleTable.style('dragger', () => `
             width: 100vw;
             height: 100vh;
             position: fixed;
             left:0;
             top:0;
         `)}"></div>
-        <div id="eventtreecontent" class="${styleTable.oneTimeStyle('eventtreecontent', () => `
+        <div id="eventtreecontent" class="${styleTable.style('eventtreecontent', () => `
             left: -20px;
             position: relative;
         `)}">
             ${renderedGridBox}
         </div>
     `;
+
+    return { baseContent, contentHtml };
 }
 
 interface EventNode {

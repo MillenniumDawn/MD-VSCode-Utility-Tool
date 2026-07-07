@@ -31,28 +31,19 @@ export interface Token<T extends string = string> {
     type: T;
 }
 
-function tokenizer<T extends string>(input: string, tokenRegexStrings: Record<T, [string, number]>, errorMessagePrefix: string = ''): Tokenizer<T> {
-    const types = Object.keys(tokenRegexStrings);
-    const typeEntries = Object.entries<[string, number]>(tokenRegexStrings);
-    typeEntries.sort((a, b) => a[1][1] - b[1][1]);
-
-    const regex = new RegExp(
-        '\\s*(?<result>' +
-            typeEntries.map(([n, [s]]) => `(?<${n}>${s})`).join('|')
-            + ')',
-        'y');
+function tokenizer(input: string, errorMessagePrefix: string = ''): Tokenizer<HOITokenType> {
+    tokenRegex.lastIndex = 0;
     let prevPos = 0;
     let pos = 0;
-    let token: Token<T> | null = null;
+    let token: Token<HOITokenType> | null = null;
     let groups: RegExpExecArray | null = null;
 
-    let sum = 0;
-    const lineLengthSums = input.split('\n').map(v => v.length).map(v => sum = (sum+ v + 1));
+    let lineLengthSums: number[] | null = null;
 
     function nextGroups() {
         prevPos = pos;
         do {
-            groups = regex.exec(input);
+            groups = tokenRegex.exec(input);
             if (groups === null) {
                 throwError("Invalid token");
             }
@@ -62,18 +53,18 @@ function tokenizer<T extends string>(input: string, tokenRegexStrings: Record<T,
             pos += groups[0].length;
 
             const localGroups = groups;
-            const type = types.find(t => localGroups.groups![t] !== undefined);
+            const type = tokenTypes.find(t => localGroups.groups![t] !== undefined);
 
             token = {
                 value: result,
                 start: pos - result.length,
                 end: pos,
-                type: type as T,
+                type: type as HOITokenType,
             };
         } while (token.type === 'comment');
     }
 
-    function peek(): Token<T> {
+    function peek(): Token<HOITokenType> {
         if (groups !== null) {
             return token!;
         }
@@ -84,10 +75,15 @@ function tokenizer<T extends string>(input: string, tokenRegexStrings: Record<T,
 
     function throwError(message: string, prev: boolean = false): never {
         const calculatePos = prev ? prevPos : pos;
-        const line = lineLengthSums.findIndex(v => v > calculatePos);
-        const column = line > 0 ? calculatePos - lineLengthSums[line - 1] : calculatePos;
+        if (lineLengthSums === null) {
+            let sum = 0;
+            lineLengthSums = input.split('\n').map(v => v.length).map(v => sum = (sum + v + 1));
+        }
+        const sums = lineLengthSums;
+        const line = sums.findIndex(v => v > calculatePos);
+        const column = line > 0 ? calculatePos - sums[line - 1] : calculatePos;
         const posString = line === -1 ?
-            ` at (${lineLengthSums.length}, ${lineLengthSums.length > 1 ? lineLengthSums[lineLengthSums.length - 1] - lineLengthSums[lineLengthSums.length - 2] + 1 : lineLengthSums[lineLengthSums.length - 1] + 1})` :
+            ` at (${sums.length}, ${sums.length > 1 ? sums[sums.length - 1] - sums[sums.length - 2] + 1 : sums[sums.length - 1] + 1})` :
             ` at (${line + 1}, ${column + 1})`;
         throw new UserError(errorMessagePrefix + message + `${posString}: ` + (input + "(EOF)").substring(calculatePos, Math.min(calculatePos + 30, input.length + 5)));
     }
@@ -114,6 +110,14 @@ const tokenRegexStrings: Record<HOITokenType, [string, number]> = {
     eof: ['$', 1000],
 };
 
+const tokenTypes = Object.keys(tokenRegexStrings) as HOITokenType[];
+const tokenTypeEntries = Object.entries<[string, number]>(tokenRegexStrings).sort((a, b) => a[1][1] - b[1][1]);
+const tokenRegex = new RegExp(
+    '\\s*(?<result>' +
+        tokenTypeEntries.map(([n, [s]]) => `(?<${n}>${s})`).join('|')
+        + ')',
+    'y');
+
 export interface ParseOptions {
     /**
      * When false, position Tokens (nameToken, operatorToken, value*Token) are not stored on the
@@ -125,7 +129,7 @@ export interface ParseOptions {
 
 export function parseHoi4File(input: string, errorMessagePrefix: string = '', options: ParseOptions = {}): Node {
     const keepTokens = options.keepTokens !== false;
-    const tokens = tokenizer(input, tokenRegexStrings, errorMessagePrefix);
+    const tokens = tokenizer(input, errorMessagePrefix);
     const value = parseBlockContent(tokens, keepTokens);
 
     if (tokens.peek().type !== 'eof') {

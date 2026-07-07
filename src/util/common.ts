@@ -197,18 +197,19 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, in
  * preview render makes while re-checking the same files' expiry tokens) without a background
  * timer. Rejections are not memoized, so a transient failure is retried on the next call. The
  * map is bounded: over `maxSize`, expired entries are pruned first and then the oldest.
- * `now` is injectable for tests.
+ * `now` is injectable for tests. The returned function exposes `.clear()` to drop every memoized
+ * entry (e.g. when the workspace or config changes invalidate all resolutions at once).
  */
 export function memoizeWithTtl<T>(
     fn: (key: string) => Promise<T>,
     options: { ttl: number; maxSize?: number; now?: () => number },
-): (key: string) => Promise<T> {
+): ((key: string) => Promise<T>) & { clear: () => void } {
     const { ttl } = options;
     const maxSize = options.maxSize ?? 500;
     const now = options.now ?? (() => Date.now());
     const entries = new Map<string, { value: Promise<T>; time: number }>();
 
-    return (key: string): Promise<T> => {
+    const memoized = (key: string): Promise<T> => {
         const current = now();
         const existing = entries.get(key);
         if (existing && current - existing.time < ttl) {
@@ -244,6 +245,8 @@ export function memoizeWithTtl<T>(
 
         return value;
     };
+
+    return Object.assign(memoized, { clear: () => entries.clear() });
 }
 
 export class UserError extends Error {

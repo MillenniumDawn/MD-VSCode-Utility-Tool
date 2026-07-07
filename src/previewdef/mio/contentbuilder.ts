@@ -89,6 +89,33 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
         slotsize: { width: toNumberLike(xGridSize), height: toNumberLike(yGridSize) },
     } as HOIPartial<GridBoxType>;
 
+    // Shell and frame render before the traits/headers so their style records sit at stable
+    // counter positions: the shell markup persists across in-place updates while updateBody
+    // replaces the whole style sheet, so a content-driven shift in its class suffixes would
+    // strand it unstyled. Content styles allocate after and swap together with their markup.
+    const frameHtml = frame ? await renderFrame(frame, gfxFiles, styleTable) : '';
+
+    // The mio dropdown <option> list. Built once and shared between the initial toolbar render and
+    // the update payload, so an in-place update refreshes the (localised) labels and add/remove of
+    // organizations without a full reload. The labels use server-only localisation, so the webview
+    // can't rebuild them from `mios` alone — it swaps this html into the stable <select>.
+    const mioOptionsHtml = renderMioOptions(mios);
+
+    const baseContent = (
+        `<div id="dragger" class="${styleTable.style('dragger', () => `
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            left:0;
+            top:0;
+        `)}"></div>` +
+        `<div id="miopreviewcontent" class="${styleTable.style('miopreviewcontent', () => `top:40px;left:-20px;position:relative`)}">
+            <div id="miopreviewplaceholder"></div>
+        </div>` +
+        frameHtml +
+        await renderToolBar(mios, styleTable, mioOptionsHtml)
+    );
+
     const renderedTrait: Record<string, Record<string, string>> = {};
     for (const mio of mios) {
         const renderedTraitForMio: Record<string, string> = {};
@@ -108,30 +135,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
     jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
-
-    const frameHtml = frame ? await renderFrame(frame, gfxFiles, styleTable) : '';
     jsCodes.push('window.mioFrameAvailable = ' + JSON.stringify(!!frame));
-
-    // The mio dropdown <option> list. Built once and shared between the initial toolbar render and
-    // the update payload, so an in-place update refreshes the (localised) labels and add/remove of
-    // organizations without a full reload. The labels use server-only localisation, so the webview
-    // can't rebuild them from `mios` alone — it swaps this html into the stable <select>.
-    const mioOptionsHtml = renderMioOptions(mios);
-
-    const baseContent = (
-        `<div id="dragger" class="${styleTable.oneTimeStyle('dragger', () => `
-            width: 100vw;
-            height: 100vh;
-            position: fixed;
-            left:0;
-            top:0;
-        `)}"></div>` +
-        `<div id="miopreviewcontent" class="${styleTable.oneTimeStyle('miopreviewcontent', () => `top:40px;left:-20px;position:relative`)}">
-            <div id="miopreviewplaceholder"></div>
-        </div>` +
-        frameHtml +
-        await renderToolBar(mios, styleTable, mioOptionsHtml)
-    );
 
     return {
         baseContent,
@@ -178,7 +182,7 @@ async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: Styl
     const bgImage = bgSprite ? bgSprite.image : undefined;
 
     const treePanel = (left: number, top: number) => `
-        <div id="mio-frame-treewindow" class="${styleTable.oneTimeStyle('mio-frame-treewindow', () => `
+        <div id="mio-frame-treewindow" class="${styleTable.style('mio-frame-treewindow', () => `
             position: absolute;
             left: ${left}px;
             top: ${top}px;
@@ -189,7 +193,7 @@ async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: Styl
             background-repeat: no-repeat;
             box-sizing: border-box;
         `)}">
-            <div id="mio-frame-scrollbar" class="${styleTable.oneTimeStyle('mio-frame-scrollbar', () => `
+            <div id="mio-frame-scrollbar" class="${styleTable.style('mio-frame-scrollbar', () => `
                 position: absolute;
                 left: ${scrollX}px;
                 top: ${scrollY}px;
@@ -199,7 +203,7 @@ async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: Styl
                 box-sizing: border-box;
                 padding: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px;
             `)}">
-                <div id="mio-frame-slot" class="${styleTable.oneTimeStyle('mio-frame-slot', () => `
+                <div id="mio-frame-slot" class="${styleTable.style('mio-frame-slot', () => `
                     position: relative;
                     width: ${innerW}px;
                     min-height: ${innerH}px;
@@ -211,7 +215,7 @@ async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: Styl
 
     // Fallback: detail window missing from the gui — render just the tree panel (previous behavior).
     if (!detail) {
-        return `<div id="mio-frame" class="${styleTable.oneTimeStyle('mio-frame', () => `
+        return `<div id="mio-frame" class="${styleTable.style('mio-frame', () => `
             display: none;
             position: absolute;
             top: 60px;
@@ -251,7 +255,7 @@ async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: Styl
         },
     );
 
-    return `<div id="mio-frame" class="${styleTable.oneTimeStyle('mio-frame', () => `
+    return `<div id="mio-frame" class="${styleTable.style('mio-frame', () => `
         display: none;
         position: absolute;
         top: 60px;

@@ -143,6 +143,27 @@ async function getSpriteByGfxNameImpl(name: string, gfxFilePath: string): Promis
     return new Sprite(name, image, sprite.noofframes);
 }
 
+const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+// Reads width/height straight from the IHDR chunk (bytes 16-23) without inflating the image.
+// Returns undefined if the signature, the IHDR chunk type, or the buffer length don't check out,
+// so the caller can fall back to a full PNG.sync.read decode.
+export function readPngHeaderDimensions(buffer: Buffer): { width: number; height: number } | undefined {
+    if (buffer.length < 24) {
+        return undefined;
+    }
+    for (let i = 0; i < pngSignature.length; i++) {
+        if (buffer[i] !== pngSignature[i]) {
+            return undefined;
+        }
+    }
+    if (buffer.toString('ascii', 12, 16) !== 'IHDR') {
+        return undefined;
+    }
+
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
 async function getImage(relativePath: string): Promise<Image | undefined> {
     let readFileResult: [Buffer, vscode.Uri] | undefined = undefined;
     try {
@@ -176,12 +197,18 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
             ({ pngBuffer, width, height } = await decodeImageToPng(buffer, 'tga'));
 
         } else if (relativePath.endsWith('.png')) {
-            // PNG passthrough: the buffer is already PNG, so only its dimensions are read here (a
-            // cheap header decode, not the heavy DXT/PNG re-encode the worker handles for dds/tga).
+            // PNG passthrough: the buffer is already PNG, so only its dimensions are read here, straight
+            // from the IHDR header bytes rather than a full inflate; PNG.sync.read is the fallback for a
+            // header that doesn't check out.
             pngBuffer = buffer;
-            const png = PNG.sync.read(buffer);
-            width = png.width;
-            height = png.height;
+            const header = readPngHeaderDimensions(buffer);
+            if (header) {
+                ({ width, height } = header);
+            } else {
+                const png = PNG.sync.read(buffer);
+                width = png.width;
+                height = png.height;
+            }
 
         } else {
             throw new UserError('Unsupported image type: ' + relativePath);

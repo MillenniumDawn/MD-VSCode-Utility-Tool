@@ -219,6 +219,20 @@ describe('util/common', function () {
             assert.strictEqual(calls, 2);
         });
 
+        it('clear() drops all entries so the next call recomputes within the TTL', async function () {
+            const clock = fakeClock();
+            let calls = 0;
+            const memo = memoizeWithTtl(async (k: string) => { calls++; return `${k}:${calls}`; }, { ttl: 500, now: clock.now });
+
+            const a = await memo('x');
+            memo.clear();
+            const b = await memo('x'); // still inside the TTL, but the memo was cleared
+
+            assert.strictEqual(a, 'x:1');
+            assert.strictEqual(b, 'x:2');
+            assert.strictEqual(calls, 2);
+        });
+
         it('bounds the map to maxSize, recomputing the evicted oldest key', async function () {
             const clock = fakeClock();
             let calls = 0;

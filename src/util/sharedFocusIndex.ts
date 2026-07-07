@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { debounceByInput } from './common';
+import { debounceByInput, mapLimit } from './common';
 import { getFilePathFromModOrHOI4, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from './fileloader';
 import { localize } from './i18n';
 import { sendEvent } from './telemetry';
@@ -104,7 +104,7 @@ async function buildFocusIndexWithCache(
     }
     timer.mark('cache');
 
-    await Promise.all(filesToParse.map(f => fillFocusItems(f, focusIndex, reverseMap, options, estimatedSize)));
+    await mapLimit(filesToParse, 8, f => fillFocusItems(f, focusIndex, reverseMap, options, estimatedSize));
     timer.mark('parse');
     timer.log(focusFiles.length, filesToParse.length);
 

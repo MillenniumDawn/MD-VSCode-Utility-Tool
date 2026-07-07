@@ -113,18 +113,11 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             hasInlayWindows: focusTrees.some(ft => ft.inlayWindows.length > 0),
         };
 
-        const gridBox: HOIPartial<GridBoxType> = {
-            position: { x: toNumberLike(leftPaddingBase), y: toNumberLike(topPaddingBase) },
-            format: toStringAsSymbolIgnoreCase('up'),
-            size: { width: toNumberLike(xGridSize), height: undefined },
-            slotsize: { width: toNumberLike(xGridSize), height: toNumberLike(yGridSize) },
-        } as HOIPartial<GridBoxType>;
-
         return {
             focusTrees,
             renderedFocus,
             renderedInlayWindows,
-            gridBox,
+            gridBox: focusTreeGridBox,
             useConditionInFocus,
             xGridSize,
             styleTable,
@@ -133,6 +126,21 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         };
     } catch (e) {
         error(e);
+        return null;
+    }
+}
+
+/**
+ * Parses the focus trees only, skipping the expensive per-focus/inlay HTML and style rendering that
+ * buildFocusTreePayload does. The partial-update early-out uses this to fingerprint structure cheaply.
+ * Because it shares the loader's content-hash cache, a same-tick buildFocusTreePayload reuses this parse
+ * instead of re-parsing, so the fall-through path never double-parses. Returns null when empty or on error.
+ */
+export async function loadFocusTreesOnly(loader: FocusTreeLoader): Promise<FocusTree[] | null> {
+    try {
+        const r = await loader.load(new LoaderSession(false));
+        return r.result.focusTrees.length ? r.result.focusTrees : null;
+    } catch {
         return null;
     }
 }
@@ -206,6 +214,17 @@ const leftPaddingBase = 50;
 const topPaddingBase = 50;
 const xGridSize = 96;
 const yGridSize = 130;
+
+// The grid layout is derived entirely from these constants, so the payload gridBox is identical on every
+// render. It is a shared const (not rebuilt per call) so the partial-update early-out can reproduce the
+// exact same gridBox fingerprint contribution as a full buildFocusTreePayload without re-deriving it.
+export const focusTreeXGridSize = xGridSize;
+export const focusTreeGridBox: HOIPartial<GridBoxType> = {
+    position: { x: toNumberLike(leftPaddingBase), y: toNumberLike(topPaddingBase) },
+    format: toStringAsSymbolIgnoreCase('up'),
+    size: { width: toNumberLike(xGridSize), height: undefined },
+    slotsize: { width: toNumberLike(xGridSize), height: toNumberLike(yGridSize) },
+} as HOIPartial<GridBoxType>;
 
 /**
  * Renders the static page shell (dragger, content placeholders, warnings container,

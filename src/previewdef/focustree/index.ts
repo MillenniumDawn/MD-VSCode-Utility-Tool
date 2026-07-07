@@ -1,15 +1,17 @@
 import * as vscode from 'vscode';
-import { buildFocusTreeHtml, buildNoFocusTreeHtml, buildFocusTreeErrorHtml, buildFocusTreePayload, FocusTreePayload, FocusTreeUpdatePayload, ToolbarFlags } from './contentbuilder';
+import { buildFocusTreeHtml, buildNoFocusTreeHtml, buildFocusTreeErrorHtml, buildFocusTreePayload, loadFocusTreesOnly, focusTreeGridBox, focusTreeXGridSize, FocusTreePayload, FocusTreeUpdatePayload, ToolbarFlags } from './contentbuilder';
 import { matchPathEnd } from '../../util/nodecommon';
 import { PreviewBase } from '../previewbase';
 import { PreviewProviderDef } from '../previewmanager';
 import { FocusTreeLoader } from './loader';
-import { getRelativePathInWorkspace, getDocumentByUri } from '../../util/vsccommon';
+import { FocusTree } from './schema';
+import { getRelativePathInWorkspace, getDocumentByUri, getConfiguration } from '../../util/vsccommon';
 import { localize } from '../../util/i18n';
 import { loadingShellHtml } from '../../util/html';
 import { withTimeout, TimeoutError } from '../../util/common';
 import { error } from '../../util/debug';
-import { computeStructuralFingerprint, computeIconSourceFingerprint, decideFocusTreeUpdate, FocusTreeFingerprints } from './fingerprint';
+import { useConditionInFocus, localisationIndex } from '../../util/featureflags';
+import { computeStructuralFingerprint, computeIconSourceFingerprint, computeTreeStructuralFingerprint, computeTreeIconFingerprint, decideFocusTreeUpdate, FocusTreeFingerprints } from './fingerprint';
 
 // A render taking longer than this is treated as stuck. The underlying load keeps running
 // in the background, but the user gets a recoverable panel instead of an endless spinner.
@@ -38,6 +40,11 @@ class FocusTreePreview extends PreviewBase {
     // in-place `update`; iconSourceFingerprint drives the (expensive) icon re-resolution + re-push.
     private lastStructuralFingerprint: string | undefined = undefined;
     private lastIconSourceFingerprint: string | undefined = undefined;
+    // Cheaper object-level fingerprints of the last rendered trees, computed from the parsed FocusTree[]
+    // before any HTML/style work. They drive the pre-render early-out in sendPartialUpdate; kept in
+    // lockstep with the rendered fingerprints above (seeded/reset at exactly the same points).
+    private lastTreeStructural: string | undefined = undefined;
+    private lastTreeIcon: string | undefined = undefined;
     private lastToolbarFlags: ToolbarFlags | undefined = undefined;
     private lastGoodHadFocusTrees = false;
     // Bug #36: the most recent real-icon CSS pushed to the webview, re-posted when the webview is
@@ -120,6 +127,26 @@ class FocusTreePreview extends PreviewBase {
         };
     }
 
+    // Object-level fingerprints of the parsed trees. gridBox/useConditionInFocus/xGridSize are static, so
+    // sourcing them from the shared const here reproduces the exact values a full payload carries, letting
+    // the early-out compare against a baseline seeded from structure.focusTrees without a payload in hand.
+    // The live localisation config (index flag + preview language) is folded in too so that a config flip,
+    // which refreshes the module flag but does NOT reload the preview, moves the hash and blocks a stale
+    // skip. Read once here per call so the early-out compare and the baseline seed use the same values.
+    private treeFingerprintsFor(focusTrees: FocusTree[]): { structural: string; icon: string } {
+        return {
+            structural: computeTreeStructuralFingerprint({
+                focusTrees,
+                gridBox: focusTreeGridBox,
+                useConditionInFocus,
+                xGridSize: focusTreeXGridSize,
+                localisationIndex,
+                previewLocalisation: getConfiguration().previewLocalisation ?? '',
+            }),
+            icon: computeTreeIconFingerprint(focusTrees),
+        };
+    }
+
     public onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
         // Chain onto the previous update so renders are serialized. By the time a queued
         // render runs it reads the live document text, coalescing intermediate edits.
@@ -155,6 +182,9 @@ class FocusTreePreview extends PreviewBase {
                 const fingerprints = this.fingerprintsFor(structure);
                 this.lastStructuralFingerprint = fingerprints.structural;
                 this.lastIconSourceFingerprint = fingerprints.iconSource;
+                const treeFingerprints = this.treeFingerprintsFor(structure.focusTrees);
+                this.lastTreeStructural = treeFingerprints.structural;
+                this.lastTreeIcon = treeFingerprints.icon;
                 this.lastToolbarFlags = structure.toolbarFlags;
                 this.lastGoodHadFocusTrees = true;
                 // Phase 2 (background): resolve the real focus icons and stream their CSS into the
@@ -165,6 +195,8 @@ class FocusTreePreview extends PreviewBase {
 
             this.lastStructuralFingerprint = undefined;
             this.lastIconSourceFingerprint = undefined;
+            this.lastTreeStructural = undefined;
+            this.lastTreeIcon = undefined;
             this.lastToolbarFlags = undefined;
             this.lastGoodHadFocusTrees = false;
             return buildNoFocusTreeHtml(this.panel.webview, document.uri);
@@ -178,6 +210,8 @@ class FocusTreePreview extends PreviewBase {
             // skipping forever on a stale fingerprint. (lastUpdateMessage was already cleared on entry.)
             this.lastStructuralFingerprint = undefined;
             this.lastIconSourceFingerprint = undefined;
+            this.lastTreeStructural = undefined;
+            this.lastTreeIcon = undefined;
             this.lastToolbarFlags = undefined;
             this.lastGoodHadFocusTrees = false;
             return buildFocusTreeErrorHtml(this.panel.webview, document.uri, e);
@@ -230,6 +264,37 @@ class FocusTreePreview extends PreviewBase {
         }
         this.content = document.getText();
         try {
+            // Object-level early-out (bug #37): parse the focus trees only and, before paying for any
+            // per-focus HTML/style rendering, skip when the parsed structure and icon set are both
+            // unchanged. loadFocusTreesOnly shares the loader's content-hash cache, so the fall-through
+            // buildFocusTreePayload reuses this same parse -- there is no double parse.
+            let trees: FocusTree[] | null = null;
+            try {
+                trees = await withTimeout(loadFocusTreesOnly(this.focusTreeLoader), focusTreeRenderTimeout);
+            } catch (e) {
+                // A slow/stuck object-level load must not throw; drop the early-out and let the existing
+                // structure pass (with its own timeout handling) take over.
+                error(e);
+                trees = null;
+            }
+            if (trees !== null && !dependencyChanged && !localisationIndex &&
+                this.lastTreeStructural !== undefined && this.lastTreeIcon !== undefined) {
+                const treeFingerprints = this.treeFingerprintsFor(trees);
+                if (treeFingerprints.structural === this.lastTreeStructural && treeFingerprints.icon === this.lastTreeIcon) {
+                    // Unchanged parsed structure + icon set and no dependency changed => the focuses and
+                    // icons already on screen are current, so we can skip the whole render (mirrors the
+                    // post-render skip below). !dependencyChanged is required: a dependency (resolved icon
+                    // bytes, .gfx sprite swap, .gui window) alters the render without touching the FocusTree
+                    // objects, so its fingerprint would not move. !localisationIndex is required because with
+                    // the localisation index on, renderFocus embeds resolved loc text that changes when a
+                    // .yml is edited, and .yml files are not focus-loader dependencies (so a loc edit never
+                    // arrives as dependencyChanged) -- the object fingerprint cannot see it, so we must not
+                    // early-out in that mode. (See task-07 report.)
+                    this.lastGoodHadFocusTrees = true;
+                    return;
+                }
+            }
+
             // Cheap structure-only pass: the rendered focus/inlay HTML is identical to a full render,
             // only the styleTable's icon CSS differs. That lets us fingerprint the change without
             // paying for the expensive DDS->PNG icon resolution on every keystroke (bug #37).
@@ -290,6 +355,9 @@ class FocusTreePreview extends PreviewBase {
 
             this.lastStructuralFingerprint = fingerprints.structural;
             this.lastIconSourceFingerprint = fingerprints.iconSource;
+            const treeFingerprints = this.treeFingerprintsFor(structure.focusTrees);
+            this.lastTreeStructural = treeFingerprints.structural;
+            this.lastTreeIcon = treeFingerprints.icon;
             this.lastToolbarFlags = structure.toolbarFlags;
             this.lastGoodHadFocusTrees = true;
 

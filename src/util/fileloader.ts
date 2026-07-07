@@ -3,7 +3,7 @@ import * as path from 'path';
 import { PromiseCache } from './cache';
 import { isSamePath } from './nodecommon';
 import { getLastModifiedAsync, readDirFiles, isFile, isDirectory, readFile, readDir, isSameUri, fileOrUriStringToUri, ensureFileScheme, readDirFilesRecursively, getConfiguration, getDocumentByUri } from './vsccommon';
-import { parseHoi4File } from '../hoiformat/hoiparser';
+import { parseHoi4File, resolveScriptVariables, Node, ParseOptions } from '../hoiformat/hoiparser';
 import { localize } from './i18n';
 import { convertNodeToJson, SchemaDef, HOIPartial } from '../hoiformat/schema';
 import { error } from './debug';
@@ -23,11 +23,64 @@ const dlcPathsCache = new PromiseCache({
     life: 10 * 60 * 1000,
 });
 
-let dlcZipCache: PromiseCache<AdmZip> | null = null;
+// Cached DLC zip that retains only a lightweight index (entryName -> isDirectory and directory ->
+// file basenames), never the zip buffer; reads reopen the archive transiently via readEntryData.
+export class DlcZip {
+    private nameIndex?: Map<string, { isDirectory: boolean }>;
+    private dirIndex?: Map<string, string[]>;
+
+    constructor(private readonly openZip: () => AdmZip) {}
+
+    getEntry(name: string): { isDirectory: boolean } | null {
+        this.ensureIndex();
+        return this.nameIndex!.get(name) ?? null;
+    }
+
+    // Basenames of the non-directory entries directly under relativePath, matched the same way the
+    // old getEntries loop did: leading slash/backslash stripped, path.resolve + lowercase compare.
+    listDir(relativePath: string): string[] {
+        this.ensureIndex();
+        return this.dirIndex!.get(path.resolve(relativePath).toLowerCase()) ?? [];
+    }
+
+    // Reopens the archive to read one entry's data. The index holds no buffers, so this pays a
+    // transient re-open; repeated reads are served upstream by fileContentCache.
+    async readEntryData(name: string): Promise<Buffer | null> {
+        const entry = this.openZip().getEntry(name);
+        if (!entry) {
+            return null;
+        }
+        return await new Promise<Buffer>(resolve => entry.getDataAsync(resolve));
+    }
+
+    private ensureIndex(): void {
+        if (this.nameIndex !== undefined) {
+            return;
+        }
+        const nameIndex = new Map<string, { isDirectory: boolean }>();
+        const dirIndex = new Map<string, string[]>();
+        for (const entry of this.openZip().getEntries()) {
+            nameIndex.set(entry.entryName, { isDirectory: entry.isDirectory });
+            if (!entry.isDirectory) {
+                const dir = path.resolve(path.dirname(entry.entryName.replace(/^[\\/]/, ''))).toLowerCase();
+                const basenames = dirIndex.get(dir);
+                if (basenames) {
+                    basenames.push(path.basename(entry.name));
+                } else {
+                    dirIndex.set(dir, [path.basename(entry.name)]);
+                }
+            }
+        }
+        this.nameIndex = nameIndex;
+        this.dirIndex = dirIndex;
+    }
+}
+
+let dlcZipCache: PromiseCache<DlcZip> | null = null;
 
 if (!IS_WEB_EXT) {
     // adm-zip requires fs, which doesn't work on web.
-    function getDlcZip(dlcZipPath: string): Promise<AdmZip> {
+    function getDlcZip(dlcZipPath: string): Promise<DlcZip> {
         const uri = vscode.Uri.parse(dlcZipPath);
         if (uri.scheme === Hoi4FsSchema) {
             dlcZipPath = path.join(getConfiguration().installPath, trimStart(uri.path, '/'));
@@ -37,14 +90,14 @@ if (!IS_WEB_EXT) {
         }
 
         const AdmZip = require('adm-zip');
-        return Promise.resolve(new AdmZip(dlcZipPath));
+        return Promise.resolve(new DlcZip(() => new AdmZip(dlcZipPath)));
     }
 
     dlcZipCache = new PromiseCache({
         factory: getDlcZip,
         expireWhenChange: key => getLastModifiedAsync(vscode.Uri.parse(key)),
-        life: 15 * 1000,
-        maxSize: 8,
+        life: 10 * 60 * 1000,
+        maxSize: 64,
     });
 }
 
@@ -67,13 +120,33 @@ export async function clearDlcZipCache() {
     dlcZipCache?.clear();
     fileContentCache.clear();
     fileListCache.clear();
+    getFilePathMemo.clear();
+    parseCache.clear();
 }
 
 export function getFilePathFromMod(relativePath: string): Promise<vscode.Uri | undefined> {
     return getFilePathFromModOrHOI4(relativePath, { hoi4: false });
 }
 
-export async function getFilePathFromModOrHOI4(relativePath: string, options?: { mod?: boolean, hoi4?: boolean }): Promise<vscode.Uri | undefined> {
+// Every icon lookup and every expiry-token check resolves a path through here, doing several
+// fs.stats each; a single render does this hundreds of times over the same paths. Collapse the
+// repeats to one resolution per path/options within the same 500ms window getLastModifiedMemo
+// uses. Keyed only on the mod/hoi4 fields the resolver reads, so unrelated option fields and key
+// order don't split the cache. Cleared by clearDlcZipCache on folder/config change.
+const getFilePathMemo = memoizeWithTtl(
+    (key: string): Promise<vscode.Uri | undefined> => {
+        const [relativePath, mod, hoi4] = JSON.parse(key) as [string, boolean | null, boolean | null];
+        return getFilePathFromModOrHOI4Impl(relativePath, { mod: mod ?? undefined, hoi4: hoi4 ?? undefined });
+    },
+    { ttl: 500, maxSize: 1000 },
+);
+
+export function getFilePathFromModOrHOI4(relativePath: string, options?: { mod?: boolean, hoi4?: boolean }): Promise<vscode.Uri | undefined> {
+    const normalizedPath = relativePath.replace(/\/\/+|\\+/g, '/');
+    return getFilePathMemo(JSON.stringify([normalizedPath, options?.mod ?? null, options?.hoi4 ?? null]));
+}
+
+async function getFilePathFromModOrHOI4Impl(relativePath: string, options?: { mod?: boolean, hoi4?: boolean }): Promise<vscode.Uri | undefined> {
     relativePath = relativePath.replace(/\/\/+|\\+/g, '/');
     let absolutePath: vscode.Uri | undefined = undefined;
 
@@ -232,9 +305,9 @@ async function readFileFromPathImpl(realPath: vscode.Uri, relativePath?: string)
             const { uri: dlc, entryPath: filePath } = getHoiDlcFileOriginalUri(realPath);
 
             const dlcZip = await dlcZipCache.get(dlc.toString());
-            const entry = dlcZip.getEntry(filePath);
-            if (entry !== null) {
-                return [await new Promise<Buffer>(resolve => entry.getDataAsync(resolve)), realPath];
+            const data = await dlcZip.readEntryData(filePath);
+            if (data !== null) {
+                return [data, realPath];
             }
         }
 
@@ -258,6 +331,53 @@ export async function readFileFromModOrHOI4AsJson<T>(relativePath: string, schem
     const [buffer, realPath] = await readFileFromModOrHOI4(relativePath);
     const nodes = parseHoi4File(buffer.toString(), localize('infile', 'In file {0}:\n', realPath));
     return convertNodeToJson<T>(nodes, schema);
+}
+
+// Buffers are cached (fileContentCache), but every call site re-tokenizes them into a Node tree.
+// This caches the parsed tree so unchanged files aren't re-parsed on every render. The returned Node
+// is shared and must be treated as read-only: consumers like convertNodeToJson/getSpriteTypes only
+// read it. resolveScriptVariables rewrites node.value in place, so the resolved variant parses a
+// fresh tree in the factory under its own key and never touches a plain entry. Keyed by relativePath
+// + parse options + resolve flag; opened/dirty documents bypass this cache (see
+// parseHoi4FileCachedImpl). Node trees run ~5-10x the buffer size, so this is bounded by entry count.
+const parseCache = new PromiseCache<Node>({
+    factory: parseHoi4FileForCache,
+    expireWhenChange: key => hoiFileExpiryToken(JSON.parse(key)[0]),
+    life: 60 * 1000,
+    maxSize: 64,
+});
+
+async function parseHoi4FileForCache(key: string): Promise<Node> {
+    const [relativePath, options, resolve] = JSON.parse(key) as [string, ParseOptions | null, boolean];
+    const [buffer, realPath] = await readFileFromModOrHOI4(relativePath);
+    return parseHoi4Buffer(buffer, realPath, options ?? undefined, resolve);
+}
+
+function parseHoi4Buffer(buffer: Buffer, realPath: vscode.Uri, options: ParseOptions | undefined, resolve: boolean): Node {
+    const node = parseHoi4File(buffer.toString().replace(/^\uFEFF/, ''), localize('infile', 'In file {0}:\n', realPath), options);
+    return resolve ? resolveScriptVariables(node) : node;
+}
+
+// Returns the shared, read-only parsed tree for a file. Opened/dirty documents bypass the cache and
+// parse the live editor text directly (mirrors readFileFromPath), so per-keystroke edits never churn
+// or stale it.
+export function parseHoi4FileCached(relativePath: string, options?: ParseOptions): Promise<Node> {
+    return parseHoi4FileCachedImpl(relativePath, options, false);
+}
+
+// Like parseHoi4FileCached but resolves @script constants. resolveScriptVariables mutates its Node in
+// place, so this gets its own cache entry; never hand a plain parseHoi4FileCached tree to it.
+export function parseAndResolveHoi4FileCached(relativePath: string): Promise<Node> {
+    return parseHoi4FileCachedImpl(relativePath, undefined, true);
+}
+
+async function parseHoi4FileCachedImpl(relativePath: string, options: ParseOptions | undefined, resolve: boolean): Promise<Node> {
+    const realPath = await getFilePathFromModOrHOI4(relativePath);
+    if (realPath && isHoiFileOpened(realPath)) {
+        const [buffer, openedPath] = await readFileFromPath(realPath, relativePath);
+        return parseHoi4Buffer(buffer, openedPath, options, resolve);
+    }
+    return parseCache.get(JSON.stringify([relativePath, options ?? null, resolve]));
 }
 
 // Short-lived cache of directory listings. listFilesFromModOrHOI4 walks the workspace, the HOI4
@@ -326,11 +446,7 @@ async function listFilesFromModOrHOI4Impl(relativePath: string, options?: { mod?
                 const dlcZip = await dlcZipCache.get(dlc.toString());
                 const folderEntry = dlcZip.getEntry(relativePath);
                 if (folderEntry && folderEntry.isDirectory) {
-                    for (const entry of dlcZip.getEntries()) {
-                        if (isSamePath(path.dirname(entry.entryName.replace(/^[\\/]/, '')), relativePath) && !entry.isDirectory) {
-                            result.push(path.basename(entry.name));
-                        }
-                    }
+                    result.push(...dlcZip.listDir(relativePath));
                 }
             }
         }

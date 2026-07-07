@@ -176,6 +176,8 @@ export class WorldMap {
                 countries: [],
                 strategicRegions: [],
                 supplyAreas: [],
+                railways: [],
+                supplyNodes: [],
             };
 
             await this.postMessageToWebview({
