@@ -1,3 +1,11 @@
+v1.1.14
+
+  Functionality:
+  - [ MIO ] The "Show ingame ui" preview toggle has been replaced with a "Show grid" toggle. Instead of overlaying the in-game industrial-organization window chrome behind the trait tree, the preview now draws a column grid anchored to the same origin as the traits and headers: a faint vertical line at every column boundary (x = 0 through the limit), with the right edge of column 9 emphasized and labelled "x = 9 limit". The in-game MIO tree window only renders columns 0-9, so any trait positioned past x = 9 bugs out; the guide makes that width limit visible while laying out a tree. The overlay scales with zoom, tracks the grid when it shifts for negative-x traits, and its on/off state persists across in-place preview updates.
+
+  Bugfixes:
+  - [ MIO ] Removed the in-game frame chrome rendering (the loader no longer parses `industrial_organization_detail.gui`, and the frame overlay, its availability probe and the associated localisation strings were dropped) now that the "Show grid" guide replaces it.
+
 v1.1.13
 
   Functionality:

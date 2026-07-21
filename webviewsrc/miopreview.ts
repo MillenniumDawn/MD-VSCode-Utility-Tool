@@ -1,23 +1,21 @@
 import { getState, setState, arrayToMap, subscribeNavigators, scrollToState, tryRun, enableZoom, initCommon } from "./util/common";
 import { DivDropdown } from "./util/dropdown";
-import { minBy } from "lodash";
+import { minBy, maxBy } from "lodash";
 import { renderGridBoxCommon, GridBoxItem, GridBoxConnection } from "../src/util/hoi4gui/gridboxcommon";
 import { StyleTable } from "../src/util/styletable";
 import { applyCondition, ConditionItem } from "../src/hoiformat/condition";
 import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
 import { toNumberLike } from "../src/hoiformat/schema";
-import { feLocalize } from './util/i18n';
 import { vscode } from "./util/vscode";
 import { Mio, MioTrait } from "../src/previewdef/mio/schema";
 
 let mios: Mio[] = (window as any).mios;
-const mioFrameAvailable: boolean = !!(window as any).mioFrameAvailable;
 
 let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
 let selectedMioIndex: number = Math.min(mios.length - 1, getState().selectedMioIndex ?? 0);
 let showIncludedTraits: boolean = getState().showIncludedTraits ?? true;
-let showFrame: boolean = false;
+let showGrid: boolean = getState().showGrid ?? false;
 let conditions: DivDropdown | undefined = undefined;
 
 initCommon();
@@ -70,36 +68,43 @@ async function buildContent() {
         ? `<div class="${styleTable.oneTimeStyle('mio-header-layer', () => `position:absolute; left:${leftPadding}px; top:${headerTop}px;`)}">${headerHtml}</div>`
         : '';
 
-    miopreviewplaceholder.innerHTML = traitPreviewContent + headerLayer + styleTable.toStyleElement((window as any).styleNonce);
+    const gridGuideLayer = showGrid ? buildGridGuide(styleTable, gridbox, xGridSize, leftPadding, traitPosition) : '';
 
-    applyFrameState();
+    miopreviewplaceholder.innerHTML = traitPreviewContent + headerLayer + gridGuideLayer + styleTable.toStyleElement((window as any).styleNonce);
+
     subscribeNavigators();
 }
 
-function applyFrameState() {
-    const frame = document.getElementById('mio-frame') as HTMLDivElement | null;
-    const frameSlot = document.getElementById('mio-frame-slot') as HTMLDivElement | null;
-    const content = document.getElementById('miopreviewcontent') as HTMLDivElement | null;
-    const placeholder = document.getElementById('miopreviewplaceholder') as HTMLDivElement | null;
-    if (!placeholder || !content) {
-        return;
+// Column grid overlay. Draws a faint vertical line at every column boundary (k = 0..10) anchored to
+// the same grid origin as the traits/headers, and emphasizes the k = 10 line — the right edge of
+// column 9. The in-game MIO tree window only renders columns 0..9, so any trait with x > 9 bugs out;
+// this marks where that limit falls. The layer sits inside #miopreviewplaceholder so it scales with
+// zoom and shifts together with the grid.
+function buildGridGuide(
+    styleTable: StyleTable,
+    gridbox: GridBoxType,
+    xGridSize: number,
+    leftPadding: number,
+    traitPosition: Record<string, NumberPosition>,
+): string {
+    const limitColumn = 10; // right edge of column 9 (valid columns are 0..9)
+    const yGridSize = gridbox.slotsize?.height?._value ?? 117;
+    const top = gridbox.position.y._value;
+    const maxY = maxBy(Object.values(traitPosition), 'y')?.y ?? 0;
+    const height = (maxY + 1) * yGridSize;
+
+    let lines = '';
+    for (let k = 0; k <= limitColumn; k++) {
+        const isLimit = k === limitColumn;
+        const cls = isLimit
+            ? styleTable.style('mio-grid-limit', () => `position:absolute; top:0; width:2px; background:#e06c3b; opacity:0.85; pointer-events:none;`)
+            : styleTable.style('mio-grid-line', () => `position:absolute; top:0; width:1px; background:#ffffff; opacity:0.12; pointer-events:none;`);
+        lines += `<div class="${cls} ${styleTable.oneTimeStyle('mio-grid-x-' + k, () => `left:${k * xGridSize}px; height:${height}px;`)}"></div>`;
     }
 
-    if (showFrame && frame && frameSlot) {
-        if (placeholder.parentElement !== frameSlot) {
-            frameSlot.appendChild(placeholder);
-        }
-        frame.style.display = 'block';
-        content.style.display = 'none';
-    } else {
-        if (placeholder.parentElement !== content) {
-            content.appendChild(placeholder);
-        }
-        if (frame) {
-            frame.style.display = 'none';
-        }
-        content.style.display = '';
-    }
+    const label = `<div class="${styleTable.style('mio-grid-label', () => `position:absolute; top:-14px; font-size:10px; color:#e06c3b; white-space:nowrap; pointer-events:none;`)} ${styleTable.oneTimeStyle('mio-grid-label-pos', () => `left:${limitColumn * xGridSize + 4}px;`)}">x = 9 limit</div>`;
+
+    return `<div class="${styleTable.oneTimeStyle('mio-grid-layer', () => `position:absolute; left:${leftPadding}px; top:${top}px;`)}">${lines}${label}</div>`;
 }
 
 function calculateTraitVisible(mio: Mio, allowBranchOptionsValue: Record<string, boolean>) {
@@ -376,28 +381,13 @@ window.addEventListener('load', tryRun(async function() {
         });
     }
 
-    // Toggle game frame
-    const showFrameCheckbox = document.getElementById('show-frame') as HTMLInputElement | null;
-    if (showFrameCheckbox) {
-        if (!mioFrameAvailable) {
-            showFrameCheckbox.disabled = true;
-            const tooltip = feLocalize('miopreview.frameunavailable', 'industrial_organization_detail.gui not found in mod/HOI4.');
-            showFrameCheckbox.title = tooltip;
-            const wrapper = showFrameCheckbox.nextElementSibling as HTMLElement | null;
-            if (wrapper?.classList.contains('checkbox-container-out')) {
-                wrapper.style.opacity = '0.4';
-                wrapper.style.pointerEvents = 'none';
-                wrapper.title = tooltip;
-            }
-            const frameLabel = document.querySelector('label[for="show-frame"]') as HTMLElement | null;
-            if (frameLabel) {
-                frameLabel.title = tooltip;
-                frameLabel.style.opacity = '0.4';
-            }
-        }
-        showFrameCheckbox.checked = showFrame;
-        showFrameCheckbox.addEventListener('change', async () => {
-            showFrame = mioFrameAvailable && showFrameCheckbox.checked;
+    // Toggle column grid overlay
+    const showGridCheckbox = document.getElementById('show-grid') as HTMLInputElement | null;
+    if (showGridCheckbox) {
+        showGridCheckbox.checked = showGrid;
+        showGridCheckbox.addEventListener('change', async () => {
+            showGrid = showGridCheckbox.checked;
+            setState({ showGrid });
             await buildContent();
         });
     }

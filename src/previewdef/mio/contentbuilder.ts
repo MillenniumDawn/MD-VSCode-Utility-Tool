@@ -4,9 +4,8 @@ import { localize, i18nTableAsScript } from '../../util/i18n';
 import { forceError, randomString } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
-import { ContainerWindowType, GridBoxType } from '../../hoiformat/gui';
-import { renderContainerWindow } from '../../util/hoi4gui/containerwindow';
-import { MioFrame, MioLoader } from './loader';
+import { GridBoxType } from '../../hoiformat/gui';
+import { MioLoader } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
@@ -41,7 +40,7 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
         const styleTable = new StyleTable();
         const jsCodes: string[] = [];
         const styleNonce = randomString(32);
-        const { baseContent, data } = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file, loadResult.result.frame);
+        const { baseContent, data } = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file);
         jsCodes.push(i18nTableAsScript());
 
         const fullHtml = html(
@@ -80,7 +79,7 @@ const topPadding = 50;
 const xGridSize = 87;
 const yGridSize = 117;
 
-async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string, frame: MioFrame | undefined): Promise<{ baseContent: string; data: Record<string, unknown> }> {
+async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string): Promise<{ baseContent: string; data: Record<string, unknown> }> {
 
     const gridBox: HOIPartial<GridBoxType> = {
         position: { x: toNumberLike(leftPadding), y: toNumberLike(topPadding) },
@@ -88,12 +87,6 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
         size: { width: toNumberLike(xGridSize), height: undefined },
         slotsize: { width: toNumberLike(xGridSize), height: toNumberLike(yGridSize) },
     } as HOIPartial<GridBoxType>;
-
-    // Shell and frame render before the traits/headers so their style records sit at stable
-    // counter positions: the shell markup persists across in-place updates while updateBody
-    // replaces the whole style sheet, so a content-driven shift in its class suffixes would
-    // strand it unstyled. Content styles allocate after and swap together with their markup.
-    const frameHtml = frame ? await renderFrame(frame, gfxFiles, styleTable) : '';
 
     // The mio dropdown <option> list. Built once and shared between the initial toolbar render and
     // the update payload, so an in-place update refreshes the (localised) labels and add/remove of
@@ -112,7 +105,6 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
         `<div id="miopreviewcontent" class="${styleTable.style('miopreviewcontent', () => `top:40px;left:-20px;position:relative`)}">
             <div id="miopreviewplaceholder"></div>
         </div>` +
-        frameHtml +
         await renderToolBar(mios, styleTable, mioOptionsHtml)
     );
 
@@ -135,15 +127,14 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
     jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
-    jsCodes.push('window.mioFrameAvailable = ' + JSON.stringify(!!frame));
 
     return {
         baseContent,
-        // The globals the webview's buildContent re-renders from. gridBox/xGridSize are constants
-        // and mioFrameAvailable follows the gui, not the edited file, but resending them keeps the
-        // update self-contained (they don't destabilize the change hash since they never vary).
+        // The globals the webview's buildContent re-renders from. gridBox/xGridSize are constants,
+        // but resending them keeps the update self-contained (they don't destabilize the change hash
+        // since they never vary).
         // mioOptionsHtml lets the webview refresh the dropdown while keeping the element + listener.
-        data: { mios, renderedTrait, renderedHeaders, gridBox, xGridSize, mioFrameAvailable: !!frame, mioOptionsHtml },
+        data: { mios, renderedTrait, renderedHeaders, gridBox, xGridSize, mioOptionsHtml },
     };
 }
 
@@ -152,121 +143,6 @@ function renderMioOptions(mios: Mio[]): string {
         const localizedText = localisationIndex ? `(${mio.id}) ${getLocalisedTextQuick(mio.id)}` : mio.id;
         return `<option value="${i}">${htmlEscape(localizedText)}</option>`;
     }).join('');
-}
-
-// Names of the dynamic panels inside industrial_organisation_detail_window that the game fills at
-// runtime. We render our own trait tree in their place, so we skip them when drawing the chrome.
-const detailTreeWindowName = 'tree_scrollbar_window';
-const detailHistoryWindowName = 'history_window';
-
-async function renderFrame(frame: MioFrame, gfxFiles: string[], styleTable: StyleTable): Promise<string> {
-    // --- Trait tree panel (industrial_organisation_tree_window). Holds the scrollable trait grid. ---
-    const treeWindow = frame.window;
-    const treeWidth = treeWindow.size?.width?._value ?? 945;
-    const treeHeight = treeWindow.size?.height?._value ?? 665;
-
-    const scrollbar = frame.scrollbarWindow;
-    const scrollX = scrollbar?.position?.x?._value ?? 45;
-    const scrollY = scrollbar?.position?.y?._value ?? 25;
-    const scrollW = scrollbar?.size?.width?._value ?? 905;
-    const scrollH = scrollbar?.size?.height?._value ?? 640;
-    const marginTop = scrollbar?.margin?.top?._value ?? 0;
-    const marginLeft = scrollbar?.margin?.left?._value ?? 0;
-    const marginBottom = scrollbar?.margin?.bottom?._value ?? 20;
-    const marginRight = scrollbar?.margin?.right?._value ?? 20;
-    const innerW = scrollW - marginLeft - marginRight;
-    const innerH = scrollH - marginTop - marginBottom;
-
-    const bgSpriteName = treeWindow.background?.spritetype ?? 'GFX_MIO_details_background';
-    const bgSprite = await getSpriteByGfxName(bgSpriteName, gfxFiles);
-    const bgImage = bgSprite ? bgSprite.image : undefined;
-
-    const treePanel = (left: number, top: number) => `
-        <div id="mio-frame-treewindow" class="${styleTable.style('mio-frame-treewindow', () => `
-            position: absolute;
-            left: ${left}px;
-            top: ${top}px;
-            width: ${treeWidth}px;
-            height: ${treeHeight}px;
-            ${bgImage ? `background-image: url(${bgImage.uri});` : 'background: #1a1a1a;'}
-            background-size: ${treeWidth}px ${treeHeight}px;
-            background-repeat: no-repeat;
-            box-sizing: border-box;
-        `)}">
-            <div id="mio-frame-scrollbar" class="${styleTable.style('mio-frame-scrollbar', () => `
-                position: absolute;
-                left: ${scrollX}px;
-                top: ${scrollY}px;
-                width: ${scrollW}px;
-                height: ${scrollH}px;
-                overflow: auto;
-                box-sizing: border-box;
-                padding: ${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px;
-            `)}">
-                <div id="mio-frame-slot" class="${styleTable.style('mio-frame-slot', () => `
-                    position: relative;
-                    width: ${innerW}px;
-                    min-height: ${innerH}px;
-                `)}"></div>
-            </div>
-        </div>`;
-
-    const detail = frame.detailWindow;
-
-    // Fallback: detail window missing from the gui — render just the tree panel (previous behavior).
-    if (!detail) {
-        return `<div id="mio-frame" class="${styleTable.style('mio-frame', () => `
-            display: none;
-            position: absolute;
-            top: 60px;
-            left: 20px;
-            width: ${treeWidth}px;
-            height: ${treeHeight}px;
-            box-sizing: border-box;
-        `)}">
-            ${treePanel(0, 0)}
-        </div>`;
-    }
-
-    // --- Full in-game detail window: left info column (org icon/size/points, aggregated bonuses,
-    // policies), title and the traits/history tabs. We draw it as chrome and overlay the trait tree. ---
-    const detailW = detail.size?.width?._value ?? 1280;
-    const detailH = detail.size?.height?._value ?? 720;
-    const treeAreaX = frame.treeScrollbarWindow?.position?.x?._value ?? 320;
-    const treeAreaY = frame.treeScrollbarWindow?.position?.y?._value ?? 50;
-
-    const chrome = await renderContainerWindow(
-        {
-            ...detail,
-            orientation: toStringAsSymbolIgnoreCase('upper_left'),
-            origo: toStringAsSymbolIgnoreCase('upper_left'),
-        } as HOIPartial<ContainerWindowType>,
-        { size: { width: detailW, height: detailH }, orientation: 'upper_left' },
-        {
-            getSprite: (sprite: string) => getSpriteByGfxName(sprite, gfxFiles),
-            styleTable,
-            ignorePosition: true,
-            onRenderChild: async (type, child) => {
-                if (type === 'containerwindow' && (child.name === detailTreeWindowName || child.name === detailHistoryWindowName)) {
-                    return '';
-                }
-                return undefined;
-            },
-        },
-    );
-
-    return `<div id="mio-frame" class="${styleTable.style('mio-frame', () => `
-        display: none;
-        position: absolute;
-        top: 60px;
-        left: 20px;
-        width: ${detailW}px;
-        height: ${detailH}px;
-        box-sizing: border-box;
-    `)}">
-        ${chrome}
-        ${treePanel(treeAreaX, treeAreaY)}
-    </div>`;
 }
 
 async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml: string): Promise<string> {
@@ -296,8 +172,8 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml
     const toggles = `
         <label for="show-included-traits" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showInheritedTraits', 'Show inherited traits')}</label>
         <input type="checkbox" id="show-included-traits" class="${styleTable.style('marginRight30', () => `margin-right:30px`)}">
-        <label for="show-frame" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showFrame', 'Show ingame ui')}</label>
-        <input type="checkbox" id="show-frame" class="${styleTable.style('marginRight10', () => `margin-right:10px`)}">`;
+        <label for="show-grid" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showGrid', 'Show grid')}</label>
+        <input type="checkbox" id="show-grid" class="${styleTable.style('marginRight10', () => `margin-right:10px`)}">`;
 
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 40px;`)}">
         <div class="toolbar">
