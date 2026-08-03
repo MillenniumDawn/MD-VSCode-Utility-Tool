@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { expiryToken, DlcZip, getFilePathFromModOrHOI4, clearDlcZipCache, parseHoi4FileCached, parseAndResolveHoi4FileCached } from '../util/fileloader';
+import { expiryToken, DlcZip, getFilePathFromModOrHOI4, listFilesFromModOrHOI4, clearDlcZipCache, parseHoi4FileCached, parseAndResolveHoi4FileCached } from '../util/fileloader';
 import { Node, SymbolNode } from '../hoiformat/hoiparser';
 
 // EXPIRY_STAT_TTL in fileloader.ts is 500ms; tests advance the stubbed clock past that.
@@ -239,5 +239,102 @@ describe('util/fileloader parseHoi4FileCached', function () {
         const plainAgain = await parseHoi4FileCached('common/pc-c.txt');
         assert.strictEqual(plainAgain, plain); // same cached instance, untouched by the resolve pass
         assert.strictEqual((child(plainAgain, 'x').value as SymbolNode).name, '@A');
+    });
+});
+
+describe('util/fileloader DLC roots', function () {
+    const File = vscode.FileType.File;
+    const Directory = vscode.FileType.Directory;
+    const realGetConfig = (vscode.workspace as any).getConfiguration;
+    const realStat = (vscode.workspace.fs as any).stat;
+    const realReadDir = (vscode.workspace.fs as any).readDirectory;
+    const realFolders = (vscode.workspace as any).workspaceFolders;
+
+    const bothRoots: Record<string, [string, vscode.FileType][]> = {
+        'dlc': [['dlc018_together_for_victory', Directory]],
+        'dlc/dlc018_together_for_victory': [['interface', Directory]],
+        'dlc/dlc018_together_for_victory/interface': [['tfv.gfx', File]],
+        'integrated_dlc': [['dlc022_waking_the_tiger', Directory]],
+        'integrated_dlc/dlc022_waking_the_tiger': [['interface', Directory]],
+        'integrated_dlc/dlc022_waking_the_tiger/interface': [['wtt.gfx', File]],
+    };
+
+    const baseRootOnly: Record<string, [string, vscode.FileType][]> = {
+        'dlc': bothRoots['dlc'],
+        'dlc/dlc018_together_for_victory': bothRoots['dlc/dlc018_together_for_victory'],
+        'dlc/dlc018_together_for_victory/interface': bothRoots['dlc/dlc018_together_for_victory/interface'],
+    };
+
+    let dirs: Record<string, [string, vscode.FileType][]> = {};
+    let files: string[] = [];
+
+    function rel(uri: any): string {
+        return String(uri?.fsPath ?? uri?.path ?? '')
+            .replace(/^hoi4installpath:/, '')
+            .replace(/\/+/g, '/')
+            .replace(/^\/|\/$/g, '');
+    }
+
+    function setLayout(layout: Record<string, [string, vscode.FileType][]>): void {
+        dirs = layout;
+        files = Object.entries(layout).flatMap(([dir, entries]) =>
+            entries.filter(([, type]) => type === File).map(([name]) => dir + '/' + name));
+    }
+
+    beforeEach(function () {
+        (vscode.workspace as any).getConfiguration = () => ({
+            get: () => undefined, update: () => Promise.resolve(), inspect: () => undefined,
+            modFile: '', installPath: '', loadDlcContents: true,
+        });
+        (vscode.workspace as any).workspaceFolders = [];
+        (vscode.workspace.fs as any).stat = async (uri: any) => {
+            const p = rel(uri);
+            if (p in dirs) {
+                return { type: Directory, mtime: 1, ctime: 0, size: 0 };
+            }
+            if (files.includes(p)) {
+                return { type: File, mtime: 1, ctime: 0, size: 0 };
+            }
+            throw new Error('not found: ' + p);
+        };
+        (vscode.workspace.fs as any).readDirectory = async (uri: any) => dirs[rel(uri)] ?? [];
+        setLayout(bothRoots);
+    });
+
+    afterEach(async function () {
+        (vscode.workspace as any).getConfiguration = realGetConfig;
+        (vscode.workspace as any).workspaceFolders = realFolders;
+        (vscode.workspace.fs as any).stat = realStat;
+        (vscode.workspace.fs as any).readDirectory = realReadDir;
+        await clearDlcZipCache(); // drop the DLC path, listing and resolution caches between layouts
+    });
+
+    it('resolves a file that exists only under integrated_dlc', async function () {
+        const found = await getFilePathFromModOrHOI4('interface/wtt.gfx');
+        assert.strictEqual(rel(found), 'integrated_dlc/dlc022_waking_the_tiger/interface/wtt.gfx');
+    });
+
+    it('still resolves a file under the base dlc folder', async function () {
+        const found = await getFilePathFromModOrHOI4('interface/tfv.gfx');
+        assert.strictEqual(rel(found), 'dlc/dlc018_together_for_victory/interface/tfv.gfx');
+    });
+
+    it('lists files from both dlc roots, base dlc first', async function () {
+        assert.deepStrictEqual(await listFilesFromModOrHOI4('interface'), ['tfv.gfx', 'wtt.gfx']);
+    });
+
+    it('behaves as before on an install without integrated_dlc', async function () {
+        setLayout(baseRootOnly);
+
+        assert.strictEqual(rel(await getFilePathFromModOrHOI4('interface/tfv.gfx')), 'dlc/dlc018_together_for_victory/interface/tfv.gfx');
+        assert.strictEqual(await getFilePathFromModOrHOI4('interface/wtt.gfx'), undefined);
+        assert.deepStrictEqual(await listFilesFromModOrHOI4('interface'), ['tfv.gfx']);
+    });
+
+    it('resolves nothing when neither dlc root exists', async function () {
+        setLayout({});
+
+        assert.strictEqual(await getFilePathFromModOrHOI4('interface/tfv.gfx'), undefined);
+        assert.deepStrictEqual(await listFilesFromModOrHOI4('interface'), []);
     });
 });
