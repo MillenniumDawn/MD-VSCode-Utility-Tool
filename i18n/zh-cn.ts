@@ -75,6 +75,7 @@ const table: Partial<typeof __table> = {
     "miopreview.nomio": "没有军工机构。",
     "miopreview.showGrid": "Show grid",
     "miopreview.showInheritedTraits": "Show inherited traits",
+    "miopreview.showOverlaps": "Show overlapping traits",
     "miopreview.warnings": "Toggle warnings",
     "miopreview.warnings.overridetraitidnotexist": "override_trait引用的特质不存在：{0}。",
     "miopreview.warnings.overridetraitnoid": "这个文件中的override_trait没有token字段：{0}。",
