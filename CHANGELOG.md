@@ -1,3 +1,8 @@
+v1.1.15
+
+  Functionality:
+  - [ MIO ] The trait preview gained a "Show overlapping traits" toggle, on by default. Two traits that resolve to the same grid slot are drawn on top of each other, so all but the last one rendered are invisible and the tree silently appears to lose a trait; every slot holding more than one trait is now marked with a red box carrying the collision count. Collisions are detected on the rendered grid items rather than on the raw trait list, so traits hidden by a branch condition, by `remove_trait` or by the inherited-traits toggle cannot raise a false positive. The markers are anchored like the grid guide (following zoom and pan) and do not intercept clicks, so the trait underneath stays clickable to jump to its definition, and the toggle state persists across in-place preview updates.
+
 v1.1.14
 
   Functionality:
