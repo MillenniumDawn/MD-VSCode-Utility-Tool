@@ -16,6 +16,7 @@ let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
 let selectedMioIndex: number = Math.min(mios.length - 1, getState().selectedMioIndex ?? 0);
 let showIncludedTraits: boolean = getState().showIncludedTraits ?? true;
 let showGrid: boolean = getState().showGrid ?? false;
+let showOverlaps: boolean = getState().showOverlaps ?? true;
 let conditions: DivDropdown | undefined = undefined;
 
 initCommon();
@@ -69,8 +70,9 @@ async function buildContent() {
         : '';
 
     const gridGuideLayer = showGrid ? buildGridGuide(styleTable, gridbox, xGridSize, leftPadding, traitPosition) : '';
+    const overlapLayer = showOverlaps ? buildOverlapOverlay(styleTable, gridbox, xGridSize, leftPadding, findOverlaps(traitGrixBoxItems)) : '';
 
-    miopreviewplaceholder.innerHTML = traitPreviewContent + headerLayer + gridGuideLayer + styleTable.toStyleElement((window as any).styleNonce);
+    miopreviewplaceholder.innerHTML = traitPreviewContent + headerLayer + gridGuideLayer + overlapLayer + styleTable.toStyleElement((window as any).styleNonce);
 
     subscribeNavigators();
 }
@@ -105,6 +107,82 @@ function buildGridGuide(
     const label = `<div class="${styleTable.style('mio-grid-label', () => `position:absolute; top:-14px; font-size:10px; color:#e06c3b; white-space:nowrap; pointer-events:none;`)} ${styleTable.oneTimeStyle('mio-grid-label-pos', () => `left:${limitColumn * xGridSize + 4}px;`)}">x = 9 limit</div>`;
 
     return `<div class="${styleTable.oneTimeStyle('mio-grid-layer', () => `position:absolute; left:${leftPadding}px; top:${top}px;`)}">${lines}${label}</div>`;
+}
+
+interface TraitOverlap {
+    x: number;
+    y: number;
+    count: number;
+}
+
+// Traits that resolve to the same grid slot are drawn on top of each other, so all but the last
+// one rendered are invisible — the tree just silently "loses" a trait. Collisions are detected on
+// the grid items rather than on mio.traits so traits hidden by a condition, by remove_trait or by
+// the inherited-traits toggle can't raise a false positive.
+export function findOverlaps(items: GridBoxItem[]): TraitOverlap[] {
+    const countByCell: Record<string, TraitOverlap> = {};
+    for (const item of items) {
+        const key = item.gridX + ',' + item.gridY;
+        const cell = countByCell[key];
+        if (cell) {
+            cell.count++;
+        } else {
+            countByCell[key] = { x: item.gridX, y: item.gridY, count: 1 };
+        }
+    }
+
+    return Object.values(countByCell).filter(cell => cell.count > 1);
+}
+
+// Marks every grid slot holding more than one trait with a red box, so an overlap is visible
+// instead of silently hiding a trait. Anchored like the grid guide above, so it lives inside
+// #miopreviewplaceholder and follows zoom and pan. The boxes are pointer-events:none on purpose:
+// the click must still reach the trait's .navigator underneath so the user can jump to the
+// definition and fix the position. z-index beats the trait label spans (z-index 5), whose .trait
+// wrapper has no stacking context of its own, so the border isn't painted over.
+function buildOverlapOverlay(
+    styleTable: StyleTable,
+    gridbox: GridBoxType,
+    xGridSize: number,
+    leftPadding: number,
+    overlaps: TraitOverlap[],
+): string {
+    if (overlaps.length === 0) {
+        return '';
+    }
+
+    const yGridSize = gridbox.slotsize?.height?._value ?? 117;
+    const top = gridbox.position.y._value;
+
+    const boxClass = styleTable.style('mio-overlap-box', () => `
+        position:absolute;
+        box-sizing:border-box;
+        border:2px solid #e33;
+        background:rgba(255,0,0,0.18);
+        pointer-events:none;
+    `);
+    const countClass = styleTable.style('mio-overlap-count', () => `
+        position:absolute;
+        top:1px;
+        right:3px;
+        font-size:10px;
+        font-weight:bold;
+        color:#fff;
+        text-shadow:0 0 3px #000;
+        pointer-events:none;
+    `);
+
+    const boxes = overlaps.map(overlap => {
+        const positionClass = styleTable.oneTimeStyle('mio-overlap-pos', () => `
+            left:${overlap.x * xGridSize}px;
+            top:${overlap.y * yGridSize}px;
+            width:${xGridSize}px;
+            height:${yGridSize}px;
+        `);
+        return `<div class="${boxClass} ${positionClass}"><span class="${countClass}">&times;${overlap.count}</span></div>`;
+    }).join('');
+
+    return `<div class="${styleTable.oneTimeStyle('mio-overlap-layer', () => `position:absolute; left:${leftPadding}px; top:${top}px; z-index:6;`)}">${boxes}</div>`;
 }
 
 function calculateTraitVisible(mio: Mio, allowBranchOptionsValue: Record<string, boolean>) {
@@ -388,6 +466,17 @@ window.addEventListener('load', tryRun(async function() {
         showGridCheckbox.addEventListener('change', async () => {
             showGrid = showGridCheckbox.checked;
             setState({ showGrid });
+            await buildContent();
+        });
+    }
+
+    // Toggle overlapping-trait markers
+    const showOverlapsCheckbox = document.getElementById('show-overlaps') as HTMLInputElement | null;
+    if (showOverlapsCheckbox) {
+        showOverlapsCheckbox.checked = showOverlaps;
+        showOverlapsCheckbox.addEventListener('change', async () => {
+            showOverlaps = showOverlapsCheckbox.checked;
+            setState({ showOverlaps });
             await buildContent();
         });
     }

@@ -75,6 +75,7 @@ const table: Partial<typeof __table> = {
     "miopreview.nomio": "설계사 정의되지 않음.",
     "miopreview.showGrid": "Show grid",
     "miopreview.showInheritedTraits": "Show inherited traits",
+    "miopreview.showOverlaps": "Show overlapping traits",
     "miopreview.warnings": "Toggle warnings",
     "miopreview.warnings.overridetraitidnotexist": "override_trait 가 존재하지 않습니다: {0}.",
     "miopreview.warnings.overridetraitnoid": "이 파일에 정의된 override_trait 는 토큰이 없습니다: {0}.",

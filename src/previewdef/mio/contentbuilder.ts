@@ -173,7 +173,9 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml
         <label for="show-included-traits" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showInheritedTraits', 'Show inherited traits')}</label>
         <input type="checkbox" id="show-included-traits" class="${styleTable.style('marginRight30', () => `margin-right:30px`)}">
         <label for="show-grid" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showGrid', 'Show grid')}</label>
-        <input type="checkbox" id="show-grid" class="${styleTable.style('marginRight10', () => `margin-right:10px`)}">`;
+        <input type="checkbox" id="show-grid" class="${styleTable.style('marginRight30', () => `margin-right:30px`)}">
+        <label for="show-overlaps" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showOverlaps', 'Show overlapping traits')}</label>
+        <input type="checkbox" id="show-overlaps" class="${styleTable.style('marginRight10', () => `margin-right:10px`)}">`;
 
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 40px;`)}">
         <div class="toolbar">

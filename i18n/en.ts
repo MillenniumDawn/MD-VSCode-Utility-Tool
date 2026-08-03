@@ -75,6 +75,7 @@ const internalTable = /* SOT Do not remove this comment */{
     "miopreview.nomio": "No military industrial organization defined.",
     "miopreview.showGrid": "Show grid",
     "miopreview.showInheritedTraits": "Show inherited traits",
+    "miopreview.showOverlaps": "Show overlapping traits",
     "miopreview.warnings": "Toggle warnings",
     "miopreview.warnings.overridetraitidnotexist": "An override_trait referenced a trait that doesn't exist: {0}.",
     "miopreview.warnings.overridetraitnoid": "An override_trait defined in this file don't have token property: {0}.",
