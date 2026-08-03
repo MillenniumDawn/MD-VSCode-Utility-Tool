@@ -9,6 +9,7 @@ import { convertNodeToJson, SchemaDef, HOIPartial } from '../hoiformat/schema';
 import { error } from './debug';
 import { updateSelectedModFileStatus, workspaceModFilesCache } from './modfile';
 import { UserError, memoizeWithTtl } from './common';
+import { getInstallPathUri } from './installpath';
 import type * as AdmZip from 'adm-zip';
 import { Hoi4FsSchema } from '../constants';
 import { trimStart } from 'lodash';
@@ -83,7 +84,11 @@ if (!IS_WEB_EXT) {
     function getDlcZip(dlcZipPath: string): Promise<DlcZip> {
         const uri = vscode.Uri.parse(dlcZipPath);
         if (uri.scheme === Hoi4FsSchema) {
-            dlcZipPath = path.join(getConfiguration().installPath, trimStart(uri.path, '/'));
+            // Resolve through the shared install path so this gets the same normalization (and
+            // cache) as every hoi4installpath: lookup; adm-zip needs a real fs path.
+            const installPath = getInstallPathUri();
+            ensureFileScheme(installPath);
+            dlcZipPath = path.join(installPath.fsPath, trimStart(uri.path, '/'));
         } else {
             ensureFileScheme(uri);
             dlcZipPath = uri.fsPath;

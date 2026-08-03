@@ -1,14 +1,11 @@
 import { trimStart } from 'lodash';
 import * as vscode from 'vscode';
 import { Commands, ConfigurationKey, Hoi4FsSchema } from '../constants';
-import { forceError, UserError } from './common';
+import { forceError } from './common';
 import { clearDlcZipCache } from './fileloader';
+import { checkInstallPath, clearInstallPathCache, getInstallPathUri, setInstallPathUri } from './installpath';
 import { sendEvent } from './telemetry';
 import { getConfiguration, isFileScheme } from './vsccommon';
-
-const installPathContainer: { current: vscode.Uri | null } = {
-    current: null,
-};
 
 export function registerHoiFs(): vscode.Disposable {
     const disposables: vscode.Disposable[] = [];
@@ -23,6 +20,7 @@ export function registerHoiFs(): vscode.Disposable {
 
     if (!IS_WEB_EXT) {
         disposables.push(vscode.workspace.onDidChangeConfiguration(onChangeWorkspaceConfiguration));
+        void checkInstallPath();
     }
 
     return vscode.Disposable.from(...disposables);
@@ -40,7 +38,7 @@ async function selectHoiFolder(): Promise<void> {
     }
 
     const uri = result[0];
-    installPathContainer.current = uri;
+    setInstallPathUri(uri);
     void clearDlcZipCache();
 
     if (!IS_WEB_EXT && isFileScheme(uri)) {
@@ -51,8 +49,9 @@ async function selectHoiFolder(): Promise<void> {
 
 function onChangeWorkspaceConfiguration(e: vscode.ConfigurationChangeEvent): void {
     if (e.affectsConfiguration(`${ConfigurationKey}.installPath`)) {
-        installPathContainer.current = null;
+        clearInstallPathCache();
         void clearDlcZipCache();
+        void checkInstallPath();
     }
 }
 
@@ -67,53 +66,40 @@ class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
     }
 
     stat(uri: vscode.Uri): vscode.FileStat | Thenable<vscode.FileStat> {
-        return vscode.workspace.fs.stat(vscode.Uri.joinPath(this.getInstallPath(), trimStart(uri.path, '/')));
+        return vscode.workspace.fs.stat(vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, '/')));
     }
 
     readDirectory(uri: vscode.Uri): [string, vscode.FileType][] | Thenable<[string, vscode.FileType][]> {
-        return vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(this.getInstallPath(), trimStart(uri.path, '/')));
+        return vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, '/')));
     }
 
     createDirectory(uri: vscode.Uri): void | Thenable<void> {
-        return vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(this.getInstallPath(), trimStart(uri.path, '/')));
+        return vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, '/')));
     }
 
     readFile(uri: vscode.Uri): Uint8Array | Thenable<Uint8Array> {
-        return vscode.workspace.fs.readFile(vscode.Uri.joinPath(this.getInstallPath(), trimStart(uri.path, '/')));
+        return vscode.workspace.fs.readFile(vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, '/')));
     }
     
     writeFile(uri: vscode.Uri, content: Uint8Array, _options: { create: boolean; overwrite: boolean; }): void | Thenable<void> {
-        return vscode.workspace.fs.writeFile(vscode.Uri.joinPath(this.getInstallPath(), trimStart(uri.path, '/')), content);
+        return vscode.workspace.fs.writeFile(vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, '/')), content);
     }
 
     delete(uri: vscode.Uri, options: { recursive: boolean; }): void | Thenable<void> {
-        return vscode.workspace.fs.delete(vscode.Uri.joinPath(this.getInstallPath(), trimStart(uri.path, '/')), options);
+        return vscode.workspace.fs.delete(vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, '/')), options);
     }
 
     rename(oldUri: vscode.Uri, newUri: vscode.Uri, options: { overwrite: boolean; }): void | Thenable<void> {
         return vscode.workspace.fs.rename(
-            vscode.Uri.joinPath(this.getInstallPath(), trimStart(oldUri.path, '/')),
-            vscode.Uri.joinPath(this.getInstallPath(), trimStart(newUri.path, '/')),
+            vscode.Uri.joinPath(getInstallPathUri(), trimStart(oldUri.path, '/')),
+            vscode.Uri.joinPath(getInstallPathUri(), trimStart(newUri.path, '/')),
             options);
     }
 
     copy(source: vscode.Uri, destination: vscode.Uri, options: { overwrite: boolean; }): void | Thenable<void> {
         return vscode.workspace.fs.copy(
-            vscode.Uri.joinPath(this.getInstallPath(), trimStart(source.path, '/')),
-            vscode.Uri.joinPath(this.getInstallPath(), trimStart(destination.path, '/')),
+            vscode.Uri.joinPath(getInstallPathUri(), trimStart(source.path, '/')),
+            vscode.Uri.joinPath(getInstallPathUri(), trimStart(destination.path, '/')),
             options);
-    }
-
-    private getInstallPath(): vscode.Uri {
-        if (installPathContainer.current !== null) {
-            return installPathContainer.current;
-        }
-
-        const installPath = getConfiguration().installPath;
-        if (installPath === '') {
-            throw new UserError("Install path of Heart of Iron IV is not set.");
-        }
-
-        return installPathContainer.current = vscode.Uri.file(installPath);
     }
 }
