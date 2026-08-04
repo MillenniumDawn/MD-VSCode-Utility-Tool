@@ -1,20 +1,19 @@
 import * as assert from 'assert';
-import * as vscode from 'vscode';
 import * as featureflags from '../util/featureflags';
+import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 describe('util/featureflags', () => {
     // The stub's `vscode.workspace.getConfiguration` is a single function that returns a fixed
-    // object literal. Replace it for the duration of each test so refreshFeatureFlags re-reads
-    // values we control, then restore the original to keep test isolation.
-    const originalGetConfiguration = (vscode.workspace as any).getConfiguration;
+    // object literal. Point it at a local object each test can rewrite, so refreshFeatureFlags
+    // re-reads values we control.
     let config: Record<string, unknown> = {};
 
     beforeEach(() => {
-        (vscode.workspace as any).getConfiguration = () => config;
+        stubVscode({ getConfiguration: () => config });
     });
 
     afterEach(() => {
-        (vscode.workspace as any).getConfiguration = originalGetConfiguration;
+        restoreVscodeStubs();
         config = {};
     });
 
@@ -58,20 +57,18 @@ describe('util/featureflags', () => {
 
     describe('registerFeatureFlags', () => {
         // Capture the change handler registerFeatureFlags subscribes, so a synthetic
-        // configuration-change event can drive the affectsConfiguration gate.
-        const originalOnDidChange = (vscode.workspace as any).onDidChangeConfiguration;
+        // configuration-change event can drive the affectsConfiguration gate. The outer suite's
+        // afterEach restores it along with everything else.
         let firedHandler: ((e: { affectsConfiguration(key: string): boolean }) => void) | undefined;
 
         beforeEach(() => {
             firedHandler = undefined;
-            (vscode.workspace as any).onDidChangeConfiguration = (handler: any) => {
-                firedHandler = handler;
-                return { dispose: () => undefined };
-            };
-        });
-
-        afterEach(() => {
-            (vscode.workspace as any).onDidChangeConfiguration = originalOnDidChange;
+            stubVscode({
+                onDidChangeConfiguration: (handler: any) => {
+                    firedHandler = handler;
+                    return { dispose: () => undefined };
+                },
+            });
         });
 
         it('refreshes flags when a change affecting the extension config fires', () => {

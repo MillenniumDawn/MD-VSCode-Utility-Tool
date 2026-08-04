@@ -9,9 +9,12 @@ import { convertNodeToJson, SchemaDef, HOIPartial } from '../hoiformat/schema';
 import { error } from './debug';
 import { updateSelectedModFileStatus, workspaceModFilesCache } from './modfile';
 import { UserError, memoizeWithTtl } from './common';
+import { getInstallPathUri } from './installpath';
 import type * as AdmZip from 'adm-zip';
 import { Hoi4FsSchema } from '../constants';
 import { trimStart } from 'lodash';
+
+const dlcRootFolders = ['dlc', 'integrated_dlc'];
 
 const dlcZipPathsCache = new PromiseCache({
     factory: getDlcZipPaths,
@@ -83,7 +86,11 @@ if (!IS_WEB_EXT) {
     function getDlcZip(dlcZipPath: string): Promise<DlcZip> {
         const uri = vscode.Uri.parse(dlcZipPath);
         if (uri.scheme === Hoi4FsSchema) {
-            dlcZipPath = path.join(getConfiguration().installPath, trimStart(uri.path, '/'));
+            // Resolve through the shared install path so this gets the same normalization (and
+            // cache) as every hoi4installpath: lookup; adm-zip needs a real fs path.
+            const installPath = getInstallPathUri();
+            ensureFileScheme(installPath);
+            dlcZipPath = path.join(installPath.fsPath, trimStart(uri.path, '/'));
         } else {
             ensureFileScheme(uri);
             dlcZipPath = uri.fsPath;
@@ -467,17 +474,32 @@ async function listFilesFromModOrHOI4Impl(relativePath: string, options?: { mod?
     return [...new Set(result)];
 }
 
-async function getDlcZipPaths(installPath: string): Promise<vscode.Uri[] | null> {
-    const dlcPath = vscode.Uri.joinPath(vscode.Uri.parse(installPath), 'dlc');
-    if (!await isDirectory(dlcPath)) {
+async function mapDlcFolders<T>(
+    installPath: string,
+    map: (dlcFolder: vscode.Uri, dlcFolderName: string) => Promise<T | null>,
+): Promise<T[] | null> {
+    const root = vscode.Uri.parse(installPath);
+    const dlcRoots = (await Promise.all(dlcRootFolders.map(async (dlcRootFolder) => {
+        const dlcPath = vscode.Uri.joinPath(root, dlcRootFolder);
+        return await isDirectory(dlcPath) ? dlcPath : null;
+    }))).filter((dlcPath): dlcPath is vscode.Uri => dlcPath !== null);
+
+    if (dlcRoots.length === 0) {
         return null;
     }
 
-    const dlcFolders = await readDir(dlcPath);
-    const paths = await Promise.all(dlcFolders.map(async (dlcFolder) => {
-        const dlcZipFolder = vscode.Uri.joinPath(dlcPath, dlcFolder);
+    const results: (T | null)[][] = await Promise.all(dlcRoots.map(async (dlcPath) => {
+        const dlcFolders = await readDir(dlcPath);
+        return await Promise.all(dlcFolders.map(dlcFolder => map(vscode.Uri.joinPath(dlcPath, dlcFolder), dlcFolder)));
+    }));
+
+    return results.flat().filter((result): result is T => result !== null);
+}
+
+function getDlcZipPaths(installPath: string): Promise<vscode.Uri[] | null> {
+    return mapDlcFolders(installPath, async (dlcZipFolder) => {
         if (await isDirectory(dlcZipFolder)) {
-            const files =  await readDir(dlcZipFolder);
+            const files = await readDir(dlcZipFolder);
             const zipFile = files.find(file => file.endsWith('.zip'));
             if (zipFile) {
                 return vscode.Uri.joinPath(dlcZipFolder, zipFile);
@@ -485,28 +507,17 @@ async function getDlcZipPaths(installPath: string): Promise<vscode.Uri[] | null>
         }
 
         return null;
-    }));
-
-    return paths.filter((path): path is vscode.Uri => path !== null);
+    });
 }
 
-async function getDlcPaths(installPath: string): Promise<vscode.Uri[] | null> {
-    const dlcPath = vscode.Uri.joinPath(vscode.Uri.parse(installPath), 'dlc');
-    if (!await isDirectory(dlcPath)) {
-        return null;
-    }
-
-    const dlcFolders = await readDir(dlcPath);
-    const paths = await Promise.all(dlcFolders.map(async (dlcFolder) => {
-        const dlcZipFolder = vscode.Uri.joinPath(dlcPath, dlcFolder);
+function getDlcPaths(installPath: string): Promise<vscode.Uri[] | null> {
+    return mapDlcFolders(installPath, async (dlcZipFolder, dlcFolder) => {
         if (await isDirectory(dlcZipFolder) && dlcFolder.startsWith("dlc")) {
             return dlcZipFolder;
         }
 
         return null;
-    }));
-
-    return paths.filter((path): path is vscode.Uri => path !== null);
+    });
 }
 
 const replacePathsCache = new PromiseCache({

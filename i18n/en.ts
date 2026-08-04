@@ -62,6 +62,8 @@ const internalTable = /* SOT Do not remove this comment */{
     "guipreview.topbar.toggleVisibility.title": "Show or Hide Container Windows",
     "hours": "hour(s)",
     "infile": "In file {0}:\n",
+    "installpath.notdirectory": "Hearts of Iron IV install path does not exist: {0}",
+    "installpath.notset": "Install path of Hearts of Iron IV is not set.",
     "loading": "Loading...",
     "localisationIndex.builddone": "Localisation index building done.",
     "localisationIndex.building": "Building localisation index...",

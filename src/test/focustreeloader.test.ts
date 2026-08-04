@@ -4,6 +4,7 @@ import { FocusTreeLoader } from '../previewdef/focustree/loader';
 import { LoaderSession } from '../util/loader/loader';
 import { listGuiGfxFiles, resolveInlayGuiWindows, resolveInlayGfxFiles } from '../previewdef/focustree/inlay';
 import { clearDlcZipCache } from '../util/fileloader';
+import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 // Drives FocusTreeLoader.postLoad against a stubbed interface/ tree (two .gfx, one .gui) served from
 // the HOI4 install path (no workspace folders). Feature flags are off, so getGfxContainerFiles is a
@@ -13,9 +14,6 @@ import { clearDlcZipCache } from '../util/fileloader';
 describe('previewdef/focustree/loader inlay short-circuit', function () {
     const File = vscode.FileType.File;
     const Directory = vscode.FileType.Directory;
-    const realGetConfig = (vscode.workspace as any).getConfiguration;
-    const realStat = (vscode.workspace.fs as any).stat;
-    const realReadDir = (vscode.workspace.fs as any).readDirectory;
 
     function uriPath(uri: any): string {
         return String(uri.fsPath ?? uri.path ?? '');
@@ -25,22 +23,19 @@ describe('previewdef/focustree/loader inlay short-circuit', function () {
     }
 
     beforeEach(function () {
-        (vscode.workspace as any).getConfiguration = () => ({
-            get: () => undefined, update: () => Promise.resolve(), inspect: () => undefined,
-            modFile: '', loadDlcContents: false, inlayWindowGfxRoots: [],
+        stubVscode({
+            configuration: { modFile: '', loadDlcContents: false, inlayWindowGfxRoots: [] },
+            stat: async (uri: any) => ({
+                type: underInterface(uri) && !/\.(gfx|gui)$/.test(uriPath(uri)) ? Directory : File,
+                mtime: 1, ctime: 0, size: 0,
+            }),
+            readDirectory: async (uri: any) =>
+                underInterface(uri) ? [['a.gfx', File], ['b.gfx', File], ['c.gui', File]] : [],
         });
-        (vscode.workspace.fs as any).stat = async (uri: any) => ({
-            type: underInterface(uri) && !/\.(gfx|gui)$/.test(uriPath(uri)) ? Directory : File,
-            mtime: 1, ctime: 0, size: 0,
-        });
-        (vscode.workspace.fs as any).readDirectory = async (uri: any) =>
-            underInterface(uri) ? [['a.gfx', File], ['b.gfx', File], ['c.gui', File]] : [];
     });
 
     afterEach(async function () {
-        (vscode.workspace as any).getConfiguration = realGetConfig;
-        (vscode.workspace.fs as any).stat = realStat;
-        (vscode.workspace.fs as any).readDirectory = realReadDir;
+        restoreVscodeStubs();
         await clearDlcZipCache(); // drop the 3s directory-listing cache so listings don't leak between tests
     });
 

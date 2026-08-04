@@ -1,7 +1,8 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { expiryToken, DlcZip, getFilePathFromModOrHOI4, clearDlcZipCache, parseHoi4FileCached, parseAndResolveHoi4FileCached } from '../util/fileloader';
+import { expiryToken, DlcZip, getFilePathFromModOrHOI4, listFilesFromModOrHOI4, clearDlcZipCache, parseHoi4FileCached, parseAndResolveHoi4FileCached } from '../util/fileloader';
 import { Node, SymbolNode } from '../hoiformat/hoiparser';
+import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 // EXPIRY_STAT_TTL in fileloader.ts is 500ms; tests advance the stubbed clock past that.
 const TTL = 500;
@@ -13,18 +14,17 @@ const TTL = 500;
 describe('util/fileloader expiryToken', function () {
     let statCalls = 0;
     let mtime = 0;
-    const realStat = (vscode.workspace.fs as any).stat;
-    const realNow = Date.now;
 
     beforeEach(function () {
         statCalls = 0;
         mtime = 111;
-        (vscode.workspace.fs as any).stat = async () => { statCalls++; return { type: vscode.FileType.File, mtime, ctime: 0, size: 0 }; };
+        stubVscode({
+            stat: async () => { statCalls++; return { type: vscode.FileType.File, mtime, ctime: 0, size: 0 }; },
+        });
     });
 
     afterEach(function () {
-        (vscode.workspace.fs as any).stat = realStat;
-        Date.now = realNow;
+        restoreVscodeStubs();
     });
 
     function onDiskUri(str: string): vscode.Uri {
@@ -39,7 +39,7 @@ describe('util/fileloader expiryToken', function () {
     });
 
     it('memoizes the on-disk stat within the TTL and recomputes after it', async function () {
-        Date.now = () => 1000;
+        stubVscode({ now: () => 1000 });
         const uri = onDiskUri('file:///disk-a.txt');
 
         const t1 = await expiryToken(uri);
@@ -49,7 +49,7 @@ describe('util/fileloader expiryToken', function () {
         assert.strictEqual(t2, t1);
         assert.strictEqual(statCalls, 1); // second call served from the memo
 
-        Date.now = () => 1000 + TTL + 1;
+        stubVscode({ now: () => 1000 + TTL + 1 });
         mtime = 222;
         const t3 = await expiryToken(uri);
 
@@ -59,7 +59,7 @@ describe('util/fileloader expiryToken', function () {
 
     it('always returns a fresh token for opened/dirty documents and never stats them', async function () {
         let clock = 5000;
-        Date.now = () => clock;
+        stubVscode({ now: () => clock });
         const uri = openedUri('file:///doc.txt#opened');
 
         const a = await expiryToken(uri);
@@ -79,27 +79,24 @@ describe('util/fileloader expiryToken', function () {
 // our proof the resolution ran once within the TTL and again after it. Mirrors the getLastModifiedMemo test above.
 describe('util/fileloader getFilePathFromModOrHOI4', function () {
     let statCalls = 0;
-    const realStat = (vscode.workspace.fs as any).stat;
-    const realNow = Date.now;
-    const realFolders = (vscode.workspace as any).workspaceFolders;
 
     beforeEach(function () {
         statCalls = 0;
-        (vscode.workspace.fs as any).stat = async () => { statCalls++; return { type: vscode.FileType.File, mtime: 0, ctime: 0, size: 0 }; };
-        (vscode.workspace as any).workspaceFolders = [
-            { uri: { fsPath: '/ws', path: '/ws', scheme: 'file', toString: () => 'file:///ws' } },
-        ];
+        stubVscode({
+            stat: async () => { statCalls++; return { type: vscode.FileType.File, mtime: 0, ctime: 0, size: 0 }; },
+            workspaceFolders: [
+                { uri: { fsPath: '/ws', path: '/ws', scheme: 'file', toString: () => 'file:///ws' } },
+            ],
+        });
     });
 
     afterEach(async function () {
-        (vscode.workspace.fs as any).stat = realStat;
-        (vscode.workspace as any).workspaceFolders = realFolders;
-        Date.now = realNow;
+        restoreVscodeStubs();
         await clearDlcZipCache(); // drop the path memo so it doesn't leak into other tests
     });
 
     it('resolves once within the TTL and re-resolves after it expires', async function () {
-        Date.now = () => 2000;
+        stubVscode({ now: () => 2000 });
         const first = await getFilePathFromModOrHOI4('common/foo.txt');
         const second = await getFilePathFromModOrHOI4('common/foo.txt');
 
@@ -107,7 +104,7 @@ describe('util/fileloader getFilePathFromModOrHOI4', function () {
         assert.strictEqual(second!.toString(), first!.toString());
         assert.strictEqual(statCalls, 1); // second resolution served from the memo
 
-        Date.now = () => 2000 + TTL + 1;
+        stubVscode({ now: () => 2000 + TTL + 1 });
         const third = await getFilePathFromModOrHOI4('common/foo.txt');
 
         assert.strictEqual(third!.toString(), first!.toString());
@@ -178,27 +175,22 @@ describe('util/fileloader DlcZip', function () {
 describe('util/fileloader parseHoi4FileCached', function () {
     let readCalls = 0;
     let content = '';
-    const realStat = (vscode.workspace.fs as any).stat;
-    const realReadFile = (vscode.workspace.fs as any).readFile;
-    const realNow = Date.now;
-    const realFolders = (vscode.workspace as any).workspaceFolders;
 
     beforeEach(function () {
         readCalls = 0;
         content = 'a = 1\nb = "two"';
-        Date.now = () => 4000;
-        (vscode.workspace.fs as any).stat = async () => ({ type: vscode.FileType.File, mtime: 111, ctime: 0, size: 0 });
-        (vscode.workspace.fs as any).readFile = async () => { readCalls++; return Buffer.from(content); };
-        (vscode.workspace as any).workspaceFolders = [
-            { uri: { fsPath: '/ws', path: '/ws', scheme: 'file', toString: () => 'file:///ws' } },
-        ];
+        stubVscode({
+            now: () => 4000,
+            stat: async () => ({ type: vscode.FileType.File, mtime: 111, ctime: 0, size: 0 }),
+            readFile: async () => { readCalls++; return Buffer.from(content); },
+            workspaceFolders: [
+                { uri: { fsPath: '/ws', path: '/ws', scheme: 'file', toString: () => 'file:///ws' } },
+            ],
+        });
     });
 
     afterEach(async function () {
-        (vscode.workspace.fs as any).stat = realStat;
-        (vscode.workspace.fs as any).readFile = realReadFile;
-        Date.now = realNow;
-        (vscode.workspace as any).workspaceFolders = realFolders;
+        restoreVscodeStubs();
         await clearDlcZipCache(); // drop the parse/content/path caches so entries don't leak between tests
     });
 
@@ -239,5 +231,118 @@ describe('util/fileloader parseHoi4FileCached', function () {
         const plainAgain = await parseHoi4FileCached('common/pc-c.txt');
         assert.strictEqual(plainAgain, plain); // same cached instance, untouched by the resolve pass
         assert.strictEqual((child(plainAgain, 'x').value as SymbolNode).name, '@A');
+    });
+});
+
+// Mirrors the folder layout of a current Steam install: the four integrated DLCs live under
+// integrated_dlc/, everything else under dlc/, and dlc023_man_the_guns exists in *both* roots --
+// as an empty leftover folder under dlc/ and with its actual content under integrated_dlc/. That
+// duplicate is the case worth pinning: base dlc is walked first, so a scan that stops at the first
+// matching folder name (rather than the first matching file) would resolve Man the Guns content to
+// the empty folder and lose it.
+describe('util/fileloader DLC roots', function () {
+    const File = vscode.FileType.File;
+    const Directory = vscode.FileType.Directory;
+
+    const baseRoot: Record<string, [string, vscode.FileType][]> = {
+        'dlc': [['dlc028_la_resistance', Directory], ['dlc023_man_the_guns', Directory]],
+        'dlc/dlc028_la_resistance': [['interface', Directory]],
+        'dlc/dlc028_la_resistance/interface': [['lar.gfx', File]],
+        'dlc/dlc023_man_the_guns': [], // present but empty, exactly as on disk
+    };
+
+    const bothRoots: Record<string, [string, vscode.FileType][]> = {
+        ...baseRoot,
+        'integrated_dlc': [
+            ['dlc018_together_for_victory', Directory],
+            ['dlc020_death_or_dishonor', Directory],
+            ['dlc022_waking_the_tiger', Directory],
+            ['dlc023_man_the_guns', Directory],
+        ],
+        'integrated_dlc/dlc018_together_for_victory': [['interface', Directory]],
+        'integrated_dlc/dlc018_together_for_victory/interface': [['tfv.gfx', File]],
+        'integrated_dlc/dlc020_death_or_dishonor': [['interface', Directory]],
+        'integrated_dlc/dlc020_death_or_dishonor/interface': [['dod.gfx', File]],
+        'integrated_dlc/dlc022_waking_the_tiger': [['interface', Directory]],
+        'integrated_dlc/dlc022_waking_the_tiger/interface': [['wtt.gfx', File]],
+        'integrated_dlc/dlc023_man_the_guns': [['interface', Directory]],
+        'integrated_dlc/dlc023_man_the_guns/interface': [['mtg.gfx', File]],
+    };
+
+    let dirs: Record<string, [string, vscode.FileType][]> = {};
+    let files: string[] = [];
+
+    function rel(uri: any): string {
+        return String(uri?.fsPath ?? uri?.path ?? '')
+            .replace(/^hoi4installpath:/, '')
+            .replace(/\/+/g, '/')
+            .replace(/^\/|\/$/g, '');
+    }
+
+    function setLayout(layout: Record<string, [string, vscode.FileType][]>): void {
+        dirs = layout;
+        files = Object.entries(layout).flatMap(([dir, entries]) =>
+            entries.filter(([, type]) => type === File).map(([name]) => dir + '/' + name));
+    }
+
+    beforeEach(function () {
+        stubVscode({
+            configuration: { modFile: '', installPath: '', loadDlcContents: true },
+            workspaceFolders: [],
+            stat: async (uri: any) => {
+                const p = rel(uri);
+                if (p in dirs) {
+                    return { type: Directory, mtime: 1, ctime: 0, size: 0 };
+                }
+                if (files.includes(p)) {
+                    return { type: File, mtime: 1, ctime: 0, size: 0 };
+                }
+                throw new Error('not found: ' + p);
+            },
+            readDirectory: async (uri: any) => dirs[rel(uri)] ?? [],
+        });
+        setLayout(bothRoots);
+    });
+
+    afterEach(async function () {
+        restoreVscodeStubs();
+        await clearDlcZipCache(); // drop the DLC path, listing and resolution caches between layouts
+    });
+
+    it('resolves a file that exists only under integrated_dlc', async function () {
+        const found = await getFilePathFromModOrHOI4('interface/wtt.gfx');
+        assert.strictEqual(rel(found), 'integrated_dlc/dlc022_waking_the_tiger/interface/wtt.gfx');
+    });
+
+    it('still resolves a file under the base dlc folder', async function () {
+        const found = await getFilePathFromModOrHOI4('interface/lar.gfx');
+        assert.strictEqual(rel(found), 'dlc/dlc028_la_resistance/interface/lar.gfx');
+    });
+
+    it('resolves Man the Guns from integrated_dlc although base dlc holds an empty folder of the same name', async function () {
+        const found = await getFilePathFromModOrHOI4('interface/mtg.gfx');
+        assert.strictEqual(rel(found), 'integrated_dlc/dlc023_man_the_guns/interface/mtg.gfx');
+    });
+
+    it('lists files from both dlc roots, base dlc first, without duplicating the shared folder name', async function () {
+        assert.deepStrictEqual(
+            await listFilesFromModOrHOI4('interface'),
+            ['lar.gfx', 'tfv.gfx', 'dod.gfx', 'wtt.gfx', 'mtg.gfx']);
+    });
+
+    it('behaves as before on an install without integrated_dlc', async function () {
+        setLayout(baseRoot);
+
+        assert.strictEqual(rel(await getFilePathFromModOrHOI4('interface/lar.gfx')), 'dlc/dlc028_la_resistance/interface/lar.gfx');
+        assert.strictEqual(await getFilePathFromModOrHOI4('interface/wtt.gfx'), undefined);
+        assert.strictEqual(await getFilePathFromModOrHOI4('interface/mtg.gfx'), undefined); // the empty dlc/ folder is not a match
+        assert.deepStrictEqual(await listFilesFromModOrHOI4('interface'), ['lar.gfx']);
+    });
+
+    it('resolves nothing when neither dlc root exists', async function () {
+        setLayout({});
+
+        assert.strictEqual(await getFilePathFromModOrHOI4('interface/lar.gfx'), undefined);
+        assert.deepStrictEqual(await listFilesFromModOrHOI4('interface'), []);
     });
 });
