@@ -130,3 +130,107 @@ const stub = buildStub();
     children: [],
     paths: [],
 };
+
+// The stub above is deliberately inert: every accessor returns nothing. Suites that need real
+// behaviour (a config value, a directory listing, a fixed clock) replace those members for the
+// duration of a test and must put them back afterwards, or the replacement leaks into every suite
+// that runs later. That save-and-restore used to be hand-rolled per `describe`, which meant two
+// naming conventions, a member occasionally forgotten in the restore, and -- because the "original"
+// was captured while the `describe` body was evaluated -- a capture that would snapshot another
+// suite's stub rather than the pristine one if a leak ever happened.
+//
+// `stubVscode` / `restoreVscodeStubs` below replace that idiom. The pristine values are captured
+// here, at module load, straight from `buildStub()`'s output, so they cannot be anything but
+// pristine; `restoreVscodeStubs` puts all of them back unconditionally, so a suite cannot forget
+// one. This file is the natural home for them: it is `--require`d by the mocha invocation (see the
+// `test` script in package.json), so it is always loaded, and always loaded first.
+const pristine = {
+    getConfiguration: stub.workspace.getConfiguration,
+    workspaceFolders: stub.workspace.workspaceFolders as unknown,
+    onDidChangeConfiguration: stub.workspace.onDidChangeConfiguration,
+    stat: stub.workspace.fs.stat,
+    readDirectory: stub.workspace.fs.readDirectory,
+    readFile: stub.workspace.fs.readFile,
+    showErrorMessage: stub.window.showErrorMessage,
+    now: Date.now,
+};
+
+export interface VscodeStubOverrides {
+    /**
+     * Convenience for the common case: installs a `getConfiguration` returning the stub's default
+     * `get`/`update`/`inspect` shape with these properties merged on top. Suites that need the
+     * returned config to change between assertions should stub `getConfiguration` directly with a
+     * closure over a mutable object instead.
+     */
+    configuration?: Record<string, unknown>;
+    getConfiguration?: () => any;
+    workspaceFolders?: unknown;
+    onDidChangeConfiguration?: (handler: any) => { dispose(): void };
+    stat?: (uri: any) => Promise<any>;
+    readDirectory?: (uri: any) => Promise<[string, number][]>;
+    readFile?: (uri: any) => Promise<Uint8Array>;
+    showErrorMessage?: (...args: any[]) => Promise<any>;
+    /** Replaces `Date.now`, for suites driving a TTL boundary deterministically. */
+    now?: () => number;
+}
+
+/**
+ * Replaces the stubbed vscode members named in `overrides`; members left out keep whatever they
+ * currently have. Safe to call more than once per test (e.g. to vary `stat` inside a single `it`).
+ * Always pair with `restoreVscodeStubs` in an `afterEach`.
+ */
+export function stubVscode(overrides: VscodeStubOverrides): void {
+    const workspace = stub.workspace as any;
+    const fs = stub.workspace.fs as any;
+    const window = stub.window as any;
+
+    if (overrides.configuration !== undefined) {
+        const configuration = {
+            get: (_k: any) => undefined,
+            update: () => Promise.resolve(),
+            inspect: () => undefined,
+            ...overrides.configuration,
+        };
+        workspace.getConfiguration = () => configuration;
+    }
+    if (overrides.getConfiguration !== undefined) {
+        workspace.getConfiguration = overrides.getConfiguration;
+    }
+    if ('workspaceFolders' in overrides) {
+        workspace.workspaceFolders = overrides.workspaceFolders;
+    }
+    if (overrides.onDidChangeConfiguration !== undefined) {
+        workspace.onDidChangeConfiguration = overrides.onDidChangeConfiguration;
+    }
+    if (overrides.stat !== undefined) {
+        fs.stat = overrides.stat;
+    }
+    if (overrides.readDirectory !== undefined) {
+        fs.readDirectory = overrides.readDirectory;
+    }
+    if (overrides.readFile !== undefined) {
+        fs.readFile = overrides.readFile;
+    }
+    if (overrides.showErrorMessage !== undefined) {
+        window.showErrorMessage = overrides.showErrorMessage;
+    }
+    if (overrides.now !== undefined) {
+        Date.now = overrides.now;
+    }
+}
+
+/** Puts every stubbable member back to the value `buildStub()` produced. */
+export function restoreVscodeStubs(): void {
+    const workspace = stub.workspace as any;
+    const fs = stub.workspace.fs as any;
+    const window = stub.window as any;
+
+    workspace.getConfiguration = pristine.getConfiguration;
+    workspace.workspaceFolders = pristine.workspaceFolders;
+    workspace.onDidChangeConfiguration = pristine.onDidChangeConfiguration;
+    fs.stat = pristine.stat;
+    fs.readDirectory = pristine.readDirectory;
+    fs.readFile = pristine.readFile;
+    window.showErrorMessage = pristine.showErrorMessage;
+    Date.now = pristine.now;
+}

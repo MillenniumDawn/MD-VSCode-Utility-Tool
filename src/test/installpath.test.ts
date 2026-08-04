@@ -2,25 +2,21 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { UserError } from '../util/common';
 import { checkInstallPath, clearInstallPathCache, getInstallPathUri, setInstallPathUri } from '../util/installpath';
+import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 describe('util/installpath', () => {
     // The stub's `vscode.workspace.getConfiguration` returns a fixed object literal without the
-    // `installPath` accessor, so replace it for the duration of each test (same idiom as
-    // featureflags.test.ts) and restore afterwards to keep test isolation.
-    const originalGetConfiguration = (vscode.workspace as any).getConfiguration;
-    const originalStat = vscode.workspace.fs.stat;
-    const originalShowErrorMessage = vscode.window.showErrorMessage;
+    // `installPath` accessor, so point it at a local object the tests can rewrite between
+    // assertions (hence `getConfiguration` rather than the `configuration` shorthand).
     let config: Record<string, unknown> = {};
 
     beforeEach(() => {
-        (vscode.workspace as any).getConfiguration = () => config;
+        stubVscode({ getConfiguration: () => config });
         clearInstallPathCache();
     });
 
     afterEach(() => {
-        (vscode.workspace as any).getConfiguration = originalGetConfiguration;
-        (vscode.workspace.fs as any).stat = originalStat;
-        (vscode.window as any).showErrorMessage = originalShowErrorMessage;
+        restoreVscodeStubs();
         config = {};
         clearInstallPathCache();
     });
@@ -81,13 +77,13 @@ describe('util/installpath', () => {
     describe('checkInstallPath', () => {
         function recordErrorMessages(): string[] {
             const messages: string[] = [];
-            (vscode.window as any).showErrorMessage = (message: string) => { messages.push(message); return Promise.resolve(undefined); };
+            stubVscode({ showErrorMessage: (message: string) => { messages.push(message); return Promise.resolve(undefined); } });
             return messages;
         }
 
         it('reports the resolved path when it is not an existing directory', async () => {
             config = { installPath: '"C:\\HOI4"' };
-            (vscode.workspace.fs as any).stat = () => Promise.reject(new Error('ENOENT'));
+            stubVscode({ stat: () => Promise.reject(new Error('ENOENT')) });
             const messages = recordErrorMessages();
 
             await checkInstallPath();
@@ -99,7 +95,7 @@ describe('util/installpath', () => {
 
         it('reports a path that exists but is a file', async () => {
             config = { installPath: 'C:\\HOI4' };
-            (vscode.workspace.fs as any).stat = () => Promise.resolve({ type: vscode.FileType.File, mtime: 0, ctime: 0, size: 0 });
+            stubVscode({ stat: () => Promise.resolve({ type: vscode.FileType.File, mtime: 0, ctime: 0, size: 0 }) });
             const messages = recordErrorMessages();
 
             await checkInstallPath();
@@ -109,7 +105,7 @@ describe('util/installpath', () => {
 
         it('stays silent when the install path is a directory', async () => {
             config = { installPath: 'C:\\HOI4' };
-            (vscode.workspace.fs as any).stat = () => Promise.resolve({ type: vscode.FileType.Directory, mtime: 0, ctime: 0, size: 0 });
+            stubVscode({ stat: () => Promise.resolve({ type: vscode.FileType.Directory, mtime: 0, ctime: 0, size: 0 }) });
             const messages = recordErrorMessages();
 
             await checkInstallPath();
@@ -119,7 +115,7 @@ describe('util/installpath', () => {
 
         it('stays silent when the setting is not set at all', async () => {
             config = { installPath: '' };
-            (vscode.workspace.fs as any).stat = () => Promise.reject(new Error('ENOENT'));
+            stubVscode({ stat: () => Promise.reject(new Error('ENOENT')) });
             const messages = recordErrorMessages();
 
             await checkInstallPath();
