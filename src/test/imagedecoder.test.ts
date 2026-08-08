@@ -4,8 +4,10 @@ import { PNG } from 'pngjs';
 import {
     decodeImageToPng,
     decodeImageToPngSync,
+    resolveWorkerPoolSize,
     _setImageWorkerPathForTest,
     _terminateImageWorkerForTest,
+    _getWorkerCountForTest,
 } from '../util/image/imagedecoder';
 // Imported only so tsc emits the worker file into this test's outDir; it is import-safe on the main
 // thread (its message handler attaches only when actually run as a worker_threads worker).
@@ -63,6 +65,26 @@ function assertValidPng(pngBuffer: Buffer, width: number, height: number): void 
 }
 
 describe('util/image/imagedecoder', () => {
+    describe('resolveWorkerPoolSize', () => {
+        it('defaults to 4 when unset', () => {
+            assert.strictEqual(resolveWorkerPoolSize(undefined), 4);
+        });
+
+        it('uses the configured value', () => {
+            assert.strictEqual(resolveWorkerPoolSize(2), 2);
+            assert.strictEqual(resolveWorkerPoolSize(8), 8);
+        });
+
+        it('clamps to at least 1', () => {
+            assert.strictEqual(resolveWorkerPoolSize(0), 1);
+            assert.strictEqual(resolveWorkerPoolSize(-3), 1);
+        });
+
+        it('clamps to at most 16', () => {
+            assert.strictEqual(resolveWorkerPoolSize(100), 16);
+        });
+    });
+
     describe('decodeImageToPngSync (fallback path)', () => {
         it('decodes a TGA buffer to a PNG with correct dimensions', () => {
             const result = decodeImageToPngSync(makeTga(), 'tga');
@@ -131,6 +153,21 @@ describe('util/image/imagedecoder', () => {
             // Worker survives a decode error: a subsequent valid decode still succeeds.
             const ok = await decodeImageToPng(makeTga(), 'tga');
             assert.strictEqual(ok.width, 2);
+        });
+
+        it('grows the pool under a concurrent decode burst', async () => {
+            const tga = makeTga();
+            const dds = makeDds(4, 4);
+            const inputs = Array.from({ length: 8 }, (_, i) => (i % 2 === 0 ? tga : dds));
+            const results = await Promise.all(inputs.map(b => decodeImageToPng(b, b === tga ? 'tga' : 'dds')));
+            results.forEach((r, i) => {
+                assert.strictEqual(r.width, i % 2 === 0 ? 2 : 4);
+                assertValidPng(r.pngBuffer, r.width, r.height);
+            });
+            // On a multi-core machine the burst should have widened the pool past one worker.
+            if (require('os').cpus().length > 1) {
+                assert.ok(_getWorkerCountForTest() > 1, 'pool should grow under a decode burst');
+            }
         });
     });
 });

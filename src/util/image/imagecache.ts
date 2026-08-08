@@ -68,6 +68,15 @@ export function resetIconResolveStats(): void {
     negativeScanMemo.clear();
 }
 
+// Test-only: drop the image/sprite/gfx-map caches and the negative-scan memo so a headless loader
+// test starts clean (the module-level caches otherwise persist across tests in one process).
+export function _clearImageCachesForTest(): void {
+    imageCache.clear();
+    spriteCache.clear();
+    gfxMapCache.clear();
+    negativeScanMemo.clear();
+}
+
 export function getImageByPath(relativePath: string): Promise<Image | undefined> {
     return imageCache.get(relativePath);
 }

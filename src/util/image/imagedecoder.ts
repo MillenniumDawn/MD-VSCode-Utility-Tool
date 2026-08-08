@@ -1,7 +1,10 @@
-// DDS/TGA -> PNG decode abstraction. On the desktop (node) build it offloads decoding to a single
-// long-lived worker_threads worker so a focus tree full of DDS icons doesn't stall the extension
-// host. On the web build (or when a worker can't be spawned, or after a worker crash) it falls back
-// to a synchronous decode that is byte-for-byte identical to the original inline getImage path.
+// DDS/TGA -> PNG decode abstraction. On the desktop (node) build it offloads decoding to a pool of
+// long-lived worker_threads workers so a focus tree full of DDS icons doesn't stall the extension
+// host. The pool grows on demand: a single DDS view spawns one worker, while a render that queues
+// many decodes at once (a focus tree) widens the pool so the CPU-bound DDS/TGA->PNG conversion
+// parallelizes across cores instead of serializing on one thread. On the web build (or when no
+// worker can be spawned, or after every worker crashes) it falls back to a synchronous decode that
+// is byte-for-byte identical to the original inline getImage path.
 //
 // worker_threads and every other node-only require live strictly inside `if (!IS_WEB_EXT)` blocks
 // (mirroring fileloader.ts) so terser dead-code-eliminates them from the web bundle.
@@ -11,6 +14,7 @@ import { DDS } from './dds';
 import { ddsToPng, tgaToPng } from './converter';
 import { UserError } from '../common';
 import { debug, error } from '../debug';
+import { getConfiguration } from '../vsccommon';
 
 export interface DecodedImage {
     pngBuffer: Buffer;
@@ -31,6 +35,12 @@ interface WorkerResponse {
 interface PendingJob {
     resolve: (value: DecodedImage) => void;
     reject: (reason: unknown) => void;
+    state: WorkerState;
+}
+
+interface WorkerState {
+    worker: WorkerInstance;
+    inFlight: number;
 }
 
 // The guaranteed synchronous fallback. Identical to the original inline decode in getImage; the DDS
@@ -50,42 +60,71 @@ export function decodeImageToPngSync(buffer: Buffer, kind: 'dds' | 'tga'): Decod
 
 const pendingJobs = new Map<number, PendingJob>();
 let nextJobId = 1;
-let worker: WorkerInstance | null = null;
-// Once a worker fails to spawn or crashes we never respawn it; every subsequent decode uses the sync
-// fallback (see the brief). In-flight jobs at crash time are rejected.
+const workers: WorkerState[] = [];
+// Once every worker has failed to spawn or crashed we never respawn; every subsequent decode uses the
+// sync fallback (see the brief). In-flight jobs at crash time are rejected.
 let workerUnavailable = false;
 // In the bundle __dirname is dist/, next to extension.js, where the imageWorker entry is emitted.
 let workerPath = path.join(__dirname, 'imageWorker.js');
 
-let ensureWorker: (() => WorkerInstance | null) | null = null;
+// Default cap on concurrent decode workers (the mdHoi4Utilities.imageDecodeWorkers setting, which the
+// user can raise or lower). Each worker is a full V8 isolate holding its own PNG buffers, so the pool
+// is bounded; it only ever reaches this many under a heavy multi-decode render.
+const WORKER_POOL_SIZE = 4;
+// Absolute ceiling so a mis-set value can't hand the pool unbounded CPU access.
+const MAX_WORKER_POOL_SIZE = 16;
+
+// Clamp the user's imageDecodeWorkers setting into the valid range: at least 1, at most
+// MAX_WORKER_POOL_SIZE, defaulting to WORKER_POOL_SIZE when unset. Pure so it is unit-testable.
+export function resolveWorkerPoolSize(configured: number | undefined): number {
+    return Math.min(Math.max(1, configured ?? WORKER_POOL_SIZE), MAX_WORKER_POOL_SIZE);
+}
+
+// Runtime pool size: the configured cap, clamped to [1, MAX_WORKER_POOL_SIZE]. Stays 1 on the web
+// build (no worker).
+let workerPoolSize = 1;
+
+let ensureWorkers: (() => WorkerState[] | null) | null = null;
+let spawnWorker: (() => WorkerState | null) | null = null;
 
 if (!IS_WEB_EXT) {
-    ensureWorker = function ensureWorkerImpl(): WorkerInstance | null {
-        if (workerUnavailable) {
-            return null;
-        }
-        if (worker) {
-            return worker;
-        }
+    workerPoolSize = resolveWorkerPoolSize(getConfiguration().imageDecodeWorkers);
 
+    spawnWorker = function spawnWorkerImpl(): WorkerState | null {
         try {
             const { Worker } = require('worker_threads') as typeof import('worker_threads');
             const spawned = new Worker(workerPath);
-            spawned.on('message', onWorkerMessage);
-            spawned.on('error', onWorkerError);
-            spawned.on('exit', onWorkerExit);
-            worker = spawned;
+            const state: WorkerState = { worker: spawned, inFlight: 0 };
+            spawned.on('message', (response: WorkerResponse) => onWorkerMessage(state, response));
+            spawned.on('error', (e: unknown) => onWorkerError(state, e));
+            spawned.on('exit', (code: number) => onWorkerExit(state, code));
+            workers.push(state);
             debug('[imagedecoder] spawned image decode worker: ' + workerPath);
-            return spawned;
+            return state;
         } catch (e) {
             error(e);
-            disableWorker();
             return null;
         }
     };
+
+    ensureWorkers = function ensureWorkersImpl(): WorkerState[] | null {
+        if (workerUnavailable) {
+            return null;
+        }
+        if (workers.length > 0) {
+            return workers;
+        }
+        const first = spawnWorker!();
+        if (!first) {
+            disableWorker();
+            return null;
+        }
+        return workers;
+    };
 }
 
-function onWorkerMessage(response: WorkerResponse): void {
+function onWorkerMessage(state: WorkerState, response: WorkerResponse): void {
+    state.inFlight = Math.max(0, state.inFlight - 1);
     const job = pendingJobs.get(response.id);
     if (!job) {
         return;
@@ -102,41 +141,51 @@ function onWorkerMessage(response: WorkerResponse): void {
     }
 }
 
-function onWorkerError(e: unknown): void {
+function onWorkerError(state: WorkerState, e: unknown): void {
     error(e);
-    failAllPendingJobs(e instanceof Error ? e : new Error(String(e)));
-    disableWorker();
+    failWorkerJobs(state, e instanceof Error ? e : new Error(String(e)));
+    removeWorker(state);
 }
 
-function onWorkerExit(code: number): void {
-    worker = null;
-    if (pendingJobs.size > 0) {
+function onWorkerExit(state: WorkerState, code: number): void {
+    removeWorker(state);
+    if (state.inFlight > 0) {
         const reason = new Error('image decode worker exited (code ' + code + ') with jobs in flight');
         error(reason);
-        failAllPendingJobs(reason);
+        failWorkerJobs(state, reason);
     }
-    workerUnavailable = true;
+}
+
+function removeWorker(state: WorkerState): void {
+    const idx = workers.indexOf(state);
+    if (idx >= 0) {
+        workers.splice(idx, 1);
+    }
+    if (workers.length === 0) {
+        disableWorker();
+    }
 }
 
 function disableWorker(): void {
     workerUnavailable = true;
-    const dead = worker;
-    worker = null;
-    if (dead) {
+    for (const state of workers) {
         try {
-            dead.removeAllListeners();
-            void dead.terminate();
+            state.worker.removeAllListeners();
+            void state.worker.terminate();
         } catch (e) {
             // The worker is already gone; nothing to clean up.
         }
     }
+    workers.length = 0;
 }
 
-function failAllPendingJobs(reason: Error): void {
-    for (const job of pendingJobs.values()) {
-        job.reject(reason);
+function failWorkerJobs(state: WorkerState, reason: Error): void {
+    for (const [id, job] of pendingJobs) {
+        if (job.state === state) {
+            pendingJobs.delete(id);
+            job.reject(reason);
+        }
     }
-    pendingJobs.clear();
 }
 
 function reviveError(info: { message: string; name: string }): Error {
@@ -149,18 +198,53 @@ function reviveError(info: { message: string; name: string }): Error {
     return e;
 }
 
-function postJob(activeWorker: WorkerInstance, buffer: Buffer, kind: 'dds' | 'tga'): Promise<DecodedImage> {
+// Least-busy worker, growing the pool when every worker is saturated and the cap isn't reached. A
+// single decode therefore spawns just one worker; a burst of concurrent decodes widens the pool so
+// the CPU-bound conversions run in parallel.
+function pickOrGrowWorker(): WorkerState {
+    if (workers.length === 0) {
+        throw new Error('no image decode worker available');
+    }
+    let best = workers[0];
+    let allBusy = true;
+    for (const state of workers) {
+        if (state.inFlight < best.inFlight) {
+            best = state;
+        }
+        if (state.inFlight === 0) {
+            allBusy = false;
+        }
+    }
+    if (allBusy && workers.length < workerPoolSize && spawnWorker) {
+        const spawned = spawnWorker();
+        if (spawned) {
+            return spawned;
+        }
+    }
+    return best;
+}
+
+function postJob(buffer: Buffer, kind: 'dds' | 'tga'): Promise<DecodedImage> {
     return new Promise<DecodedImage>((resolve, reject) => {
         const id = nextJobId++;
-        pendingJobs.set(id, { resolve, reject });
+        let state: WorkerState;
+        try {
+            state = pickOrGrowWorker();
+        } catch (e) {
+            reject(e);
+            return;
+        }
+        pendingJobs.set(id, { resolve, reject, state });
         try {
             // Copy into a private ArrayBuffer before transferring: the source Buffer is shared and
             // cached in fileContentCache, so it must never be detached. The copy is the only cost
             // paid on the main thread; the heavy decode and PNG encode run in the worker.
             const payload = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
-            activeWorker.postMessage({ id, kind, buffer: payload }, [payload]);
+            state.inFlight++;
+            state.worker.postMessage({ id, kind, buffer: payload }, [payload]);
         } catch (e) {
             pendingJobs.delete(id);
+            state.inFlight = Math.max(0, state.inFlight - 1);
             reject(e);
         }
     });
@@ -168,9 +252,9 @@ function postJob(activeWorker: WorkerInstance, buffer: Buffer, kind: 'dds' | 'tg
 
 export async function decodeImageToPng(buffer: Buffer, kind: 'dds' | 'tga'): Promise<DecodedImage> {
     if (!IS_WEB_EXT) {
-        const activeWorker = ensureWorker ? ensureWorker() : null;
-        if (activeWorker) {
-            return await postJob(activeWorker, buffer, kind);
+        const pool = ensureWorkers ? ensureWorkers() : null;
+        if (pool && pool.length > 0) {
+            return await postJob(buffer, kind);
         }
     }
 
@@ -182,18 +266,23 @@ export async function decodeImageToPng(buffer: Buffer, kind: 'dds' | 'tga'): Pro
 export function _setImageWorkerPathForTest(newPath: string): void {
     workerPath = newPath;
     workerUnavailable = false;
-    worker = null;
+    workers.length = 0;
     pendingJobs.clear();
     nextJobId = 1;
 }
 
-// Test-only: terminate the long-lived worker so the test process can settle between cases.
+// Test-only: terminate the worker pool so the test process can settle between cases.
 export async function _terminateImageWorkerForTest(): Promise<void> {
-    const dead = worker;
-    worker = null;
+    const dead = workers.slice();
+    workers.length = 0;
     workerUnavailable = false;
-    if (dead) {
-        dead.removeAllListeners();
-        await dead.terminate();
+    for (const state of dead) {
+        state.worker.removeAllListeners();
+        await state.worker.terminate();
     }
+}
+
+// Test-only: current pool size, so a test can assert the pool grew under a decode burst.
+export function _getWorkerCountForTest(): number {
+    return workers.length;
 }

@@ -9,6 +9,7 @@ declare module 'vscode' {
             readonly sharedFocusIndex: boolean;
             readonly gfxIndex: boolean;
             readonly localisationIndex: boolean;
+            readonly imageDecodeWorkers: number;
             readonly enableSupplyArea: boolean;
             readonly previewLocalisation: 'Brazilian Portuguese' | 'English' | 'French' | 'German' | 'Japanese' | 'Polish' | 'Russian' | 'Simplified Chinese' | 'Spanish';
             readonly inlayWindowGfxRoots: string[];
