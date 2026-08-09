@@ -26,7 +26,7 @@ jobs:
         tag="v${version}"
         echo "tag=$tag" >> "$GITHUB_OUTPUT"
         if git rev-parse "refs/tags/$tag" >/dev/null 2>&1; then
-          echo "Tag $tag already exists; skipping release."
+          echo "::warning::Tag $tag already exists, so nothing was built or published. Bump the version in package.json to release these changes."
           echo "should_release=false" >> "$GITHUB_OUTPUT"
         else
           echo "Tag $tag does not exist; will release."

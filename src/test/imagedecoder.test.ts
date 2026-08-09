@@ -192,4 +192,35 @@ describe("util/image/imagedecoder", () => {
 			}
 		});
 	});
+
+	describe("decodeImageToPng (unusable worker file)", () => {
+		before(() => {
+			// A missing entry file is reported on the worker's 'error' event, not by `new Worker`, so
+			// the spawn succeeds and the job is only rejected once the worker is already dead.
+			_setImageWorkerPathForTest(
+				path.resolve(__dirname, "no-such-image-worker.js"),
+			);
+		});
+
+		after(async () => {
+			await _terminateImageWorkerForTest();
+		});
+
+		it("falls back to the sync decode instead of failing the image", async () => {
+			const tga = makeTga();
+			const result = await decodeImageToPng(tga, "tga");
+			assert.ok(
+				result.pngBuffer.equals(decodeImageToPngSync(tga, "tga").pngBuffer),
+				"fallback PNG should equal the sync PNG",
+			);
+		});
+
+		it("keeps decoding after the pool has been given up on", async () => {
+			const dds = makeDds(4, 4);
+			const result = await decodeImageToPng(dds, "dds");
+			assert.strictEqual(result.width, 4);
+			assert.strictEqual(result.height, 4);
+			assertValidPng(result.pngBuffer, 4, 4);
+		});
+	});
 });
