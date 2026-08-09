@@ -12,6 +12,8 @@
     "hoi4modutilities.sharedFocusIndex.desc": "Build an index of shared focuses for cross-file lookups. Reloading is required after changing this.",
     "hoi4modutilities.gfxIndex.title": "GFX Index",
     "hoi4modutilities.gfxIndex.desc": "Build an index of GFX sprite definitions. Uses more memory. Reloading is required after changing this.",
+    "hoi4modutilities.imageDecodeWorkers.title": "Image Decode Workers",
+    "hoi4modutilities.imageDecodeWorkers.desc": "Maximum number of worker threads used to decode DDS/TGA images to PNG. Higher values render icon-heavy previews (focus trees) faster but use more CPU and memory. Reloading is required after changing this.",
     "hoi4modutilities.localisationIndex.title": "Localisation Index",
     "hoi4modutilities.localisationIndex.desc": "Build a localisation index to show translated text in previews. Uses more memory. Reloading is required after changing this.",
     "hoi4modutilities.installPath.title": "Install Path",
