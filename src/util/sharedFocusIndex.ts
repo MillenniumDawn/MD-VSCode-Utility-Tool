@@ -8,6 +8,7 @@ import {
 } from "./fileloader";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
+import { attachTaskWithErrorLogging } from "./promiseUtils";
 import { Logger } from "./logger";
 import { extractFocusIds } from "../previewdef/focustree/schema";
 import { parseHoi4File } from "../hoiformat/hoiparser";
@@ -49,15 +50,20 @@ export function registerSharedFocusIndex(): vscode.Disposable {
 				localize("sharedFocusIndex.building", "Building Shared Focus index..."),
 			task,
 		);
-		void task.then(() => {
-			vscode.window.showInformationMessage(
-				localize(
-					"sharedFocusIndex.builddone",
-					"Building Shared Focus index done.",
-				),
-			);
-			sendEvent("sharedFocusIndex", { size: estimatedSize[0].toString() });
-		});
+		attachTaskWithErrorLogging(
+			task,
+			() => {
+				vscode.window.showInformationMessage(
+					localize(
+						"sharedFocusIndex.builddone",
+						"Building Shared Focus index done.",
+					),
+				);
+				sendEvent("sharedFocusIndex", { size: estimatedSize[0].toString() });
+			},
+			"Building Shared Focus index failed.",
+			Logger.error,
+		);
 
 		disposables.push(
 			vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
@@ -249,17 +255,22 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 			),
 		task,
 	);
-	void task.then(() => {
-		vscode.window.showInformationMessage(
-			localize(
-				"sharedFocusIndex.workspace.builddone",
-				"Building workspace Focus index done.",
-			),
-		);
-		sendEvent("sharedFocusIndex.workspace", {
-			size: estimatedSize[0].toString(),
-		});
-	});
+	attachTaskWithErrorLogging(
+		task,
+		() => {
+			vscode.window.showInformationMessage(
+				localize(
+					"sharedFocusIndex.workspace.builddone",
+					"Building workspace Focus index done.",
+				),
+			);
+			sendEvent("sharedFocusIndex.workspace", {
+				size: estimatedSize[0].toString(),
+			});
+		},
+		"Building workspace Focus index failed.",
+		Logger.error,
+	);
 }
 
 function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
