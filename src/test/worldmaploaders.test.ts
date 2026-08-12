@@ -363,7 +363,9 @@ describe("previewdef/worldmap/loader missing files (0% → smoke)", () => {
 		const origJson = fileloader.readFileFromModOrHOI4AsJson;
 		const orig = fileloader.readFileFromModOrHOI4;
 		fileloader.readFileFromModOrHOI4AsJson = async (path: string) => {
-			if (path.includes("colors.txt")) {throw new Error("missing");}
+			if (path.includes("colors.txt")) {
+				throw new Error("missing");
+			}
 			// country_tags returns empty
 			return { _map: {} } as any;
 		};

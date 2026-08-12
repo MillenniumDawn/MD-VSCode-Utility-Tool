@@ -1,5 +1,8 @@
 import * as assert from "assert";
-import { findFileByFocusKey, registerSharedFocusIndex } from "../util/sharedFocusIndex";
+import {
+	findFileByFocusKey,
+	registerSharedFocusIndex,
+} from "../util/sharedFocusIndex";
 
 describe("util/sharedFocusIndex", () => {
 	it("findFileByFocusKey returns undefined for unknown key", () => {

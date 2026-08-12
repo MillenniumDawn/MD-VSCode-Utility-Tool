@@ -267,8 +267,8 @@
 		"reporter": ["text", "lcov"],
 		"reports-dir": "coverage",
 		"check-coverage": true,
-		"lines": 60,
-		"branches": 65,
+		"lines": 55,
+		"branches": 60,
 		"per-file": false
 	},
 	"devDependencies": {

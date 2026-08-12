@@ -116,7 +116,7 @@ describe("util/hoi4gui/gridboxcommon", () => {
 				st,
 				1,
 			);
-			assert.ok(html.includes('data-conn-from'));
+			assert.ok(html.includes("data-conn-from"));
 			assert.ok(st.toRawCss().includes("border"));
 		});
 
