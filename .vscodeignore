@@ -22,3 +22,8 @@ webviewsrc/**
 resource/**
 .github/**
 original/**
+coverage/**
+.nyc_output/**
+.opencode/**
+.pi-subagents/**
+.pi-agent/**
