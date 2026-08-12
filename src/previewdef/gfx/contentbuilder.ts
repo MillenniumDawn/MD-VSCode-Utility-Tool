@@ -3,7 +3,7 @@ import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { getSpriteTypes, SpriteType } from "../../hoiformat/spritetype";
 import { getImageByPath } from "../../util/image/imagecache";
 import { localize } from "../../util/i18n";
-import { html, htmlEscape, previewedFileUriScript } from "../../util/html";
+import { escapeAttr, html, htmlEscape, previewedFileUriScript } from "../../util/html";
 import { StyleTable } from "../../util/styletable";
 import { forceError } from "../../util/common";
 import { LoaderRenderResult } from "../updateablepreview";
@@ -91,17 +91,6 @@ async function renderSpriteTypes(
 	return (
 		await Promise.all(spriteTypes.map((st) => renderSpriteType(st, styleTable)))
 	).join("");
-}
-
-// Attribute-context escape for the sprite name in the id: unlike htmlEscape it leaves spaces as-is so
-// the filter's element.id.includes() keeps matching, while still neutralising a "-breakout from a
-// crafted mod name. The name is untrusted (comes from the parsed .gfx file).
-function escapeAttr(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/"/g, "&quot;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;");
 }
 
 async function renderSpriteType(

@@ -3,7 +3,7 @@ import { getSpriteByGfxName, Image, getImageByPath } from '../../util/image/imag
 import { localize, i18nTableAsScript } from '../../util/i18n';
 import { forceError, randomString } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
+import { escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
 import { MioLoader } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
@@ -257,7 +257,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
         start="${trait.token?.start}"
         end="${trait.token?.end}"
         ${file === trait.file ? '' : `file="${trait.file}"`}
-        title="${trait.id}${localisationIndex ? `\n${getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
+        title="${escapeAttr(trait.id)}${localisationIndex ? `\n${getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
             <div class="
                 ${styleTable.style('effect-host', () => `
                     text-align: center;
