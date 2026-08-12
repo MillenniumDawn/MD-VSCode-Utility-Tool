@@ -361,6 +361,9 @@ function getFocuses(hoiFocuses: HOIPartial<FocusDef>[], conditionExprs: Conditio
         if (focus !== null) {
             if (focus.id in focuses) {
                 const otherFocus = focuses[focus.id];
+                if (!otherFocus) {
+                    continue;
+                }
                 warnings.push({
                     text: localize('focustree.warnings.focusidconflict', "There're more than one focuses with ID {0} in file: {1}.", focus.id, filePath),
                     source: focus.id,
@@ -386,7 +389,11 @@ function getFocuses(hoiFocuses: HOIPartial<FocusDef>[], conditionExprs: Conditio
     // Build reverse map: prerequisite -> focuses that depend on it
     const allowBranchDependents = new Map<string, string[]>();
     for (const key in focuses) {
-        const prereqs = flatten(focuses[key].prerequisite).filter(p => p in focuses);
+        const focus = focuses[key];
+        if (!focus) {
+            continue;
+        }
+        const prereqs = flatten(focus.prerequisite).filter(p => p in focuses);
         for (const p of prereqs) {
             if (!allowBranchDependents.has(p)) { allowBranchDependents.set(p, []); }
             allowBranchDependents.get(p)!.push(key);
@@ -396,7 +403,7 @@ function getFocuses(hoiFocuses: HOIPartial<FocusDef>[], conditionExprs: Conditio
     // Seed queue with focuses that have allowBranch
     const abQueue: string[] = [];
     for (const key in focuses) {
-        if (focuses[key].hasAllowBranch) {
+        if (focuses[key]?.hasAllowBranch) {
             abQueue.push(key);
         }
     }
@@ -405,9 +412,12 @@ function getFocuses(hoiFocuses: HOIPartial<FocusDef>[], conditionExprs: Conditio
         const sourceKey = abQueue.shift()!;
         const source = focuses[sourceKey];
         const deps = allowBranchDependents.get(sourceKey);
-        if (!deps) { continue; }
+        if (!source || !deps) { continue; }
         for (const depKey of deps) {
             const dep = focuses[depKey];
+            if (!dep) {
+                continue;
+            }
             let changed = false;
             for (const ab of source.inAllowBranch) {
                 if (!dep.inAllowBranch.includes(ab)) {
@@ -492,7 +502,11 @@ function addSharedFocus(focuses: Record<string, Focus>, filePath: string, shared
 
     for (const key in sharedFocuses) {
         if (key in focuses) { continue; }
-        const prereqs = flatten(sharedFocuses[key].prerequisite).filter(p => p in sharedFocuses);
+        const focus = sharedFocuses[key];
+        if (!focus) {
+            continue;
+        }
+        const prereqs = flatten(focus.prerequisite).filter(p => p in sharedFocuses);
         if (prereqs.length === 0) { continue; }
         let unresolved = 0;
         for (const p of prereqs) {
@@ -507,8 +521,12 @@ function addSharedFocus(focuses: Record<string, Focus>, filePath: string, shared
 
     // BFS: start from the requested shared focus, propagate to dependents
     const queue: string[] = [sharedFocusId];
-    focuses[sharedFocusId] = sharedFocuses[sharedFocusId];
-    updateConditionExprsByFocus(sharedFocuses[sharedFocusId], conditionExprs);
+    const sharedFocus = sharedFocuses[sharedFocusId];
+    if (!sharedFocus) {
+        return;
+    }
+    focuses[sharedFocusId] = sharedFocus;
+    updateConditionExprsByFocus(sharedFocus, conditionExprs);
 
     while (queue.length > 0) {
         const added = queue.shift()!;
@@ -519,8 +537,14 @@ function addSharedFocus(focuses: Record<string, Focus>, filePath: string, shared
             unresolvedCount.set(dep, count);
             if (count <= 0 && !(dep in focuses)) {
                 const focus = sharedFocuses[dep];
+                if (!focus) {
+                    continue;
+                }
                 if (focus.id in focuses) {
                     const otherFocus = focuses[focus.id];
+                    if (!otherFocus) {
+                        continue;
+                    }
                     warnings.push({
                         text: localize('focustree.warnings.focusidconflict2', "There're more than one focuses with ID {0} in files: {1}, {2}.", focus.id, filePath, focus.file),
                         source: focus.id,

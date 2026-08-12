@@ -122,8 +122,9 @@ export class StatesLoader extends FolderLoader<StateLoaderResult, StateNoBoundin
 
         const filledStates: State[] = new Array(sortedStates.length);
         for (let i = badStateId + 1; i < sortedStates.length; i++) {
-            if (sortedStates[i]) {
-                const state = calculateBoundingBox(sortedStates[i], provinces, width, height, warnings);
+            const sortedState = sortedStates[i];
+            if (sortedState) {
+                const state = calculateBoundingBox(sortedState, provinces, width, height, warnings);
                 filledStates[i] = state;
 
                 if (!(state.category in stateCategories.result)) {
@@ -193,10 +194,11 @@ class StateCategoriesLoader extends FolderLoader<Record<string, StateCategory>, 
         const categories: Record<string, StateCategory> = {};
 
         fileResults.forEach(result => result.result.forEach(category => {
-            if (category.name in categories) {
+            const existingCategory = categories[category.name];
+            if (existingCategory) {
                 warnings.push({
                     source: [{ type: 'statecategory', name: category.name }],
-                    relatedFiles: [category.file, categories[category.name].file],
+                    relatedFiles: [category.file, existingCategory.file],
                     text: localize('worldmap.warnings.statecategoryconflict', "There're multiple state categories have name \"{0}\".", category.name),
                 });
             }

@@ -11,6 +11,7 @@
 		"sourceMap": true,
 		"rootDir": ".",
 		"strict": true,
+		"noUncheckedIndexedAccess": true,
 		"noFallthroughCasesInSwitch": true,
 		"noUnusedLocals": true,
 		"importHelpers": true,

@@ -24,6 +24,10 @@ describe('util/vsccommon', () => {
             assert.strictEqual(fileOrUriStringToUri('C:\\HOI"4')?.fsPath, 'C:\\HOI"4');
         });
 
+        it('returns undefined when the setting is absent', () => {
+            assert.strictEqual(fileOrUriStringToUri(undefined), undefined);
+        });
+
         it('returns undefined for a value that normalizes to nothing', () => {
             assert.strictEqual(fileOrUriStringToUri(''), undefined);
             assert.strictEqual(fileOrUriStringToUri('   '), undefined);

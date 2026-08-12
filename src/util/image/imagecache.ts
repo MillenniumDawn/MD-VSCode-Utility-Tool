@@ -134,7 +134,7 @@ async function spriteCacheExpiryToken(
 	key: string,
 	spritePromise: Promise<Sprite | undefined>,
 ): Promise<string> {
-	const [gfxFilePath] = key.split("?");
+	const [gfxFilePath = ""] = key.split("?");
 	const gfxToken = await hoiFileExpiryToken(gfxFilePath);
 	const sprite = await spritePromise;
 	if (sprite) {
@@ -144,7 +144,7 @@ async function spriteCacheExpiryToken(
 }
 
 function getSpriteByKey(key: string): Promise<Sprite | undefined> {
-	const [gfxFilePath, name] = key.split("?");
+	const [gfxFilePath = "", name = ""] = key.split("?");
 	return getSpriteByGfxNameImpl(name, gfxFilePath);
 }
 

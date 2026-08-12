@@ -27,18 +27,19 @@ async function loadDefinitions(definitionsFile: string, progressReporter: Progre
 }
 
 function convertRowToProvince(row: string[], _warnings: WorldMapWarning[]): ProvinceDefinition {
-    const r = parseInt(row[1]);
-    const g = parseInt(row[2]);
-    const b = parseInt(row[3]);
-    const type = row[4];
-    const continent = parseInt(row[7]);
+    const id = parseInt(row[0] ?? '0');
+    const r = parseInt(row[1] ?? '0');
+    const g = parseInt(row[2] ?? '0');
+    const b = parseInt(row[3] ?? '0');
+    const type = row[4] ?? '';
+    const continent = parseInt(row[7] ?? '0');
 
     return {
-        id: parseInt(row[0]),
+        id,
         color: (r << 16) | (g << 8) | b,
         type,
-        coastal: row[5].trim().toLowerCase() === 'true',
-        terrain: row[6],
+        coastal: (row[5] ?? '').trim().toLowerCase() === 'true',
+        terrain: row[6] ?? '',
         continent,
     };
 }

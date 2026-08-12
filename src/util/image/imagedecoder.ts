@@ -221,7 +221,11 @@ function pickOrGrowWorker(): WorkerState {
 	if (workers.length === 0) {
 		throw new Error("no image decode worker available");
 	}
-	let best = workers[0];
+	const firstWorker = workers[0];
+	if (firstWorker === undefined) {
+		throw new Error("no image decode worker available");
+	}
+	let best = firstWorker;
 	let allBusy = true;
 	for (const state of workers) {
 		if (state.inFlight < best.inFlight) {

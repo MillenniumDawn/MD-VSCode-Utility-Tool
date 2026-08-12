@@ -210,7 +210,7 @@ function convertEvent<T extends HOIEventType>(eventDef: HOIPartial<EventDef>, fi
 
     const id = eventDef.id;
     const title = eventDef.title ?? (id + '.t');
-    const namespace = id.split('.')[0];
+    const namespace = id.split('.')[0] ?? '';
     const picture = eventDef.picture;
 
     const scopeType = eventTypeToScopeType(type);

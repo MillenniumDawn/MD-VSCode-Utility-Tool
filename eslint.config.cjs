@@ -16,10 +16,10 @@ module.exports = [
 			sourceType: "module",
 		},
 		rules: {
-			curly: "warn",
-			eqeqeq: "warn",
-			"no-throw-literal": "warn",
-			semi: "warn",
+			curly: "error",
+			eqeqeq: "error",
+			"no-throw-literal": "error",
+			semi: "error",
 			"no-duplicate-imports": "error",
 			"@typescript-eslint/no-unused-vars": [
 				"error",
@@ -41,6 +41,7 @@ module.exports = [
 		},
 		rules: {
 			"@typescript-eslint/no-floating-promises": "error",
+			"@typescript-eslint/no-explicit-any": "warn",
 		},
 	},
 ];

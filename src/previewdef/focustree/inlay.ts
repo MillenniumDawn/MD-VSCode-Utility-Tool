@@ -222,11 +222,15 @@ export async function resolveInlayGuiWindows(inlays: FocusTreeInlay[]): Promise<
             const windows = collectContainerWindows(guiFileData);
             for (const name of Object.keys(windows)) {
                 if (unresolved.has(name) && !(name in windowByName)) {
-                    windowByName[name] = { file: guiFile, window: windows[name] };
+                    const window = windows[name];
+                    if (window !== undefined) {
+                        windowByName[name] = { file: guiFile, window };
+                    }
                     unresolved.delete(name);
                 }
             }
-        } catch (e) {
+        } catch {
+            continue;
         }
     }
 
@@ -327,7 +331,8 @@ export async function resolveInlayGfxFiles(inlays: FocusTreeInlay[]): Promise<In
                     candidateFiles.push(`${root.replace(/\\+/g, "/")}/${file}`.replace(/\/+/g, "/"));
                 }
             }
-        } catch (e) {
+        } catch {
+            continue;
         }
     }
     candidateFiles.push(...await listGuiGfxFiles());
@@ -344,7 +349,8 @@ export async function resolveInlayGfxFiles(inlays: FocusTreeInlay[]): Promise<In
                     unresolved.delete(spriteType.name);
                 }
             }
-        } catch (e) {
+        } catch {
+            continue;
         }
     }
 

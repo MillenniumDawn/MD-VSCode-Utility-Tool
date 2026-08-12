@@ -36,12 +36,13 @@ export class ResourceDefinitionLoader extends FolderLoader<Resource[], Resource[
         const warnings = mergeInLoadResult(fileResults, 'warnings');
 
         for (const resource of results) {
-            if (resource.name in resourceMap) {
+            const existingResource = resourceMap[resource.name];
+            if (existingResource) {
                 warnings.push({
                     source: [],
                     text: localize('worldmap.warnings.resourcedefinedtwice', 'Resource {0} is defined in two files: {1}, {2}.',
-                        resource.name, resource.file, resourceMap[resource.name].file),
-                    relatedFiles: [resource.file, resourceMap[resource.name].file],
+                        resource.name, resource.file, existingResource.file),
+                    relatedFiles: [resource.file, existingResource.file],
                 });
             } else {
                 resourceMap[resource.name] = resource;

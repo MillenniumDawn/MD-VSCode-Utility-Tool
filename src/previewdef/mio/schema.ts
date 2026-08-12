@@ -146,17 +146,22 @@ export function getMiosFromFile(node: Node, dependentMios: Mio[], filePath: stri
     const result: Mio[] = [];
 
     for (const key in file._map) {
-        const mio = getMio(file._map[key], dependencies, filePath);
+        const mioDefItem = file._map[key];
+        if (!mioDefItem) {
+            continue;
+        }
+        const mio = getMio(mioDefItem, dependencies, filePath);
         dependencies.push(mio);
-        if (!file._map[key]._value.include) {
+        if (!mioDefItem._value.include) {
             result.push(mio);
         }
     }
 
     // Run twice in case dependent mio is in current file.
     for (const key in file._map) {
-        if (file._map[key]._value.include) {
-            const mio = getMio(file._map[key], dependencies, filePath);
+        const mioDefItem = file._map[key];
+        if (mioDefItem?._value.include) {
+            const mio = getMio(mioDefItem, dependencies, filePath);
             result.push(mio);
         }
     }
@@ -197,10 +202,11 @@ function getMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }, depend
     for (const traitDef of [...mioDef.trait, ...mioDef.add_trait]) {
         const trait = getTrait(traitDef, filePath, warnings, conditionExprs);
         trait.sourceMioId = id;
-        if (traits[trait.id]) {
+        const existingTrait = traits[trait.id];
+        if (existingTrait) {
             warnings.push({
                 source: id,
-                text: localize('miopreview.warnings.traitConflict', 'There\'re more than one trait with ID {0} in military industrial organization {1} in files: {2}, {3}.', trait.id, id, traits[trait.id].file, filePath),
+                text: localize('miopreview.warnings.traitConflict', 'There\'re more than one trait with ID {0} in military industrial organization {1} in files: {2}, {3}.', trait.id, id, existingTrait.file, filePath),
             });
         }
         traits[trait.id] = trait;

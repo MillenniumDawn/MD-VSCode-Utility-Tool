@@ -68,8 +68,9 @@ export class SupplyAreasLoader extends FolderLoader<SupplyAreasLoaderResult, Sup
 
         const filledSupplyAreas: SupplyArea[] = new Array(sortedSupplyAreas.length);
         for (let i = badSupplyAreasCount; i < sortedSupplyAreas.length; i++) {
-            if (sortedSupplyAreas[i]) {
-                filledSupplyAreas[i] = calculateBoundingBox(sortedSupplyAreas[i], states, width, warnings);
+            const sortedArea = sortedSupplyAreas[i];
+            if (sortedArea) {
+                filledSupplyAreas[i] = calculateBoundingBox(sortedArea, states, width, warnings);
             }
         }
 
@@ -212,7 +213,7 @@ function validateStatesInSupplyAreas(
                         ...[supplyArea.id, stateToSupplyArea[s]].map<WorldMapWarningSource>(id => ({ type: 'supplyarea', id })),
                         { type: 'state', id: s }
                     ],
-                    relatedFiles: [supplyArea.file, supplyAreas[stateToSupplyArea[s]]!.file, state.file],
+                    relatedFiles: [supplyArea.file, supplyAreas[stateToSupplyArea[s]]?.file ?? '', state.file],
                     text: localize('worldmap.warnings.stateinmultiplesupplyareas', 'State {0} exists in multiple supply areas: {1}, {2}.', s, stateToSupplyArea[s], supplyArea.id),
                 });
             } else {
@@ -253,8 +254,12 @@ function checkStatesContiguous(states: State[], provinces: (Province | undefined
     }
     
     const accessedStates: Record<number, boolean> = {};
-    const stack: State[] = [states[0]];
-    accessedStates[stack[0].id] = true;
+    const firstState = states[0];
+    if (!firstState) {
+        return undefined;
+    }
+    const stack: State[] = [firstState];
+    accessedStates[firstState.id] = true;
 
     while (stack.length) {
         const currentState = stack.pop()!;
@@ -271,7 +276,7 @@ function checkStatesContiguous(states: State[], provinces: (Province | undefined
     }
 
     const inAccessedState = states.find(state => !accessedStates[state.id]);
-    return inAccessedState === undefined ? undefined : [inAccessedState.id, parseInt(Object.keys(accessedStates)[0])];
+    return inAccessedState === undefined ? undefined : [inAccessedState.id, parseInt(Object.keys(accessedStates)[0] ?? '0')];
 }
 
 function statesAreAdjacent(stateA: State, stateB: State, provinces: (Province | undefined | null)[]): boolean {

@@ -1,22 +1,35 @@
-import { __table } from '../../i18n/en';
+import { __table } from "../../i18n/en";
 
 let table: Record<string, string> = {};
 
 try {
-    table = (window as any)['__i18ntable'];
-    if (!table) {
-        console.error('Table not filled.');
-        table = {};
-    }
-} catch(e) {
-    console.error(e);
+	table = (window as any)["__i18ntable"];
+	if (!table) {
+		console.error("Table not filled.");
+		table = {};
+	}
+} catch (e) {
+	console.error(e);
 }
 
-export function feLocalize(key: string, message: string, ...args: any[]): string {
-    if (key in table) {
-        message = table[key];
-    }
+export function feLocalize(
+	key: string,
+	message: string,
+	...args: any[]
+): string {
+	if (key in table) {
+		const localized = table[key];
+		if (localized !== undefined) {
+			message = localized;
+		}
+	}
 
-    const regex = new RegExp('\\{(' + args.map((_, i) => i.toString()).join('|') + ')\\}', 'g');
-    return message.replace(regex, (_, group1) => args[parseInt(group1)]?.toString());
+	const regex = new RegExp(
+		"\\{(" + args.map((_, i) => i.toString()).join("|") + ")\\}",
+		"g",
+	);
+	return message.replace(
+		regex,
+		(_, group1) => args[parseInt(group1)]?.toString() ?? "",
+	);
 }

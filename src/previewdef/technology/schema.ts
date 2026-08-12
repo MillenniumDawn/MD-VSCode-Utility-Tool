@@ -112,7 +112,7 @@ function getTechnologiesByFolder(allTechnologies: Record<string, Technology>): R
                 groupedTechnologies[folder] = [];
             }
 
-            groupedTechnologies[folder].push(tech);
+            groupedTechnologies[folder]?.push(tech);
         }
     }
 
@@ -156,7 +156,11 @@ function getTechnologiesByTree(technologiesInOneFolder: Technology[]): Record<st
     }
 
     for (const rootTechId in trees) {
-        trees[rootTechId].push(techIdToTech[rootTechId]);
+        const tree = trees[rootTechId];
+        const rootTechnology = techIdToTech[rootTechId];
+        if (tree && rootTechnology) {
+            tree.push(rootTechnology);
+        }
     }
 
     return trees;
@@ -207,6 +211,9 @@ function getTechnologies(technologies: HOIPartial<TechnologiesDef>['_map']): Rec
         const id = _key;
         const technology = _value;
         const techObject = result[id];
+        if (!techObject) {
+            continue;
+        }
 
         for (const subTechnologyName of technology.sub_technologies._values) {
             const subTechnology = result[subTechnologyName];

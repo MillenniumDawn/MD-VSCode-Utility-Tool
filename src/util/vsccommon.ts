@@ -103,7 +103,7 @@ export function basename(uri: vscode.Uri, ext?: string): string {
     return path.basename(uri.path, ext);
 }
 
-export function fileOrUriStringToUri(path: string): vscode.Uri | undefined {
+export function fileOrUriStringToUri(path: string | undefined): vscode.Uri | undefined {
     const normalizedPath = normalizeFileOrUriString(path);
 
     if (normalizedPath === '') {
@@ -125,8 +125,8 @@ export function fileOrUriStringToUri(path: string): vscode.Uri | undefined {
     }
 }
 
-function normalizeFileOrUriString(path: string): string {
-    const trimmedPath = path.trim();
+function normalizeFileOrUriString(path: string | undefined): string {
+    const trimmedPath = (path ?? '').trim();
     if (trimmedPath.length >= 2) {
         const startsWithDoubleQuote = trimmedPath.startsWith('"') && trimmedPath.endsWith('"');
         const startsWithSingleQuote = trimmedPath.startsWith("'") && trimmedPath.endsWith("'");

@@ -61,7 +61,7 @@ function findRiverPointsList(riversImage: BMP): River[] {
         y >= 0;
         y--, sy += riversImage.bytesPerRow, dy -= riversImage.width) {
         for (let x = 0, sx = sy, dx = dy; x < riversImage.width; x++, sx++, dx++) {
-            const color = riversImage.data[sx];
+            const color = riversImage.data[sx] ?? 255;
             if (color > 11) {
                 continue;
             }
@@ -86,22 +86,23 @@ function findRiverPoints(startX: number, startY: number, riversImage: BMP): Rive
         const { x, y } = point;
         const si = (riversImage.height - 1 - y) * riversImage.bytesPerRow + x;
         const di = y * riversImage.width + x;
-        colors[di] = riversImage.data[si];
+        const color = riversImage.data[si] ?? 255;
+        colors[di] = color;
         riversImage.data[si] = 255;
         let adjecents = 0;
-        if (x > 0 && riversImage.data[si - 1] <= 11) {
+        if (x > 0 && (riversImage.data[si - 1] ?? 255) <= 11) {
             stack.push({ x: x - 1, y });
             adjecents++;
         }
-        if (x < riversImage.width - 1 && riversImage.data[si + 1] <= 11) {
+        if (x < riversImage.width - 1 && (riversImage.data[si + 1] ?? 255) <= 11) {
             stack.push({ x: x + 1, y });
             adjecents++;
         }
-        if (y > 0 && riversImage.data[si + riversImage.bytesPerRow] <= 11) {
+        if (y > 0 && (riversImage.data[si + riversImage.bytesPerRow] ?? 255) <= 11) {
             stack.push({ x, y: y - 1 });
             adjecents++;
         }
-        if (y < riversImage.height - 1 && riversImage.data[si - riversImage.bytesPerRow] <= 11) {
+        if (y < riversImage.height - 1 && (riversImage.data[si - riversImage.bytesPerRow] ?? 255) <= 11) {
             stack.push({ x, y: y + 1 });
             adjecents++;
         }
@@ -115,6 +116,9 @@ function findRiverPoints(startX: number, startY: number, riversImage: BMP): Rive
     const convertedColors: Record<number, number> = {};
     for (const key in colors) {
         const value = colors[key];
+        if (value === undefined) {
+            continue;
+        }
         const di = parseInt(key, 10);
         const x = di % riversImage.width;
         const y = Math.floor(di / riversImage.width);
@@ -137,7 +141,10 @@ function findRiverPoints(startX: number, startY: number, riversImage: BMP): Rive
 
 function validateRivers(file: string, rivers: River[], warnings: WorldMapWarning[]) {
     for (let i = 0; i < rivers.length; i++) {
-        validateRiver(file, i, rivers[i], warnings);
+        const river = rivers[i];
+        if (river) {
+            validateRiver(file, i, river, warnings);
+        }
     }
 }
 
@@ -155,7 +162,7 @@ function validateRiver(file: string, index: number, river: River, warning: World
         warning.push({
             relatedFiles: [file],
             text: localize('worldmap.warning.rivernosource', 'River has no source. Its end points are: {0}.', river.ends.map(e => riverToString(river, e)).join(', ')),
-            source: [{ type: 'river', name: riverToString(river, river.ends[0]), index: index }]
+            source: [{ type: 'river', name: riverToString(river, river.ends[0] ?? 0), index: index }]
         });
     }
 
@@ -247,7 +254,7 @@ function validateJoiningRiver(file: string, index: number, river: River, end: nu
 
 function riverToString(river: River, point?: number) {
     if (point === undefined) {
-        point = parseInt(Object.keys(river.colors)[0], 10);
+        point = parseInt(Object.keys(river.colors)[0] ?? '0', 10);
     }
 
     const x = point % river.boundingBox.w + river.boundingBox.x;
