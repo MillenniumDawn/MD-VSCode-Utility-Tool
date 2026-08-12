@@ -90,4 +90,52 @@ describe('previewdef/technology renderTechnologyFile in-place update', () => {
         const rendered = await renderTechnologyFile(throwing, uri, webview);
         assert.strictEqual(typeof rendered, 'string');
     });
+
+    it('renders a technology node inside the folder', async () => {
+        const loader: any = {
+            load: async () => ({
+                result: {
+                    technologyTrees: [
+                        {
+                            startTechnology: 'start',
+                            folder: 'infantry',
+                            technologies: [
+                                {
+                                    id: 'test_tech',
+                                    name: 'Test Tech',
+                                    x: 0,
+                                    y: 0,
+                                    cost: 10,
+                                    icon: 'GFX_test',
+                                    token: { start: 0, end: 5 },
+                                },
+                            ],
+                        },
+                    ],
+                    guiFiles: [
+                        {
+                            file: 'countrytechtreeview.gui',
+                            data: {
+                                guitypes: [
+                                    {
+                                        containerwindowtype: [
+                                            { name: 'countrytechtreeview', containerwindowtype: [] },
+                                        ],
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                    gfxFiles: [],
+                    equipmentArchetypes: {},
+                },
+            }),
+        };
+        const rendered = (await renderTechnologyFile(loader, uri, webview)) as LoaderRenderResult;
+        assert.ok(typeof rendered === 'object');
+        assert.ok(rendered.update);
+        const data = rendered.update!.data as { contentHtml: string; folders: string[] };
+        assert.ok(data.contentHtml.length > 0);
+        assert.ok(data.folders.includes('infantry'));
+    });
 });

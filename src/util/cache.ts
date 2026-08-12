@@ -44,7 +44,11 @@ export class Cache<V> {
 				() => this.tryClean(),
 				options.life / 5,
 			);
-			if (this._intervalToken && typeof (this._intervalToken as unknown as { unref?: () => void }).unref === 'function') {
+			if (
+				this._intervalToken &&
+				typeof (this._intervalToken as unknown as { unref?: () => void })
+					.unref === "function"
+			) {
 				(this._intervalToken as unknown as { unref: () => void }).unref();
 			}
 		}

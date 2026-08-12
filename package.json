@@ -265,7 +265,11 @@
 		"include": ["out-test/src/**/*.js"],
 		"exclude": ["out-test/src/test/**", "out-test-webview/**"],
 		"reporter": ["text", "lcov"],
-		"reports-dir": "coverage"
+		"reports-dir": "coverage",
+		"check-coverage": true,
+		"lines": 60,
+		"branches": 65,
+		"per-file": false
 	},
 	"devDependencies": {
 		"@types/js-yaml": "^4.0.9",
