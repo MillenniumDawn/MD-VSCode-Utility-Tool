@@ -13,6 +13,7 @@ import {
 import { localize } from "./i18n";
 import { uniq } from "lodash";
 import { sendEvent } from "./telemetry";
+import { attachTaskWithErrorLogging } from "./promiseUtils";
 import { Logger } from "./logger";
 import {
 	loadCacheManifest,
@@ -47,12 +48,17 @@ export function registerGfxIndex(): vscode.Disposable {
 				localize("gfxindex.building", "Building GFX index..."),
 			task,
 		);
-		void task.then(() => {
-			vscode.window.showInformationMessage(
-				localize("gfxindex.builddone", "Building GFX index done."),
-			);
-			sendEvent("gfxIndex", { size: estimatedSize[0].toString() });
-		});
+		attachTaskWithErrorLogging(
+			task,
+			() => {
+				vscode.window.showInformationMessage(
+					localize("gfxindex.builddone", "Building GFX index done."),
+				);
+				sendEvent("gfxIndex", { size: estimatedSize[0].toString() });
+			},
+			"Building GFX index failed.",
+			Logger.error,
+		);
 		disposables.push(
 			vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
 		);
@@ -256,15 +262,20 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 			),
 		task,
 	);
-	void task.then(() => {
-		vscode.window.showInformationMessage(
-			localize(
-				"gfxindex.workspace.builddone",
-				"Building workspace GFX index done.",
-			),
-		);
-		sendEvent("gfxIndex.workspace", { size: estimatedSize[0].toString() });
-	});
+	attachTaskWithErrorLogging(
+		task,
+		() => {
+			vscode.window.showInformationMessage(
+				localize(
+					"gfxindex.workspace.builddone",
+					"Building workspace GFX index done.",
+				),
+			);
+			sendEvent("gfxIndex.workspace", { size: estimatedSize[0].toString() });
+		},
+		"Building workspace GFX index failed.",
+		Logger.error,
+	);
 }
 
 function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {

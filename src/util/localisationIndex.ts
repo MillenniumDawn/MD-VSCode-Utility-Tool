@@ -9,6 +9,7 @@ import {
 } from "./fileloader";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
+import { attachTaskWithErrorLogging } from "./promiseUtils";
 import { Logger } from "./logger";
 import { ConfigurationKey } from "../constants";
 import {
@@ -75,15 +76,20 @@ export function registerLocalisationIndex(): vscode.Disposable {
 				),
 			task,
 		);
-		void task.then(() => {
-			vscode.window.showInformationMessage(
-				localize(
-					"localisationIndex.builddone",
-					"Building Localisation index done.",
-				),
-			);
-			sendEvent("localisationIndex", { size: estimatedSize[0].toString() });
-		});
+		attachTaskWithErrorLogging(
+			task,
+			() => {
+				vscode.window.showInformationMessage(
+					localize(
+						"localisationIndex.builddone",
+						"Building Localisation index done.",
+					),
+				);
+				sendEvent("localisationIndex", { size: estimatedSize[0].toString() });
+			},
+			"Building Localisation index failed.",
+			Logger.error,
+		);
 		disposables.push(
 			vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
 		);
@@ -411,17 +417,22 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 			),
 		task,
 	);
-	void task.then(() => {
-		vscode.window.showInformationMessage(
-			localize(
-				"localisationIndex.workspace.builddone",
-				"Building workspace Localisation index done.",
-			),
-		);
-		sendEvent("localisationIndex.workspace", {
-			size: estimatedSize[0].toString(),
-		});
-	});
+	attachTaskWithErrorLogging(
+		task,
+		() => {
+			vscode.window.showInformationMessage(
+				localize(
+					"localisationIndex.workspace.builddone",
+					"Building workspace Localisation index done.",
+				),
+			);
+			sendEvent("localisationIndex.workspace", {
+				size: estimatedSize[0].toString(),
+			});
+		},
+		"Building workspace Localisation index failed.",
+		Logger.error,
+	);
 }
 
 function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
