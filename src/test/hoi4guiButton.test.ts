@@ -7,7 +7,10 @@ function st() {
 	return new StyleTable();
 }
 function parent() {
-	return { size: { width: 1920, height: 1080 }, orientation: "upper_left" as const };
+	return {
+		size: { width: 1920, height: 1080 },
+		orientation: "upper_left" as const,
+	};
 }
 
 describe("util/hoi4gui/button", () => {

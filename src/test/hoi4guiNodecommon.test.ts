@@ -1,5 +1,9 @@
 import * as assert from "assert";
-import { renderSprite, renderBackground, renderCorneredTileSprite } from "../util/hoi4gui/nodecommon";
+import {
+	renderSprite,
+	renderBackground,
+	renderCorneredTileSprite,
+} from "../util/hoi4gui/nodecommon";
 import { StyleTable } from "../util/styletable";
 import { CorneredTileSprite } from "../util/image/sprite";
 
@@ -47,14 +51,22 @@ describe("util/hoi4gui/nodecommon", () => {
 				width: 30,
 				height: 30,
 				borderSize: { x: 5, y: 5 },
-				getTiles: () => Array(9).fill({ uri: "file:///tile.png", width: 10, height: 10 }),
+				getTiles: () =>
+					Array(9).fill({ uri: "file:///tile.png", width: 10, height: 10 }),
 				frames: [{ uri: "file:///corner.png", width: 30, height: 30 }],
 			};
 			// Make instanceof check pass by setting prototype
 			Object.setPrototypeOf(tileSprite, CorneredTileSprite.prototype);
-			const html = renderSprite({ x: 0, y: 0 }, { width: 30, height: 30 }, tileSprite, 0, 1, {
-				styleTable: table,
-			});
+			const html = renderSprite(
+				{ x: 0, y: 0 },
+				{ width: 30, height: 30 },
+				tileSprite,
+				0,
+				1,
+				{
+					styleTable: table,
+				},
+			);
 			assert.ok(html.includes("corneredtilesprite"));
 		});
 
@@ -81,12 +93,19 @@ describe("util/hoi4gui/nodecommon", () => {
 				width: 30,
 				height: 30,
 				borderSize: { x: 5, y: 5 },
-				getTiles: () => Array(9).fill({ uri: "file:///tile.png", width: 10, height: 10 }),
+				getTiles: () =>
+					Array(9).fill({ uri: "file:///tile.png", width: 10, height: 10 }),
 			};
 			Object.setPrototypeOf(sprite, CorneredTileSprite.prototype);
-			const html = renderCorneredTileSprite({ x: 0, y: 0 }, { width: 30, height: 30 }, sprite, 0, {
-				styleTable: table,
-			});
+			const html = renderCorneredTileSprite(
+				{ x: 0, y: 0 },
+				{ width: 30, height: 30 },
+				sprite,
+				0,
+				{
+					styleTable: table,
+				},
+			);
 			const divs = (html.match(/<div/g) || []).length;
 			assert.ok(divs >= 10); // outer + 9 tiles
 		});
@@ -98,19 +117,30 @@ describe("util/hoi4gui/nodecommon", () => {
 				width: 10,
 				height: 10,
 				borderSize: { x: 10, y: 10 },
-				getTiles: () => Array(9).fill({ uri: "file:///tile.png", width: 5, height: 5 }),
+				getTiles: () =>
+					Array(9).fill({ uri: "file:///tile.png", width: 5, height: 5 }),
 			};
 			Object.setPrototypeOf(sprite, CorneredTileSprite.prototype);
-			const html = renderCorneredTileSprite({ x: 0, y: 0 }, { width: 10, height: 10 }, sprite, 0, {
-				styleTable: table,
-			});
+			const html = renderCorneredTileSprite(
+				{ x: 0, y: 0 },
+				{ width: 10, height: 10 },
+				sprite,
+				0,
+				{
+					styleTable: table,
+				},
+			);
 			assert.ok(html.length > 0);
 		});
 	});
 
 	describe("renderBackground", () => {
 		it("returns empty when background undefined", async () => {
-			const html = await renderBackground(undefined, { size: { width: 100, height: 100 }, orientation: "upper_left" }, { styleTable: st() });
+			const html = await renderBackground(
+				undefined,
+				{ size: { width: 100, height: 100 }, orientation: "upper_left" },
+				{ styleTable: st() },
+			);
 			assert.strictEqual(html, "");
 		});
 

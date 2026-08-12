@@ -74,14 +74,17 @@ describe("previewdef/worldmap/loader railway", () => {
 
 describe("previewdef/worldmap/loader resource", () => {
 	it("handles empty resource file", async () => {
-		await withMockedJson(async () => ({ _map: {} }) as any, async () => {
-			const { ResourceDefinitionLoader } = await import(
-				"../previewdef/worldmap/loader/resource"
-			);
-			const loader = new ResourceDefinitionLoader();
-			const result = await loader.load(new LoaderSession(false));
-			assert.ok(result);
-		});
+		await withMockedJson(
+			async () => ({ _map: {} }) as any,
+			async () => {
+				const { ResourceDefinitionLoader } = await import(
+					"../previewdef/worldmap/loader/resource"
+				);
+				const loader = new ResourceDefinitionLoader();
+				const result = await loader.load(new LoaderSession(false));
+				assert.ok(result);
+			},
+		);
 	});
 });
 
@@ -96,21 +99,22 @@ describe("previewdef/worldmap/loader strategicregion", () => {
 
 describe("previewdef/worldmap/loader supplyarea", () => {
 	it("module loads and exports SupplyAreasLoader", async () => {
-		const mod: any = await import(
-			"../previewdef/worldmap/loader/supplyarea"
-		);
+		const mod: any = await import("../previewdef/worldmap/loader/supplyarea");
 		assert.ok(mod.SupplyAreasLoader);
 	});
 });
 
 describe("previewdef/worldmap/loader states additional", () => {
 	it("StateLoader handles malformed state via file mock", async () => {
-		await withMockedJson(async () => ({ _map: {} }) as any, async () => {
-			// Just verify module loads and loader can be instantiated with mocks
-			const mod: any = await import("../previewdef/worldmap/loader/states");
-			assert.ok(mod.StatesLoader);
-			assert.ok(mod);
-		});
+		await withMockedJson(
+			async () => ({ _map: {} }) as any,
+			async () => {
+				// Just verify module loads and loader can be instantiated with mocks
+				const mod: any = await import("../previewdef/worldmap/loader/states");
+				assert.ok(mod.StatesLoader);
+				assert.ok(mod);
+			},
+		);
 	});
 });
 

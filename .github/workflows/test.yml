@@ -1,7 +1,7 @@
 on:
   pull_request:
     branches:
-      - '*'
+      - "*"
 
 name: Test
 
@@ -13,8 +13,8 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 24
+          cache: "npm"
       - name: Install dependencies
         run: npm ci
       - name: Lint
@@ -34,7 +34,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: md-vscode-utility-tool.vsix
-          path: '*.vsix'
+          path: "*.vsix"
           retention-days: 5
 
   integration:
@@ -43,8 +43,8 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 24
+          cache: "npm"
       - name: Install dependencies
         run: npm ci
       - name: Build extension

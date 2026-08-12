@@ -7,7 +7,10 @@ function st() {
 	return new StyleTable();
 }
 function parent() {
-	return { size: { width: 1920, height: 1080 }, orientation: "upper_left" as const };
+	return {
+		size: { width: 1920, height: 1080 },
+		orientation: "upper_left" as const,
+	};
 }
 
 describe("util/hoi4gui/instanttextbox", () => {
@@ -20,7 +23,9 @@ describe("util/hoi4gui/instanttextbox", () => {
 			text: "Hello",
 			_token: { start: 0, end: 5 },
 		};
-		const html = await renderInstantTextBox(tb, parent(), { styleTable: table });
+		const html = await renderInstantTextBox(tb, parent(), {
+			styleTable: table,
+		});
 		assert.ok(html.includes('start="0"'));
 		assert.ok(table.toRawCss().includes("left: 10px"));
 		assert.ok(table.toRawCss().includes("width: 100px"));
