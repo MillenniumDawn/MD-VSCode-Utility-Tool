@@ -1,3 +1,9 @@
+## Unreleased
+
+  Cleanup:
+
+- [ Build ] Enabled TypeScript's `noUncheckedIndexedAccess` and made the `curly`, `eqeqeq`, `no-throw-literal`, and `semi` ESLint rules errors. Indexed access across the extension and webviews now handles missing values explicitly, while `any` usage is reported as a warning.
+
 v1.1.17
 
   Functionality:
