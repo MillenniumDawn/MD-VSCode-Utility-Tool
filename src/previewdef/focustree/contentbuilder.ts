@@ -4,7 +4,7 @@ import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconR
 import { localize, i18nTableAsScript } from '../../util/i18n';
 import { forceError, randomString, mapLimit } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
+import { escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { GridBoxType, IconType, ButtonType } from '../../hoiformat/gui';
 import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
@@ -638,7 +638,7 @@ async function renderFocus(
     start="${focus.token?.start}"
     end="${focus.token?.end}"
     ${file === focus.file ? '' : `file="${focus.file}"`}
-    title="${focus.id}\n({{position}})">
+    title="${escapeAttr(focus.id)}\n({{position}})">
         <div
         class="{{iconClass}} ${styleTable.style('focus-icon-layer', () => `
             position: absolute;

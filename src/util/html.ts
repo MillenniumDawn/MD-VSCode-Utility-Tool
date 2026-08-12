@@ -168,3 +168,15 @@ export function htmlEscape(unsafe: string): string {
          .replace(/\n/g, "&#10;")
          .replace(/ /g, "&nbsp;");
 }
+
+// Attribute-context escape for mod-supplied identifiers in preview HTML. Unlike
+// htmlEscape it leaves spaces intact so in-page filter / id matching keeps
+// working, while still neutralising a "-breakout from a crafted identifier.
+// Centralised here so every contentbuilder shares the same escaping.
+export function escapeAttr(value: string): string {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
