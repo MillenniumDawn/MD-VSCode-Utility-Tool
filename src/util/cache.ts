@@ -44,6 +44,9 @@ export class Cache<V> {
 				() => this.tryClean(),
 				options.life / 5,
 			);
+			if (this._intervalToken && typeof (this._intervalToken as unknown as { unref?: () => void }).unref === 'function') {
+				(this._intervalToken as unknown as { unref: () => void }).unref();
+			}
 		}
 		if (!options.expireWhenChange) {
 			options.expireWhenChange = () => undefined;

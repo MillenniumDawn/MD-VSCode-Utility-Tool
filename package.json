@@ -251,13 +251,21 @@
 		"watch": "tsc -watch -p ./",
 		"compile-test-webview": "tsc -p ./tsconfig.webview.test.json",
 		"pretest": "tsc -p ./tsconfig.test.json & tsc -p ./tsconfig.webview.test.json & wait",
-		"test": "mocha --exit --require ./out-test/src/test/_vscode_stub.js './out-test/src/test/**/*.test.js' './out-test-webview/src/test/webview/**/*.test.js'",
+		"test": "mocha --require ./out-test/src/test/_vscode_stub.js './out-test/src/test/**/*.test.js' './out-test-webview/src/test/webview/**/*.test.js' --exclude './out-test/src/test/integration/**'",
+		"test:coverage": "c8 --reporter=text --reporter=lcov --reports-dir=coverage mocha --require ./out-test/src/test/_vscode_stub.js './out-test/src/test/**/*.test.js' './out-test-webview/src/test/webview/**/*.test.js' --exclude './out-test/src/test/integration/**'",
+		"test:integration": "node ./out-test/src/test/integration/runTest.js",
 		"clean": "rimraf dist out static",
 		"geni18n": "npm run compile-ts && node scripts/genzhi18n.js",
 		"package": "vsce package",
 		"package:patch": "npm version patch --no-git-tag-version && vsce package",
 		"package:minor": "npm version minor --no-git-tag-version && vsce package",
 		"package:major": "npm version major --no-git-tag-version && vsce package"
+	},
+	"c8": {
+		"include": ["out-test/src/**/*.js"],
+		"exclude": ["out-test/src/test/**", "out-test-webview/**"],
+		"reporter": ["text", "lcov"],
+		"reports-dir": "coverage"
 	},
 	"devDependencies": {
 		"@types/js-yaml": "^4.0.9",
@@ -269,7 +277,9 @@
 		"@types/vscode": "~1.74.0",
 		"@typescript-eslint/eslint-plugin": "^8.62.1",
 		"@typescript-eslint/parser": "^8.62.1",
+		"@vscode/test-electron": "^2.5.0",
 		"@vscode/vsce": "^3.9.2",
+		"c8": "^10.1.3",
 		"copy-webpack-plugin": "^14.0.0",
 		"eslint": "^10.1.0",
 		"jsdom": "^29.1.1",
