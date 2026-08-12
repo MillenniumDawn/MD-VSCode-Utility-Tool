@@ -26,7 +26,10 @@ async function buildContent() {
 
     const styleTable = new StyleTable();
     const mio = mios[selectedMioIndex];
-    const renderedTrait: Record<string, string> = (window as any).renderedTrait[mio.id];
+    if (!mio) {
+        return;
+    }
+    const renderedTrait: Record<string, string> = (window as any).renderedTrait[mio.id] ?? {};
     const allTraits = Object.values(mio.traits);
 
     const allowBranchOptionsValue: Record<string, boolean> = {};
@@ -56,7 +59,7 @@ async function buildContent() {
         styleTable,
         items: arrayToMap(traitGrixBoxItems, 'id'),
         onRenderItem: item => Promise.resolve(
-            renderedTrait[item.id].replace('{{position}}', item.gridX + ', ' + item.gridY)),
+            (renderedTrait[item.id] ?? '').replace('{{position}}', item.gridX + ', ' + item.gridY)),
         cornerPosition: 0.5,
     });
 
@@ -193,7 +196,7 @@ function calculateTraitVisible(mio: Mio, allowBranchOptionsValue: Record<string,
         changed = false;
         for (const key in traits) {
             const trait = traits[key];
-            if (trait.anyParent.length === 0 && trait.allParents.length === 0 && !trait.parent) {
+            if (!trait || (trait.anyParent.length === 0 && trait.allParents.length === 0 && !trait.parent)) {
                 continue;
             }
 
@@ -232,6 +235,9 @@ function calculateTraitVisible(mio: Mio, allowBranchOptionsValue: Record<string,
 
 function updateSelectedMio(clearCondition: boolean) {
     const mio = mios[selectedMioIndex];
+    if (!mio) {
+        return;
+    }
 
     const conditionExprs = mio.conditionExprs;
 

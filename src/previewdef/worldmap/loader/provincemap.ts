@@ -201,7 +201,7 @@ function mergeProvinceDefinitions(
     for (const provinceDef of provinceDefinitions) {
         if (colorToProvinceId[provinceDef.color] !== undefined) {
             warnings.push({
-                source: [provinceDef.id, colorToProvinceId[provinceDef.color]].map(id => ({ type: 'province', id, color: provinceDef.color })),
+                source: [provinceDef.id, colorToProvinceId[provinceDef.color] ?? null].map(id => ({ type: 'province', id, color: provinceDef.color })),
                 relatedFiles: relatedFiles.slice(0, 1),
                 text: localize('worldmap.warnings.provincecolorconflict', 'Province {0} has conflict color with province {1}.', provinceDef.id, colorToProvinceId[provinceDef.color]),
             });
@@ -237,11 +237,15 @@ function mergeProvinceDefinitions(
         }
 
         const useBadId = badId--;
+        const coverZone = provinceInMap.coverZones[0];
+        if (!coverZone) {
+            continue;
+        }
         warnings.push({
             source: [{ type: 'province', id: useBadId, color }],
             relatedFiles,
             text: localize('worldmap.warnings.provincenotexistindef', "Province with color ({0}, {1}, {2}) in provinces bmp ({3}, {4}) doesn't exist in definitions.",
-                (color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF, provinceInMap.coverZones[0].x, provinceInMap.coverZones[0].y),
+                (color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF, coverZone.x, coverZone.y),
         });
 
         colorToProvinceId[color] = useBadId;

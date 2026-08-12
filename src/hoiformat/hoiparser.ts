@@ -1,152 +1,192 @@
-import { UserError } from '../util/common';
+import { UserError } from "../util/common";
 
 export type NodeValue = string | number | Node[] | SymbolNode | null;
 
 export interface Node {
-    name: string | null;
-    operator: string | null;
-    value: NodeValue;
-    valueAttachment: SymbolNode | null;
-    valueAttachmentToken: Token | null;
-    nameToken: Token | null;
-    operatorToken: Token | null;
-    valueStartToken: Token | null;
-    valueEndToken: Token | null;
+	name: string | null;
+	operator: string | null;
+	value: NodeValue;
+	valueAttachment: SymbolNode | null;
+	valueAttachmentToken: Token | null;
+	nameToken: Token | null;
+	operatorToken: Token | null;
+	valueStartToken: Token | null;
+	valueEndToken: Token | null;
 }
 
 export interface SymbolNode {
-    name: string;
+	name: string;
 }
 
 interface Tokenizer<T extends string> {
-    peek: () => Token<T>;
-    next: () => Token<T>;
-    throw: (message: string, prev?: boolean) => never;
+	peek: () => Token<T>;
+	next: () => Token<T>;
+	throw: (message: string, prev?: boolean) => never;
 }
 
 export interface Token<T extends string = string> {
-    value: string;
-    start: number;
-    end: number;
-    type: T;
+	value: string;
+	start: number;
+	end: number;
+	type: T;
 }
 
-function tokenizer(input: string, errorMessagePrefix: string = ''): Tokenizer<HOITokenType> {
-    tokenRegex.lastIndex = 0;
-    let prevPos = 0;
-    let pos = 0;
-    let token: Token<HOITokenType> | null = null;
-    let groups: RegExpExecArray | null = null;
+function tokenizer(
+	input: string,
+	errorMessagePrefix: string = "",
+): Tokenizer<HOITokenType> {
+	tokenRegex.lastIndex = 0;
+	let prevPos = 0;
+	let pos = 0;
+	let token: Token<HOITokenType> | null = null;
+	let groups: RegExpExecArray | null = null;
 
-    let lineLengthSums: number[] | null = null;
+	let lineLengthSums: number[] | null = null;
 
-    function nextGroups() {
-        prevPos = pos;
-        do {
-            groups = tokenRegex.exec(input);
-            if (groups === null) {
-                throwError("Invalid token");
-            }
+	function nextGroups() {
+		prevPos = pos;
+		do {
+			groups = tokenRegex.exec(input);
+			if (groups === null) {
+				throwError("Invalid token");
+			}
 
-            const result = groups.groups!['result'];
-            // input = input.substr(groups[0].length);
-            pos += groups[0].length;
+			const result = groups.groups?.["result"];
+			if (result === undefined) {
+				throwError("Invalid token");
+			}
+			// input = input.substr(groups[0].length);
+			pos += groups[0].length;
 
-            const localGroups = groups;
-            const type = tokenTypes.find(t => localGroups.groups![t] !== undefined);
+			const localGroups = groups;
+			const type = tokenTypes.find(
+				(t) => localGroups.groups?.[t] !== undefined,
+			);
 
-            token = {
-                value: result,
-                start: pos - result.length,
-                end: pos,
-                type: type as HOITokenType,
-            };
-        } while (token.type === 'comment');
-    }
+			token = {
+				value: result,
+				start: pos - result.length,
+				end: pos,
+				type: type as HOITokenType,
+			};
+		} while (token?.type === "comment");
+	}
 
-    function peek(): Token<HOITokenType> {
-        if (groups !== null) {
-            return token!;
-        }
+	function peek(): Token<HOITokenType> {
+		if (groups !== null) {
+			return token!;
+		}
 
-        nextGroups();
-        return token!;
-    }
+		nextGroups();
+		return token!;
+	}
 
-    function throwError(message: string, prev: boolean = false): never {
-        const calculatePos = prev ? prevPos : pos;
-        if (lineLengthSums === null) {
-            let sum = 0;
-            lineLengthSums = input.split('\n').map(v => v.length).map(v => sum = (sum + v + 1));
-        }
-        const sums = lineLengthSums;
-        const line = sums.findIndex(v => v > calculatePos);
-        const column = line > 0 ? calculatePos - sums[line - 1] : calculatePos;
-        const posString = line === -1 ?
-            ` at (${sums.length}, ${sums.length > 1 ? sums[sums.length - 1] - sums[sums.length - 2] + 1 : sums[sums.length - 1] + 1})` :
-            ` at (${line + 1}, ${column + 1})`;
-        throw new UserError(errorMessagePrefix + message + `${posString}: ` + (input + "(EOF)").substring(calculatePos, Math.min(calculatePos + 30, input.length + 5)));
-    }
-    
-    return {
-        peek,
-        next: () => {
-            const result = peek();
-            groups = null;
-            return result;
-        },
-        throw: throwError,
-    };
+	function throwError(message: string, prev: boolean = false): never {
+		const calculatePos = prev ? prevPos : pos;
+		if (lineLengthSums === null) {
+			let sum = 0;
+			lineLengthSums = input
+				.split("\n")
+				.map((v) => v.length)
+				.map((v) => (sum = sum + v + 1));
+		}
+		const sums = lineLengthSums;
+		const line = sums.findIndex((v) => v > calculatePos);
+		const column =
+			line > 0 ? calculatePos - (sums[line - 1] ?? 0) : calculatePos;
+		const lastSum = sums[sums.length - 1] ?? 0;
+		const previousSum = sums[sums.length - 2] ?? 0;
+		const posString =
+			line === -1
+				? ` at (${sums.length}, ${sums.length > 1 ? lastSum - previousSum + 1 : lastSum + 1})`
+				: ` at (${line + 1}, ${column + 1})`;
+		throw new UserError(
+			errorMessagePrefix +
+				message +
+				`${posString}: ` +
+				(input + "(EOF)").substring(
+					calculatePos,
+					Math.min(calculatePos + 30, input.length + 5),
+				),
+		);
+	}
+
+	return {
+		peek,
+		next: () => {
+			const result = peek();
+			groups = null;
+			return result;
+		},
+		throw: throwError,
+	};
 }
 
-type HOITokenType = 'comment' | 'symbol' | 'operator' | 'string' | 'number' | 'unitnumber' | 'eof';
+type HOITokenType =
+	| "comment"
+	| "symbol"
+	| "operator"
+	| "string"
+	| "number"
+	| "unitnumber"
+	| "eof";
 const tokenRegexStrings: Record<HOITokenType, [string, number]> = {
-    comment: ['#.*(?:[\\r\\n]|$)', 0],
-    symbol: ['(?:\\d+\\.)?[a-zA-Z_@\\[\\]][\\w:\\._@\\[\\]\\-\\?\\^\\/\\u00A0-\\u024F|]*', 40],
-    operator: ['[={}<>;,]|>=|<=|!=', 10],
-    string: ['"(?:\\\\"|\\\\\\\\|[^"])*"', 10],
-    number: ['-?\\d*\\.\\d+|-?\\d+|0x\\d+', 50],
-    unitnumber: ['(?:-?\\d*\\.\\d+|-?\\d+)(?:%%?)', 49],
-    eof: ['$', 1000],
+	comment: ["#.*(?:[\\r\\n]|$)", 0],
+	symbol: [
+		"(?:\\d+\\.)?[a-zA-Z_@\\[\\]][\\w:\\._@\\[\\]\\-\\?\\^\\/\\u00A0-\\u024F|]*",
+		40,
+	],
+	operator: ["[={}<>;,]|>=|<=|!=", 10],
+	string: ['"(?:\\\\"|\\\\\\\\|[^"])*"', 10],
+	number: ["-?\\d*\\.\\d+|-?\\d+|0x\\d+", 50],
+	unitnumber: ["(?:-?\\d*\\.\\d+|-?\\d+)(?:%%?)", 49],
+	eof: ["$", 1000],
 };
 
 const tokenTypes = Object.keys(tokenRegexStrings) as HOITokenType[];
-const tokenTypeEntries = Object.entries<[string, number]>(tokenRegexStrings).sort((a, b) => a[1][1] - b[1][1]);
+const tokenTypeEntries = Object.entries<[string, number]>(
+	tokenRegexStrings,
+).sort((a, b) => a[1][1] - b[1][1]);
 const tokenRegex = new RegExp(
-    '\\s*(?<result>' +
-        tokenTypeEntries.map(([n, [s]]) => `(?<${n}>${s})`).join('|')
-        + ')',
-    'y');
+	"\\s*(?<result>" +
+		tokenTypeEntries.map(([n, [s]]) => `(?<${n}>${s})`).join("|") +
+		")",
+	"y",
+);
 
 export interface ParseOptions {
-    /**
-     * When false, position Tokens (nameToken, operatorToken, value*Token) are not stored on the
-     * resulting nodes. Index builds only need names/values, not editor positions, so dropping the
-     * tokens substantially lowers peak RAM while parsing many files. Defaults to true.
-     */
-    keepTokens?: boolean;
+	/**
+	 * When false, position Tokens (nameToken, operatorToken, value*Token) are not stored on the
+	 * resulting nodes. Index builds only need names/values, not editor positions, so dropping the
+	 * tokens substantially lowers peak RAM while parsing many files. Defaults to true.
+	 */
+	keepTokens?: boolean;
 }
 
-export function parseHoi4File(input: string, errorMessagePrefix: string = '', options: ParseOptions = {}): Node {
-    const keepTokens = options.keepTokens !== false;
-    const tokens = tokenizer(input, errorMessagePrefix);
-    const value = parseBlockContent(tokens, keepTokens);
+export function parseHoi4File(
+	input: string,
+	errorMessagePrefix: string = "",
+	options: ParseOptions = {},
+): Node {
+	const keepTokens = options.keepTokens !== false;
+	const tokens = tokenizer(input, errorMessagePrefix);
+	const value = parseBlockContent(tokens, keepTokens);
 
-    if (tokens.peek().type !== 'eof') {
-        tokens.throw("File content can't be completely parsed");
-    }
+	if (tokens.peek().type !== "eof") {
+		tokens.throw("File content can't be completely parsed");
+	}
 
-    return {
-        name: null,
-        nameToken: null,
-        operator: null,
-        operatorToken: null,
-        value,
-        valueStartToken: null,
-        valueEndToken: null,
-        valueAttachment: null,
-        valueAttachmentToken: null,
-    };
+	return {
+		name: null,
+		nameToken: null,
+		operator: null,
+		operatorToken: null,
+		value,
+		valueStartToken: null,
+		valueEndToken: null,
+		valueAttachment: null,
+		valueAttachmentToken: null,
+	};
 }
 
 /**
@@ -157,158 +197,176 @@ export function parseHoi4File(input: string, errorMessagePrefix: string = '', op
  * `@name` reference with its defined value, in place. Inline `@[ expr ]` expressions are left as-is.
  */
 export function resolveScriptVariables(root: Node): Node {
-    const constants: Record<string, number | string> = {};
-    const collect = (node: Node) => {
-        if (node.name && node.name.startsWith('@') && (typeof node.value === 'number' || typeof node.value === 'string')) {
-            constants[node.name] = node.value;
-        }
-        if (Array.isArray(node.value)) {
-            node.value.forEach(collect);
-        }
-    };
-    collect(root);
+	const constants: Record<string, number | string> = {};
+	const collect = (node: Node) => {
+		if (
+			node.name &&
+			node.name.startsWith("@") &&
+			(typeof node.value === "number" || typeof node.value === "string")
+		) {
+			constants[node.name] = node.value;
+		}
+		if (Array.isArray(node.value)) {
+			node.value.forEach(collect);
+		}
+	};
+	collect(root);
 
-    if (Object.keys(constants).length === 0) {
-        return root;
-    }
+	if (Object.keys(constants).length === 0) {
+		return root;
+	}
 
-    const substitute = (node: Node) => {
-        const value = node.value;
-        if (Array.isArray(value)) {
-            value.forEach(substitute);
-        } else if (value !== null && typeof value === 'object' && 'name' in value) {
-            const name = value.name;
-            if (name.startsWith('@') && name in constants) {
-                node.value = constants[name];
-            }
-        }
-    };
-    substitute(root);
+	const substitute = (node: Node) => {
+		const value = node.value;
+		if (Array.isArray(value)) {
+			value.forEach(substitute);
+		} else if (value !== null && typeof value === "object" && "name" in value) {
+			const name = value.name;
+			const constant = constants[name];
+			if (name.startsWith("@") && constant !== undefined) {
+				node.value = constant;
+			}
+		}
+	};
+	substitute(root);
 
-    return root;
+	return root;
 }
 
 function parseNode(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node {
-    const name = tokens.next();
-    if (name.type !== 'string' && name.type !== 'symbol' && name.type !== 'number') {
-        tokens.throw("Expect name to be symbol, string or number", true);
-    }
+	const name = tokens.next();
+	if (
+		name.type !== "string" &&
+		name.type !== "symbol" &&
+		name.type !== "number"
+	) {
+		tokens.throw("Expect name to be symbol, string or number", true);
+	}
 
-    let nextToken = tokens.peek();
-    if (nextToken.type !== 'operator' || nextToken.value.match(/^[,;}]$/)) {
-        while (nextToken.value.match(/^[,;]$/)) {
-            tokens.next();
-            nextToken = tokens.peek();
-        }
+	let nextToken = tokens.peek();
+	if (nextToken.type !== "operator" || nextToken.value.match(/^[,;}]$/)) {
+		while (nextToken.value.match(/^[,;]$/)) {
+			tokens.next();
+			nextToken = tokens.peek();
+		}
 
-        return {
-            name: name.value,
-            nameToken: keepTokens ? name : null,
-            operator: null,
-            operatorToken: null,
-            value: null,
-            valueStartToken: null,
-            valueEndToken: null,
-            valueAttachment: null,
-            valueAttachmentToken: null,
-        };
-    }
+		return {
+			name: name.value,
+			nameToken: keepTokens ? name : null,
+			operator: null,
+			operatorToken: null,
+			value: null,
+			valueStartToken: null,
+			valueEndToken: null,
+			valueAttachment: null,
+			valueAttachmentToken: null,
+		};
+	}
 
-    let operator: Token<HOITokenType>;
-    if (nextToken.value === '{') {
-        operator = {
-            ...nextToken,
-            value: '=',
-        };
-    } else {
-        operator = tokens.next();
-    }
+	let operator: Token<HOITokenType>;
+	if (nextToken.value === "{") {
+		operator = {
+			...nextToken,
+			value: "=",
+		};
+	} else {
+		operator = tokens.next();
+	}
 
-    let valueAttachment: SymbolNode | null = null;
-    let valueAttachmentToken: Token | null = null;
-    let [value, valueStartToken, valueEndToken] = parseNodeValue(tokens, keepTokens);
+	let valueAttachment: SymbolNode | null = null;
+	let valueAttachmentToken: Token | null = null;
+	let [value, valueStartToken, valueEndToken] = parseNodeValue(
+		tokens,
+		keepTokens,
+	);
 
-    if (value !== null && typeof value === 'object' && 'name' in value) {
-        const nextToken = tokens.peek();
-        if (nextToken.value === '{') {
-            valueAttachment = value;
-            valueAttachmentToken = valueStartToken;
-            [value, valueStartToken, valueEndToken] = parseNodeValue(tokens, keepTokens);
-        }
-    }
+	if (value !== null && typeof value === "object" && "name" in value) {
+		const nextToken = tokens.peek();
+		if (nextToken.value === "{") {
+			valueAttachment = value;
+			valueAttachmentToken = valueStartToken;
+			[value, valueStartToken, valueEndToken] = parseNodeValue(
+				tokens,
+				keepTokens,
+			);
+		}
+	}
 
-    let tailComma = tokens.peek();
-    while (tailComma.value.match(/^[,;]$/)) {
-        tokens.next();
-        tailComma = tokens.peek();
-    }
+	let tailComma = tokens.peek();
+	while (tailComma.value.match(/^[,;]$/)) {
+		tokens.next();
+		tailComma = tokens.peek();
+	}
 
-    return {
-        name: name.value,
-        nameToken: keepTokens ? name : null,
-        operator: operator.value,
-        operatorToken: keepTokens ? operator : null,
-        value,
-        valueStartToken: keepTokens ? valueStartToken : null,
-        valueEndToken: keepTokens ? valueEndToken : null,
-        valueAttachment,
-        valueAttachmentToken: keepTokens ? valueAttachmentToken : null,
-    };
+	return {
+		name: name.value,
+		nameToken: keepTokens ? name : null,
+		operator: operator.value,
+		operatorToken: keepTokens ? operator : null,
+		value,
+		valueStartToken: keepTokens ? valueStartToken : null,
+		valueEndToken: keepTokens ? valueEndToken : null,
+		valueAttachment,
+		valueAttachmentToken: keepTokens ? valueAttachmentToken : null,
+	};
 }
 
-function parseNodeValue(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): [ NodeValue, Token<HOITokenType>, Token<HOITokenType> ] {
-    const nextToken = tokens.next();
-    switch (nextToken.type) {
-        case 'string':
-            return [
-                nextToken.value.substr(1, nextToken.end - nextToken.start - 2).replace(/\\"/g, '"').replace(/\\\\/g, '\\'),
-                nextToken,
-                nextToken,
-            ];
-        case 'number':
-            const nextTokenValue = nextToken.value;
-            return [
-                nextTokenValue.startsWith('0x') ? parseInt(nextTokenValue.substr(2), 16) : parseFloat(nextTokenValue),
-                nextToken,
-                nextToken,
-            ];
-        case 'symbol':
-        case 'unitnumber':
-            return [
-                { name: nextToken.value },
-                nextToken,
-                nextToken,
-            ];
-        case 'operator':
-            if (nextToken.value === '{') {
-                const result = parseBlockContent(tokens, keepTokens);
-                const right = tokens.next();
-                if (right.value !== '}') {
-                    tokens.throw("Expect a '}'", true);
-                }
-                return [
-                    result,
-                    nextToken,
-                    right,
-                ];
-            }
-            break;
-    }
+function parseNodeValue(
+	tokens: Tokenizer<HOITokenType>,
+	keepTokens: boolean,
+): [NodeValue, Token<HOITokenType>, Token<HOITokenType>] {
+	const nextToken = tokens.next();
+	switch (nextToken.type) {
+		case "string":
+			return [
+				nextToken.value
+					.substr(1, nextToken.end - nextToken.start - 2)
+					.replace(/\\"/g, '"')
+					.replace(/\\\\/g, "\\"),
+				nextToken,
+				nextToken,
+			];
+		case "number":
+			const nextTokenValue = nextToken.value;
+			return [
+				nextTokenValue.startsWith("0x")
+					? parseInt(nextTokenValue.substr(2), 16)
+					: parseFloat(nextTokenValue),
+				nextToken,
+				nextToken,
+			];
+		case "symbol":
+		case "unitnumber":
+			return [{ name: nextToken.value }, nextToken, nextToken];
+		case "operator":
+			if (nextToken.value === "{") {
+				const result = parseBlockContent(tokens, keepTokens);
+				const right = tokens.next();
+				if (right.value !== "}") {
+					tokens.throw("Expect a '}'", true);
+				}
+				return [result, nextToken, right];
+			}
+			break;
+	}
 
-    tokens.throw("Expect string, number, symbol, or {", true);
+	tokens.throw("Expect string, number, symbol, or {", true);
 }
 
-function parseBlockContent(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node[] {
-    const nodes: Node[] = [];
+function parseBlockContent(
+	tokens: Tokenizer<HOITokenType>,
+	keepTokens: boolean,
+): Node[] {
+	const nodes: Node[] = [];
 
-    while (true) {
-        const nextToken = tokens.peek();
-        if (nextToken.type === 'eof' || nextToken.value === "}") {
-            break;
-        }
+	while (true) {
+		const nextToken = tokens.peek();
+		if (nextToken.type === "eof" || nextToken.value === "}") {
+			break;
+		}
 
-        nodes.push(parseNode(tokens, keepTokens));
-    }
+		nodes.push(parseNode(tokens, keepTokens));
+	}
 
-    return nodes;
+	return nodes;
 }

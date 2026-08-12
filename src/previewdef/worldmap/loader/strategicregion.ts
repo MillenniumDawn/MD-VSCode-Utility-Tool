@@ -69,8 +69,9 @@ export class StrategicRegionsLoader extends FolderLoader<StrategicRegionsLoaderR
 
         const filledStrategicRegions: StrategicRegion[] = new Array(sortedStrategicRegions.length);
         for (let i = badStrategicRegionsCount; i < sortedStrategicRegions.length; i++) {
-            if (sortedStrategicRegions[i]) {
-                filledStrategicRegions[i] = calculateBoundingBox(sortedStrategicRegions[i], provinces, width, warnings);
+            const sortedRegion = sortedStrategicRegions[i];
+            if (sortedRegion) {
+                filledStrategicRegions[i] = calculateBoundingBox(sortedRegion, provinces, width, warnings);
             }
         }
 
@@ -265,15 +266,18 @@ function validateProvincesInStrategicRegions(
 
         const strategicRegionId = state.provinces
             .filter(p => provinces[p])
-            .map<[number, number]>(p => [p, provinceToStrategicRegion[p]])
-            .filter(p => p[1] !== undefined);
+            .map<[number, number] | undefined>(p => {
+                const regionId = provinceToStrategicRegion[p];
+                return regionId === undefined ? undefined : [p, regionId];
+            })
+            .filter((p): p is [number, number] => p !== undefined);
 
         const strategicRegionIdCount: Record<number, number> = {};
         strategicRegionId.forEach(([_, sr]) => strategicRegionIdCount[sr] = (strategicRegionIdCount[sr] ?? 0) + 1);
         const entries = Object.entries(strategicRegionIdCount);
         if (entries.length > 1) {
             entries.sort((a, b) => b[1] - a[1]);
-            const mostStrategicRegionId = parseInt(entries[0][0]);
+            const mostStrategicRegionId = parseInt(entries[0]?.[0] ?? '0');
             const badProvinces = strategicRegionId.filter(([_, sr]) => sr !== mostStrategicRegionId).map(v => v[0]);
             warnings.push({
                 source: [

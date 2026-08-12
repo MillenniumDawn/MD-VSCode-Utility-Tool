@@ -29,14 +29,14 @@ export function convertColor(color: DetailValue<Enum> | undefined): number {
 
     if (!color._attachment || color._attachment.toLowerCase() === 'rgb') {
         let [ r, g, b ] = vec;
-        r = clipNumber(r, 0, 255);
-        g = clipNumber(g, 0, 255);
-        b = clipNumber(b, 0, 255);
+        r = clipNumber(r ?? 0, 0, 255);
+        g = clipNumber(g ?? 0, 0, 255);
+        b = clipNumber(b ?? 0, 0, 255);
         return (r << 16) | (g << 8) | b;
     }
 
     if (color._attachment.toLowerCase() === 'hsv') {
-        const { r, g, b } = hsvToRgb(vec[0], vec[1], vec[2]);
+        const { r, g, b } = hsvToRgb(vec[0] ?? 0, vec[1] ?? 0, vec[2] ?? 0);
         return (r << 16) | (g << 8) | b;
     }
 
@@ -64,9 +64,11 @@ export function sortItems<T extends { id: number }>(
         }
         if (result[p.id]) {
             const conflictItem = result[p.id];
-            onConflict(p, conflictItem, badId);
-            conflictItem.id = badId--;
-            result[conflictItem.id] = conflictItem;
+            if (conflictItem) {
+                onConflict(p, conflictItem, badId);
+                conflictItem.id = badId--;
+                result[conflictItem.id] = conflictItem;
+            }
         }
         result[p.id] = p;
     });

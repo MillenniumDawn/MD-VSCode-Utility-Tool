@@ -1,24 +1,25 @@
-import * as path from 'path';
+import * as path from "path";
 
 export function matchPathEnd(pathname: string, segments: string[]): boolean {
-    pathname = pathname.replace(/\/|\\/g, path.sep);
+	pathname = pathname.replace(/\/|\\/g, path.sep);
 
-    for (let i = segments.length - 1; i >= 0; i--) {
-        const name = path.basename(pathname);
-        pathname = path.dirname(pathname);
+	for (let i = segments.length - 1; i >= 0; i--) {
+		const name = path.basename(pathname);
+		pathname = path.dirname(pathname);
 
-        if (segments[i] === '*') {
-            continue;
-        }
+		const segment = segments[i];
+		if (segment === undefined || segment === "*") {
+			continue;
+		}
 
-        if (segments[i].toLowerCase() !== name.toLowerCase()) {
-            return false;
-        }
-    }
+		if (segment.toLowerCase() !== name.toLowerCase()) {
+			return false;
+		}
+	}
 
-    return true;
+	return true;
 }
 
 export function isSamePath(a: string, b: string): boolean {
-    return path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+	return path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 }

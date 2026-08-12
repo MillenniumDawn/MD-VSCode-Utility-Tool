@@ -27,15 +27,25 @@ async function loadAdjacencies(adjacenciesFile: string, progressReporter: Progre
 }
 
 function convertRowToAdjacencies(adjacency: string[], _warnings: WorldMapWarning[]): ProvinceEdgeAdjacency | undefined {
-    const from = parseInt(adjacency[0]);
-    const to = parseInt(adjacency[1]);
+    const fromValue = adjacency[0];
+    const toValue = adjacency[1];
     const type = adjacency[2];
-    const through = parseInt(adjacency[3]);
-    const startX = parseInt(adjacency[4]);
-    const startY = parseInt(adjacency[5]);
-    const stopX = parseInt(adjacency[6]);
-    const stopY = parseInt(adjacency[7]);
+    const throughValue = adjacency[3];
+    const startXValue = adjacency[4];
+    const startYValue = adjacency[5];
+    const stopXValue = adjacency[6];
+    const stopYValue = adjacency[7];
     const rule = adjacency[8];
+    if (!fromValue || !toValue || !type || !throughValue || !startXValue || !startYValue || !stopXValue || !stopYValue || !rule) {
+        return undefined;
+    }
+    const from = parseInt(fromValue);
+    const to = parseInt(toValue);
+    const through = parseInt(throughValue);
+    const startX = parseInt(startXValue);
+    const startY = parseInt(startYValue);
+    const stopX = parseInt(stopXValue);
+    const stopY = parseInt(stopYValue);
 
     if (from === -1 || to === -1) {
         return undefined;

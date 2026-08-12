@@ -40,7 +40,9 @@ async function loadRailway(provinces: (Province | null | undefined)[], file: str
     const [railwaysBuffer] = await readFileFromModOrHOI4(file);
     const railwaysRaw = railwaysBuffer.toString().split(/(?:\r\n|\n|\r)/).map(line => line.trimLeft().split(/\s+/).map(v => parseInt(v))).filter(v => v.length >= 3);
     const railways = railwaysRaw.map((line, index) => {
-        if (line[1] + 2 > line.length) {
+        const level = line[0] ?? 0;
+        const provinceCount = line[1] ?? 0;
+        if (provinceCount + 2 > line.length) {
             warnings.push({
                 source: [{ type: 'railway', id: index }],
                 relatedFiles: [file],
@@ -48,8 +50,8 @@ async function loadRailway(provinces: (Province | null | undefined)[], file: str
             });
         }
         return {
-            level: line[0],
-            provinces: line.slice(2, Math.min(line[1] + 2, line.length)),
+            level,
+            provinces: line.slice(2, Math.min(provinceCount + 2, line.length)),
         };
     });
 
@@ -70,6 +72,9 @@ function validateRailways(provinces: (Province | null | undefined)[], file: stri
                 });
             } else if (index > 0) {
                 const lastProvinceId = railway.provinces[index - 1];
+                if (lastProvinceId === undefined) {
+                    return;
+                }
                 const hasEdge = province.edges.filter(e => e.to === lastProvinceId && e.type !== 'impassable').length > 0;
                 if (!hasEdge) {
                     warnings.push({
@@ -118,7 +123,8 @@ async function loadSupplyNodes(provinces: (Province | null | undefined)[], file:
     const [supplyNodesBuffer] = await readFileFromModOrHOI4(file);
     const supplyNodesRaw = supplyNodesBuffer.toString().split(/(?:\r\n|\n|\r)/).map(line => line.split(/\s+/).map(v => parseInt(v))).filter(v => v.length >= 2);
     const supplyNodes = supplyNodesRaw.map((line, index) => {
-        const provinceId = line[1];
+        const provinceId = line[1] ?? 0;
+        const level = line[0] ?? 0;
         if (!provinces[provinceId]) {
             warnings.push({
                 source: [{ type: 'supplynode', id: index }, { type: 'province', id: provinceId, color: 0 }],
@@ -127,7 +133,7 @@ async function loadSupplyNodes(provinces: (Province | null | undefined)[], file:
             });
         }
         return {
-            level: line[0],
+            level,
             province: provinceId,
         };
     });

@@ -90,7 +90,13 @@ export class CorneredTileSprite extends Sprite {
 			return cached;
 		}
 
+		if (frameId < 0 || frameId >= this.frames.length) {
+			frameId = 0;
+		}
 		const frame = this.frames[frameId];
+		if (frame === undefined) {
+			return [];
+		}
 		const sizeX = frame.width;
 		const sizeY = frame.height;
 		const backPng = pngRead(frame.pngBuffer);
@@ -113,10 +119,10 @@ export class CorneredTileSprite extends Sprite {
 				tiles.push(
 					extractImageFromPng(
 						backPng,
-						xPos[x],
-						yPos[y],
-						xPos[x + 1] - xPos[x],
-						yPos[y + 1] - yPos[y],
+						xPos[x] ?? 0,
+						yPos[y] ?? 0,
+						(xPos[x + 1] ?? 0) - (xPos[x] ?? 0),
+						(yPos[y + 1] ?? 0) - (yPos[y] ?? 0),
 						path,
 					),
 				);

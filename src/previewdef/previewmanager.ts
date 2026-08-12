@@ -142,8 +142,9 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         const uri = document.uri;
         const key = uri.toString();
-        if (key in this._previews) {
-            this._previews[key].panel.reveal();
+        const existingPreview = this._previews[key];
+        if (existingPreview) {
+            existingPreview.panel.reveal();
             panel?.dispose();
             debug(`dispose panel ${uri} because preview already open`);
             return;

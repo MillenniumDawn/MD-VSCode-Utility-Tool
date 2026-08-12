@@ -268,7 +268,10 @@ async function renderTechnologyTreeGridBox(
     const technologyXorJoints = technologiesInFolder
         .map<[Technology, Technology[][] | undefined]>(tech => [tech, findXorGroups(treeMap, tech, folder)])
         .filter((t): t is [Technology, Technology[][]] => t[1] !== undefined && t[1].length > 0)
-        .map<[Technology, Technology[], Technology[][]]>(([t, tgs]) => [t, tgs[0], tgs.slice(1)]);
+        .flatMap(([t, tgs]) => {
+            const base = tgs[0];
+            return base === undefined ? [] : [[t, base, tgs.slice(1)] as [Technology, Technology[], Technology[][]]];
+        });
     const technologyXorJointsMap: Record<string, [Technology[], Technology[][]]> = {};
 
     technologyXorJoints.forEach(([t, tl, tgs]) => technologyXorJointsMap[t.id] = [tl, tgs]);
@@ -292,24 +295,36 @@ async function renderTechnologyTreeGridBox(
             return { target: c.id, style: "1px solid #88aaff", targetType: "child" };
         }));
 
+        const technologyFolder = t.folders[folder];
+        if (!technologyFolder) {
+            return {
+                id: t.id,
+                gridX: 0,
+                gridY: 0,
+                connections,
+            };
+        }
         return {
             id: t.id,
-            gridX: t.folders[folder].x,
-            gridY: t.folders[folder].y,
+            gridX: technologyFolder.x,
+            gridY: technologyFolder.y,
             connections,
         };
     });
 
     const technologyXorJointsItemsArray = flatMap(technologyXorJoints, ([t, _, tgs]) =>
-        tgs.map<GridBoxItem>((tl, i) => ({
-            id: xorJointKey + t.id + i,
-            gridX: Math.round(sumBy(tl, t => t.folders[folder].x) / tl.length),
-            gridY: (min(tl.map(t1 => t1.folders[folder].y)) ?? 0) - 1,
-            isJoint: true,
-            connections: tl.map<GridBoxConnection>(c => {
-                return { target: c.id, style: "1px solid red", targetType: "child" };
-            }),
-        }))
+        tgs.map<GridBoxItem>((tl, i) => {
+            const positions = tl.map(t => t.folders[folder]).filter((v): v is TechnologyFolder => v !== undefined);
+            return {
+                id: xorJointKey + t.id + i,
+                gridX: Math.round(sumBy(positions, position => position.x) / (positions.length || 1)),
+                gridY: (min(positions.map(position => position.y)) ?? 0) - 1,
+                isJoint: true,
+                connections: tl.map<GridBoxConnection>(c => {
+                    return { target: c.id, style: "1px solid red", targetType: "child" };
+                }),
+            };
+        })
     );
 
     return await renderGridBox(gridboxType, parentInfo, {
@@ -324,8 +339,15 @@ async function renderTechnologyTreeGridBox(
                 return await renderXorItem(xorItem, gridboxType.format?._name ?? 'up', parent, commonOptions);
             } else {
                 const technology = treeMap[item.id];
+                if (!technology) {
+                    return '';
+                }
+                const technologyFolder = technology.folders[folder];
+                if (!technologyFolder) {
+                    return '';
+                }
                 const technologyItem = technology.enableEquipments ? folderItem : folderSmallItem;
-                return await renderTechnology(technologyItem, technology, technology.folders[folder], parent, commonOptions, guiFiles, gfxFiles, equipmentArchetypes);
+                return await renderTechnology(technologyItem, technology, technologyFolder, parent, commonOptions, guiFiles, gfxFiles, equipmentArchetypes);
             }
         },
         onRenderLineBox: async (item, parent) => {
@@ -340,19 +362,19 @@ async function renderTechnologyTreeGridBox(
 function findXorGroups(treeMap: Record<string, Technology>, technology: Technology, folder: string): Technology[][] | undefined {
     const techChildren = technology.leadsToTechs
         .map(techName => treeMap[techName])
-        .filter(tech => tech && folder in technology.folders);
+        .filter((tech): tech is Technology => tech !== undefined && folder in tech.folders);
     const xorGroupMap: Record<string, Technology[]> = {};
 
     for (const xorChild of techChildren) {
         const xorTechs = xorChild.xor
             .map(techName => treeMap[techName])
-            .filter(tech => tech && folder in technology.folders && tech !== xorChild && tech.xor.includes(xorChild.id));
+            .filter((tech): tech is Technology => tech !== undefined && folder in tech.folders && tech !== xorChild && tech.xor.includes(xorChild.id));
         if (xorTechs.length === 0) {
             continue;
         }
 
-        const groups = xorTechs.map(tech => xorGroupMap[tech.id]).filter((v, i, a) => v !== undefined && i === a.indexOf(v));
-        const bigGroup = flatten(groups).concat([ xorChild ]);
+        const groups = xorTechs.map(tech => xorGroupMap[tech.id]).filter((v, i, a): v is Technology[] => v !== undefined && i === a.indexOf(v));
+        const bigGroup = flatten(groups).concat([xorChild]);
         bigGroup.forEach(tech => xorGroupMap[tech.id] = bigGroup);
     }
 
@@ -502,8 +524,13 @@ async function renderTechnology(
             if (type === 'containerwindow' && child.name) {
                 const subSlot = subSlotRegex.exec(child.name.toLowerCase());
                 if (subSlot) {
-                    const slotId = parseInt(subSlot[1]);
-                    return await renderSubTechnology(child as HOIPartial<ContainerWindowType>, folder, technology.subTechnologies[slotId], parentInfo, commonOptions, gfxFiles);
+                    const slotIdString = subSlot[1];
+                    const slotId = slotIdString === undefined ? -1 : parseInt(slotIdString);
+                    const subTechnology = technology.subTechnologies[slotId];
+                    if (subTechnology === undefined) {
+                        return undefined;
+                    }
+                    return await renderSubTechnology(child as HOIPartial<ContainerWindowType>, folder, subTechnology, parentInfo, commonOptions, gfxFiles);
                 }
             }
 

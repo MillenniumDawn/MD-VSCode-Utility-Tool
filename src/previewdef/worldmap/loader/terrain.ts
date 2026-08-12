@@ -38,12 +38,13 @@ export class TerrainDefinitionLoader extends FolderLoader<Terrain[], Terrain[]> 
         const warnings = mergeInLoadResult(fileResults, 'warnings');
 
         for (const terrain of results) {
-            if (terrain.name in terrainMap) {
+            const existingTerrain = terrainMap[terrain.name];
+            if (existingTerrain) {
                 warnings.push({
                     source: [],
                     text: localize('worldmap.warnings.terraindefinedtwice', 'Terrain {0} is defined in two files: {1}, {2}.',
-                        terrain.name, terrain.file, terrainMap[terrain.name].file),
-                    relatedFiles: [terrain.file, terrainMap[terrain.name].file],
+                        terrain.name, terrain.file, existingTerrain.file),
+                    relatedFiles: [terrain.file, existingTerrain.file],
                 });
             } else {
                 terrainMap[terrain.name] = terrain;
