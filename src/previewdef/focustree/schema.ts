@@ -247,7 +247,6 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         const conditionExprs: ConditionItem[] = [];
         const warnings: FocusWarning[] = [];
         const focuses = getFocuses(file.shared_focus, conditionExprs, filePath, warnings, constants);
-        validateFocusLayout(focuses, warnings);
         const sharedFocusTree = {
             id: localize('focustree.sharedfocuses', '<Shared focuses>'),
             focuses,
@@ -267,7 +266,6 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         const conditionExprs: ConditionItem[] = [];
         const warnings: FocusWarning[] = [];
         const focuses = getFocuses(file.joint_focus, conditionExprs, filePath, warnings, constants);
-        validateFocusLayout(focuses, warnings);
 
         focusTrees.push({
             id: getJointFocusTreeId(filePath),
@@ -297,7 +295,7 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         }
 
         validateRelativePositionId(focuses, warnings);
-        validateFocusLayout(focuses, warnings);
+        validateFocusLayout(focuses, warnings, filePath);
 
         focusTrees.push({
             id: focusTree.id ?? localize('focustree.ananymous', '<Anonymous focus tree>'),
@@ -630,8 +628,11 @@ function resolveFocusPosition(focus: Focus, focuses: Record<string, Focus>): { x
  * they overlap). Positions are resolved through relative_position_id chains like the preview does;
  * condition-dependent offsets are ignored.
  */
-function validateFocusLayout(focuses: Record<string, Focus>, warnings: FocusWarning[]) {
-    const focusList = Object.values(focuses);
+function validateFocusLayout(focuses: Record<string, Focus>, warnings: FocusWarning[], filePath: string) {
+    // Only focuses defined in the tree's own file participate. Shared focuses merged in via
+    // addSharedFocus live in other files and their stored x/y is the shared_focus block's
+    // (defaulting to 0,0), so comparing them against real focuses would raise false positives.
+    const focusList = Object.values(focuses).filter(focus => focus.file === filePath);
     const positions = new Map<string, { x: number; y: number }>();
     for (const focus of focusList) {
         positions.set(focus.id, resolveFocusPosition(focus, focuses));
@@ -646,7 +647,10 @@ function validateFocusLayout(focuses: Record<string, Focus>, warnings: FocusWarn
         // An OR-group prerequisite is satisfied by completing any one of its focuses, so it is
         // only a layout problem when none of the group's options sits above the dependent.
         for (const group of focus.prerequisite) {
-            const options = group.filter(p => p !== focus.id && p in focuses);
+            const options = group.filter(p => {
+                const prerequisite = focuses[p];
+                return p !== focus.id && prerequisite !== undefined && prerequisite.file === filePath;
+            });
             const anyAbove = options.some(p => {
                 const optionPosition = positions.get(p);
                 return optionPosition !== undefined && optionPosition.y < position.y;
@@ -662,7 +666,8 @@ function validateFocusLayout(focuses: Record<string, Focus>, warnings: FocusWarn
 
         // Mutually exclusive focuses are alternatives in the same tree slot, so they must share an X.
         for (const exclusive of focus.exclusive) {
-            if (exclusive === focus.id || !(exclusive in focuses)) {
+            const exclusiveFocus = focuses[exclusive];
+            if (exclusive === focus.id || exclusiveFocus === undefined || exclusiveFocus.file !== filePath) {
                 continue;
             }
             const key = pairKey(focus.id, exclusive);

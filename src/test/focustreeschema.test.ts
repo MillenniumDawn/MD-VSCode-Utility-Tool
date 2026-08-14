@@ -190,4 +190,94 @@ describe('previewdef/focustree layout warnings', () => {
             'Mutually exclusive focuses focus_a and focus_b are not on the same X position.',
         ]);
     });
+
+    it('reports overlap for negative coordinates', () => {
+        const content = treeWithFocuses(
+            focusBlock('focus_a', -1, 0),
+            focusBlock('focus_b', 0, 0),
+        );
+        assert.deepStrictEqual(warningTexts(content), [
+            'Focuses focus_a and focus_b are less than 2 apart on the same row, so their icons overlap.',
+        ]);
+    });
+
+    it('reports all three layout warnings in one tree', () => {
+        const content = treeWithFocuses(
+            focusBlock('dep', 0, 0, 'prerequisite = { focus = req }'),
+            focusBlock('req', 0, 2),
+            focusBlock('ex_a', 0, 3, 'mutually_exclusive = { focus = ex_b }'),
+            focusBlock('ex_b', 2, 4),
+            focusBlock('ov_a', 0, 5),
+            focusBlock('ov_b', 1, 5),
+        );
+        assert.deepStrictEqual(warningTexts(content), [
+            'Prerequisite req of focus dep is not positioned above it.',
+            'Mutually exclusive focuses ex_a and ex_b are not on the same X position.',
+            'Focuses ov_a and ov_b are less than 2 apart on the same row, so their icons overlap.',
+        ]);
+    });
+
+    it('terminates and warns on a circular relative_position_id chain', () => {
+        const content = treeWithFocuses(
+            focusBlock('focus_a', 0, 0, 'relative_position_id = focus_b prerequisite = { focus = focus_c }'),
+            focusBlock('focus_b', 0, 1, 'relative_position_id = focus_a'),
+            focusBlock('focus_c', 0, 5),
+        );
+        // The cycle is cut (a + b), so focus_a resolves to (0, 1) and focus_c at y=5 is below it.
+        const texts = warningTexts(content);
+        assert.ok(texts.includes('Prerequisite focus_c of focus focus_a is not positioned above it.'));
+    });
+
+    it('reports no layout warnings for shared_focus blocks', () => {
+        const content = `shared_focus = {
+    id = SH_a
+    focus = { id = sh_a1 x = 0 y = 0 }
+}
+shared_focus = {
+    id = SH_b
+    focus = { id = sh_b1 x = 0 y = 0 }
+}`;
+        // The schema drops the nested focuses, leaving one position-less entry per block at (0,0);
+        // those must not be compared against each other as if they were real focuses.
+        assert.deepStrictEqual(warningTexts(content), []);
+    });
+
+    it('reports no layout warnings for joint_focus blocks', () => {
+        const content = `joint_focus = {
+    focus = { id = j_a x = 0 y = 0 }
+    focus = { id = j_b x = 1 y = 0 }
+}`;
+        const texts = warningTexts(content);
+        // The id-less joint pseudo focus keeps its pre-existing focusnoid warning; the layout
+        // checks must not add anything on top.
+        assert.strictEqual(texts.length, 1);
+        assert.ok(!texts.some(t =>
+            t.includes('not positioned above') || t.includes('same X position') || t.includes('less than 2 apart')));
+    });
+
+    it('skips shared focuses merged into the tree from another file', () => {
+        const sharedFile = convertFocusFileNodeToJson(parseHoi4File(`shared_focus = {
+    id = SH_a
+    focus = { id = sh_a1 x = 0 y = 0 }
+}`), {});
+        const sharedTrees = getFocusTreeWithFocusFile(sharedFile, [], 'common/national_focus/shared.txt', {});
+
+        const flags = require('../util/featureflags') as { useConditionInFocus: boolean };
+        flags.useConditionInFocus = true;
+        try {
+            const mainContent = treeWithFocuses(
+                focusBlock('m1', 0, 0),
+                focusBlock('m2', 0, 1),
+            ).replace('id = test_tree', 'id = test_tree\n    shared_focus = SH_a');
+            // The merge only looks at sharedFocusTrees, so drive it through the same path the loader uses.
+            const mainFile = convertFocusFileNodeToJson(parseHoi4File(mainContent), {});
+            const merged = getFocusTreeWithFocusFile(mainFile, sharedTrees, filePath, {});
+            const main = merged.find(t => t.id === 'test_tree');
+            assert.ok(main?.focuses['SH_a'], 'shared focus must be merged for this test to be meaningful');
+            // SH_a sits at (0,0) like m1, but it lives in another file, so no overlap warning.
+            assert.deepStrictEqual((main?.warnings ?? []).map(w => w.text), []);
+        } finally {
+            flags.useConditionInFocus = false;
+        }
+    });
 });

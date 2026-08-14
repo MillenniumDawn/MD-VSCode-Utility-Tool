@@ -260,7 +260,8 @@ async function buildContent() {
 // Focuses named in a layout warning get a red inset ring so the problem is visible on the tree
 // itself, not only as a line in the warnings panel. Runs after every (re)render, including the
 // in-place update path, and marks every focus the warning involves (source + related sources).
-function applyWarningHighlights(focusTree: FocusTree, styleTable: StyleTable) {
+// Exported (like miopreview's findOverlaps) so the id-collection logic is unit-testable.
+export function warningFocusIdsFor(focusTree: FocusTree): Set<string> {
 	const warningFocusIds = new Set<string>();
 	for (const warning of focusTree.warnings) {
 		warningFocusIds.add(warning.source);
@@ -268,6 +269,11 @@ function applyWarningHighlights(focusTree: FocusTree, styleTable: StyleTable) {
 			warningFocusIds.add(related);
 		}
 	}
+	return warningFocusIds;
+}
+
+function applyWarningHighlights(focusTree: FocusTree, styleTable: StyleTable) {
+	const warningFocusIds = warningFocusIdsFor(focusTree);
 	if (warningFocusIds.size === 0) {
 		return;
 	}
