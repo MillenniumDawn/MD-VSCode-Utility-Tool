@@ -40,6 +40,24 @@ describe('previewdef/focustree layout warnings', () => {
         assert.deepStrictEqual(trees[0].focuses.focus_a.prerequisite, [['focus_b', 'focus_c']]);
     });
 
+    it('parses an explicit OR block with bare focus ids', () => {
+        const trees = treesOf(treeWithFocuses(
+            focusBlock('focus_a', 0, 0, 'prerequisite = { OR = { focus_b focus_c } }'),
+            focusBlock('focus_b', 0, 1),
+            focusBlock('focus_c', 2, 1),
+        ));
+        assert.deepStrictEqual(trees[0].focuses.focus_a.prerequisite, [['focus_b', 'focus_c']]);
+    });
+
+    it('parses an explicit OR block with focus = entries', () => {
+        const trees = treesOf(treeWithFocuses(
+            focusBlock('focus_a', 0, 0, 'prerequisite = { OR = { focus = focus_b focus = focus_c } }'),
+            focusBlock('focus_b', 0, 1),
+            focusBlock('focus_c', 2, 1),
+        ));
+        assert.deepStrictEqual(trees[0].focuses.focus_a.prerequisite, [['focus_b', 'focus_c']]);
+    });
+
     it('reports no warnings for a clean tree', () => {
         const content = treeWithFocuses(
             focusBlock('focus_b', 0, 0),
@@ -80,6 +98,17 @@ describe('previewdef/focustree layout warnings', () => {
     it('warns when no option of an OR-group prerequisite is above', () => {
         const content = treeWithFocuses(
             focusBlock('focus_a', 0, 0, 'prerequisite = { focus = focus_b focus = focus_c }'),
+            focusBlock('focus_b', 0, 2),
+            focusBlock('focus_c', 2, 2),
+        );
+        assert.deepStrictEqual(warningTexts(content), [
+            'Prerequisite focus_b, focus_c of focus focus_a is not positioned above it.',
+        ]);
+    });
+
+    it('warns when no option of an explicit OR block is above', () => {
+        const content = treeWithFocuses(
+            focusBlock('focus_a', 0, 0, 'prerequisite = { OR = { focus = focus_b focus = focus_c } }'),
             focusBlock('focus_b', 0, 2),
             focusBlock('focus_c', 2, 2),
         );
@@ -140,7 +169,35 @@ describe('previewdef/focustree layout warnings', () => {
             focusBlock('focus_a', 0, 0),
             focusBlock('focus_b', 0, 0),
         );
-        assert.strictEqual(warningTexts(content).length, 1);
+        assert.deepStrictEqual(warningTexts(content), [
+            'Focuses focus_a, focus_b share the same position, so their icons overlap.',
+        ]);
+    });
+
+    it('collapses a stack of same-position focuses into one warning', () => {
+        const content = treeWithFocuses(
+            focusBlock('focus_a', 0, 0),
+            focusBlock('focus_b', 0, 0),
+            focusBlock('focus_c', 0, 0),
+        );
+        const warnings = warningsOf(content);
+        assert.strictEqual(warnings.length, 1);
+        assert.strictEqual(warnings[0].source, 'focus_a');
+        assert.deepStrictEqual(warnings[0].relatedSources, ['focus_b', 'focus_c']);
+        assert.strictEqual(warnings[0].text, 'Focuses focus_a, focus_b, focus_c share the same position, so their icons overlap.');
+    });
+
+    it('still warns for a focus one apart from a same-position stack', () => {
+        const content = treeWithFocuses(
+            focusBlock('focus_a', 0, 0),
+            focusBlock('focus_b', 0, 0),
+            focusBlock('focus_c', 1, 0),
+        );
+        assert.deepStrictEqual(warningTexts(content), [
+            'Focuses focus_a, focus_b share the same position, so their icons overlap.',
+            'Focuses focus_a and focus_c are less than 2 apart on the same row, so their icons overlap.',
+            'Focuses focus_b and focus_c are less than 2 apart on the same row, so their icons overlap.',
+        ]);
     });
 
     it('reports no warning for focuses two apart on the same row', () => {

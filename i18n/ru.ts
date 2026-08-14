@@ -54,6 +54,7 @@ const table: Partial<typeof __table> = {
     "focustree.warnings.prerequisitenotabove": "Prerequisite {0} of focus {1} is not positioned above it.",
     "focustree.warnings.relativepositioncircularref": "Зеркальное отношение ID в данных фокусах: {0}.",
     "focustree.warnings.relativepositionidnotexist": "Связи между ID фокуса {0} и: {1} не существует.",
+    "focustree.warnings.sameposition": "Focuses {0} share the same position, so their icons overlap.",
     "gfx.filter": "Фильтер: ",
     "gfx.imagenotfound": "Изображение не найдено",
     "gfxindex.builddone": "Building GFX index done.",

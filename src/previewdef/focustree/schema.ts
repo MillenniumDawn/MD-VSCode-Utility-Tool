@@ -1,5 +1,5 @@
 import { Node, Token } from "../../hoiformat/hoiparser";
-import { HOIPartial, SchemaDef, Position, convertNodeToJson, positionSchema, Raw } from "../../hoiformat/schema";
+import { HOIPartial, SchemaDef, Position, convertNodeToJson, positionSchema, Raw, isSymbolNode } from "../../hoiformat/schema";
 import { normalizeNumberLike } from "../../util/hoi4gui/common";
 import { flatten, chain } from 'lodash';
 import { ConditionItem, ConditionComplexExpr, extractConditionValues, extractConditionValue, extractConditionalExprs } from "../../hoiformat/condition";
@@ -143,7 +143,9 @@ interface OffsetDef {
 
 interface FocusOrORList {
     focus: string[];
-    OR: string[];
+    // Raw node list: an OR block's contents cannot be expressed with the plain string schema
+    // (a block converts via convertString to undefined), so extractOrListIds walks them.
+    or: Raw[];
 }
 
 interface FocusFile {
@@ -157,8 +159,9 @@ const focusOrORListSchema: SchemaDef<FocusOrORList> = {
         _innerType: "string",
         _type: 'array',
     },
-    OR: {
-        _innerType: "string",
+    // Schema keys are matched against lowercased file keys, so this must be lowercase.
+    or: {
+        _innerType: 'raw',
         _type: 'array',
     },
 };
@@ -453,11 +456,11 @@ function getFocus(hoiFocus: HOIPartial<FocusDef>, conditionExprs: ConditionItem[
     const relativePositionId = hoiFocus.relative_position_id;
 
     const exclusive = chain(hoiFocus.mutually_exclusive)
-        .flatMap(f => f.focus.concat(f.OR))
+        .flatMap(f => f.focus.concat(extractOrListIds(f.or)))
         .filter((s): s is string => s !== undefined)
         .value();
     const prerequisite = hoiFocus.prerequisite
-        .map(p => p.focus.concat(p.OR).filter((s): s is string => s !== undefined));
+        .map(p => p.focus.concat(extractOrListIds(p.or)).filter((s): s is string => s !== undefined));
     const icon = parseFocusIcon(hoiFocus.icon.filter((v): v is Raw => v !== undefined).map(v => v._raw), constants, conditionExprs);
     const textIcon = hoiFocus.text_icon;
     const overlay = hoiFocus.overlay;
@@ -632,18 +635,15 @@ function validateFocusLayout(focuses: Record<string, Focus>, warnings: FocusWarn
     // Only focuses defined in the tree's own file participate. Shared focuses merged in via
     // addSharedFocus live in other files and their stored x/y is the shared_focus block's
     // (defaulting to 0,0), so comparing them against real focuses would raise false positives.
-    const focusList = Object.values(focuses).filter(focus => focus.file === filePath);
-    const positions = new Map<string, { x: number; y: number }>();
-    for (const focus of focusList) {
-        positions.set(focus.id, resolveFocusPosition(focus, focuses));
-    }
+    const entries = Object.values(focuses)
+        .filter(focus => focus.file === filePath)
+        .map(focus => ({ focus, position: resolveFocusPosition(focus, focuses) }));
+    const positions = new Map(entries.map(entry => [entry.focus.id, entry.position] as const));
 
     const reportedPairs = new Set<string>();
     const pairKey = (a: string, b: string) => a < b ? `${a}\u0001${b}` : `${b}\u0001${a}`;
 
-    for (const focus of focusList) {
-        const position = positions.get(focus.id) ?? { x: focus.x, y: focus.y };
-
+    for (const { focus, position } of entries) {
         // An OR-group prerequisite is satisfied by completing any one of its focuses, so it is
         // only a layout problem when none of the group's options sits above the dependent.
         for (const group of focus.prerequisite) {
@@ -686,31 +686,49 @@ function validateFocusLayout(focuses: Record<string, Focus>, warnings: FocusWarn
         }
     }
 
-    // Focus icons span two grid columns, so focuses on the same row need at least two X units
-    // between them or the sprites overlap.
-    for (let i = 0; i < focusList.length; i++) {
-        const focusA = focusList[i];
-        if (focusA === undefined) {
+    // Focuses stacked on the exact same resolved position collapse into one warning each, so a
+    // pile of focuses on one spot emits a single line instead of one per pair.
+    const stacks = new Map<string, string[]>();
+    for (const { focus, position } of entries) {
+        const key = `${position.x}\u0001${position.y}`;
+        const stack = stacks.get(key);
+        if (stack === undefined) {
+            stacks.set(key, [focus.id]);
+        } else {
+            stack.push(focus.id);
+        }
+    }
+    for (const stack of stacks.values()) {
+        const first = stack[0];
+        if (stack.length > 1 && first !== undefined) {
+            warnings.push({
+                text: localize('focustree.warnings.sameposition', 'Focuses {0} share the same position, so their icons overlap.', stack.join(', ')),
+                source: first,
+                relatedSources: stack.slice(1),
+            });
+        }
+    }
+
+    // Focus icons span two grid columns, so the remaining same-row pairs need at least two X
+    // units between them or the sprites overlap. Same-position pairs are covered by the stacks.
+    for (let i = 0; i < entries.length; i++) {
+        const entryA = entries[i];
+        if (entryA === undefined) {
             continue;
         }
-        const positionA = positions.get(focusA.id);
-        if (positionA === undefined) {
-            continue;
-        }
-        for (let j = i + 1; j < focusList.length; j++) {
-            const focusB = focusList[j];
-            if (focusB === undefined) {
+        for (let j = i + 1; j < entries.length; j++) {
+            const entryB = entries[j];
+            if (entryB === undefined) {
                 continue;
             }
-            const positionB = positions.get(focusB.id);
-            if (positionB === undefined) {
+            if (entryA.position.y !== entryB.position.y || entryA.position.x === entryB.position.x) {
                 continue;
             }
-            if (positionA.y === positionB.y && Math.abs(positionA.x - positionB.x) < 2) {
+            if (Math.abs(entryA.position.x - entryB.position.x) < 2) {
                 warnings.push({
-                    text: localize('focustree.warnings.overlap', 'Focuses {0} and {1} are less than 2 apart on the same row, so their icons overlap.', focusA.id, focusB.id),
-                    source: focusA.id,
-                    relatedSources: [focusB.id],
+                    text: localize('focustree.warnings.overlap', 'Focuses {0} and {1} are less than 2 apart on the same row, so their icons overlap.', entryA.focus.id, entryB.focus.id),
+                    source: entryA.focus.id,
+                    relatedSources: [entryB.focus.id],
                 });
             }
         }
@@ -757,6 +775,35 @@ function validateRelativePositionId(focuses: Record<string, Focus>, warnings: Fo
             currentFocus = nextFocus;
         }
     }
+}
+
+function nodeValueToString(value: Node['value']): string | undefined {
+    if (typeof value === 'string') {
+        return value;
+    }
+    return isSymbolNode(value) ? value.name : undefined;
+}
+
+/**
+ * Reads the focus ids out of a prerequisite/mutually_exclusive OR block. The plain string
+ * schema cannot express an OR block (a block value converts via convertString to undefined),
+ * so the OR entries are kept raw and walked here. Both HOI4 spellings are accepted:
+ * OR = { focus_a focus_b } and OR = { focus = focus_a focus = focus_b }.
+ */
+function extractOrListIds(orList: (Raw | undefined)[]): string[] {
+    return flatten(orList
+        .map(v => v?._raw)
+        .filter((v): v is Node => v !== undefined)
+        .map(node => {
+            const value = node.value;
+            if (Array.isArray(value)) {
+                return value
+                    .map(child => child.name === 'focus' ? nodeValueToString(child.value) : child.name)
+                    .filter((v): v is string => typeof v === 'string');
+            }
+            const single = nodeValueToString(value);
+            return single !== undefined ? [single] : [];
+        }));
 }
 
 function parseFocusIcon(nodes: Node[], constants: {}, conditionExprs: ConditionItem[]): FocusIconWithCondition[] {

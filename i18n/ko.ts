@@ -54,6 +54,7 @@ const table: Partial<typeof __table> = {
     "focustree.warnings.prerequisitenotabove": "Prerequisite {0} of focus {1} is not positioned above it.",
     "focustree.warnings.relativepositioncircularref": "{0} 중점의 상대적 위치 ID에 순환 참조가 존재합니다.",
     "focustree.warnings.relativepositionidnotexist": "{0} 과 일치하는 상대적 위치 ID가 {1} 에 존재하지 않습니다.",
+    "focustree.warnings.sameposition": "Focuses {0} share the same position, so their icons overlap.",
     "gfx.filter": "필터: ",
     "gfx.imagenotfound": "이미지 찾을수 없음",
     "gfxindex.builddone": "GFX 색인 작업 완료.",

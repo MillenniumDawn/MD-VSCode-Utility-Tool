@@ -54,6 +54,7 @@ const table: Partial<typeof __table> = {
     "focustree.warnings.prerequisitenotabove": "Prerequisite {0} of focus {1} is not positioned above it.",
     "focustree.warnings.relativepositioncircularref": "这些国策的relative position id字段有循环引用：{0}。",
     "focustree.warnings.relativepositionidnotexist": "国策{0}的relative position id字段指向的国策不存在于文件中：{1}。",
+    "focustree.warnings.sameposition": "Focuses {0} share the same position, so their icons overlap.",
     "gfx.filter": "筛选器：",
     "gfx.imagenotfound": "没有找到图像",
     "gfxindex.builddone": "构建图片索引完成。",
