@@ -51,6 +51,9 @@ export interface Focus {
 
 export interface FocusWarning extends Warning<string> {
     navigations?: { file: string, start: number, end: number }[];
+    // Other focuses involved in this warning (e.g. the other focus of a pair), so the webview
+    // can highlight every offender instead of only the warning's source.
+    relatedSources?: string[];
 }
 
 export interface FocusTreeInlayRef {
@@ -244,6 +247,7 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         const conditionExprs: ConditionItem[] = [];
         const warnings: FocusWarning[] = [];
         const focuses = getFocuses(file.shared_focus, conditionExprs, filePath, warnings, constants);
+        validateFocusLayout(focuses, warnings);
         const sharedFocusTree = {
             id: localize('focustree.sharedfocuses', '<Shared focuses>'),
             focuses,
@@ -263,6 +267,7 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         const conditionExprs: ConditionItem[] = [];
         const warnings: FocusWarning[] = [];
         const focuses = getFocuses(file.joint_focus, conditionExprs, filePath, warnings, constants);
+        validateFocusLayout(focuses, warnings);
 
         focusTrees.push({
             id: getJointFocusTreeId(filePath),
@@ -292,6 +297,7 @@ export function getFocusTreeWithFocusFile(file: HOIPartial<FocusFile>, sharedFoc
         }
 
         validateRelativePositionId(focuses, warnings);
+        validateFocusLayout(focuses, warnings);
 
         focusTrees.push({
             id: focusTree.id ?? localize('focustree.ananymous', '<Anonymous focus tree>'),
@@ -598,6 +604,112 @@ function getAllowBranchOptions(focuses: Record<string, Focus>): string[] {
         .map(f => f.id)
         .uniq()
         .value();
+}
+
+function resolveFocusPosition(focus: Focus, focuses: Record<string, Focus>): { x: number; y: number } {
+    // Mirrors the webview's getFocusPosition without the condition-dependent offset pass:
+    // the resolved position is the focus's own x/y plus the resolved position of the
+    // relative_position_id chain. Cycles are cut (validateRelativePositionId reports them).
+    let x = focus.x;
+    let y = focus.y;
+    const seen = new Set<string>([focus.id]);
+    let current = focus.relativePositionId !== undefined ? focuses[focus.relativePositionId] : undefined;
+    while (current !== undefined && !seen.has(current.id)) {
+        x += current.x;
+        y += current.y;
+        seen.add(current.id);
+        current = current.relativePositionId !== undefined ? focuses[current.relativePositionId] : undefined;
+    }
+    return { x, y };
+}
+
+/**
+ * Layout checks for the common focus-tree mistakes that make the game render a broken tree:
+ * a prerequisite not positioned above its dependent, mutually exclusive focuses not sharing an X,
+ * and icons less than two grid units apart on the same row (the sprites are two units wide, so
+ * they overlap). Positions are resolved through relative_position_id chains like the preview does;
+ * condition-dependent offsets are ignored.
+ */
+function validateFocusLayout(focuses: Record<string, Focus>, warnings: FocusWarning[]) {
+    const focusList = Object.values(focuses);
+    const positions = new Map<string, { x: number; y: number }>();
+    for (const focus of focusList) {
+        positions.set(focus.id, resolveFocusPosition(focus, focuses));
+    }
+
+    const reportedPairs = new Set<string>();
+    const pairKey = (a: string, b: string) => a < b ? `${a}\u0001${b}` : `${b}\u0001${a}`;
+
+    for (const focus of focusList) {
+        const position = positions.get(focus.id) ?? { x: focus.x, y: focus.y };
+
+        // An OR-group prerequisite is satisfied by completing any one of its focuses, so it is
+        // only a layout problem when none of the group's options sits above the dependent.
+        for (const group of focus.prerequisite) {
+            const options = group.filter(p => p !== focus.id && p in focuses);
+            const anyAbove = options.some(p => {
+                const optionPosition = positions.get(p);
+                return optionPosition !== undefined && optionPosition.y < position.y;
+            });
+            if (options.length > 0 && !anyAbove) {
+                warnings.push({
+                    text: localize('focustree.warnings.prerequisitenotabove', 'Prerequisite {0} of focus {1} is not positioned above it.', options.join(', '), focus.id),
+                    source: focus.id,
+                    relatedSources: options,
+                });
+            }
+        }
+
+        // Mutually exclusive focuses are alternatives in the same tree slot, so they must share an X.
+        for (const exclusive of focus.exclusive) {
+            if (exclusive === focus.id || !(exclusive in focuses)) {
+                continue;
+            }
+            const key = pairKey(focus.id, exclusive);
+            if (reportedPairs.has(key)) {
+                continue;
+            }
+            reportedPairs.add(key);
+            const exclusivePosition = positions.get(exclusive);
+            if (exclusivePosition !== undefined && exclusivePosition.x !== position.x) {
+                warnings.push({
+                    text: localize('focustree.warnings.exclusivenotsamex', 'Mutually exclusive focuses {0} and {1} are not on the same X position.', focus.id, exclusive),
+                    source: focus.id,
+                    relatedSources: [exclusive],
+                });
+            }
+        }
+    }
+
+    // Focus icons span two grid columns, so focuses on the same row need at least two X units
+    // between them or the sprites overlap.
+    for (let i = 0; i < focusList.length; i++) {
+        const focusA = focusList[i];
+        if (focusA === undefined) {
+            continue;
+        }
+        const positionA = positions.get(focusA.id);
+        if (positionA === undefined) {
+            continue;
+        }
+        for (let j = i + 1; j < focusList.length; j++) {
+            const focusB = focusList[j];
+            if (focusB === undefined) {
+                continue;
+            }
+            const positionB = positions.get(focusB.id);
+            if (positionB === undefined) {
+                continue;
+            }
+            if (positionA.y === positionB.y && Math.abs(positionA.x - positionB.x) < 2) {
+                warnings.push({
+                    text: localize('focustree.warnings.overlap', 'Focuses {0} and {1} are less than 2 apart on the same row, so their icons overlap.', focusA.id, focusB.id),
+                    source: focusA.id,
+                    relatedSources: [focusB.id],
+                });
+            }
+        }
+    }
 }
 
 function validateRelativePositionId(focuses: Record<string, Focus>, warnings: FocusWarning[]) {

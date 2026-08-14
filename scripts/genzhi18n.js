@@ -6,9 +6,14 @@ function generate(name) {
     const result = { ...en, ...zhCn };
 
     fs.writeFileSync('./i18n/' + name + '.ts',
-        `import { __table } from './en';\r\n/*eslint sort-keys: "warn"*/\r\nconst table: Partial<typeof __table> = ` +
+        `import { __table } from './en';
+/*eslint sort-keys: "warn"*/
+const table: Partial<typeof __table> = ` +
         JSON.stringify(result, Object.keys(result).sort(), 4) +
-        `;\r\n\r\nexport default table;\r\n`
+        `;
+
+export default table;
+`
         );
 }
 
