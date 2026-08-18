@@ -45,6 +45,7 @@ const table: Partial<typeof __table> = {
     "focustree.resetcheckboxes": "Reset focus checkboxes",
     "focustree.search": "Search: ",
     "focustree.sharedfocuses": "<Shared focuses>",
+    "focustree.warningmarkers": "Toggle warning markers on the tree",
     "focustree.warnings": "Toggle warnings",
     "focustree.warnings.exclusivenotsamex": "Mutually exclusive focuses {0} and {1} are not on the same X position.",
     "focustree.warnings.focusidconflict": "There're more than one focuses with ID {0} in file: {1}.",

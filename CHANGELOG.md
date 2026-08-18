@@ -1,3 +1,15 @@
+v1.1.19
+
+  Functionality:
+
+- [ Focus Tree ] Layout warnings are now readable off the tree itself instead of only out of a text panel. Every focus a warning names -- both ends of a mutually exclusive or overlap pair, every member of a same-position stack, and the focus a prerequisite or relative-position warning is filed under -- is drawn with a red box and a warning badge over its slot, the same treatment overlapping traits already get in the MIO preview. Where several warned focuses resolve to one slot, the badge carries the count, which is the only way to see that a focus is hidden underneath another one; the count is taken over warned focuses only, so shared and joint focuses merged in from another file, which the validator deliberately ignores, cannot produce a marker. Hovering a marked focus lists the warnings that concern it in the tooltip, after the focus id and position it already showed. The markers are drawn inside the focus element rather than over it, so they follow zoom, pan and branch visibility, do not survive a focus being filtered out, and are not erased by the search box writing its own outline and background onto every focus. They are `pointer-events: none`, so a click still reaches the focus underneath and jumps to its definition.
+- [ Focus Tree ] The warnings panel is now a list of clickable entries rather than a read-only text box. Activating an entry -- by click, Enter or Space -- closes the panel, scrolls the offending focus to the centre of the canvas and flashes it, so a warning no longer has to be read as coordinates and then hunted for by hand. The wording of each entry is unchanged.
+- [ Focus Tree ] New toolbar button next to the warnings button hides and shows the on-canvas markers, for when a marker covers an icon that needs looking at. It appears under exactly the same condition as the warnings button, defaults to on, and is remembered across reloads. Toggling flips the existing markers rather than re-rendering the tree, so it stays instant on large trees.
+
+  Bugfixes:
+
+- [ Focus Tree ] The red outline v1.1.18 announced for warned focuses never actually drew. It was registered in the per-render style table *after* that table had already been serialized into the document, and `StyleTable` snapshots its rules at serialization time, so the class landed on the focus element while no rule for it ever reached the page. The warning styles now live in the shell stylesheet, which is emitted once before any render, and the class names are shared between the content builder and the webview through a single module -- so the ordering that caused this cannot recur, and a test now asserts the markers really appear on the rendered nodes.
+
 v1.1.18
 
   Functionality:

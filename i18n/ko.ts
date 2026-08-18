@@ -45,6 +45,7 @@ const table: Partial<typeof __table> = {
     "focustree.resetcheckboxes": "Reset focus checkboxes",
     "focustree.search": "검색: ",
     "focustree.sharedfocuses": "<공유 중점>",
+    "focustree.warningmarkers": "Toggle warning markers on the tree",
     "focustree.warnings": "경고 활성/비활성",
     "focustree.warnings.exclusivenotsamex": "Mutually exclusive focuses {0} and {1} are not on the same X position.",
     "focustree.warnings.focusidconflict": "중점 ID {0} 가 {1} 파일 내에 2개 이상 존재합니다.",

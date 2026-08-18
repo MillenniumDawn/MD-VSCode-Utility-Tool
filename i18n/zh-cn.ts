@@ -45,6 +45,7 @@ const table: Partial<typeof __table> = {
     "focustree.resetcheckboxes": "Reset focus checkboxes",
     "focustree.search": "搜索：",
     "focustree.sharedfocuses": "<共享国策>",
+    "focustree.warningmarkers": "Toggle warning markers on the tree",
     "focustree.warnings": "开启/收起警告列表",
     "focustree.warnings.exclusivenotsamex": "Mutually exclusive focuses {0} and {1} are not on the same X position.",
     "focustree.warnings.focusidconflict": "在这个文件中有多个国策的id字段为{0}：{1}。",
