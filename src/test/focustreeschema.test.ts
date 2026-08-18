@@ -2,6 +2,8 @@ import * as assert from "assert";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import {
 	convertFocusFileNodeToJson,
+	extractFocusIds,
+	extractOrListIds,
 	getFocusTreeWithFocusFile,
 	FocusTree,
 	FocusWarning,
@@ -379,8 +381,8 @@ shared_focus = {
     id = SH_b
     focus = { id = sh_b1 x = 0 y = 0 }
 }`;
-		// The schema drops the nested focuses, leaving one position-less entry per block at (0,0);
-		// those must not be compared against each other as if they were real focuses.
+		// The container blocks (SH_a, SH_b) are unwrapped into their real children (sh_a1, sh_b1)
+		// instead of becoming position-less pseudo focuses, so there's nothing to warn about.
 		assert.deepStrictEqual(warningTexts(content), []);
 	});
 
@@ -389,18 +391,9 @@ shared_focus = {
     focus = { id = j_a x = 0 y = 0 }
     focus = { id = j_b x = 1 y = 0 }
 }`;
-		const texts = warningTexts(content);
-		// The id-less joint pseudo focus keeps its pre-existing focusnoid warning; the layout
-		// checks must not add anything on top.
-		assert.strictEqual(texts.length, 1);
-		assert.ok(
-			!texts.some(
-				(t) =>
-					t.includes("not positioned above") ||
-					t.includes("same X position") ||
-					t.includes("less than 2 apart"),
-			),
-		);
+		// The id-less joint container is unwrapped into j_a/j_b, both of which have real ids, so
+		// the pre-existing focusnoid warning for the container itself no longer applies.
+		assert.deepStrictEqual(warningTexts(content), []);
 	});
 
 	it("skips shared focuses merged into the tree from another file", () => {
@@ -448,6 +441,141 @@ shared_focus = {
 				(main?.warnings ?? []).map((w) => w.text),
 				[],
 			);
+		} finally {
+			flags.useConditionInFocus = false;
+		}
+	});
+
+	it("flattens nested focus entries inside a shared_focus block into their real ids and positions", () => {
+		const content = `shared_focus = {
+    id = SH_test
+    focus = { id = sh_a x = 0 y = 0 }
+    focus = { id = sh_b x = 0 y = 1 }
+}`;
+		const trees = treesOf(content);
+		assert.strictEqual(trees.length, 1);
+		assert.deepStrictEqual(Object.keys(trees[0].focuses).sort(), [
+			"sh_a",
+			"sh_b",
+		]);
+		assert.strictEqual(trees[0].focuses.sh_a.x, 0);
+		assert.strictEqual(trees[0].focuses.sh_a.y, 0);
+		assert.strictEqual(trees[0].focuses.sh_b.y, 1);
+	});
+
+	it("recurses through more than one level of nested focus containers", () => {
+		const content = `shared_focus = {
+    id = SH_group
+    focus = {
+        id = SH_mid
+        focus = { id = sh_leaf x = 3 y = 4 }
+    }
+}`;
+		const trees = treesOf(content);
+		assert.deepStrictEqual(Object.keys(trees[0].focuses), ["sh_leaf"]);
+		assert.strictEqual(trees[0].focuses.sh_leaf.x, 3);
+		assert.strictEqual(trees[0].focuses.sh_leaf.y, 4);
+	});
+
+	it("still treats a shared_focus block with no nested focus as a single focus", () => {
+		const content = `shared_focus = {
+    id = SH_solo
+    x = 3
+    y = 4
+}`;
+		const trees = treesOf(content);
+		assert.deepStrictEqual(Object.keys(trees[0].focuses), ["SH_solo"]);
+		assert.strictEqual(trees[0].focuses.SH_solo.x, 3);
+		assert.strictEqual(trees[0].focuses.SH_solo.y, 4);
+	});
+
+	it("flattens nested focus entries inside a joint_focus block", () => {
+		const content = `joint_focus = {
+    focus = { id = j_a x = 0 y = 0 }
+    focus = { id = j_b x = 1 y = 0 }
+}`;
+		const trees = treesOf(content);
+		assert.deepStrictEqual(Object.keys(trees[0].focuses).sort(), [
+			"j_a",
+			"j_b",
+		]);
+	});
+
+	it("indexes ids from nested shared_focus/joint_focus blocks for the shared focus index", () => {
+		const content = `shared_focus = {
+    id = SH_group
+    focus = { id = sh_a x = 0 y = 0 }
+    focus = { id = sh_b x = 0 y = 1 }
+}
+joint_focus = {
+    focus = { id = j_a x = 0 y = 0 }
+}`;
+		const ids = extractFocusIds(parseHoi4File(content));
+		assert.deepStrictEqual(ids.sort(), ["j_a", "sh_a", "sh_b"]);
+	});
+
+	it("parses block-form shared_focus references like the single-symbol form", () => {
+		const single = treeWithFocuses(focusBlock("m1", 0, 0)).replace(
+			"id = test_tree",
+			"id = test_tree\n    shared_focus = SH_a\n    shared_focus = SH_b",
+		);
+		const block = treeWithFocuses(focusBlock("m1", 0, 0)).replace(
+			"id = test_tree",
+			"id = test_tree\n    shared_focus = { SH_a SH_b }",
+		);
+
+		const idsOf = (content: string) => {
+			const file = convertFocusFileNodeToJson(parseHoi4File(content), {});
+			return extractOrListIds(file.focus_tree[0].shared_focus);
+		};
+
+		assert.deepStrictEqual(idsOf(block), ["SH_a", "SH_b"]);
+		assert.deepStrictEqual(idsOf(single), idsOf(block));
+	});
+
+	it("merges shared focuses referenced via block-form shared_focus = { A B }", () => {
+		const sharedFile = convertFocusFileNodeToJson(
+			parseHoi4File(`shared_focus = {
+    id = SH_a
+    x = 0
+    y = 0
+}
+shared_focus = {
+    id = SH_b
+    x = 0
+    y = 1
+}`),
+			{},
+		);
+		const sharedTrees = getFocusTreeWithFocusFile(
+			sharedFile,
+			[],
+			"common/national_focus/shared.txt",
+			{},
+		);
+
+		const flags = require("../util/featureflags") as {
+			useConditionInFocus: boolean;
+		};
+		flags.useConditionInFocus = true;
+		try {
+			const mainContent = treeWithFocuses(focusBlock("m1", 0, 0)).replace(
+				"id = test_tree",
+				"id = test_tree\n    shared_focus = { SH_a SH_b }",
+			);
+			const mainFile = convertFocusFileNodeToJson(
+				parseHoi4File(mainContent),
+				{},
+			);
+			const merged = getFocusTreeWithFocusFile(
+				mainFile,
+				sharedTrees,
+				filePath,
+				{},
+			);
+			const main = merged.find((t) => t.id === "test_tree");
+			assert.ok(main?.focuses["SH_a"], "SH_a must be merged in");
+			assert.ok(main?.focuses["SH_b"], "SH_b must be merged in");
 		} finally {
 			flags.useConditionInFocus = false;
 		}

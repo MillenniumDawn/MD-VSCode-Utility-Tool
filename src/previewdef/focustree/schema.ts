@@ -122,7 +122,7 @@ interface Offset {
 
 interface FocusTreeDef {
 	id: string;
-	shared_focus: string[];
+	shared_focus: Raw[];
 	focus: FocusDef[];
 	continuous_focus_position: Position;
 	inlay_window: Raw[];
@@ -140,6 +140,8 @@ interface FocusDef {
 	relative_position_id: string;
 	allow_branch: Raw[] /* FIXME not symbol node */;
 	offset: OffsetDef[];
+	// Nested focus = { ... } children of a top-level shared_focus/joint_focus block.
+	focus: FocusDef[];
 	_token: Token;
 	text?: string;
 }
@@ -214,13 +216,21 @@ const focusSchema: SchemaDef<FocusDef> = {
 		},
 		_type: "array",
 	},
+	focus: {
+		_innerType: undefined as any,
+		_type: "array",
+	},
 	text: "string",
 };
 
+focusSchema.focus._innerType = focusSchema;
+
 const focusTreeSchema: SchemaDef<FocusTreeDef> = {
 	id: "string",
+	// A block-form shared_focus = { SH_a SH_b } converts via convertString to undefined per
+	// occurrence, so this is kept raw and walked with extractOrListIds like an OR block.
 	shared_focus: {
-		_innerType: "string",
+		_innerType: "raw",
 		_type: "array",
 	},
 	focus: {
@@ -272,7 +282,7 @@ export function getFocusTreeWithFocusFile(
 		const conditionExprs: ConditionItem[] = [];
 		const warnings: FocusWarning[] = [];
 		const focuses = getFocuses(
-			file.shared_focus,
+			flattenFocusGroups(file.shared_focus),
 			conditionExprs,
 			filePath,
 			warnings,
@@ -297,7 +307,7 @@ export function getFocusTreeWithFocusFile(
 		const conditionExprs: ConditionItem[] = [];
 		const warnings: FocusWarning[] = [];
 		const focuses = getFocuses(
-			file.joint_focus,
+			flattenFocusGroups(file.joint_focus),
 			conditionExprs,
 			filePath,
 			warnings,
@@ -329,10 +339,7 @@ export function getFocusTreeWithFocusFile(
 		);
 
 		if (useConditionInFocus) {
-			for (const sharedFocus of focusTree.shared_focus) {
-				if (!sharedFocus) {
-					continue;
-				}
+			for (const sharedFocus of extractOrListIds(focusTree.shared_focus)) {
 				addSharedFocus(
 					focuses,
 					filePath,
@@ -397,17 +404,27 @@ export function extractFocusIds(node: Node): string[] {
 		}
 	}
 	for (const focus of file.shared_focus) {
-		if (focus.id) {
-			ids.push(focus.id);
-		}
+		collectFocusIds(focus, ids);
 	}
 	for (const focus of file.joint_focus) {
-		if (focus.id) {
-			ids.push(focus.id);
-		}
+		collectFocusIds(focus, ids);
 	}
 
 	return ids;
+}
+
+// Mirrors flattenFocusGroups: a container block itself isn't a focus, so only its (recursive)
+// focus children contribute ids.
+function collectFocusIds(focus: HOIPartial<FocusDef>, ids: string[]): void {
+	if (focus.focus.length > 0) {
+		for (const child of focus.focus) {
+			collectFocusIds(child, ids);
+		}
+		return;
+	}
+	if (focus.id) {
+		ids.push(focus.id);
+	}
 }
 
 export function getFocusTree(
@@ -419,6 +436,26 @@ export function getFocusTree(
 	const file = convertFocusFileNodeToJson(node, constants);
 
 	return getFocusTreeWithFocusFile(file, sharedFocusTrees, filePath, constants);
+}
+
+/**
+ * A top-level shared_focus/joint_focus block can be a group container (`id = SH_group  focus =
+ * { ... }  focus = { ... }`) instead of a single focus. A container has no real position of its
+ * own, so it is unwrapped recursively into its `focus` children instead of becoming a pseudo
+ * focus. A block with no nested focus is still a single focus, as before.
+ */
+function flattenFocusGroups(
+	hoiFocuses: HOIPartial<FocusDef>[],
+): HOIPartial<FocusDef>[] {
+	const result: HOIPartial<FocusDef>[] = [];
+	for (const hoiFocus of hoiFocuses) {
+		if (hoiFocus.focus.length > 0) {
+			result.push(...flattenFocusGroups(hoiFocus.focus));
+		} else {
+			result.push(hoiFocus);
+		}
+	}
+	return result;
 }
 
 function getFocuses(
@@ -990,12 +1027,13 @@ function nodeValueToString(value: Node["value"]): string | undefined {
 }
 
 /**
- * Reads the focus ids out of a prerequisite/mutually_exclusive OR block. The plain string
- * schema cannot express an OR block (a block value converts via convertString to undefined),
- * so the OR entries are kept raw and walked here. Both HOI4 spellings are accepted:
- * OR = { focus_a focus_b } and OR = { focus = focus_a focus = focus_b }.
+ * Reads bare focus ids out of a raw node list. The plain string schema cannot express a block
+ * value (it converts via convertString to undefined), so both a prerequisite/mutually_exclusive
+ * OR block and a focus_tree's shared_focus references are kept raw and walked here. Both the
+ * single-symbol form (OR = focus_a, shared_focus = SH_a) and the block forms are accepted:
+ * OR = { focus_a focus_b }, OR = { focus = focus_a focus = focus_b }, shared_focus = { SH_a SH_b }.
  */
-function extractOrListIds(orList: (Raw | undefined)[]): string[] {
+export function extractOrListIds(orList: (Raw | undefined)[]): string[] {
 	return flatten(
 		orList
 			.map((v) => v?._raw)

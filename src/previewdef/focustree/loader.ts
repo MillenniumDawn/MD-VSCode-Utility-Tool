@@ -1,5 +1,5 @@
 import { ContentLoader, LoadResultOD, Dependency, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
-import { convertFocusFileNodeToJson, FocusTree, getFocusTreeWithFocusFile } from "./schema";
+import { convertFocusFileNodeToJson, extractOrListIds, FocusTree, getFocusTreeWithFocusFile } from "./schema";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
 import { uniq, flatten, chain } from "lodash";
@@ -42,10 +42,7 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
         if (sharedFocusIndex) {
             const depPaths = new Set(dependencies.map(d => d.path));
             for (const focusTree of file.focus_tree) {
-                for (const sharedFocus of focusTree.shared_focus) {
-                    if (!sharedFocus) {
-                        continue;
-                    }
+                for (const sharedFocus of extractOrListIds(focusTree.shared_focus)) {
                     const filePath = findFileByFocusKey(sharedFocus);
                     if (filePath && !depPaths.has(filePath)) {
                         depPaths.add(filePath);
