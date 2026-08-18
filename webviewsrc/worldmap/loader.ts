@@ -125,25 +125,41 @@ export class Loader extends Subscriber {
                     break;
                 case 'warnings':
                     if (this.loadingProvinceMap) {
-                        this.loadingProvinceMap.warnings = JSON.parse(message.data);
+                        try {
+                            this.loadingProvinceMap.warnings = JSON.parse(message.data);
+                        } catch (e) {
+                            console.error(e);
+                        }
                         this.loadNext();
                     }
                     break;
                 case 'continents':
                     if (this.loadingProvinceMap) {
-                        this.loadingProvinceMap.continents = JSON.parse(message.data);
+                        try {
+                            this.loadingProvinceMap.continents = JSON.parse(message.data);
+                        } catch (e) {
+                            console.error(e);
+                        }
                         this.loadNext();
                     }
                     break;
                 case 'terrains':
                     if (this.loadingProvinceMap) {
-                        this.loadingProvinceMap.terrains = JSON.parse(message.data);
+                        try {
+                            this.loadingProvinceMap.terrains = JSON.parse(message.data);
+                        } catch (e) {
+                            console.error(e);
+                        }
                         this.loadNext();
                     }
                     break;
                 case 'resources':
                     if (this.loadingProvinceMap) {
-                        this.loadingProvinceMap.resources = JSON.parse(message.data);
+                        try {
+                            this.loadingProvinceMap.resources = JSON.parse(message.data);
+                        } catch (e) {
+                            console.error(e);
+                        }
                         this.loadNext();
                     }
                     break;
@@ -239,7 +255,11 @@ export class Loader extends Subscriber {
     
     private receiveData<T>(arr: T[] | undefined, start: number, end: number, data: string): void {
         if (arr) {
-            copyArray(JSON.parse(data), arr, 0, start, end - start);
+            try {
+                copyArray(JSON.parse(data), arr, 0, start, end - start);
+            } catch (e) {
+                console.error(e);
+            }
         }
     }
 }

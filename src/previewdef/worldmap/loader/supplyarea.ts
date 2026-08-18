@@ -115,7 +115,7 @@ async function loadSupplyArea(file: string, globalWarnings: WorldMapWarning[]): 
             const id = supplyArea.id ? supplyArea.id : (warnings.push(localize('worldmap.warnings.supplyareanoid', "A supply area in \"{0}\" doesn't have id field.", file)), -1);
             const name = supplyArea.name ? supplyArea.name : (warnings.push(localize('worldmap.warnings.supplyareanoname', "Supply area {0} doesn't have name field.", id)), '');
             const value = supplyArea.value ?? 0;
-            const states = supplyArea.states._values.map(v => parseInt(v));
+            const states = supplyArea.states._values.map(v => parseInt(v, 10));
 
             if (states.length === 0) {
                 warnings.push(localize('worldmap.warnings.supplyareanostates', "Supply area {0} in \"{1}\" doesn't have states.", id, file));
@@ -221,7 +221,7 @@ function validateStatesInSupplyAreas(
             }
 
             return state;
-        }).filter((s): s is State => !!s);
+        }).filter((s): s is State => Boolean(s));
 
         const badStates = checkStatesContiguous(statesInSupplyArea, provinces);
         if (badStates) {
@@ -276,7 +276,7 @@ function checkStatesContiguous(states: State[], provinces: (Province | undefined
     }
 
     const inAccessedState = states.find(state => !accessedStates[state.id]);
-    return inAccessedState === undefined ? undefined : [inAccessedState.id, parseInt(Object.keys(accessedStates)[0] ?? '0')];
+    return inAccessedState === undefined ? undefined : [inAccessedState.id, parseInt(Object.keys(accessedStates)[0] ?? '0', 10)];
 }
 
 function statesAreAdjacent(stateA: State, stateB: State, provinces: (Province | undefined | null)[]): boolean {

@@ -290,7 +290,7 @@ function validateProvinceContinents(provinces: Province[], continents: string[],
                 text: localize('worldmap.warnings.continentnotdefined', 'Continent {0} is not defined.', continent),
             });
         }
-        if (province.type === 'land' && (continent === 0 || isNaN(continent)) && province.id !== 0) {
+        if (province.type === 'land' && (continent === 0 || Number.isNaN(continent)) && province.id !== 0) {
             warnings.push({
                 source: [{
                     type: 'province',
@@ -335,7 +335,7 @@ function fillAdjacencyEdges(provinces: (Province | undefined)[], adjacencies: Pr
             continue;
         }
 
-        const resultThrough = through !== undefined && !isNaN(through) && through !== -1 ? through : undefined;
+        const resultThrough = through !== undefined && !Number.isNaN(through) && through !== -1 ? through : undefined;
         if (resultThrough && !provinces[resultThrough]) {
             warnings.push({
                 source: [{ type: 'province', id: resultThrough, color: -1 }],

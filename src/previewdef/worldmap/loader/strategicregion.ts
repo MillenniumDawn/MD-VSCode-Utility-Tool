@@ -115,7 +115,7 @@ async function loadStrategicRegion(file: string, globalWarnings: WorldMapWarning
             const warnings: string[] = [];
             const id = strategicRegion.id ? strategicRegion.id : (warnings.push(localize('worldmap.warnings.strategicregionnoid', "A strategic region in \"{0}\" doesn't have id field.", file)), -1);
             const name = strategicRegion.name ? strategicRegion.name : (warnings.push(localize('worldmap.warnings.strategicregionnoname', "Strategic region {0} doesn't have name field.", id)), '');
-            const provinces = strategicRegion.provinces._values.map(v => parseInt(v));
+            const provinces = strategicRegion.provinces._values.map(v => parseInt(v, 10));
             const navalTerrain = strategicRegion.naval_terrain ?? null;
 
             if (provinces.length === 0) {
@@ -277,7 +277,7 @@ function validateProvincesInStrategicRegions(
         const entries = Object.entries(strategicRegionIdCount);
         if (entries.length > 1) {
             entries.sort((a, b) => b[1] - a[1]);
-            const mostStrategicRegionId = parseInt(entries[0]?.[0] ?? '0');
+            const mostStrategicRegionId = parseInt(entries[0]?.[0] ?? '0', 10);
             const badProvinces = strategicRegionId.filter(([_, sr]) => sr !== mostStrategicRegionId).map(v => v[0]);
             warnings.push({
                 source: [

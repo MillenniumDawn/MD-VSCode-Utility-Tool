@@ -304,7 +304,7 @@ export class WorldMap {
             return false;
         }
 
-        return await this.panel.webview.postMessage(message);
+        return this.panel.webview.postMessage(message);
     }
 
     private async requestExportMap() {
@@ -330,7 +330,7 @@ export class WorldMap {
         }
 
         try {
-            const base64 = dataUrl.substring(prefix.length);
+            const base64 = dataUrl.slice(prefix.length);
             const buffer = Buffer.from(base64, 'base64');
 
             await writeFile(uri, buffer);

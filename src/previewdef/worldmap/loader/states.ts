@@ -135,7 +135,7 @@ export class StatesLoader extends FolderLoader<StateLoaderResult, StateNoBoundin
                     });
                 }
 
-                for (const key in state.resources) {
+                for (const key of Object.keys(state.resources)) {
                     if (state.resources[key] !== undefined && !(key in resources)) {
                         warnings.push({
                             source: [{ type: 'state', id: i }],
@@ -244,11 +244,11 @@ async function loadState(stateFile: string, globalWarnings: WorldMapWarning[]): 
             const manpower = state.manpower ?? 0;
             const category = state.state_category ? state.state_category : (warnings.push(localize('worldmap.warnings.statenocategory', "The state doesn't have category field.")), '');
             const owner = state.history?.owner;
-            const provinces = state.provinces._values.map(v => parseInt(v));
+            const provinces = state.provinces._values.map(v => parseInt(v, 10));
             const cores = state.history?.add_core_of.map(v => v).filter((v, i, a): v is string => v !== undefined && i === a.indexOf(v)) ?? [];
             const impassable = state.impassable ?? false;
-            const impassableIgnoredLinks = state.impassable_ignored_links?._values.map(v => parseInt(v)) ?? [];
-            const victoryPointsArray = state.history?.victory_points.filter(v => v._values.length >= 2).map(v => v._values.slice(0, 2).map(v => parseInt(v)) as [number, number]) ?? [];
+            const impassableIgnoredLinks = state.impassable_ignored_links?._values.map(v => parseInt(v, 10)) ?? [];
+            const victoryPointsArray = state.history?.victory_points.filter(v => v._values.length >= 2).map(v => v._values.slice(0, 2).map(v => parseInt(v, 10)) as [number, number]) ?? [];
             const victoryPoints = arrayToMap(victoryPointsArray, "0", v => v[1]);
             const resources = arrayToMap(
                 Object.values(state.resources._map), '_key', v => v._value);
