@@ -813,7 +813,7 @@ function resolveFocusPosition(
 
 /**
  * Layout checks for the common focus-tree mistakes that make the game render a broken tree:
- * a prerequisite not positioned above its dependent, mutually exclusive focuses not sharing an X,
+ * a prerequisite not positioned above its dependent, mutually exclusive focuses not sharing a row,
  * and icons less than two grid units apart on the same row (the sprites are two units wide, so
  * they overlap). Positions are resolved through relative_position_id chains like the preview does;
  * condition-dependent offsets are ignored.
@@ -870,7 +870,10 @@ function validateFocusLayout(
 			}
 		}
 
-		// Mutually exclusive focuses are alternatives in the same tree slot, so they must share an X.
+		// Mutually exclusive focuses are drawn side by side and linked by a horizontal red
+		// exclusivity marker, so they must share a row. Differing X is the normal case, not a
+		// mistake: the standard idiom places the alternatives two columns apart and lets
+		// allow_branch hide the loser while offset slides the survivor into the vacated slot.
 		for (const exclusive of focus.exclusive) {
 			const exclusiveFocus = focuses[exclusive];
 			if (
@@ -888,12 +891,12 @@ function validateFocusLayout(
 			const exclusivePosition = positions.get(exclusive);
 			if (
 				exclusivePosition !== undefined &&
-				exclusivePosition.x !== position.x
+				exclusivePosition.y !== position.y
 			) {
 				warnings.push({
 					text: localize(
-						"focustree.warnings.exclusivenotsamex",
-						"Mutually exclusive focuses {0} and {1} are not on the same X position.",
+						"focustree.warnings.exclusivenotsamey",
+						"Mutually exclusive focuses {0} and {1} are not on the same row.",
 						focus.id,
 						exclusive,
 					),
