@@ -11,6 +11,7 @@ import { slice, debounceByInput, forceError } from '../../util/common';
 import { openOrCopyHoiFile } from '../../util/previewfileopener';
 import { WorldMapLoader } from './loader/worldmaploader';
 import { isEqual } from 'lodash';
+import { diffItemList, defaultHashItem } from './worldmapdiff';
 import { LoaderSession } from '../../util/loader/loader';
 import { TelemetryMessage, sendByMessage } from '../../util/telemetry';
 
@@ -281,40 +282,18 @@ export class WorldMap {
         listStart: number,
         listEnd: number,
     ): boolean {
-        const changeMessagesCountLimit = 30;
-        const messageCountLimit = 300;
+        const ranges = diffItemList(list, cachedList, listStart, listEnd, defaultHashItem, 30 - changeMessages.length);
+        if (ranges === undefined) {
+            return false;
+        }
 
-        let lastDifferenceStart: number | undefined = undefined;
-        for (let i = listStart; i <= listEnd; i++) {
-            if (i === listEnd || isEqual(list[i], cachedList[i])) {
-                if (lastDifferenceStart !== undefined) {
-                    changeMessages.push({
-                        command,
-                        data: JSON.stringify(slice(list, lastDifferenceStart, i)),
-                        start: lastDifferenceStart,
-                        end: i,
-                    });
-                    if (changeMessages.length > changeMessagesCountLimit) {
-                        return false;
-                    }
-                    lastDifferenceStart = undefined;
-                }
-            } else {
-                if (lastDifferenceStart === undefined) {
-                    lastDifferenceStart = i;
-                } else if (i - lastDifferenceStart >= messageCountLimit) {
-                    changeMessages.push({
-                        command,
-                        data: JSON.stringify(slice(list, lastDifferenceStart, i)),
-                        start: lastDifferenceStart,
-                        end: i,
-                    });
-                    if (changeMessages.length > changeMessagesCountLimit) {
-                        return false;
-                    }
-                    lastDifferenceStart = i;
-                }
-            }
+        for (const { start, end } of ranges) {
+            changeMessages.push({
+                command,
+                data: JSON.stringify(slice(list, start, end)),
+                start,
+                end,
+            });
         }
 
         return true;
