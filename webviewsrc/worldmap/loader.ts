@@ -172,13 +172,13 @@ export class Loader extends Subscriber {
     
         this.queueLoadingRequest('requestcountries', this.loadingProvinceMap.countriesCount, 750);
         this.queueLoadingRequest('requeststrategicregions', this.loadingProvinceMap.strategicRegionsCount, 750);
-        this.queueLoadingRequest('requeststrategicregions', -this.loadingProvinceMap.badStrategicRegionsCount, 750, this.loadingProvinceMap.badStrategicRegionsCount);
+        this.queueLoadingRequest('requeststrategicregions', this.loadingProvinceMap.badStrategicRegionsCount, 750, -this.loadingProvinceMap.badStrategicRegionsCount);
         this.queueLoadingRequest('requestsupplyareas', this.loadingProvinceMap.supplyAreasCount, 750);
-        this.queueLoadingRequest('requestsupplyareas', -this.loadingProvinceMap.badSupplyAreasCount, 750, this.loadingProvinceMap.badSupplyAreasCount);
+        this.queueLoadingRequest('requestsupplyareas', this.loadingProvinceMap.badSupplyAreasCount, 750, -this.loadingProvinceMap.badSupplyAreasCount);
         this.queueLoadingRequest('requeststates', this.loadingProvinceMap.statesCount, 750);
-        this.queueLoadingRequest('requeststates', -this.loadingProvinceMap.badStatesCount, 750, this.loadingProvinceMap.badStatesCount);
+        this.queueLoadingRequest('requeststates', this.loadingProvinceMap.badStatesCount, 750, -this.loadingProvinceMap.badStatesCount);
         this.queueLoadingRequest('requestprovinces', this.loadingProvinceMap.provincesCount, 750);
-        this.queueLoadingRequest('requestprovinces', -this.loadingProvinceMap.badProvincesCount, 750, this.loadingProvinceMap.badProvincesCount);
+        this.queueLoadingRequest('requestprovinces', this.loadingProvinceMap.badProvincesCount, 750, -this.loadingProvinceMap.badProvincesCount);
         this.queueLoadingRequest('requestrailways', this.loadingProvinceMap.railwaysCount, 2500);
         this.queueLoadingRequest('requestsupplynodes', this.loadingProvinceMap.supplyNodesCount, 5000);
 
@@ -400,7 +400,7 @@ export class FEWorldMapClass implements FEWorldMap {
 
     public forEachProvince(callback: (province: Province) => boolean | void) {
         const count = this.provincesCount;
-        for (let i = this.badProvincesCount; i < count; i++) {
+        for (let i = -this.badProvincesCount; i < count; i++) {
             const province = this.provinces[i];
             if (province && callback(province)) {
                 break;
@@ -410,7 +410,7 @@ export class FEWorldMapClass implements FEWorldMap {
 
     public forEachState(callback: (state: State) => boolean | void) {
         const count = this.statesCount;
-        for (let i = this.badStatesCount; i < count; i++) {
+        for (let i = -this.badStatesCount; i < count; i++) {
             const state = this.states[i];
             if (state && callback(state)) {
                 break;
@@ -420,7 +420,7 @@ export class FEWorldMapClass implements FEWorldMap {
 
     public forEachStrategicRegion(callback: (strategicRegion: StrategicRegion) => boolean | void): void {
         const count = this.strategicRegionsCount;
-        for (let i = this.badStrategicRegionsCount; i < count; i++) {
+        for (let i = -this.badStrategicRegionsCount; i < count; i++) {
             const strategicRegion = this.strategicRegions[i];
             if (strategicRegion && callback(strategicRegion)) {
                 break;
@@ -430,7 +430,7 @@ export class FEWorldMapClass implements FEWorldMap {
     
     public forEachSupplyArea(callback: (supplyArea: SupplyArea) => boolean | void): void {
         const count = this.supplyAreasCount;
-        for (let i = this.badSupplyAreasCount; i < count; i++) {
+        for (let i = -this.badSupplyAreasCount; i < count; i++) {
             const supplyArea = this.supplyAreas[i];
             if (supplyArea && callback(supplyArea)) {
                 break;

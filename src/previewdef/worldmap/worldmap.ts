@@ -236,11 +236,11 @@ export class WorldMap {
             changeMessages.push({ command: 'resources', data: JSON.stringify(worldMap.resources), start: 0, end: 0 });
         }
 
-        if (!this.fillMessageForItem(changeMessages, worldMap.provinces, cachedWorldMap.provinces, 'provinces', worldMap.badProvincesCount, worldMap.provincesCount)) {
+        if (!this.fillMessageForItem(changeMessages, worldMap.provinces, cachedWorldMap.provinces, 'provinces', -worldMap.badProvincesCount, worldMap.provincesCount)) {
             return false;
         }
 
-        if (!this.fillMessageForItem(changeMessages, worldMap.states, cachedWorldMap.states, 'states', worldMap.badStatesCount, worldMap.statesCount)) {
+        if (!this.fillMessageForItem(changeMessages, worldMap.states, cachedWorldMap.states, 'states', -worldMap.badStatesCount, worldMap.statesCount)) {
             return false;
         }
 
@@ -248,11 +248,11 @@ export class WorldMap {
             return false;
         }
 
-        if (!this.fillMessageForItem(changeMessages, worldMap.strategicRegions, cachedWorldMap.strategicRegions, 'strategicregions', worldMap.badStrategicRegionsCount, worldMap.strategicRegionsCount)) {
+        if (!this.fillMessageForItem(changeMessages, worldMap.strategicRegions, cachedWorldMap.strategicRegions, 'strategicregions', -worldMap.badStrategicRegionsCount, worldMap.strategicRegionsCount)) {
             return false;
         }
 
-        if (!this.fillMessageForItem(changeMessages, worldMap.supplyAreas, cachedWorldMap.supplyAreas, 'supplyareas', worldMap.badSupplyAreasCount, worldMap.supplyAreasCount)) {
+        if (!this.fillMessageForItem(changeMessages, worldMap.supplyAreas, cachedWorldMap.supplyAreas, 'supplyareas', -worldMap.badSupplyAreasCount, worldMap.supplyAreasCount)) {
             return false;
         }
 

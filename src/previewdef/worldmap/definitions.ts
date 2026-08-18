@@ -18,10 +18,10 @@ export interface WorldMapData {
     supplyAreasCount: number;
     railwaysCount: number;
     supplyNodesCount: number;
-    badProvincesCount: number; // will be * -1
-    badStatesCount: number; // will be * -1;
-    badStrategicRegionsCount: number;
-    badSupplyAreasCount: number;
+    badProvincesCount: number; // non-negative count of synthetic "bad" provinces (ids -1 .. -N), 0 when none
+    badStatesCount: number; // non-negative count of synthetic "bad" states (ids -1 .. -N), 0 when none
+    badStrategicRegionsCount: number; // non-negative count of synthetic "bad" strategic regions (ids -1 .. -N), 0 when none
+    badSupplyAreasCount: number; // non-negative count of synthetic "bad" supply areas (ids -1 .. -N), 0 when none
     continents: string[];
     terrains: Terrain[];
     resources: Resource[];
@@ -42,7 +42,7 @@ export interface ProvinceMap {
     height: number;
     colorByPosition: Uint32Array; // width * height
     provinces: (Province | undefined | null)[]; // count of provinces
-    badProvincesCount: number;
+    badProvincesCount: number; // non-negative count of synthetic "bad" provinces (ids -1 .. -N), 0 when none
     continents: string[];
     terrains: Terrain[];
     rivers: River[];

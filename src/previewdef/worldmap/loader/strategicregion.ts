@@ -65,10 +65,10 @@ export class StrategicRegionsLoader extends FolderLoader<StrategicRegionsLoaderR
         const { sortedStrategicRegions, badStrategicRegionId } = sortStrategicRegions(strategicRegions, warnings);
 
         const { states, badStatesCount } = stateMap.result;
-        const badStrategicRegionsCount = badStrategicRegionId + 1;
+        const badStrategicRegionsCount = -(badStrategicRegionId + 1);
 
         const filledStrategicRegions: StrategicRegion[] = new Array(sortedStrategicRegions.length);
-        for (let i = badStrategicRegionsCount; i < sortedStrategicRegions.length; i++) {
+        for (let i = -badStrategicRegionsCount; i < sortedStrategicRegions.length; i++) {
             const sortedRegion = sortedStrategicRegions[i];
             if (sortedRegion) {
                 filledStrategicRegions[i] = calculateBoundingBox(sortedRegion, provinces, width, warnings);
@@ -217,7 +217,7 @@ function validateProvincesInStrategicRegions(
 ) {
     const provinceToStrategicRegion: Record<number, number> = {};
 
-    for (let i = badStrategicRegionsCount; i < strategicRegions.length; i++) {
+    for (let i = -badStrategicRegionsCount; i < strategicRegions.length; i++) {
         const strategicRegion = strategicRegions[i];
         if (!strategicRegion) {
             continue;
@@ -258,7 +258,7 @@ function validateProvincesInStrategicRegions(
         }
     }
 
-    for (let i = badStatesCount; i < states.length; i++) {
+    for (let i = -badStatesCount; i < states.length; i++) {
         const state = states[i];
         if (!state) {
             continue;

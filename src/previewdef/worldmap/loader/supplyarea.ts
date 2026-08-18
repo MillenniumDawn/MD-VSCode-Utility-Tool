@@ -64,10 +64,10 @@ export class SupplyAreasLoader extends FolderLoader<SupplyAreasLoaderResult, Sup
         const { sortedSupplyAreas, badSupplyAreaId } = sortSupplyAreas(SupplyAreas, warnings);
 
         const { states } = stateMap.result;
-        const badSupplyAreasCount = badSupplyAreaId + 1;
+        const badSupplyAreasCount = -(badSupplyAreaId + 1);
 
         const filledSupplyAreas: SupplyArea[] = new Array(sortedSupplyAreas.length);
-        for (let i = badSupplyAreasCount; i < sortedSupplyAreas.length; i++) {
+        for (let i = -badSupplyAreasCount; i < sortedSupplyAreas.length; i++) {
             const sortedArea = sortedSupplyAreas[i];
             if (sortedArea) {
                 filledSupplyAreas[i] = calculateBoundingBox(sortedArea, states, width, warnings);
@@ -195,7 +195,7 @@ function validateStatesInSupplyAreas(
 ) {
     const stateToSupplyArea: Record<number, number> = {};
 
-    for (let i = badSupplyAreasCount; i < supplyAreas.length; i++) {
+    for (let i = -badSupplyAreasCount; i < supplyAreas.length; i++) {
         const supplyArea = supplyAreas[i];
         if (!supplyArea) {
             continue;

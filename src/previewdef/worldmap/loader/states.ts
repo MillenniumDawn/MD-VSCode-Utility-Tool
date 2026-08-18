@@ -147,7 +147,7 @@ export class StatesLoader extends FolderLoader<StateLoaderResult, StateNoBoundin
             }
         }
 
-        const badStatesCount = badStateId + 1;
+        const badStatesCount = -(badStateId + 1);
         validateProvinceInState(provinces, filledStates, badStatesCount, warnings);
 
         return {
@@ -342,7 +342,7 @@ function calculateBoundingBox(noBoundingBoxState: StateNoBoundingBox, provinces:
 function validateProvinceInState(provinces: (Province | undefined | null)[], states: (State | undefined | null)[], badStatesCount: number, warnings: WorldMapWarning[]) {
     const provinceToState: Record<number, number> = {};
 
-    for (let i = badStatesCount; i < states.length; i++) {
+    for (let i = -badStatesCount; i < states.length; i++) {
         const state = states[i];
         if (!state) {
             continue;
