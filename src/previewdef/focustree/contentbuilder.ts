@@ -18,6 +18,7 @@ import { renderContainerWindow, RenderChildTypeMap } from "../../util/hoi4gui/co
 import { calculateBBox, ParentInfo } from "../../util/hoi4gui/common";
 import { renderInstantTextBox } from "../../util/hoi4gui/instanttextbox";
 import { renderSprite } from "../../util/hoi4gui/nodecommon";
+import { registerWarningStyles, warningListClass } from "./warningstyles";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
 
@@ -275,7 +276,9 @@ interface ToolbarFlags {
 }
 
 function renderWarningContainer(styleTable: StyleTable) {
-    styleTable.style('warnings', () => 'outline: none;', ':focus');
+    // Emitted into the shell stylesheet, which is serialized once before any render, so the
+    // webview can attach these classes to freshly rendered focuses at any time. See warningstyles.ts.
+    registerWarningStyles(styleTable);
     return `
     <div id="warnings-container" class="${styleTable.style('warnings-container', () => `
         height: 100vh;
@@ -288,18 +291,7 @@ function renderWarningContainer(styleTable: StyleTable) {
         box-sizing: border-box;
         display: none;
     `)}">
-        <textarea id="warnings" readonly wrap="off" class="${styleTable.style('warnings', () => `
-            height: 100%;
-            width: 100%;
-            font-family: 'Consolas', monospace;
-            resize: none;
-            background: var(--vscode-editor-background);
-            padding: 10px;
-            border-top: none;
-            border-left: none;
-            border-bottom: none;
-            box-sizing: border-box;
-        `)}"></textarea>
+        <div id="warnings" class="${warningListClass}"></div>
     </div>`;
 }
 
@@ -385,9 +377,17 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             </div>
         </div>`;
     
-    const warningsButton = focusTrees.every(ft => ft.warnings.length === 0) ? '' : `
+    // Both warning buttons share the same gate, so ToolbarFlags.hasWarnings alone still decides
+    // whether the toolbar needs a full reload when a tree gains or loses its first warning.
+    const hasNoWarnings = focusTrees.every(ft => ft.warnings.length === 0);
+    const warningsButton = hasNoWarnings ? '' : `
         <button id="show-warnings" title="${localize('focustree.warnings', 'Toggle warnings')}">
             <i class="codicon codicon-warning"></i>
+        </button>`;
+
+    const warningMarkersButton = hasNoWarnings ? '' : `
+        <button id="toggle-warning-markers" title="${localize('focustree.warningmarkers', 'Toggle warning markers on the tree')}">
+            <i class="codicon codicon-error"></i>
         </button>`;
 
     const hasAllowBranch = focusTrees.some(ft => ft.allowBranchOptions.length > 0);
@@ -406,6 +406,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${inlayWindowsToggle}
             ${inlayWindows}
             ${warningsButton}
+            ${warningMarkersButton}
             ${resetCheckboxesButton}
         </div>
     </div>`;

@@ -9,6 +9,14 @@ import {
 	focusTreeGridBox,
 } from "../previewdef/focustree/contentbuilder";
 import { StyleTable } from "../util/styletable";
+import {
+	registerWarningStyles,
+	warningBadgeClass,
+	warningBoxClass,
+	warningEntryClass,
+	warningFlashClass,
+	warningListClass,
+} from "../previewdef/focustree/warningstyles";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
@@ -142,6 +150,74 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(html.includes("focus_a"));
 		assert.ok(html.includes("test-csp"));
 		assert.ok(html.includes("focustreecontent"));
+	});
+
+	it("buildFocusTreeHtml renders the warnings panel as a list, not a textarea", async () => {
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([minimalFocusTree()]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		assert.ok(html.includes(`<div id="warnings" class="${warningListClass}"`));
+		assert.ok(!html.includes('<textarea id="warnings"'));
+	});
+
+	it("buildFocusTreeHtml emits the warning marker styles into the shell", async () => {
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([minimalFocusTree()]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		// The classes must be in the stylesheet even for a tree without warnings: the webview may
+		// attach them after an in-place update turns a clean tree into a warned one.
+		assert.ok(html.includes(`.${warningBoxClass} {`));
+		assert.ok(html.includes(`.${warningBadgeClass} {`));
+		assert.ok(html.includes(`.${warningFlashClass} {`));
+		assert.ok(html.includes(`.${warningEntryClass} {`));
+	});
+
+	it("buildFocusTreeHtml shows the warning buttons only when a tree has warnings", async () => {
+		const clean = await buildFocusTreePayload(
+			loaderWithTrees([minimalFocusTree()]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		const cleanHtml = buildFocusTreeHtml(clean!, webview, uri);
+		assert.ok(!cleanHtml.includes('id="show-warnings"'));
+		assert.ok(!cleanHtml.includes('id="toggle-warning-markers"'));
+
+		const warned = minimalFocusTree();
+		warned.warnings = [{ text: "Focuses a and b overlap.", source: "focus_a" }];
+		const warnedPayload = await buildFocusTreePayload(
+			loaderWithTrees([warned]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		const warnedHtml = buildFocusTreeHtml(warnedPayload!, webview, uri);
+		assert.ok(warnedHtml.includes('id="show-warnings"'));
+		assert.ok(warnedHtml.includes('id="toggle-warning-markers"'));
+	});
+
+	it("registerWarningStyles emits exactly the exported class names", () => {
+		const styleTable = new StyleTable();
+		registerWarningStyles(styleTable);
+		const css = styleTable.toRawCss();
+		for (const className of [
+			warningBoxClass,
+			warningBadgeClass,
+			warningFlashClass,
+			warningListClass,
+			warningEntryClass,
+		]) {
+			assert.ok(
+				css.includes(`.${className} {`),
+				`missing rule for ${className}`,
+			);
+		}
 	});
 
 	it("buildNoFocusTreeHtml contains localized placeholder", () => {

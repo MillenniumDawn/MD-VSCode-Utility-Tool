@@ -17,6 +17,12 @@ import {
 } from "../src/util/hoi4gui/gridboxcommon";
 import { StyleTable, normalizeForStyle } from "../src/util/styletable";
 import { FocusTree, Focus } from "../src/previewdef/focustree/schema";
+import {
+	warningBadgeClass,
+	warningBoxClass,
+	warningEntryClass,
+	warningFlashClass,
+} from "../src/previewdef/focustree/warningstyles";
 import { applyCondition, ConditionItem } from "../src/hoiformat/condition";
 import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
@@ -97,6 +103,10 @@ function showCustomTitlebars() {
 
 function showFocusOverlays() {
 	return getState().showFocusOverlays ?? false;
+}
+
+function showWarningMarkers() {
+	return getState().showFocusWarningMarkers ?? true;
 }
 
 function showInlayWindows() {
@@ -252,14 +262,15 @@ async function buildContent() {
 
 	subscribeNavigators();
 	setupCheckedFocuses(focuses, focusTree);
-	applyWarningHighlights(focusTree, styleTable);
+	applyWarningMarkers(focusTree, focusGrixBoxItems);
 	applyCustomTitlebarVisibility();
 	applyFocusOverlayVisibility();
 }
 
-// Focuses named in a layout warning get a red inset ring so the problem is visible on the tree
-// itself, not only as a line in the warnings panel. Runs after every (re)render, including the
-// in-place update path, and marks every focus the warning involves (source + related sources).
+// Focuses named in a layout warning get a red box with a warning badge so the problem is visible
+// on the tree itself, not only as a line in the warnings panel. Runs after every (re)render,
+// including the in-place update path, and marks every focus the warning involves (source +
+// related sources).
 // Exported (like miopreview's findOverlaps) so the id-collection logic is unit-testable.
 export function warningFocusIdsFor(focusTree: FocusTree): Set<string> {
 	const warningFocusIds = new Set<string>();
@@ -272,17 +283,104 @@ export function warningFocusIdsFor(focusTree: FocusTree): Set<string> {
 	return warningFocusIds;
 }
 
-function applyWarningHighlights(focusTree: FocusTree, styleTable: StyleTable) {
+// How many warned focuses resolve to each grid slot, keyed by focus id. Focuses stacked on the
+// same slot are drawn on top of each other, so all but the last one rendered are invisible -- the
+// count on the badge is the only way to see that more than one focus is hiding there. Counting is
+// restricted to focuses that already carry a warning, so a stack of shared or joint focuses merged
+// in from another file (which the validator deliberately ignores) can't manufacture a marker.
+// Exported for the same testability reason as warningFocusIdsFor.
+export function warningCellCountsFor(
+	items: GridBoxItem[],
+	warningFocusIds: Set<string>,
+): Record<string, number> {
+	const countByCell: Record<string, number> = {};
+	const cellByFocusId: Record<string, string> = {};
+	for (const item of items) {
+		if (!warningFocusIds.has(item.id)) {
+			continue;
+		}
+		const cell = item.gridX + "," + item.gridY;
+		cellByFocusId[item.id] = cell;
+		countByCell[cell] = (countByCell[cell] ?? 0) + 1;
+	}
+
+	const countByFocusId: Record<string, number> = {};
+	for (const [id, cell] of Object.entries(cellByFocusId)) {
+		countByFocusId[id] = countByCell[cell] ?? 1;
+	}
+	return countByFocusId;
+}
+
+// Warning texts per focus, filed under the warning's source *and* every related source, so both
+// ends of a pair explain themselves on hover instead of only the focus the warning was filed under.
+function warningTextsByFocusId(focusTree: FocusTree): Record<string, string[]> {
+	const texts: Record<string, string[]> = {};
+	for (const warning of focusTree.warnings) {
+		for (const id of [warning.source, ...(warning.relatedSources ?? [])]) {
+			(texts[id] ??= []).push(warning.text);
+		}
+	}
+	return texts;
+}
+
+// Exported so a test can assert the markers really land on the rendered nodes: the previous
+// highlight silently did nothing because its CSS was registered after the stylesheet had already
+// been serialized, and nothing covered the DOM side.
+export function applyWarningMarkers(focusTree: FocusTree, items: GridBoxItem[]) {
 	const warningFocusIds = warningFocusIdsFor(focusTree);
 	if (warningFocusIds.size === 0) {
 		return;
 	}
-	const warningClass = styleTable.style("focus-warning", () => `
-		box-shadow: inset 0 0 0 2px #E33;
-	`);
+
+	const cellCounts = warningCellCountsFor(items, warningFocusIds);
+	const texts = warningTextsByFocusId(focusTree);
+	const visible = showWarningMarkers();
+
 	warningFocusIds.forEach((id) => {
-		document.getElementById(`focus_${id}`)?.classList.add(warningClass);
+		// A focus hidden by allow_branch, or belonging to another tree, simply has no element.
+		const element = document.getElementById(`focus_${id}`);
+		if (!element) {
+			return;
+		}
+
+		// Built through the DOM rather than innerHTML: nothing derived from a mod-supplied focus id
+		// is ever interpolated into markup.
+		const marker = document.createElement("div");
+		marker.className = warningBoxClass;
+		if (!visible) {
+			marker.style.display = "none";
+		}
+		const badge = document.createElement("span");
+		badge.className = warningBadgeClass;
+		const stacked = cellCounts[id] ?? 1;
+		badge.textContent = stacked > 1 ? `⚠×${stacked}` : "⚠";
+		marker.appendChild(badge);
+		element.appendChild(marker);
+
+		// The tooltip lives on the .navigator child, which is what carries the focus id and
+		// position title; the marker itself is pointer-events:none so it can't show one.
+		const navigator = element.querySelector(".navigator") as HTMLElement | null;
+		const focusTexts = texts[id];
+		if (navigator && focusTexts) {
+			navigator.title = [navigator.title, ...focusTexts.map((t) => `⚠ ${t}`)]
+				.filter((line) => line)
+				.join("\n");
+		}
 	});
+}
+
+function setWarningMarkersVisible(visible: boolean) {
+	const markers = document.getElementsByClassName(warningBoxClass);
+	for (let i = 0; i < markers.length; i++) {
+		(markers[i] as HTMLDivElement).style.display = visible ? "block" : "none";
+	}
+
+	const button = document.getElementById(
+		"toggle-warning-markers",
+	) as HTMLButtonElement | null;
+	if (button) {
+		button.style.opacity = visible ? "" : "0.4";
+	}
 }
 
 function calculateFocusAllowed(
@@ -450,14 +548,68 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 		}
 	}
 
-	const warnings = document.getElementById(
-		"warnings",
-	) as HTMLTextAreaElement | null;
-	if (warnings) {
-		warnings.value =
-			focusTree.warnings.length === 0
-				? feLocalize("worldmap.warnings.nowarnings", "No warnings.")
-				: focusTree.warnings.map((w) => `[${w.source}] ${w.text}`).join("\n");
+	renderWarningList(focusTree);
+}
+
+// The warnings panel lists one clickable entry per warning: activating it closes the panel and
+// scrolls the offending focus into view with a short flash, so a warning never has to be read
+// off as coordinates and hunted for by hand.
+function renderWarningList(focusTree: FocusTree) {
+	const warnings = document.getElementById("warnings") as HTMLDivElement | null;
+	if (!warnings) {
+		return;
+	}
+
+	warnings.textContent = "";
+	if (focusTree.warnings.length === 0) {
+		const empty = document.createElement("div");
+		empty.textContent = feLocalize(
+			"worldmap.warnings.nowarnings",
+			"No warnings.",
+		);
+		warnings.appendChild(empty);
+		return;
+	}
+
+	for (const warning of focusTree.warnings) {
+		const entry = document.createElement("div");
+		entry.className = warningEntryClass;
+		entry.setAttribute("role", "button");
+		entry.tabIndex = 0;
+		entry.textContent = `[${warning.source}] ${warning.text}`;
+		const reveal = () => revealFocus(warning.source);
+		entry.addEventListener("click", reveal);
+		entry.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" || e.key === " ") {
+				e.preventDefault();
+				reveal();
+			}
+		});
+		warnings.appendChild(entry);
+	}
+}
+
+function revealFocus(focusId: string) {
+	hideWarningPanel();
+
+	// A focus hidden by allow_branch has no element; the entry then just closes the panel.
+	const element = document.getElementById(`focus_${focusId}`);
+	if (!element) {
+		return;
+	}
+
+	element.scrollIntoView({ block: "center", inline: "center" });
+	element.classList.add(warningFlashClass);
+	setTimeout(() => element.classList.remove(warningFlashClass), 1200);
+}
+
+function hideWarningPanel() {
+	const container = document.getElementById(
+		"warnings-container",
+	) as HTMLDivElement | null;
+	if (container) {
+		container.style.display = "none";
+		document.body.style.overflow = "";
 	}
 }
 
@@ -1016,6 +1168,20 @@ window.addEventListener(
 				const visible = warnings.style.display === "block";
 				document.body.style.overflow = visible ? "" : "hidden";
 				warnings.style.display = visible ? "none" : "block";
+			});
+		}
+
+		// Toggle the on-canvas warning markers. Flips the existing marker elements instead of
+		// rebuilding the tree, so hiding them stays instant on large focus trees.
+		const toggleWarningMarkers = document.getElementById(
+			"toggle-warning-markers",
+		) as HTMLButtonElement | null;
+		if (toggleWarningMarkers) {
+			setWarningMarkersVisible(showWarningMarkers());
+			toggleWarningMarkers.addEventListener("click", () => {
+				const visible = !showWarningMarkers();
+				setState({ showFocusWarningMarkers: visible });
+				setWarningMarkersVisible(visible);
 			});
 		}
 
