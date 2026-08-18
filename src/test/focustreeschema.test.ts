@@ -419,7 +419,7 @@ shared_focus = {
 			const mainContent = treeWithFocuses(
 				focusBlock("m1", 0, 0),
 				focusBlock("m2", 0, 1),
-			).replace("id = test_tree", "id = test_tree\n    shared_focus = SH_a");
+			).replace("id = test_tree", "id = test_tree\n    shared_focus = sh_a1");
 			// The merge only looks at sharedFocusTrees, so drive it through the same path the loader uses.
 			const mainFile = convertFocusFileNodeToJson(
 				parseHoi4File(mainContent),
@@ -433,10 +433,10 @@ shared_focus = {
 			);
 			const main = merged.find((t) => t.id === "test_tree");
 			assert.ok(
-				main?.focuses["SH_a"],
+				main?.focuses["sh_a1"],
 				"shared focus must be merged for this test to be meaningful",
 			);
-			// SH_a sits at (0,0) like m1, but it lives in another file, so no overlap warning.
+			// sh_a1 sits at (0,0) like m1, but it lives in another file, so no overlap warning.
 			assert.deepStrictEqual(
 				(main?.warnings ?? []).map((w) => w.text),
 				[],
