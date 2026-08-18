@@ -178,7 +178,7 @@ describe("previewdef/focustree layout warnings", () => {
 		assert.deepStrictEqual(warningTexts(content), []);
 	});
 
-	it("warns when mutually exclusive focuses do not share an X", () => {
+	it("warns when mutually exclusive focuses are not on the same row", () => {
 		const content = treeWithFocuses(
 			focusBlock("focus_a", 0, 0, "mutually_exclusive = { focus = focus_b }"),
 			focusBlock("focus_b", 2, 1),
@@ -189,15 +189,46 @@ describe("previewdef/focustree layout warnings", () => {
 		assert.deepStrictEqual(warnings[0].relatedSources, ["focus_b"]);
 		assert.strictEqual(
 			warnings[0].text,
-			"Mutually exclusive focuses focus_a and focus_b are not on the same X position.",
+			"Mutually exclusive focuses focus_a and focus_b are not on the same row.",
 		);
 	});
 
-	it("reports no warning for mutually exclusive focuses sharing an X", () => {
+	// The standard layout: the two alternatives sit side by side on one row, two columns
+	// apart. Differing X is expected here, so this must stay silent.
+	it("reports no warning for mutually exclusive focuses sharing a row", () => {
 		const content = treeWithFocuses(
 			focusBlock("focus_a", 0, 0, "mutually_exclusive = { focus = focus_b }"),
-			focusBlock("focus_b", 0, 1),
+			focusBlock("focus_b", 2, 0),
 		);
+		assert.deepStrictEqual(warningTexts(content), []);
+	});
+
+	// The full Millennium Dawn idiom the same-X rule used to flag on every mutex pair: two
+	// alternatives side by side under a shared root, each hiding the other through allow_branch
+	// and each carrying a triggered offset that slides it into the vacated slot once the branch
+	// resolves. Offsets are not applied by the validator, so the base coordinates must pass.
+	it("reports no warning for a side-by-side pair using offset and allow_branch", () => {
+		const exclusiveHalf = (self: string, other: string, x: number, dx: number) =>
+			focusBlock(
+				self,
+				x,
+				2,
+				`relative_position_id = focus_root
+				offset = {
+					x = ${dx}
+					y = -1
+					trigger = { has_completed_focus = ${self} }
+				}
+				allow_branch = { NOT = { has_completed_focus = ${other} } }
+				prerequisite = { focus = focus_root }
+				mutually_exclusive = { focus = ${other} }`,
+			);
+		const content = treeWithFocuses(
+			focusBlock("focus_root", 10, 0),
+			exclusiveHalf("focus_a", "focus_b", -3, -1),
+			exclusiveHalf("focus_b", "focus_a", -5, 1),
+		);
+		// focus_a resolves to (7, 2), focus_b to (5, 2): one row, two columns apart.
 		assert.deepStrictEqual(warningTexts(content), []);
 	});
 
@@ -297,32 +328,32 @@ describe("previewdef/focustree layout warnings", () => {
 		]);
 	});
 
-	it("checks X resolved through relative_position_id for exclusivity", () => {
+	it("checks Y resolved through relative_position_id for exclusivity", () => {
 		const clean = treeWithFocuses(
-			focusBlock("focus_base", -6, 0),
+			focusBlock("focus_base", 0, 6),
 			focusBlock(
 				"focus_a",
 				5,
-				0,
+				-5,
 				"relative_position_id = focus_base mutually_exclusive = { focus = focus_b }",
 			),
-			focusBlock("focus_b", -1, 1),
+			focusBlock("focus_b", 8, 1),
 		);
-		// focus_a resolves to x = 5 - 6 = -1, matching focus_b.
+		// focus_a resolves to y = -5 + 6 = 1, matching focus_b.
 		assert.deepStrictEqual(warningTexts(clean), []);
 
 		const broken = treeWithFocuses(
-			focusBlock("focus_base", -6, 0),
+			focusBlock("focus_base", 0, 6),
 			focusBlock(
 				"focus_a",
 				5,
-				0,
+				-5,
 				"relative_position_id = focus_base mutually_exclusive = { focus = focus_b }",
 			),
-			focusBlock("focus_b", 0, 1),
+			focusBlock("focus_b", 8, 3),
 		);
 		assert.deepStrictEqual(warningTexts(broken), [
-			"Mutually exclusive focuses focus_a and focus_b are not on the same X position.",
+			"Mutually exclusive focuses focus_a and focus_b are not on the same row.",
 		]);
 	});
 
@@ -347,7 +378,7 @@ describe("previewdef/focustree layout warnings", () => {
 		);
 		assert.deepStrictEqual(warningTexts(content), [
 			"Prerequisite req of focus dep is not positioned above it.",
-			"Mutually exclusive focuses ex_a and ex_b are not on the same X position.",
+			"Mutually exclusive focuses ex_a and ex_b are not on the same row.",
 			"Focuses ov_a and ov_b are less than 2 apart on the same row, so their icons overlap.",
 		]);
 	});

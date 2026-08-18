@@ -23,6 +23,7 @@ import {
 	warningEntryClass,
 	warningFlashClass,
 } from "../src/previewdef/focustree/warningstyles";
+import { exclusiveLinkClass } from "../src/previewdef/focustree/exclusivelinkstyles";
 import { applyCondition, ConditionItem } from "../src/hoiformat/condition";
 import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
@@ -219,6 +220,8 @@ async function buildContent() {
 			),
 		)
 		.filter((v): v is GridBoxItem => !!v);
+
+	applyExclusiveLinkStyle(focusGrixBoxItems);
 
 	const minX = minBy(Object.values(focusPosition), "x")?.x ?? 0;
 	const leftPadding =
@@ -760,6 +763,49 @@ function focusToGridItem(
 		gridY: position.y,
 		connections,
 	};
+}
+
+// Swaps the plain line of a mutually exclusive link for the game's own textures, but only when both
+// focuses share a row. Any other pair takes renderGridBoxConnection's L-shaped corner path, which
+// draws borders on two edges of a tall box, where a horizontal texture would be wrong -- and the
+// schema already warns about such a pair. Deciding this here instead of in focusToGridItem is what
+// makes the target's row known: resolving it there would mean positioning focuses the branch filter
+// has dropped, which would shift the tree's left padding.
+// Exported for unit testing, like warningFocusIdsFor.
+export function applyExclusiveLinkStyle(items: GridBoxItem[]): void {
+	const rowById: Record<string, number> = {};
+	for (const item of items) {
+		rowById[item.id] = item.gridY;
+	}
+
+	const drawn: Record<string, true> = {};
+	for (const item of items) {
+		const kept: GridBoxConnection[] = [];
+		for (const conn of item.connections) {
+			if (conn.targetType !== "related" || rowById[conn.target] !== item.gridY) {
+				kept.push(conn);
+				continue;
+			}
+
+			// Both focuses of a pair push a connection to the other, so the link is drawn twice on
+			// top of itself. That is invisible for a 1px border but double composites the
+			// semi-transparent textures; both connections carry the same set of branch classes, so
+			// dropping either one of them is safe.
+			const key =
+				item.id < conn.target
+					? item.id + " " + conn.target
+					: conn.target + " " + item.id;
+			if (drawn[key]) {
+				continue;
+			}
+			drawn[key] = true;
+
+			conn.style = "none";
+			conn.classNames = (conn.classNames ?? "") + " " + exclusiveLinkClass;
+			kept.push(conn);
+		}
+		item.connections = kept;
+	}
 }
 
 function clearCheckedFocuses() {

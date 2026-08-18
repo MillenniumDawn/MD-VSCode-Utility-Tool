@@ -47,7 +47,7 @@ const table: Partial<typeof __table> = {
     "focustree.sharedfocuses": "<공유 중점>",
     "focustree.warningmarkers": "Toggle warning markers on the tree",
     "focustree.warnings": "경고 활성/비활성",
-    "focustree.warnings.exclusivenotsamex": "Mutually exclusive focuses {0} and {1} are not on the same X position.",
+    "focustree.warnings.exclusivenotsamey": "Mutually exclusive focuses {0} and {1} are not on the same row.",
     "focustree.warnings.focusidconflict": "중점 ID {0} 가 {1} 파일 내에 2개 이상 존재합니다.",
     "focustree.warnings.focusidconflict2": "중점 ID {0} 가 {1} 과 {2} 파일 내에 2개 이상 존재합니다.",
     "focustree.warnings.focusnoid": "{0} 파일에 정의된 중점에는 ID가 없습니다.",

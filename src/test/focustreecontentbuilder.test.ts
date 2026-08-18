@@ -17,6 +17,10 @@ import {
 	warningFlashClass,
 	warningListClass,
 } from "../previewdef/focustree/warningstyles";
+import {
+	exclusiveLinkClass,
+	registerExclusiveLinkStyles,
+} from "../previewdef/focustree/exclusivelinkstyles";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
@@ -218,6 +222,36 @@ describe("previewdef/focustree contentbuilder", () => {
 				`missing rule for ${className}`,
 			);
 		}
+	});
+
+	it("registerExclusiveLinkStyles falls back to the plain line without textures", () => {
+		const styleTable = new StyleTable();
+		registerExclusiveLinkStyles(styleTable, undefined);
+		const css = styleTable.toRawCss();
+		assert.ok(css.includes(`.${exclusiveLinkClass} {`));
+		assert.ok(css.includes(`.${exclusiveLinkClass}::before {`));
+		assert.ok(css.includes("border-top: 1px solid red"));
+		assert.ok(!css.includes("background-image"));
+	});
+
+	it("registerExclusiveLinkStyles paints the game textures when they resolve", () => {
+		const image = (name: string) =>
+			({ uri: `data:image/png;base64,${name}`, width: 16, height: 16 }) as any;
+		const styleTable = new StyleTable();
+		registerExclusiveLinkStyles(styleTable, {
+			line: image("line"),
+			left: image("left"),
+			mid: image("mid"),
+			right: image("right"),
+		});
+		const css = styleTable.toRawCss();
+		assert.ok(css.includes("background-image: url(data:image/png;base64,line)"));
+		assert.ok(
+			css.includes(
+				"background-image: url(data:image/png;base64,left), url(data:image/png;base64,mid), url(data:image/png;base64,right)",
+			),
+		);
+		assert.ok(!css.includes("border-top: 1px solid red"));
 	});
 
 	it("buildNoFocusTreeHtml contains localized placeholder", () => {

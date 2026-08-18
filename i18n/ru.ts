@@ -47,7 +47,7 @@ const table: Partial<typeof __table> = {
     "focustree.sharedfocuses": "<Общие фокусы>",
     "focustree.warningmarkers": "Toggle warning markers on the tree",
     "focustree.warnings": "Включить предупреждения",
-    "focustree.warnings.exclusivenotsamex": "Mutually exclusive focuses {0} and {1} are not on the same X position.",
+    "focustree.warnings.exclusivenotsamey": "Mutually exclusive focuses {0} and {1} are not on the same row.",
     "focustree.warnings.focusidconflict": "Здесь более одного фокуса с ID {0} в файле: {1}.",
     "focustree.warnings.focusidconflict2": "Здесь более одного фокуса с ID {0} в файлах: {1}, {2}.",
     "focustree.warnings.focusnoid": "Фокус определенный в этих файлах не имеет ID: {0}.",
