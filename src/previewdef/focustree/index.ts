@@ -30,7 +30,8 @@ function toolbarFlagsEqual(a: ToolbarFlags | undefined, b: ToolbarFlags | undefi
     if (a === undefined || b === undefined) {return a === b;}
     return a.hasCustomTitlebar === b.hasCustomTitlebar &&
         a.hasFocusOverlay === b.hasFocusOverlay &&
-        a.hasInlayWindows === b.hasInlayWindows;
+        a.hasInlayWindows === b.hasInlayWindows &&
+        a.hasWarnings === b.hasWarnings;
 }
 
 class FocusTreePreview extends PreviewBase {

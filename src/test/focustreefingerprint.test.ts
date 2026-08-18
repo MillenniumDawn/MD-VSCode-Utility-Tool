@@ -154,6 +154,19 @@ describe('previewdef/focustree/fingerprint', () => {
             assert.notStrictEqual(before, after);
         });
 
+        it('changes when a tree gains a warning (so the update path re-renders)', () => {
+            const before = computeTreeStructuralFingerprint(treeObjectInput());
+            const after = computeTreeStructuralFingerprint(treeObjectInput({
+                focusTrees: [{
+                    id: 'tree',
+                    focuses: { a: { id: 'a', x: 0, y: 0, icon: [{ icon: 'GFX_a' }], token: { start: 10, end: 20 } } },
+                    inlayWindows: [],
+                    warnings: [{ text: 'Focuses a and b overlap.', source: 'a', relatedSources: ['b'] }],
+                }],
+            }));
+            assert.notStrictEqual(before, after);
+        });
+
         it('is EQUAL when only an inlay guiWindow subtree changes (guiWindow is excluded)', () => {
             const before = computeTreeStructuralFingerprint(treeObjectInput());
             const after = computeTreeStructuralFingerprint(treeObjectInput({

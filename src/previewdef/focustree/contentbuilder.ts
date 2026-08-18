@@ -111,6 +111,9 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             hasCustomTitlebar: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.textIcon !== undefined && titlebarStyles[f.textIcon] !== undefined)),
             hasFocusOverlay: focusTrees.some(ft => Object.values(ft.focuses).some(f => f.overlay !== undefined)),
             hasInlayWindows: focusTrees.some(ft => ft.inlayWindows.length > 0),
+            // The warnings button is part of the baked-in shell, so a 0 -> 1+ transition must take
+            // the full-reload path to (re)render it (mirrors the other toolbar toggles).
+            hasWarnings: focusTrees.some(ft => ft.warnings.length > 0),
         };
 
         return {
@@ -268,6 +271,7 @@ interface ToolbarFlags {
     hasCustomTitlebar: boolean;
     hasFocusOverlay: boolean;
     hasInlayWindows: boolean;
+    hasWarnings: boolean;
 }
 
 function renderWarningContainer(styleTable: StyleTable) {

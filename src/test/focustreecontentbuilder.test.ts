@@ -90,6 +90,21 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.strictEqual(payload!.styleNonce.length, 32);
 		assert.ok(payload!.gridBox);
 		assert.strictEqual(payload!.xGridSize, 96);
+		assert.strictEqual(payload!.toolbarFlags.hasWarnings, false);
+	});
+
+	it("buildFocusTreePayload sets hasWarnings when a tree carries warnings", async () => {
+		const tree = minimalFocusTree();
+		tree.warnings = [{ text: "Focuses a and b overlap.", source: "focus_a" }];
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([tree]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		// The toolbar button is baked into the shell; this flag is what flips a 0 -> 1+
+		// warning transition into the full-reload path that (re)renders it.
+		assert.strictEqual(payload!.toolbarFlags.hasWarnings, true);
 	});
 
 	it("buildFocusTreePayload reports progress", async () => {
