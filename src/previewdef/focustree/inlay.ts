@@ -172,8 +172,15 @@ export function resolveInlaysForTree(
     const conditionExprs: ConditionItem[] = [];
     const inlayWindows: FocusTreeInlay[] = [];
 
+    const inlayById = new Map<string, FocusTreeInlay>();
+    for (const inlay of allInlays) {
+        if (!inlayById.has(inlay.id)) {
+            inlayById.set(inlay.id, inlay);
+        }
+    }
+
     for (const ref of refs) {
-        const matched = allInlays.find(inlay => inlay.id === ref.id);
+        const matched = inlayById.get(ref.id);
         if (!matched) {
             warnings.push({
                 text: localize("TODO", "Focus tree references missing inlay window: {0}.", ref.id),
