@@ -616,10 +616,10 @@ async function renderFocus(
 
     let textContent = focus.id;
     if (localisationIndex){
-        let localizedText = getLocalisedTextQuick(focus.id);
+        let localizedText = await getLocalisedTextQuick(focus.id);
         if (localizedText === focus.id || !localizedText){
             if (focus.text){
-                localizedText = getLocalisedTextQuick(focus.text);
+                localizedText = await getLocalisedTextQuick(focus.text);
                 if (localizedText !== focus.text && localizedText !== null){
                     textContent += `<br/>${localizedText}`;
                 }

@@ -92,7 +92,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     // the update payload, so an in-place update refreshes the (localised) labels and add/remove of
     // organizations without a full reload. The labels use server-only localisation, so the webview
     // can't rebuild them from `mios` alone — it swaps this html into the stable <select>.
-    const mioOptionsHtml = renderMioOptions(mios);
+    const mioOptionsHtml = await renderMioOptions(mios);
 
     const baseContent = (
         `<div id="dragger" class="${styleTable.style('dragger', () => `
@@ -118,7 +118,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
 
     const renderedHeaders: Record<string, string> = {};
     for (const mio of mios) {
-        renderedHeaders[mio.id] = renderTreeHeaders(mio, styleTable).replace(/\s\s+/g, ' ');
+        renderedHeaders[mio.id] = (await renderTreeHeaders(mio, styleTable)).replace(/\s\s+/g, ' ');
     }
 
     jsCodes.push('window.mios = ' + JSON.stringify(mios));
@@ -138,11 +138,11 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     };
 }
 
-function renderMioOptions(mios: Mio[]): string {
-    return mios.map((mio, i) => {
-        const localizedText = localisationIndex ? `(${mio.id}) ${getLocalisedTextQuick(mio.id)}` : mio.id;
+async function renderMioOptions(mios: Mio[]): Promise<string> {
+    return (await Promise.all(mios.map(async (mio, i) => {
+        const localizedText = localisationIndex ? `(${mio.id}) ${await getLocalisedTextQuick(mio.id)}` : mio.id;
         return `<option value="${i}">${htmlEscape(localizedText)}</option>`;
-    }).join('');
+    }))).join('');
 }
 
 async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml: string): Promise<string> {
@@ -190,9 +190,9 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml
 // column x. The header text is localised here (server side); the raw key is the fallback. The
 // containing layer is positioned client side so it lines up with the dynamically-computed grid
 // origin, so each header only carries its column offset (left = x * xGridSize).
-function renderTreeHeaders(mio: Mio, styleTable: StyleTable): string {
-    return mio.textHeaders.map(header => {
-        const text = getLocalisedTextQuick(header.text) ?? header.text;
+async function renderTreeHeaders(mio: Mio, styleTable: StyleTable): Promise<string> {
+    return (await Promise.all(mio.textHeaders.map(async header => {
+        const text = (await getLocalisedTextQuick(header.text)) ?? header.text;
         return `<div class="
             ${styleTable.style('mio-tree-header', () => `
                 position: absolute;
@@ -207,7 +207,7 @@ function renderTreeHeaders(mio: Mio, styleTable: StyleTable): string {
             `)}
             ${styleTable.oneTimeStyle('mio-tree-header-pos', () => `left: ${header.x * xGridSize}px;`)}
         ">${htmlEscape(text)}</div>`;
-    }).join('');
+    }))).join('');
 }
 
 async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: string[], file: string): Promise<string> {
@@ -257,7 +257,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
         start="${trait.token?.start}"
         end="${trait.token?.end}"
         ${file === trait.file ? '' : `file="${trait.file}"`}
-        title="${escapeAttr(trait.id)}${localisationIndex ? `\n${getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
+        title="${escapeAttr(trait.id)}${localisationIndex ? `\n${await getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
             <div class="
                 ${styleTable.style('effect-host', () => `
                     text-align: center;
@@ -301,7 +301,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
                 position: relative;
                 z-index: 5;
             `)}">
-            ${localisationIndex ? `${getLocalisedTextQuick(trait.name)}` : ''}
+            ${localisationIndex ? `${await getLocalisedTextQuick(trait.name)}` : ''}
             </span>
         </div>
     </div>`;
