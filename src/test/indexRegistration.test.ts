@@ -3,7 +3,10 @@ import * as featureflags from "../util/featureflags";
 import { Logger } from "../util/logger";
 import { registerGfxIndex } from "../util/gfxindex";
 import { registerLocalisationIndex } from "../util/localisationIndex";
-import { registerSharedFocusIndex } from "../util/sharedFocusIndex";
+import {
+	findFileByFocusKey,
+	__resetSharedFocusIndexForTests,
+} from "../util/sharedFocusIndex";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
 type FileloaderModule = {
@@ -37,6 +40,7 @@ describe("util index registration failure path", function () {
 			}),
 		});
 		featureflags.refreshFeatureFlags();
+		__resetSharedFocusIndexForTests();
 
 		originalLoggerError = Logger.error;
 		Logger.error = (message: string) => {
@@ -62,6 +66,7 @@ describe("util index registration failure path", function () {
 		Logger.error = originalLoggerError;
 		restoreVscodeStubs();
 		featureflags.refreshFeatureFlags();
+		__resetSharedFocusIndexForTests();
 	});
 
 	async function assertRegisterFailure(
@@ -94,10 +99,16 @@ describe("util index registration failure path", function () {
 		);
 	});
 
-	it("registerSharedFocusIndex reports a contextual build failure", async function () {
-		await assertRegisterFailure(
-			() => registerSharedFocusIndex(),
-			"Building Shared Focus index failed.",
+	it("findFileByFocusKey reports a contextual build failure on first use", async function () {
+		await findFileByFocusKey("anything");
+		await waitForAsyncTasks();
+
+		assert.ok(
+			logs.some(
+				(message) =>
+					message ===
+					"Building Shared Focus index failed.: Error: listing failed intentionally",
+			),
 		);
 	});
 });

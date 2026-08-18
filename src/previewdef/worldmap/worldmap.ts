@@ -195,7 +195,12 @@ export class WorldMap {
     }
 
     private async openFile(file: string, type: 'state' | 'strategicregion' | 'supplyarea', start: number | undefined, end: number | undefined): Promise<void> {
-        const typeName = localize('worldmap.openfiletype.' + type as any, type);
+        const openFileTypeKeys: Record<typeof type, 'worldmap.openfiletype.state' | 'worldmap.openfiletype.strategicregion' | 'worldmap.openfiletype.supplyarea'> = {
+            state: 'worldmap.openfiletype.state',
+            strategicregion: 'worldmap.openfiletype.strategicregion',
+            supplyarea: 'worldmap.openfiletype.supplyarea',
+        };
+        const typeName = localize(openFileTypeKeys[type], type);
         await openOrCopyHoiFile(file, start, end, {
             mustOpenFolderMessage: localize('worldmap.mustopenafolder', 'Must open a folder before opening {0} file.', typeName),
             selectFolderMessage: localize('worldmap.selectafolder', 'Select a folder to copy {0} file', typeName),
