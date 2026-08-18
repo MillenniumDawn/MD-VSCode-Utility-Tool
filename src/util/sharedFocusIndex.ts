@@ -38,33 +38,6 @@ export function registerSharedFocusIndex(): vscode.Disposable {
 	const disposables: vscode.Disposable[] = [];
 
 	if (sharedFocusIndex) {
-		const estimatedSize: [number] = [0];
-
-		const task = Promise.all([
-			buildGlobalFocusIndex(estimatedSize),
-			buildWorkspaceFocusIndex(estimatedSize),
-		]);
-
-		vscode.window.setStatusBarMessage(
-			"$(loading~spin) " +
-				localize("sharedFocusIndex.building", "Building Shared Focus index..."),
-			task,
-		);
-		attachTaskWithErrorLogging(
-			task,
-			() => {
-				vscode.window.showInformationMessage(
-					localize(
-						"sharedFocusIndex.builddone",
-						"Building Shared Focus index done.",
-					),
-				);
-				sendEvent("sharedFocusIndex", { size: estimatedSize[0].toString() });
-			},
-			"Building Shared Focus index failed.",
-			Logger.error,
-		);
-
 		disposables.push(
 			vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
 		);
@@ -80,6 +53,44 @@ export function registerSharedFocusIndex(): vscode.Disposable {
 	}
 
 	return vscode.Disposable.from(...disposables);
+}
+
+// Memoized build promise: first caller starts the build, concurrent callers await the same one.
+let buildTask: Promise<[void, void]> | undefined;
+
+function ensureIndexBuilt(): Promise<[void, void]> {
+	if (buildTask) {
+		return buildTask;
+	}
+
+	const estimatedSize: [number] = [0];
+	const task = Promise.all([
+		buildGlobalFocusIndex(estimatedSize),
+		buildWorkspaceFocusIndex(estimatedSize),
+	]);
+	buildTask = task;
+
+	vscode.window.setStatusBarMessage(
+		"$(loading~spin) " +
+			localize("sharedFocusIndex.building", "Building Shared Focus index..."),
+		task,
+	);
+	attachTaskWithErrorLogging(
+		task,
+		() => {
+			vscode.window.showInformationMessage(
+				localize(
+					"sharedFocusIndex.builddone",
+					"Building Shared Focus index done.",
+				),
+			);
+			sendEvent("sharedFocusIndex", { size: estimatedSize[0].toString() });
+		},
+		"Building Shared Focus index failed.",
+		Logger.error,
+	);
+
+	return task;
 }
 
 const FOCUS_CACHE_VERSION = 1;
@@ -237,11 +248,21 @@ async function fillFocusItems(
 	}
 }
 
-export function findFileByFocusKey(key: string): string | undefined {
+export async function findFileByFocusKey(
+	key: string,
+): Promise<string | undefined> {
+	if (!sharedFocusIndex) {
+		return undefined;
+	}
+	await ensureIndexBuilt().catch(() => undefined);
 	return workspaceFocusKeyToFile.get(key) ?? globalFocusKeyToFile.get(key);
 }
 
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	workspaceFocusIndex = {};
 	workspaceFocusKeyToFile.clear();
 
@@ -274,6 +295,10 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 }
 
 function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	const file = e.document.uri;
 	if (file.path.endsWith(".txt")) {
 		onChangeTextDocumentImpl(file);
@@ -291,6 +316,10 @@ const onChangeTextDocumentImpl = debounceByInput(
 );
 
 function onCloseTextDocument(document: vscode.TextDocument) {
+	if (!buildTask) {
+		return;
+	}
+
 	const file = document.uri;
 	if (file.path.endsWith(".txt") && document.isDirty) {
 		removeWorkspaceFocusIndex(file);
@@ -299,6 +328,10 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 }
 
 function onCreateFiles(e: vscode.FileCreateEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	for (const file of e.files) {
 		if (file.path.endsWith(".txt")) {
 			addWorkspaceFocusIndex(file);
@@ -307,6 +340,10 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 }
 
 function onDeleteFiles(e: vscode.FileDeleteEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	for (const file of e.files) {
 		if (file.path.endsWith(".txt")) {
 			removeWorkspaceFocusIndex(file);
@@ -354,4 +391,15 @@ function addWorkspaceFocusIndex(file: vscode.Uri) {
 			);
 		}
 	}
+}
+
+// Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
+export function __resetSharedFocusIndexForTests(): void {
+	buildTask = undefined;
+	for (const file of Object.keys(globalFocusIndex)) {
+		delete globalFocusIndex[file];
+	}
+	workspaceFocusIndex = {};
+	globalFocusKeyToFile.clear();
+	workspaceFocusKeyToFile.clear();
 }
