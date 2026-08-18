@@ -112,7 +112,7 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
                 height: provinceBmp.result.height,
                 colorByPosition: provinceBmp.result.colorByPosition, // width * height
                 provinces: sortedProvinces, // count of provinces
-                badProvincesCount: -(badProvinceId + 1),
+                badProvincesCount: -badProvinceId - 1,
                 continents: continents.result,
                 terrains: terrains.result,
                 rivers: rivers.result.rivers,

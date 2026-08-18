@@ -64,7 +64,7 @@ export class SupplyAreasLoader extends FolderLoader<SupplyAreasLoaderResult, Sup
         const { sortedSupplyAreas, badSupplyAreaId } = sortSupplyAreas(SupplyAreas, warnings);
 
         const { states } = stateMap.result;
-        const badSupplyAreasCount = -(badSupplyAreaId + 1);
+        const badSupplyAreasCount = -badSupplyAreaId - 1;
 
         const filledSupplyAreas: SupplyArea[] = new Array(sortedSupplyAreas.length);
         for (let i = -badSupplyAreasCount; i < sortedSupplyAreas.length; i++) {

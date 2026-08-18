@@ -147,7 +147,7 @@ export class StatesLoader extends FolderLoader<StateLoaderResult, StateNoBoundin
             }
         }
 
-        const badStatesCount = -(badStateId + 1);
+        const badStatesCount = -badStateId - 1;
         validateProvinceInState(provinces, filledStates, badStatesCount, warnings);
 
         return {

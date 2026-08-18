@@ -65,7 +65,7 @@ export class StrategicRegionsLoader extends FolderLoader<StrategicRegionsLoaderR
         const { sortedStrategicRegions, badStrategicRegionId } = sortStrategicRegions(strategicRegions, warnings);
 
         const { states, badStatesCount } = stateMap.result;
-        const badStrategicRegionsCount = -(badStrategicRegionId + 1);
+        const badStrategicRegionsCount = -badStrategicRegionId - 1;
 
         const filledStrategicRegions: StrategicRegion[] = new Array(sortedStrategicRegions.length);
         for (let i = -badStrategicRegionsCount; i < sortedStrategicRegions.length; i++) {
