@@ -51,6 +51,8 @@ function buildStub() {
         onDidDeleteFiles: disposable,
         onDidRenameFiles: disposable,
         textDocuments: [],
+        openTextDocument: async () => undefined,
+        registerTextDocumentContentProvider: () => disposable(),
         fs: {
             stat: async () => ({ type: FileType.File, mtime: 0, ctime: 0, size: 0 }),
             readDirectory: async () => [],
@@ -59,6 +61,31 @@ function buildStub() {
             createDirectory: async () => undefined,
         },
     };
+
+    function webviewPanel(options: any) {
+        let html = '';
+        const webview = {
+            get html() { return html; },
+            set html(v: string) { html = v; },
+            options: options ?? {},
+            cspSource: 'stub-csp-source',
+            asWebviewUri: (uri: any) => uri,
+            postMessage: async (_msg: any) => true,
+            onDidReceiveMessage: () => disposable(),
+        };
+        return {
+            webview,
+            options: options ?? {},
+            viewColumn: undefined,
+            visible: true,
+            active: true,
+            iconPath: undefined,
+            onDidDispose: () => disposable(),
+            onDidChangeViewState: () => disposable(),
+            reveal: noop,
+            dispose: noop,
+        };
+    }
 
     const window = {
         showErrorMessage: async () => undefined,
@@ -72,10 +99,16 @@ function buildStub() {
             show: noop, hide: noop, dispose: noop,
         }),
         activeTextEditor: undefined,
+        visibleTextEditors: [],
+        onDidChangeActiveTextEditor: disposable,
+        createWebviewPanel: (_viewType: string, _title: string, _showOptions: any, options: any) => webviewPanel(options),
+        registerWebviewPanelSerializer: () => disposable(),
+        registerCustomEditorProvider: () => disposable(),
     };
 
     const commands = {
         registerCommand: () => disposable(),
+        executeCommand: async () => undefined,
     };
 
     const ConfigurationTarget = { Global: 1, Workspace: 2 };
@@ -105,10 +138,18 @@ function buildStub() {
     };
 }
 
+const assetStubPath = path.join(__dirname, '__asset_stub__');
+
 const origResolve = (Module as any)._resolveFilename;
 (Module as any)._resolveFilename = function (request: string, parent: any, ...rest: any[]) {
     if (request === 'vscode') {
         return path.join(__dirname, '__vscode_stub__');
+    }
+    // webpack's raw-loader inlines *.html/*.css as strings at build time; under tsc + Node those
+    // files aren't copied next to the compiled output, so requiring them for real would 404. Modules
+    // pulling one in (e.g. worldmap.ts) only need the import to resolve, not real content.
+    if (request.endsWith('.html') || request.endsWith('.css')) {
+        return assetStubPath;
     }
     return origResolve.call(this, request, parent, ...rest);
 };
@@ -127,6 +168,17 @@ const stub = buildStub();
     filename: 'vscode',
     loaded: true,
     exports: stub,
+    children: [],
+    paths: [],
+};
+
+// `__esModule: true` makes TS's `__importDefault` helper hand back `.default` as-is instead of
+// wrapping this whole object as the default, so `import x from './y.html'` sees the string.
+(require.cache as any)[assetStubPath] = {
+    id: 'asset-stub',
+    filename: 'asset-stub',
+    loaded: true,
+    exports: { __esModule: true, default: '' },
     children: [],
     paths: [],
 };
@@ -151,7 +203,11 @@ const pristine = {
     stat: stub.workspace.fs.stat,
     readDirectory: stub.workspace.fs.readDirectory,
     readFile: stub.workspace.fs.readFile,
+    openTextDocument: stub.workspace.openTextDocument,
+    textDocuments: stub.workspace.textDocuments as unknown,
     showErrorMessage: stub.window.showErrorMessage,
+    createWebviewPanel: stub.window.createWebviewPanel,
+    registerWebviewPanelSerializer: stub.window.registerWebviewPanelSerializer,
     now: Date.now,
 };
 
@@ -169,7 +225,13 @@ export interface VscodeStubOverrides {
     stat?: (uri: any) => Promise<any>;
     readDirectory?: (uri: any) => Promise<[string, number][]>;
     readFile?: (uri: any) => Promise<Uint8Array>;
+    openTextDocument?: (uri: any) => Promise<any>;
+    /** Replaces `workspace.textDocuments`, for suites driving `getDocumentByUri` lookups. */
+    textDocuments?: readonly any[];
     showErrorMessage?: (...args: any[]) => Promise<any>;
+    createWebviewPanel?: (viewType: string, title: string, showOptions: any, options: any) => any;
+    /** Captures the serializer a suite's `register()` call installs, e.g. to drive it directly. */
+    registerWebviewPanelSerializer?: (viewType: string, serializer: any) => { dispose(): void };
     /** Replaces `Date.now`, for suites driving a TTL boundary deterministically. */
     now?: () => number;
 }
@@ -211,8 +273,20 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.readFile !== undefined) {
         fs.readFile = overrides.readFile;
     }
+    if (overrides.openTextDocument !== undefined) {
+        workspace.openTextDocument = overrides.openTextDocument;
+    }
+    if (overrides.textDocuments !== undefined) {
+        workspace.textDocuments = overrides.textDocuments;
+    }
     if (overrides.showErrorMessage !== undefined) {
         window.showErrorMessage = overrides.showErrorMessage;
+    }
+    if (overrides.createWebviewPanel !== undefined) {
+        window.createWebviewPanel = overrides.createWebviewPanel;
+    }
+    if (overrides.registerWebviewPanelSerializer !== undefined) {
+        window.registerWebviewPanelSerializer = overrides.registerWebviewPanelSerializer;
     }
     if (overrides.now !== undefined) {
         Date.now = overrides.now;
@@ -231,6 +305,10 @@ export function restoreVscodeStubs(): void {
     fs.stat = pristine.stat;
     fs.readDirectory = pristine.readDirectory;
     fs.readFile = pristine.readFile;
+    workspace.openTextDocument = pristine.openTextDocument;
+    workspace.textDocuments = pristine.textDocuments;
     window.showErrorMessage = pristine.showErrorMessage;
+    window.createWebviewPanel = pristine.createWebviewPanel;
+    window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
     Date.now = pristine.now;
 }
