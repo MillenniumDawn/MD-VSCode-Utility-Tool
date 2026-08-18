@@ -1,3 +1,9 @@
+v1.1.21
+
+  Bugfixes:
+
+- [ CI ] A merge to `main` that forgets the version bump now fails the release workflow instead of reporting success while publishing nothing. The version check compares `package.json` against the existing tags and, when the tag is already present, every remaining step was skipped -- so the run went green in about ten seconds having built no VSIX, published nothing and created no release, with only a `::warning::` buried in the log to say so. Eight consecutive merges landed that way after v1.1.19 (issues #42, #43, #44, #49, #56, #73, #75 and #80), and all eight sat unreleased until v1.1.20 finally carried a bump. The check now emits `::error::` and exits non-zero, so the branch protection status is red and the failure is visible from the commit list. With the skip path gone, the `should_release` output and the ten `if:` guards that depended on it are removed: the job now either publishes or fails. The consequence is that every push to `main` must carry a version bump, including a documentation- or CI-only change.
+
 v1.1.20
 
   Functionality:
