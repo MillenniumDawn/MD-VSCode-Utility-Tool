@@ -537,7 +537,7 @@ async function makeEventNode(
 						: `${edge.randomHours > 0 ? `${edge.hours}-${edge.hours + edge.randomHours}` : edge.hours} ${localize("hours", "hour(s)")}`) +
 					"\n"
 				: "") +
-			`${localize("eventtree.scope", "Scope: ")}${scope}\n${localize("eventtree.title", "Title: ")}${localisationIndex ? getLocalisedTextQuick(event.title) : event.title}`;
+			`${localize("eventtree.scope", "Scope: ")}${scope}\n${localize("eventtree.title", "Title: ")}${localisationIndex ? await getLocalisedTextQuick(event.title) : event.title}`;
 
 		const flags = [
 			event.hidden,
@@ -576,7 +576,7 @@ async function makeEventNode(
 								}
             </p>
             <p class="${styleTable.style("paragraph", () => "margin: 5px 0; text-overflow: ellipsis; overflow: hidden;")}">
-                ${localisationIndex ? getLocalisedTextQuick(event.title) : event.title}
+                ${localisationIndex ? await getLocalisedTextQuick(event.title) : event.title}
             </p>`;
 
 		const extraAttributes = [];
@@ -628,7 +628,7 @@ async function makeEventNode(
 		const title = `${localize("eventtree.eventid", "Event ID: ")}${eventId}\n${localize("eventtree.scope", "Scope: ")}${scope}`;
 		let contentText = "";
 		if (localisationIndex) {
-			let localizedTitle = getLocalisedTextQuick(eventId);
+			let localizedTitle = await getLocalisedTextQuick(eventId);
 			if (
 				localizedTitle !== eventId &&
 				localizedTitle !== null &&
@@ -636,7 +636,7 @@ async function makeEventNode(
 			) {
 				contentText += `<br/>${localizedTitle}`;
 			} else {
-				localizedTitle = getLocalisedTextQuick(`${eventId}.t`);
+				localizedTitle = await getLocalisedTextQuick(`${eventId}.t`);
 				if (
 					localizedTitle !== `${eventId}.t` &&
 					localizedTitle !== null &&
@@ -681,7 +681,7 @@ async function makeOptionNode(
 	let content = option.optionName;
 	let title = option.optionName;
 	if (localisationIndex) {
-		const optionName = getLocalisedTextQuick(option.optionName);
+		const optionName = await getLocalisedTextQuick(option.optionName);
 		content = `${option.optionName} <br/> ${optionName}`;
 		title = `${option.optionName} \n ${optionName}`;
 	}

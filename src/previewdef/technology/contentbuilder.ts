@@ -108,7 +108,7 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
     // Collapse whitespace exactly as html() does to the whole body, so the innerHTML the update swaps
     // in is byte-identical to what the baseline reload renders inside #techtreecontent.
     const contentHtml = techFolders.replace(/\s\s+/g, ' ');
-    const folderOptionsHtml = renderFolderOptions(folders);
+    const folderOptionsHtml = await renderFolderOptions(folders);
 
     const baseContent = `
     ${await renderFolderSelector(folderOptionsHtml, styleTable)}
@@ -138,11 +138,11 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
     return { baseContent, contentHtml, folderOptionsHtml };
 }
 
-function renderFolderOptions(folders: string[]): string {
-    return folders.map((folder) => {
-        const localizedText = localisationIndex ? `${getLocalisedTextQuick(folder)} (${folder})` : folder;
+async function renderFolderOptions(folders: string[]): Promise<string> {
+    return (await Promise.all(folders.map(async (folder) => {
+        const localizedText = localisationIndex ? `${await getLocalisedTextQuick(folder)} (${folder})` : folder;
         return `<option value="techfolder_${folder}">${localizedText}</option>`;
-    }).join('');
+    }))).join('');
 }
 
 async function renderFolderSelector(folderOptionsHtml: string, styleTable: StyleTable): Promise<string> {
@@ -434,15 +434,15 @@ async function resolveTechNameKeys(technology: Technology, equipmentArchetypes: 
         return keys;
     }
 
-    const techLoc = getLocalisedTextQuick(technology.id);
+    const techLoc = await getLocalisedTextQuick(technology.id);
     if (techLoc && techLoc !== technology.id) {
         keys.techKey = technology.id;
     }
 
     for (const equipment of technology.enableEquipmentNames) {
         const shortKey = resolveShortNameKey(equipment, equipmentArchetypes);
-        const shortLoc = keys.shortKey === undefined ? getLocalisedTextQuick(shortKey) : undefined;
-        const longLoc = keys.longKey === undefined ? getLocalisedTextQuick(equipment) : undefined;
+        const shortLoc = keys.shortKey === undefined ? await getLocalisedTextQuick(shortKey) : undefined;
+        const longLoc = keys.longKey === undefined ? await getLocalisedTextQuick(equipment) : undefined;
         if (keys.shortKey === undefined && shortLoc && shortLoc !== shortKey) {
             keys.shortKey = shortKey;
         }
@@ -542,7 +542,7 @@ async function renderTechnology(
         data-tech-id="${escapeAttr(technology.id)}" data-tech-small="${technology.enableEquipments ? '0' : '1'}"
         start="${technology.token?.start}"
         end="${technology.token?.end}"
-        title="${escapeAttr(technology.id)}${localisationIndex ? `\n${getLocalisedTextQuick(bestNameKey)}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${escapeAttr(technology.id)}${localisationIndex ? `\n${await getLocalisedTextQuick(bestNameKey)}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `
@@ -628,7 +628,7 @@ async function renderSubTechnology(
         data-subtech-id="${escapeAttr(subTechnology.id)}"
         start="${subTechnology.token?.start}"
         end="${subTechnology.token?.end}"
-        title="${escapeAttr(subTechnology.id)}${localisationIndex ? `\n${getLocalisedTextQuick(subTechnology.id)}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${escapeAttr(subTechnology.id)}${localisationIndex ? `\n${await getLocalisedTextQuick(subTechnology.id)}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `

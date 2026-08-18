@@ -62,34 +62,8 @@ const localeISOMapping: Record<string, string> = {
 
 export function registerLocalisationIndex(): vscode.Disposable {
 	const disposables: vscode.Disposable[] = [];
+
 	if (localisationIndex) {
-		const estimatedSize: [number] = [0];
-		const task = Promise.all([
-			buildGlobalLocalisationIndex(estimatedSize),
-			buildWorkspaceLocalisationIndex(estimatedSize),
-		]);
-		vscode.window.setStatusBarMessage(
-			"$(loading~spin) " +
-				localize(
-					"localisationIndex.building",
-					"Building Localisation index...",
-				),
-			task,
-		);
-		attachTaskWithErrorLogging(
-			task,
-			() => {
-				vscode.window.showInformationMessage(
-					localize(
-						"localisationIndex.builddone",
-						"Building Localisation index done.",
-					),
-				);
-				sendEvent("localisationIndex", { size: estimatedSize[0].toString() });
-			},
-			"Building Localisation index failed.",
-			Logger.error,
-		);
 		disposables.push(
 			vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
 		);
@@ -107,9 +81,47 @@ export function registerLocalisationIndex(): vscode.Disposable {
 	return vscode.Disposable.from(...disposables);
 }
 
-export function getLocalisedTextQuick(
+// Memoized build promise: first caller starts the build, concurrent callers await the same one.
+let buildTask: Promise<[void, void]> | undefined;
+
+function ensureIndexBuilt(): Promise<[void, void]> {
+	if (buildTask) {
+		return buildTask;
+	}
+
+	const estimatedSize: [number] = [0];
+	const task = Promise.all([
+		buildGlobalLocalisationIndex(estimatedSize),
+		buildWorkspaceLocalisationIndex(estimatedSize),
+	]);
+	buildTask = task;
+
+	vscode.window.setStatusBarMessage(
+		"$(loading~spin) " +
+			localize("localisationIndex.building", "Building Localisation index..."),
+		task,
+	);
+	attachTaskWithErrorLogging(
+		task,
+		() => {
+			vscode.window.showInformationMessage(
+				localize(
+					"localisationIndex.builddone",
+					"Building Localisation index done.",
+				),
+			);
+			sendEvent("localisationIndex", { size: estimatedSize[0].toString() });
+		},
+		"Building Localisation index failed.",
+		Logger.error,
+	);
+
+	return task;
+}
+
+export async function getLocalisedTextQuick(
 	localisationKey: string | undefined,
-): string | undefined {
+): Promise<string | undefined> {
 	const previewLocalisation =
 		vscode.workspace.getConfiguration(ConfigurationKey).previewLocalisation;
 	if (previewLocalisation) {
@@ -121,10 +133,10 @@ export function getLocalisedTextQuick(
 	return getLocalisedText(localisationKey, vscode.env.language);
 }
 
-export function getLocalisedText(
+export async function getLocalisedText(
 	localisationKey: string | undefined,
 	language: string,
-): string | undefined {
+): Promise<string | undefined> {
 	if (!localisationKey) {
 		return localisationKey;
 	}
@@ -132,6 +144,8 @@ export function getLocalisedText(
 	if (!localisationIndex) {
 		return localisationKey ?? "";
 	}
+
+	await ensureIndexBuilt().catch(() => undefined);
 
 	const langKey = localeMapping[language.toLowerCase()] || "l_english"; // use mapping to get language suffix
 	const defaultLangKey = "l_english";
@@ -403,6 +417,10 @@ export function parseLocalisation(fileContent: string): LocalisationData {
 }
 
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	workspaceLocalisationIndex = {};
 	for (const langKey in workspaceLocalisationFileMap) {
 		delete workspaceLocalisationFileMap[langKey];
@@ -436,6 +454,10 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 }
 
 function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	const file = e.document.uri;
 	if (file.path.endsWith(".yml")) {
 		onChangeTextDocumentImpl(file);
@@ -453,6 +475,10 @@ const onChangeTextDocumentImpl = debounceByInput(
 );
 
 function onCloseTextDocument(document: vscode.TextDocument) {
+	if (!buildTask) {
+		return;
+	}
+
 	const file = document.uri;
 	if (file.path.endsWith(".yml") && document.isDirty) {
 		removeWorkspaceLocalisationIndex(file);
@@ -461,6 +487,10 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 }
 
 function onCreateFiles(e: vscode.FileCreateEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	for (const file of e.files) {
 		if (file.path.endsWith(".yml")) {
 			addWorkspaceLocalisationIndex(file);
@@ -469,6 +499,10 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 }
 
 function onDeleteFiles(e: vscode.FileDeleteEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	for (const file of e.files) {
 		if (file.path.endsWith(".yml")) {
 			removeWorkspaceLocalisationIndex(file);
@@ -520,4 +554,16 @@ function addWorkspaceLocalisationIndex(file: vscode.Uri) {
 function getLangKeyFromPath(filePath: string): string {
 	const match = filePath.match(localisationFileFilter);
 	return match?.[1] ?? "l_english";
+}
+
+// Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
+export function __resetLocalisationIndexForTests(): void {
+	buildTask = undefined;
+	for (const key of Object.keys(globalLocalisationIndex)) {
+		delete globalLocalisationIndex[key];
+	}
+	workspaceLocalisationIndex = {};
+	for (const key of Object.keys(workspaceLocalisationFileMap)) {
+		delete workspaceLocalisationFileMap[key];
+	}
 }

@@ -37,28 +37,8 @@ const workspaceGfxFileToKeys = new Map<string, string[]>();
 
 export function registerGfxIndex(): vscode.Disposable {
 	const disposables: vscode.Disposable[] = [];
+
 	if (gfxIndex) {
-		const estimatedSize: [number] = [0];
-		const task = Promise.all([
-			buildGlobalGfxIndex(estimatedSize),
-			buildWorkspaceGfxIndex(estimatedSize),
-		]);
-		vscode.window.setStatusBarMessage(
-			"$(loading~spin) " +
-				localize("gfxindex.building", "Building GFX index..."),
-			task,
-		);
-		attachTaskWithErrorLogging(
-			task,
-			() => {
-				vscode.window.showInformationMessage(
-					localize("gfxindex.builddone", "Building GFX index done."),
-				);
-				sendEvent("gfxIndex", { size: estimatedSize[0].toString() });
-			},
-			"Building GFX index failed.",
-			Logger.error,
-		);
 		disposables.push(
 			vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
 		);
@@ -76,6 +56,41 @@ export function registerGfxIndex(): vscode.Disposable {
 	return vscode.Disposable.from(...disposables);
 }
 
+// Memoized build promise: first caller starts the build, concurrent callers await the same one.
+let buildTask: Promise<[void, void]> | undefined;
+
+function ensureIndexBuilt(): Promise<[void, void]> {
+	if (buildTask) {
+		return buildTask;
+	}
+
+	const estimatedSize: [number] = [0];
+	const task = Promise.all([
+		buildGlobalGfxIndex(estimatedSize),
+		buildWorkspaceGfxIndex(estimatedSize),
+	]);
+	buildTask = task;
+
+	vscode.window.setStatusBarMessage(
+		"$(loading~spin) " +
+			localize("gfxindex.building", "Building GFX index..."),
+		task,
+	);
+	attachTaskWithErrorLogging(
+		task,
+		() => {
+			vscode.window.showInformationMessage(
+				localize("gfxindex.builddone", "Building GFX index done."),
+			);
+			sendEvent("gfxIndex", { size: estimatedSize[0].toString() });
+		},
+		"Building GFX index failed.",
+		Logger.error,
+	);
+
+	return task;
+}
+
 export async function getGfxContainerFile(
 	gfxName: string | undefined,
 ): Promise<string | undefined> {
@@ -83,6 +98,7 @@ export async function getGfxContainerFile(
 		return undefined;
 	}
 
+	await ensureIndexBuilt().catch(() => undefined);
 	return (globalGfxIndex[gfxName] ?? workspaceGfxIndex[gfxName])?.file;
 }
 
@@ -250,6 +266,10 @@ async function fillGfxItems(
 }
 
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	workspaceGfxIndex = {};
 	workspaceGfxFileToKeys.clear();
 	const estimatedSize: [number] = [0];
@@ -279,6 +299,10 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 }
 
 function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	const file = e.document.uri;
 	if (file.path.endsWith(".gfx")) {
 		onChangeTextDocumentImpl(file);
@@ -296,6 +320,10 @@ const onChangeTextDocumentImpl = debounceByInput(
 );
 
 function onCloseTextDocument(document: vscode.TextDocument) {
+	if (!buildTask) {
+		return;
+	}
+
 	const file = document.uri;
 	if (file.path.endsWith(".gfx") && document.isDirty) {
 		removeWorkspaceGfxIndex(file);
@@ -304,6 +332,10 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 }
 
 function onCreateFiles(e: vscode.FileCreateEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	for (const file of e.files) {
 		if (file.path.endsWith(".gfx")) {
 			addWorkspaceGfxIndex(file);
@@ -312,6 +344,10 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 }
 
 function onDeleteFiles(e: vscode.FileDeleteEvent) {
+	if (!buildTask) {
+		return;
+	}
+
 	for (const file of e.files) {
 		if (file.path.endsWith(".gfx")) {
 			removeWorkspaceGfxIndex(file);
@@ -354,4 +390,14 @@ function addWorkspaceGfxIndex(file: vscode.Uri) {
 			});
 		}
 	}
+}
+
+// Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
+export function __resetGfxIndexForTests(): void {
+	buildTask = undefined;
+	for (const key of Object.keys(globalGfxIndex)) {
+		delete globalGfxIndex[key];
+	}
+	workspaceGfxIndex = {};
+	workspaceGfxFileToKeys.clear();
 }

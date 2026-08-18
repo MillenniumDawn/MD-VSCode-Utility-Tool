@@ -1,5 +1,12 @@
 import * as assert from 'assert';
-import { parseLocalisation } from '../util/localisationIndex';
+import * as featureflags from '../util/featureflags';
+import {
+    parseLocalisation,
+    getLocalisedText,
+    registerLocalisationIndex,
+    __resetLocalisationIndexForTests,
+} from '../util/localisationIndex';
+import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 describe('util/localisationIndex', () => {
     describe('parseLocalisation', () => {
@@ -63,5 +70,106 @@ describe('util/localisationIndex', () => {
             assert.strictEqual(result.l_english.KEY, 'english');
             assert.strictEqual(result.l_russian.KEY, 'russian');
         });
+    });
+});
+
+type FileloaderModule = {
+    listFilesFromModOrHOI4: (
+        relativePath: string,
+        options?: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
+    ) => Promise<string[]>;
+    readFileFromModOrHOI4: (
+        relativePath: string,
+        options?: { mod?: boolean; hoi4?: boolean },
+    ) => Promise<[Buffer, unknown]>;
+};
+
+const fileloader = require('../util/fileloader') as FileloaderModule;
+
+const LOC_FILE_CONTENT = Buffer.from('l_english:\n KEY_A:0 "Value A"\n');
+
+function waitForAsyncTasks(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
+}
+
+describe('util/localisationIndex lazy build', function () {
+    let originalListFiles: FileloaderModule['listFilesFromModOrHOI4'];
+    let originalReadFile: FileloaderModule['readFileFromModOrHOI4'];
+    let listFilesCallCount: number;
+
+    beforeEach(function () {
+        __resetLocalisationIndexForTests();
+        stubVscode({
+            getConfiguration: () => ({ localisationIndex: true }),
+        });
+        featureflags.refreshFeatureFlags();
+
+        listFilesCallCount = 0;
+        originalListFiles = fileloader.listFilesFromModOrHOI4;
+        originalReadFile = fileloader.readFileFromModOrHOI4;
+
+        (
+            fileloader as typeof fileloader & {
+                listFilesFromModOrHOI4: FileloaderModule['listFilesFromModOrHOI4'];
+            }
+        ).listFilesFromModOrHOI4 = async () => {
+            listFilesCallCount++;
+            return ['test_l_english.yml'];
+        };
+        (
+            fileloader as typeof fileloader & {
+                readFileFromModOrHOI4: FileloaderModule['readFileFromModOrHOI4'];
+            }
+        ).readFileFromModOrHOI4 = async () => [LOC_FILE_CONTENT, {} as unknown];
+    });
+
+    afterEach(function () {
+        (
+            fileloader as typeof fileloader & {
+                listFilesFromModOrHOI4: FileloaderModule['listFilesFromModOrHOI4'];
+            }
+        ).listFilesFromModOrHOI4 = originalListFiles;
+        (
+            fileloader as typeof fileloader & {
+                readFileFromModOrHOI4: FileloaderModule['readFileFromModOrHOI4'];
+            }
+        ).readFileFromModOrHOI4 = originalReadFile;
+        restoreVscodeStubs();
+        featureflags.refreshFeatureFlags();
+        __resetLocalisationIndexForTests();
+    });
+
+    it('does no build work when registered', async function () {
+        const disposable = registerLocalisationIndex();
+        await waitForAsyncTasks();
+
+        assert.strictEqual(listFilesCallCount, 0);
+        disposable.dispose();
+    });
+
+    it('does no build work when the feature flag is off', async function () {
+        stubVscode({ getConfiguration: () => ({ localisationIndex: false }) });
+        featureflags.refreshFeatureFlags();
+
+        const result = await getLocalisedText('KEY_A', 'en');
+
+        assert.strictEqual(result, 'KEY_A');
+        assert.strictEqual(listFilesCallCount, 0);
+    });
+
+    it('builds the index exactly once for concurrent first lookups, then serves later lookups from it', async function () {
+        const [first, second] = await Promise.all([
+            getLocalisedText('KEY_A', 'en'),
+            getLocalisedText('KEY_A', 'en'),
+        ]);
+
+        // One list call for the global build, one for the workspace build; a duplicate build would double these.
+        assert.strictEqual(listFilesCallCount, 2);
+        assert.strictEqual(first, 'Value A');
+        assert.strictEqual(second, 'Value A');
+
+        const third = await getLocalisedText('KEY_A', 'en');
+        assert.strictEqual(third, 'Value A');
+        assert.strictEqual(listFilesCallCount, 2);
     });
 });

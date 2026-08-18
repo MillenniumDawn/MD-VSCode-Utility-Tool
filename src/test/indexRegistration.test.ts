@@ -1,8 +1,16 @@
 import * as assert from "assert";
 import * as featureflags from "../util/featureflags";
 import { Logger } from "../util/logger";
-import { registerGfxIndex } from "../util/gfxindex";
-import { registerLocalisationIndex } from "../util/localisationIndex";
+import {
+	getGfxContainerFile,
+	registerGfxIndex,
+	__resetGfxIndexForTests,
+} from "../util/gfxindex";
+import {
+	getLocalisedText,
+	registerLocalisationIndex,
+	__resetLocalisationIndexForTests,
+} from "../util/localisationIndex";
 import {
 	findFileByFocusKey,
 	__resetSharedFocusIndexForTests,
@@ -41,6 +49,8 @@ describe("util index registration failure path", function () {
 		});
 		featureflags.refreshFeatureFlags();
 		__resetSharedFocusIndexForTests();
+		__resetGfxIndexForTests();
+		__resetLocalisationIndexForTests();
 
 		originalLoggerError = Logger.error;
 		Logger.error = (message: string) => {
@@ -67,35 +77,48 @@ describe("util index registration failure path", function () {
 		restoreVscodeStubs();
 		featureflags.refreshFeatureFlags();
 		__resetSharedFocusIndexForTests();
+		__resetGfxIndexForTests();
+		__resetLocalisationIndexForTests();
 	});
 
-	async function assertRegisterFailure(
-		action: () => { dispose: () => void },
-		expectedContext: string,
-	): Promise<void> {
-		const disposable = action();
+	it("registerGfxIndex only registers watchers, reporting no build failure", async function () {
+		const disposable = registerGfxIndex();
+		await waitForAsyncTasks();
+
+		assert.strictEqual(logs.length, 0);
+		disposable.dispose();
+	});
+
+	it("registerLocalisationIndex only registers watchers, reporting no build failure", async function () {
+		const disposable = registerLocalisationIndex();
+		await waitForAsyncTasks();
+
+		assert.strictEqual(logs.length, 0);
+		disposable.dispose();
+	});
+
+	it("getGfxContainerFile reports a contextual build failure on first use", async function () {
+		await getGfxContainerFile("GFX_anything");
 		await waitForAsyncTasks();
 
 		assert.ok(
 			logs.some(
 				(message) =>
-					message === `${expectedContext}: Error: listing failed intentionally`,
+					message === "Building GFX index failed.: Error: listing failed intentionally",
 			),
-		);
-		disposable.dispose();
-	}
-
-	it("registerGfxIndex reports a contextual build failure", async function () {
-		await assertRegisterFailure(
-			() => registerGfxIndex(),
-			"Building GFX index failed.",
 		);
 	});
 
-	it("registerLocalisationIndex reports a contextual build failure", async function () {
-		await assertRegisterFailure(
-			() => registerLocalisationIndex(),
-			"Building Localisation index failed.",
+	it("getLocalisedText reports a contextual build failure on first use", async function () {
+		await getLocalisedText("anything", "en");
+		await waitForAsyncTasks();
+
+		assert.ok(
+			logs.some(
+				(message) =>
+					message ===
+					"Building Localisation index failed.: Error: listing failed intentionally",
+			),
 		);
 	});
 
