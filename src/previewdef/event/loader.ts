@@ -2,7 +2,7 @@ import { HOIEvents, getEvents } from "./schema";
 import { ContentLoader, Dependency, LoadResultOD, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
-import { uniq, flatten } from "lodash";
+import { uniq, uniqBy, flatten } from "lodash";
 import { YamlLoader } from "../../util/loader/yaml";
 import { getGfxContainerFiles } from "../../util/gfxindex";
 import { getLanguageIdInYml } from "../../util/vsccommon";
@@ -73,6 +73,10 @@ export class EventsLoader extends ContentLoader<EventsLoaderResult> {
 function mergeEvents(...events: HOIEvents[]): HOIEvents {
     return {
         eventItemsByNamespace: events.map(e => e.eventItemsByNamespace).reduce((p, c) => Object.assign(p, c), {}),
+        conditionExprs: uniqBy(
+            flatten(events.map(e => e.conditionExprs)),
+            e => e.scopeName + '@' + e.nodeContent,
+        ),
     };
 }
 
