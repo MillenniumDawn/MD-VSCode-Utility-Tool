@@ -1,0 +1,300 @@
+/*
+ * Event workflow view.
+ *
+ * Every colour here resolves from a VS Code theme variable, so the preview follows whatever
+ * theme the editor is running rather than shipping its own palette. The fallbacks after each
+ * var() only matter when a theme omits the variable.
+ *
+ * Colour carries meaning and nothing else: a scope dot identifies the event type, the accent
+ * marks a gated option and the condition that gates it, and the "immediate" hue marks a call
+ * fired outside player choice.
+ */
+
+:root {
+	--ev-surface: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+	--ev-surface-alt: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background));
+	--ev-border: var(--vscode-panel-border, var(--vscode-editorWidget-border));
+	--ev-border-strong: var(--vscode-focusBorder);
+	--ev-fg: var(--vscode-editor-foreground, var(--vscode-foreground));
+	--ev-fg-muted: var(--vscode-descriptionForeground);
+	--ev-accent: var(--vscode-textLink-foreground);
+	--ev-accent-bg: var(--vscode-textBlockQuote-background);
+
+	/* Event scope hues. charts.* is the one theme-provided categorical ramp. */
+	--ev-country: var(--vscode-charts-blue);
+	--ev-news: var(--vscode-charts-yellow);
+	--ev-state: var(--vscode-charts-green);
+	--ev-leader: var(--vscode-charts-purple);
+	--ev-operative: var(--vscode-charts-orange);
+
+	--ev-radius: 6px;
+}
+
+#eventtreecontent {
+	position: relative;
+	transform-origin: 0 0;
+}
+
+.ev-edges {
+	position: absolute;
+	left: 0;
+	top: 0;
+	overflow: visible;
+	pointer-events: none;
+}
+
+/* ---------- Column rails ---------- */
+
+/* One rail per rank. Rank is real information: how many events deep the chain is here. */
+.ev-rail {
+	position: absolute;
+	top: 0;
+	border-left: 1px dashed var(--ev-border);
+	pointer-events: none;
+}
+
+.ev-rail > span {
+	position: absolute;
+	top: 6px;
+	left: 8px;
+	padding: 0 5px;
+	font-size: 11px;
+	color: var(--ev-fg-muted);
+	background: var(--vscode-editor-background);
+	white-space: nowrap;
+}
+
+/* ---------- Nodes ---------- */
+
+.ev-node {
+	position: absolute;
+}
+
+.ev-node.ev-dim,
+.ev-chip.ev-dim {
+	opacity: 0.25;
+}
+
+.ev-node,
+.ev-chip {
+	transition: opacity 0.12s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ev-node,
+	.ev-chip {
+		transition: none;
+	}
+}
+
+.ev-card {
+	background: var(--ev-surface);
+	border: 1px solid var(--ev-border);
+	border-radius: var(--ev-radius);
+	cursor: pointer;
+	transition: border-color 0.1s;
+}
+
+.ev-card:hover {
+	border-color: var(--ev-border-strong);
+}
+
+.ev-card:focus-visible {
+	outline: 1px solid var(--ev-border-strong);
+	outline-offset: 2px;
+}
+
+.ev-card-event {
+	width: 250px;
+}
+
+.ev-card-option {
+	width: 228px;
+}
+
+.ev-card-hidden,
+.ev-card-unresolved {
+	border-style: dashed;
+	background: var(--ev-surface-alt);
+}
+
+.ev-card-gated {
+	border-color: var(--ev-accent);
+}
+
+.ev-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 9px 11px;
+}
+
+.ev-marker {
+	width: 7px;
+	height: 7px;
+	flex: none;
+	margin-top: 5px;
+	border-radius: 50%;
+	background: var(--ev-dot, var(--ev-country));
+}
+
+/* The one non-round glyph on the canvas, so a gated option is findable at a glance. */
+.ev-marker-decision {
+	border-radius: 1px;
+	background: var(--ev-accent);
+	transform: rotate(45deg);
+}
+
+.ev-text {
+	min-width: 0;
+	flex: 1;
+}
+
+.ev-id {
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 12px;
+	color: var(--ev-fg);
+	overflow-wrap: anywhere;
+}
+
+.ev-card-option .ev-id {
+	color: var(--ev-fg-muted);
+}
+
+.ev-sub {
+	margin-top: 1px;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--ev-fg-muted);
+	overflow-wrap: anywhere;
+}
+
+.ev-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	padding: 0 11px 9px;
+}
+
+.ev-badge {
+	padding: 0 6px;
+	border: 1px solid var(--ev-border);
+	border-radius: 2em;
+	font-size: 11px;
+	line-height: 17px;
+	white-space: nowrap;
+	color: var(--ev-fg-muted);
+}
+
+.ev-badge-major {
+	color: var(--ev-news);
+	border-color: var(--ev-news);
+}
+
+.ev-badge-hidden {
+	border-style: dashed;
+}
+
+.ev-badge-loop {
+	color: var(--ev-operative);
+	border-color: var(--ev-operative);
+}
+
+/* ---------- Condition panels ---------- */
+
+.ev-cond {
+	padding: 7px 11px 8px;
+	border-top: 1px solid var(--ev-border);
+	border-radius: 0 0 5px 5px;
+	background: var(--ev-accent-bg);
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-size: 11px;
+	line-height: 1.65;
+	color: var(--ev-fg-muted);
+}
+
+.ev-cond-head {
+	margin-bottom: 3px;
+	font-family: var(--vscode-font-family);
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--ev-fg-muted);
+}
+
+.ev-cond ul {
+	margin: 0;
+	padding: 0 0 0 10px;
+	list-style: none;
+	border-left: 1px solid var(--ev-border);
+}
+
+.ev-cond > ul {
+	padding-left: 0;
+	border-left: 0;
+}
+
+.ev-cond .ev-fold {
+	color: var(--ev-accent);
+}
+
+.ev-cond .ev-cond-scope {
+	opacity: 0.75;
+}
+
+.ev-cond li {
+	overflow-wrap: anywhere;
+}
+
+/* ---------- Edges ---------- */
+
+.ev-edge {
+	fill: none;
+	stroke: var(--ev-border);
+	stroke-width: 1.5;
+}
+
+.ev-edge-guarded {
+	stroke: var(--ev-accent);
+	stroke-dasharray: 4 3;
+}
+
+.ev-edge-immediate {
+	stroke: var(--ev-operative);
+	stroke-dasharray: 1 3;
+	stroke-width: 2;
+	stroke-linecap: round;
+}
+
+.ev-edge-dim {
+	opacity: 0.15;
+}
+
+.ev-chip {
+	position: absolute;
+	transform: translate(-50%, -50%);
+	max-width: 220px;
+	padding: 0 6px;
+	border: 1px solid var(--ev-border);
+	border-radius: 2em;
+	background: var(--vscode-editor-background);
+	font-size: 11px;
+	line-height: 17px;
+	color: var(--ev-fg-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	pointer-events: none;
+}
+
+.ev-chip-guarded {
+	border-color: var(--ev-accent);
+	color: var(--ev-accent);
+	font-family: var(--vscode-editor-font-family, monospace);
+}
+
+/* ---------- Empty state ---------- */
+
+.ev-empty {
+	padding: 40px;
+	color: var(--ev-fg-muted);
+}
