@@ -110,6 +110,30 @@ export function slice<T>(
 		return [];
 	}
 
+	// Synthetic world-map arrays store "bad" entries at negative indices (-1 .. -N)
+	// as own properties, with bad*Count now a non-negative N. For those arrays a
+	// negative start is a direct index, not len+start. Detect via own-property.
+	if (start < 0 && Object.prototype.hasOwnProperty.call(array, String(start))) {
+		let realEnd = end;
+		if (realEnd < 0 && !Object.prototype.hasOwnProperty.call(array, String(realEnd))) {
+			realEnd = array.length + realEnd;
+		}
+		if (realEnd <= start) {
+			return [];
+		}
+		const result: T[] = [];
+		for (let i = start; i < realEnd; i++) {
+			if (i < 0) {
+				result.push((array as unknown as Record<number, T>)[i]!);
+			} else if (i < array.length) {
+				result.push(array[i]!);
+			} else {
+				break;
+			}
+		}
+		return result;
+	}
+
 	const len = array.length;
 	let realStart = start;
 	if (realStart < 0) {
