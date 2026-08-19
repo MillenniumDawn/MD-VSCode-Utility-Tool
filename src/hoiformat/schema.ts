@@ -96,6 +96,26 @@ export type SchemaDef<T> = T extends boolean
 												>;
 											};
 
+/**
+ * Runtime shape of a `SchemaDef<T>` once its conditional type is erased. The converter
+ * below walks schemas reflectively and cannot keep `T`, so it narrows against this
+ * instead of falling back to `any`.
+ */
+type SchemaPrimitive =
+	| "boolean"
+	| "stringignorecase"
+	| "string"
+	| "number"
+	| "numberlike"
+	| "enum"
+	| "raw";
+type SchemaContainer = {
+	_innerType: AnySchemaDef;
+	_type: "map" | "detailvalue" | "array";
+};
+type SchemaObject = { [key: string]: AnySchemaDef };
+type AnySchemaDef = SchemaPrimitive | SchemaContainer | SchemaObject;
+
 //#endregion
 
 //#region Common Defs
@@ -277,12 +297,12 @@ function convertObject<T>(
 	schemaDef: SchemaDef<T>,
 	constants: Record<string, NodeValue> = {},
 ): HOIPartial<T> {
-	const result: Record<string, any> = {};
-	const schema = schemaDef as any;
+	const result: Record<string, unknown> = {};
+	const schema = schemaDef as unknown as SchemaObject;
 
 	for (const childSchemaEntry of Object.entries(schema)) {
 		if (typeof childSchemaEntry[1] === "object") {
-			const type = (childSchemaEntry[1] as any)._type;
+			const type = childSchemaEntry[1]._type;
 			if (type === "map") {
 				result[childSchemaEntry[0]] = { _map: {}, _token: undefined };
 			} else if (type === "array") {
@@ -315,31 +335,43 @@ function convertObject<T>(
 			const type = childSchemaDef._type;
 
 			if (type === "map") {
-				const mapData = (
-					convertNodeToJson(child, childSchemaDef, constants) as any
-				)._map;
-				Object.assign(result[childName]._map, mapData);
+				const mapData = convertNodeToJson<unknown>(
+					child,
+					childSchemaDef as SchemaDef<unknown>,
+					constants,
+				) as CustomMap<unknown>;
+				Object.assign(
+					(result[childName] as CustomMap<unknown>)._map,
+					mapData._map,
+				);
 			} else if (type === "array") {
-				const innerType = childSchemaDef._innerType;
+				const innerType = childSchemaDef._innerType as SchemaDef<unknown>;
 				const convertedChild = convertNodeToJson(child, innerType, constants);
 				if (typeof convertedChild === "object") {
-					(convertedChild as any)._index = index;
+					(convertedChild as { _index?: number })._index = index;
 				}
 
-				result[childName].push(convertedChild);
+				(result[childName] as unknown[]).push(convertedChild);
 			} else {
 				setChildValue = false;
 			}
 		} else if (childSchemaDef === "enum") {
-			const enums = (convertNodeToJson(child, childSchemaDef, constants) as any)
-				._values;
-			result[childName]._values.push(...enums);
+			const enums = convertNodeToJson<unknown>(
+				child,
+				childSchemaDef as SchemaDef<unknown>,
+				constants,
+			) as Enum;
+			(result[childName] as Enum)._values.push(...enums._values);
 		} else {
 			setChildValue = false;
 		}
 
 		if (!setChildValue) {
-			result[childName] = convertNodeToJson(child, childSchemaDef, constants);
+			result[childName] = convertNodeToJson(
+				child,
+				childSchemaDef as SchemaDef<unknown>,
+				constants,
+			);
 		}
 	});
 
@@ -375,7 +407,7 @@ export function convertNodeToJson<T>(
 	schemaDef: SchemaDef<T>,
 	constants: Record<string, NodeValue> = {},
 ): HOIPartial<T> {
-	const schema = schemaDef as any;
+	const schema = schemaDef as unknown as AnySchemaDef;
 	let result: HOIPartial<T>;
 	node = applyConstantsToNode(node, constants);
 
@@ -418,7 +450,7 @@ export function convertNodeToJson<T>(
 				constants,
 			) as HOIPartial<T>;
 		} else {
-			result = convertObject(node, schema, constants);
+			result = convertObject(node, schema as unknown as SchemaDef<T>, constants);
 		}
 	} else {
 		throw new Error("Bad schema " + schema);

@@ -24,10 +24,7 @@ export async function renderEventFile(
 	try {
 		const session = new LoaderSession(false);
 		const loadResult = await loader.load(session);
-		const loadedLoaders = Array.from((session as any).loadedLoader).map<string>(
-			(v) => (v as any).toString(),
-		);
-		debug("Loader session event tree", loadedLoaders);
+		debug("Loader session event tree", session.loadedLoaderNames());
 
 		const styleTable = new StyleTable();
 		const eventGraph = await renderEvents(loadResult.result, styleTable);

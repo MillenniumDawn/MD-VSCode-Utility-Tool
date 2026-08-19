@@ -33,6 +33,11 @@ export class LoaderSession {
 		this.loadedLoader.add(loader);
 	}
 
+	/** Names of every loader this session has completed, for debug output. */
+	public loadedLoaderNames(): string[] {
+		return Array.from(this.loadedLoader, (loader) => loader.toString());
+	}
+
 	public checkingShouldReload(loader: Loader<unknown, unknown>) {
 		this.shouldLoaderReload.set(loader, "checking");
 	}
