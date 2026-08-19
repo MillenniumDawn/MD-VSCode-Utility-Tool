@@ -8,6 +8,7 @@ v1.1.22
 
   Bugfixes:
 
+- [ Event Tree ] A group of events that only call each other renders instead of showing an empty canvas. Root selection treated an event as an entry point only when nothing else called it, so a closed group had no member to start from and the preview drew nothing at all. `ENG_inner_circle_charles.01` and `.02` in Millennium Dawn are exactly that shape -- two hidden events whose `immediate` blocks fire each other on a 180 day loop -- and neither appeared. Anything left unreached after the normal roots are walked is now promoted to a root of its own, in file order so the output stays deterministic. An event a real root already reaches is not promoted, so no chain gains a duplicate entry point.
 - [ Event Tree ] An event fired inside an array-indexed variable scope is no longer invisible. `variableRegexForScope` in `hoiformat/schema.ts` spelled the variable name `\w+`, which cannot match the `^` of an array index, so a block such as `var:influence_array^0 = { country_event = { id = arab_spring.3 days = 1 } }` failed to resolve as a scope switch and was read as a leaf effect instead -- and nothing nested inside it was ever visited. The `else_if` branch of `arab_spring.0`'s only option leads into exactly that shape, so the preview drew one outgoing call where the file has two. The variable name and each scope segment now accept `^`-indexed suffixes. The regex is shared with the focus tree and MIO condition extractors, which gain the same resolution.
 
 v1.1.21

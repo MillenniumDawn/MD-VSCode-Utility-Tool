@@ -304,6 +304,38 @@ describe('previewdef/event renderEventFile in-place update', () => {
         assert.notStrictEqual((shared[0] as EventGraphEventNode).scope, (shared[1] as EventGraphEventNode).scope);
     });
 
+    it('renders a group of events that only call each other', async () => {
+        // ENG_inner_circle_charles.01 and .02 in Millennium Dawn are two hidden events whose
+        // immediate blocks fire each other. Neither is parentless, so root selection found no way
+        // in and the preview was blank for the whole group.
+        const call = (eventName: string) => ({
+            scopeName: '{event_target}', eventName, days: 0, hours: 0, randomDays: 0, randomHours: 0, condition: true,
+        });
+        const rendered = await renderEventFile(loaderFor([
+            { id: 'test.1', hidden: true, immediate: { childEvents: [call('test.2')] } },
+            { id: 'test.2', hidden: true, immediate: { childEvents: [call('test.1')] } },
+        ]), uri, webview) as LoaderRenderResult;
+
+        const graph = payloadOf(rendered);
+        assert.ok(graph.roots.length > 0, 'the group must get an entry point');
+        const ids = graph.nodes.filter(n => n.kind === 'event').map(n => (n as EventGraphEventNode).eventId);
+        assert.ok(ids.includes('test.1'), ids.join(','));
+        assert.ok(ids.includes('test.2'), ids.join(','));
+    });
+
+    it('does not promote an event that a real root already reaches', async () => {
+        const call = (eventName: string) => ({
+            scopeName: '{event_target}', eventName, days: 0, hours: 0, randomDays: 0, randomHours: 0, condition: true,
+        });
+        const rendered = await renderEventFile(loaderFor([
+            { id: 'test.0', options: [{ name: 'test.0.a', childEvents: [call('test.1')] }] },
+            { id: 'test.1' },
+        ]), uri, webview) as LoaderRenderResult;
+
+        const graph = payloadOf(rendered);
+        assert.strictEqual(graph.roots.length, 1, 'test.1 hangs off test.0 and must not also be a root');
+    });
+
     it('terminates on a cycle instead of recursing forever', async () => {
         const call = (eventName: string) => ({
             scopeName: '{event_target}', eventName, days: 1, hours: 0, randomDays: 0, randomHours: 0, condition: true,

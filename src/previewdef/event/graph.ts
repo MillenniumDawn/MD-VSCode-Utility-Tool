@@ -61,16 +61,59 @@ export function eventsToGraph(
 	}
 
 	const result: EventNode[] = [];
+	const covered = new Set<string>();
+
+	const addRoot = (eventNode: EventNode) => {
+		result.push(eventNode);
+		markReachable(eventNode, covered);
+	};
+
 	for (const event of Object.values(eventIdToEvent)) {
 		if (!eventHasParent[event.id]) {
 			const eventNode = eventIdToNode[event.id];
 			if (eventNode?.relatedNamespace.some((n) => mainNamespaces.includes(n))) {
-				result.push(eventNode);
+				addRoot(eventNode);
 			}
 		}
 	}
 
+	// A group of events that only call each other has no parentless member, so the pass above
+	// finds no way in and the whole group renders as nothing. Millennium Dawn's
+	// ENG_inner_circle_charles.01 and .02 are exactly that: two hidden events whose immediate
+	// blocks fire each other, and the preview was blank for them. Anything still unreached is
+	// therefore promoted to a root of its own, in file order so the result stays deterministic.
+	for (const event of Object.values(eventIdToEvent)) {
+		if (covered.has(event.id)) {
+			continue;
+		}
+		const eventNode = eventIdToNode[event.id];
+		if (eventNode?.relatedNamespace.some((n) => mainNamespaces.includes(n))) {
+			addRoot(eventNode);
+		}
+	}
+
 	return result;
+}
+
+// Every event id reachable from this node, following options and calls alike.
+function markReachable(node: EventNode, covered: Set<string>): void {
+	if (covered.has(node.event.id)) {
+		return;
+	}
+	covered.add(node.event.id);
+	for (const child of node.children) {
+		if ("toNode" in child) {
+			if (typeof child.toNode !== "string") {
+				markReachable(child.toNode, covered);
+			}
+		} else {
+			for (const edge of child.children) {
+				if (typeof edge.toNode !== "string") {
+					markReachable(edge.toNode, covered);
+				}
+			}
+		}
+	}
 }
 
 function eventToNode(
