@@ -2,7 +2,7 @@ import { HOIEvents, getEvents } from "./schema";
 import { ContentLoader, Dependency, LoadResultOD, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
-import { uniq, flatten } from "lodash";
+import { uniq, uniqBy, flatten } from "lodash";
 import { YamlLoader } from "../../util/loader/yaml";
 import { getGfxContainerFiles } from "../../util/gfxindex";
 import { getLanguageIdInYml } from "../../util/vsccommon";
@@ -23,7 +23,7 @@ export class EventsLoader extends ContentLoader<EventsLoaderResult> {
         return await super.shouldReloadImpl(session) || this.languageKey !== getLanguageIdInYml();
     }
 
-    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: any, session: LoaderSession): Promise<LoadResultOD<EventsLoaderResult>> {
+    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: unknown, session: LoaderSession): Promise<LoadResultOD<EventsLoaderResult>> {
         if (error || (content === undefined)) {
             throw error;
         }
@@ -73,14 +73,25 @@ export class EventsLoader extends ContentLoader<EventsLoaderResult> {
 function mergeEvents(...events: HOIEvents[]): HOIEvents {
     return {
         eventItemsByNamespace: events.map(e => e.eventItemsByNamespace).reduce((p, c) => Object.assign(p, c), {}),
+        conditionExprs: uniqBy(
+            flatten(events.map(e => e.conditionExprs)),
+            e => e.scopeName + '@' + e.nodeContent,
+        ),
     };
 }
 
-function makeLocalizationDict(dicts: any[], language: string): Record<string, string> {
+function makeLocalizationDict(dicts: unknown[], language: string): Record<string, string> {
     const result: Record<string, string> = {};
     for (const dict of dicts) {
-        if (dict[language] && typeof dict[language] === 'object' && !Array.isArray(dict[language])) {
-            Object.assign(result, dict[language]);
+        // An empty .yml parses to null or undefined, so the entry has to be rejected before
+        // it is indexed rather than after.
+        if (typeof dict !== 'object' || dict === null) {
+            continue;
+        }
+
+        const section = (dict as Record<string, unknown>)[language];
+        if (section && typeof section === 'object' && !Array.isArray(section)) {
+            Object.assign(result, section);
         }
     }
 

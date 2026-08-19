@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { hsvToRgb, slice, clipNumber, withTimeout, mapLimit, forceError, arrayToMap, TimeoutError, UserError, randomString, debounceByInput, memoizeWithTtl } from '../util/common';
+import { hsvToRgb, slice, clipNumber, withTimeout, mapLimit, forceError, arrayToMap, TimeoutError, UserError, randomString, debounceByInput, memoizeWithTtl, jsonForScript } from '../util/common';
 
 describe('util/common', function () {
     describe('arrayToMap', function () {
@@ -292,6 +292,25 @@ describe('util/common', function () {
             fn(2);
             await nextTick();
             assert.strictEqual(calls, 2);
+        });
+    });
+
+    describe('jsonForScript', function () {
+        it('escapes a closing script tag so it cannot end the inline script', function () {
+            const json = jsonForScript({ text: '</script><img src=x>' });
+            assert.ok(!json.includes('</script'), json);
+            assert.strictEqual(JSON.parse(json).text, '</script><img src=x>');
+        });
+
+        it('escapes the line separators that are legal JSON but not legal JavaScript', function () {
+            const json = jsonForScript({ text: '\u2028\u2029' });
+            assert.ok(!json.includes('\u2028'), json);
+            assert.strictEqual(JSON.parse(json).text, '\u2028\u2029');
+        });
+
+        it('leaves ordinary values exactly as JSON.stringify writes them', function () {
+            const value = { a: 1, b: ['x', null], c: 'plain text' };
+            assert.strictEqual(jsonForScript(value), JSON.stringify(value));
         });
     });
 });

@@ -81,10 +81,13 @@ function extractEffectByCondition(
 			if (Array.isArray(child.value)) {
 				const randomListItems = child.value.map((n) => {
 					const possibility = parseInt(n.name ?? "0");
+					// A `random_list` picks one of its branches; it does not lift whatever guards the
+					// list itself. Carrying `condition` into each branch keeps an enclosing `if` on
+					// the effects inside, which would otherwise read as unconditional.
 					const effect = extractEffectByCondition(
 						n.value,
 						scopeStack,
-						true,
+						condition,
 						[],
 						["modifier"],
 					);

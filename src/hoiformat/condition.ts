@@ -419,6 +419,40 @@ export function simplifyCondition(
 	};
 }
 
+// Combines two conditions that both have to hold. Nested `and` folders are flattened and an item
+// already present is dropped, so folding a guard onto an expression that already carries it -- which
+// is what happens when an enclosing `if` is preserved into a `random_list` branch and then folded
+// again while collecting the calls inside it -- yields the guard once rather than twice.
+export function andCondition(
+	a: ConditionComplexExpr,
+	b: ConditionComplexExpr,
+): ConditionComplexExpr {
+	if (a === true) {
+		return b;
+	}
+	if (b === true) {
+		return a;
+	}
+
+	const items: ConditionComplexExpr[] = [];
+	const push = (condition: ConditionComplexExpr): void => {
+		if (condition === true) {
+			return;
+		}
+		if (typeof condition === "object" && "items" in condition && condition.type === "and") {
+			condition.items.forEach(push);
+			return;
+		}
+		if (items.every((item) => !isEqual(item, condition))) {
+			items.push(condition);
+		}
+	};
+	push(a);
+	push(b);
+
+	return simplifyCondition({ type: "and", items });
+}
+
 export function extractConditionalExprs(
 	condition: ConditionComplexExpr,
 	result: ConditionItem[] = [],

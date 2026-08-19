@@ -1,3 +1,25 @@
+v1.1.22
+
+  Functionality:
+
+- [ Event Tree ] The event preview now draws an event chain as a workflow diagram instead of a grid of boxes, and shows the conditions that decide which way a chain goes. Issue #4.
+- [ Event Tree ] Four toggles in the preview toolbar: show localisation, show triggers, show event conditions, and show hidden & immediate events. Your choices are remembered.
+- [ Event Tree ] Large event files open quickly. An event that several other events lead to is drawn once instead of being copied for every route into it.
+
+  Bugfixes:
+
+- [ Event Tree ] A group of events that only trigger each other now shows up instead of an empty preview.
+- [ Event Tree ] Events fired inside an indexed variable scope, such as `var:influence_array^0`, are no longer missing from the chain.
+- [ Event Tree ] Conditions on the arrows now read correctly. A negated or counted condition used to be shown as a plain list, which said the opposite of what the file does.
+- [ Event Tree ] A `random_list` chance is now labelled a weight rather than a percentage, because that is what the number in the file is: a 3 next to a 1 means three chances in four, not 3%.
+- [ Event Tree ] Turning off hidden events no longer removes events that are still reachable a normal way.
+- [ Event Tree ] A call guarded by a condition inside a `random_list` no longer looks unconditional, and two calls to the same event that differ only in delay or weight are no longer merged into one arrow.
+- [ Event Tree ] `FROM` now resolves to the event that actually fired the call, and an event reached from several places is placed to the right of all of them instead of getting a backwards arrow.
+- [ Event ] An empty or comment-only localisation file no longer blanks the preview.
+- [ Security ] Text taken from the workspace is escaped before it is written into the preview page, so a value containing `</script>` cannot break the page.
+- [ Accessibility ] The preview toggles report the right state to a screen reader as soon as the preview opens.
+- [ Cleanup ] The files this change touches no longer emit `any` type warnings, taking the repository from 62 lint warnings to 51.
+
 v1.1.21
 
   Bugfixes:
