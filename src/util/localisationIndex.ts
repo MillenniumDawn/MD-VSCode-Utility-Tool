@@ -347,10 +347,6 @@ async function fillLocalisationItems(
 			}
 		}
 	} catch (e) {
-		console.log(localisationFile);
-		console.log(content);
-		console.error(e);
-
 		const baseMessage = options.hoi4
 			? localize("localisationIndex.vanilla", "[Vanilla]")
 			: localize("localisationIndex.mod", "[mod]");
@@ -360,13 +356,9 @@ async function fillLocalisationItems(
 			"parsing failed! Please check if the file has issues!",
 		);
 
-		if ((e as { name?: string } | null)?.name === "YAMLException") {
-			Logger.error(
-				`${baseMessage} ${localisationFile} ${failureMessage}\n${(e as Error).message}`,
-			);
-		} else {
-			Logger.error(`${baseMessage} ${localisationFile} ${failureMessage}`);
-		}
+		Logger.error(
+			`${baseMessage} ${localisationFile} ${failureMessage}\n${e instanceof Error ? e.message : String(e)}`,
+		);
 	}
 }
 
