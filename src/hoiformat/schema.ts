@@ -112,8 +112,11 @@ export const positionSchema: SchemaDef<Position> = {
 
 export const variableRegex =
 	/^(?:(?<prefix>\w+):)?(?<scope>(?:\w+\.)*)?(?<var>\w+)(?:@(?<target>(?:\w+\.)*\w+))?(?:\?(?<default>\d+))?$/;
+// `^` indexes an array, as in `var:influence_array^0`. Without it in the character class the
+// whole scope fails to match and the block is read as a leaf effect instead of a scope switch,
+// so anything nested inside it -- including a country_event call -- is never visited.
 export const variableRegexForScope =
-	/^(?:(?<prefix>\w+):)(?<scope>(?:\w+\.)*)?(?<var>\w+)(?:@(?<target>(?:\w+\.)*\w+))?$/;
+	/^(?:(?<prefix>\w+):)(?<scope>(?:\w+(?:\^\w+)*\.)*)?(?<var>\w+(?:\^\w+)*)(?:@(?<target>(?:\w+\.)*\w+))?$/;
 
 //#region Functions
 export function forEachNodeValue(
