@@ -118,6 +118,14 @@ function buildStub() {
     function Position(this: any, line: number, character: number) { this.line = line; this.character = character; }
     function Range(this: any, s: any, e: any) { this.start = s; this.end = e; }
 
+    class DisposableStub {
+        constructor(private callOnDispose?: () => void) {}
+        dispose() { this.callOnDispose?.(); }
+        static from(...disposableLikes: any[]) {
+            return new DisposableStub(() => disposableLikes.forEach(d => d && d.dispose && d.dispose()));
+        }
+    }
+
     return {
         Uri,
         workspace,
@@ -130,7 +138,7 @@ function buildStub() {
         ViewColumn,
         Position,
         Range,
-        Disposable: { from: (...d: any[]) => ({ dispose: () => d.forEach(x => x && x.dispose && x.dispose()) }) },
+        Disposable: DisposableStub,
         EventEmitter: class { event: any; fire: any; dispose: any; constructor() { this.event = () => undefined; this.fire = noop; this.dispose = noop; } },
         TreeItem: class { label: any; constructor(label: any) { this.label = label; } },
         TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
