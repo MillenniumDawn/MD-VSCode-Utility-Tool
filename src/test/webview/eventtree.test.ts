@@ -9,11 +9,70 @@ import {
     EventGraphPayload,
 } from '../../previewdef/event/payload';
 
-// eventtree.ts reads window.eventGraph at module scope, so it has to exist before the import runs.
-(global as any).window.eventGraph = { roots: [], nodes: [], edges: [], conditionExprs: [] };
+// eventtree.ts reads window.eventGraph and builds its shell references at module scope, so both
+// the payload and the DOM the host renders have to exist before the import runs. This mirrors the
+// arab_spring.0 chain: one event with a trigger, one option, and two calls -- one guarded, one not.
+const integrationPayload: EventGraphPayload = {
+    roots: ['arab_spring.0:0'],
+    conditionExprs: [],
+    nodes: [
+        {
+            id: 'arab_spring.0:0', kind: 'event', eventId: 'arab_spring.0', eventType: 'country',
+            scope: 'EVENT_TARGET', title: { key: 'arab_spring.0.t', text: 'Mass Protests Erupt' },
+            major: false, hidden: false, fireOnlyOnce: false, isTriggeredOnly: true, loop: false,
+            meanTimeToHappenBase: 1,
+            trigger: { type: 'and', items: [
+                { scopeName: '', nodeContent: 'is_in_array = { global.arabic_countries = THIS.id }' },
+                { scopeName: '', nodeContent: 'has_country_flag = AS_arab_spring_completed' },
+            ] },
+            nav: { start: 10, end: 20, file: '00_arab_spring.txt' },
+        },
+        {
+            id: 'arab_spring.0.a:1', kind: 'option',
+            name: { key: 'arab_spring.0.a', text: 'We must mitigate this crisis!' },
+            trigger: { scopeName: '', nodeContent: 'tag = FROM' },
+        },
+        {
+            id: 'arab_spring.1:2', kind: 'event', eventId: 'arab_spring.1', eventType: 'news',
+            scope: 'EVENT_TARGET', title: { key: 'arab_spring.1.t', text: 'Protests Erupt' },
+            major: true, hidden: false, fireOnlyOnce: false, isTriggeredOnly: true, loop: false,
+            meanTimeToHappenBase: 1, trigger: true,
+        },
+        {
+            id: 'arab_spring.3:3', kind: 'event', eventId: 'arab_spring.3', eventType: 'country',
+            scope: 'EVENT_TARGET.overlord', title: { key: 'arab_spring.3.t', text: 'Ally under Threat' },
+            major: false, hidden: true, fireOnlyOnce: false, isTriggeredOnly: true, loop: false,
+            meanTimeToHappenBase: 1, trigger: true,
+        },
+    ] as EventGraphNode[],
+    edges: [
+        { from: 'arab_spring.0:0', to: 'arab_spring.0.a:1', structural: true, immediate: false,
+          scope: '', days: 0, hours: 0, randomDays: 0, randomHours: 0, condition: true },
+        { from: 'arab_spring.0.a:1', to: 'arab_spring.1:2', structural: false, immediate: false,
+          scope: '{event_target}', days: 0, hours: 0, randomDays: 0, randomHours: 0, condition: true },
+        { from: 'arab_spring.0.a:1', to: 'arab_spring.3:3', structural: false, immediate: false,
+          scope: 'OVERLORD', days: 1, hours: 0, randomDays: 0, randomHours: 0,
+          condition: { scopeName: '', nodeContent: 'is_subject = yes' } },
+    ],
+};
 
-const { conditionToDom, conditionToLabel, visibleGraph, layoutGraph } =
-    require('../../../webviewsrc/eventtree') as typeof import('../../../webviewsrc/eventtree');
+(global as any).window.eventGraph = integrationPayload;
+
+// The shell the host renders. Installed from the rendering suite's before hook rather than at
+// module scope: every webview test file shares one jsdom document, and writing body.innerHTML
+// here would clobber whichever other file's fixture happened to load after this one.
+const shellHtml = `
+    <div class="toolbar-outer"><div class="toolbar">
+        <input type="checkbox" id="show-localisation">
+        <input type="checkbox" id="show-triggers">
+        <input type="checkbox" id="show-event-conditions">
+        <input type="checkbox" id="show-hidden">
+    </div></div>
+    <div id="dragger"></div>
+    <div id="eventtreecontent"></div>`;
+
+const eventtree = require('../../../webviewsrc/eventtree') as typeof import('../../../webviewsrc/eventtree');
+const { conditionToDom, conditionToLabel, visibleGraph, layoutGraph } = eventtree;
 
 function leaf(nodeContent: string, scopeName = ''): ConditionComplexExpr {
     return { scopeName, nodeContent };
@@ -326,5 +385,139 @@ describe('webview/eventtree layout over a realistic chain', () => {
         assert.ok(x('arab_spring.0:0') < x('arab_spring.0.a:1'));
         assert.ok(x('arab_spring.0.a:1') < x('arab_spring.1:2'));
         assert.strictEqual(x('arab_spring.1:2'), x('arab_spring.3:3'), 'both targets share a column');
+    });
+});
+
+describe('webview/eventtree rendering', () => {
+    const content = () => document.getElementById('eventtreecontent')!;
+    const toggle = (id: string) => document.getElementById(id) as HTMLInputElement;
+
+    function setToggle(id: string, value: boolean): void {
+        const input = toggle(id);
+        input.checked = value;
+        input.dispatchEvent(new (window as any).Event('change'));
+    }
+
+    let previousBody = '';
+
+    before(() => {
+        previousBody = document.body.innerHTML;
+        document.body.innerHTML = shellHtml;
+        // The module binds its renderer to window load, as the webview does.
+        window.dispatchEvent(new (window as any).Event('load'));
+    });
+
+    after(() => {
+        document.body.innerHTML = previousBody;
+    });
+
+    it('renders a card per node', () => {
+        assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
+        assert.strictEqual(content().querySelectorAll('.ev-card-event').length, 3);
+        assert.strictEqual(content().querySelectorAll('.ev-card-option').length, 1);
+    });
+
+    it('draws one svg path per edge', () => {
+        assert.strictEqual(content().querySelectorAll('svg.ev-edges path').length, 3);
+    });
+
+    it('marks the guarded call with a dashed edge and a condition chip', () => {
+        assert.strictEqual(content().querySelectorAll('path.ev-edge-guarded').length, 1);
+        const guardedChip = content().querySelector('.ev-chip-guarded');
+        assert.ok(guardedChip, 'the guarded call must be labelled');
+        assert.ok(guardedChip!.textContent!.includes('is_subject = yes'), guardedChip!.textContent!);
+        assert.ok(guardedChip!.textContent!.includes('OVERLORD'));
+    });
+
+    it('renders the option as a decision node carrying its trigger', () => {
+        const option = content().querySelector('.ev-card-option')!;
+        assert.ok(option.classList.contains('ev-card-gated'));
+        assert.strictEqual(option.querySelectorAll('.ev-marker-decision').length, 1);
+        const panel = option.querySelector('.ev-cond');
+        assert.ok(panel, 'the option trigger must be shown');
+        assert.ok(panel!.textContent!.includes('tag = FROM'));
+    });
+
+    it('renders the event trigger as a nested condition tree', () => {
+        const card = Array.from(content().querySelectorAll('.ev-card-event'))
+            .find(c => c.textContent!.includes('arab_spring.0'))!;
+        const panel = card.querySelector('.ev-cond')!;
+        assert.ok(panel.textContent!.includes('all of'));
+        assert.ok(panel.textContent!.includes('is_in_array'));
+    });
+
+    it('marks the event card navigable so clicking it jumps to the definition', () => {
+        const card = Array.from(content().querySelectorAll('.ev-card-event'))
+            .find(c => c.textContent!.includes('arab_spring.0'))!;
+        assert.ok(card.classList.contains('navigator'));
+        assert.strictEqual(card.getAttribute('start'), '10');
+        assert.strictEqual(card.getAttribute('file'), '00_arab_spring.txt');
+    });
+
+    it('swaps the localisation on and off without a host round trip', () => {
+        setToggle('show-localisation', true);
+        assert.ok(content().textContent!.includes('Mass Protests Erupt'));
+        setToggle('show-localisation', false);
+        assert.ok(!content().textContent!.includes('Mass Protests Erupt'));
+        assert.ok(content().textContent!.includes('arab_spring.0.t'));
+        setToggle('show-localisation', true);
+    });
+
+    it('drops the trigger panels and the guarded styling when triggers are hidden', () => {
+        setToggle('show-triggers', false);
+        assert.strictEqual(content().querySelectorAll('.ev-marker-decision').length, 0);
+        assert.strictEqual(content().querySelectorAll('path.ev-edge-guarded').length, 0);
+        assert.strictEqual(content().querySelectorAll('.ev-chip-guarded').length, 0);
+        setToggle('show-triggers', true);
+        assert.strictEqual(content().querySelectorAll('.ev-marker-decision').length, 1);
+    });
+
+    it('drops only the event trigger panel when event conditions are hidden', () => {
+        setToggle('show-event-conditions', false);
+        const card = Array.from(content().querySelectorAll('.ev-card-event'))
+            .find(c => c.textContent!.includes('arab_spring.0'))!;
+        assert.strictEqual(card.querySelectorAll('.ev-cond').length, 0);
+        // The option trigger is governed by its own toggle and must survive.
+        assert.ok(content().querySelector('.ev-card-option .ev-cond'));
+        setToggle('show-event-conditions', true);
+    });
+
+    it('removes the hidden event and its edge when hidden events are off', () => {
+        setToggle('show-hidden', false);
+        assert.strictEqual(content().querySelectorAll('.ev-node').length, 3);
+        assert.strictEqual(content().querySelectorAll('svg.ev-edges path').length, 2);
+        assert.ok(!content().textContent!.includes('Ally under Threat'));
+        setToggle('show-hidden', true);
+        assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
+    });
+
+    it('re-renders from a pushed update instead of reloading', () => {
+        const next: EventGraphPayload = {
+            roots: ['only:0'],
+            conditionExprs: [],
+            edges: [],
+            nodes: [eventNode('only:0', { eventId: 'replaced.1' })],
+        };
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: next } },
+        }));
+        assert.strictEqual(content().querySelectorAll('.ev-node').length, 1);
+        assert.ok(content().textContent!.includes('replaced.1'));
+
+        // Put the chain back so ordering between tests does not matter.
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: integrationPayload } },
+        }));
+        assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
+    });
+
+    it('shows an empty state rather than a blank canvas when there is nothing to draw', () => {
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', data: { eventGraph: { roots: [], nodes: [], edges: [], conditionExprs: [] } } },
+        }));
+        assert.ok(content().querySelector('.ev-empty'));
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', data: { eventGraph: integrationPayload } },
+        }));
     });
 });
