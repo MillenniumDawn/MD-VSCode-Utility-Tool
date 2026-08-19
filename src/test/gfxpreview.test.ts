@@ -8,6 +8,18 @@ import { GfxPreview } from "../previewdef/gfx";
 // changed render against a hidden panel assigns the full html.
 
 describe("previewdef/gfx GfxPreview in-place updates", () => {
+	// Every render below resolves a sprite whose texturefile deliberately doesn't exist, so the
+	// image-not-found logging on that path fires on every render; silence it here for the block
+	// instead of per test.
+	let originalConsoleError: typeof console.error;
+	beforeEach(() => {
+		originalConsoleError = console.error;
+		console.error = () => undefined;
+	});
+	afterEach(() => {
+		console.error = originalConsoleError;
+	});
+
 	const content = (name: string) => `spriteTypes = {
         spriteType = {
             name = "${name}"

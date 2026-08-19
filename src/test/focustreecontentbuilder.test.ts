@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import * as path from "path";
 import * as vscode from "vscode";
 import {
 	buildFocusTreePayload,
@@ -21,12 +22,31 @@ import {
 	exclusiveLinkClass,
 	registerExclusiveLinkStyles,
 } from "../previewdef/focustree/exclusivelinkstyles";
+import {
+	_setImageWorkerPathForTest,
+	_terminateImageWorkerForTest,
+	_resetImageWorkerPathForTest,
+} from "../util/image/imagedecoder";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
 	cspSource: "test-csp",
 } as unknown as vscode.Webview;
 const uri = vscode.Uri.file("/tmp/common/national_focus/test.txt");
+
+function captureConsoleError(): { consoleErrors: string[]; restore: () => void } {
+	const consoleErrors: string[] = [];
+	const originalConsoleError = console.error;
+	console.error = (...args: any[]) => {
+		consoleErrors.push(args.map(String).join(" "));
+	};
+	return {
+		consoleErrors,
+		restore: () => {
+			console.error = originalConsoleError;
+		},
+	};
+}
 
 function loaderWithTrees(trees: any[]): any {
 	return {
@@ -74,16 +94,25 @@ describe("previewdef/focustree contentbuilder", () => {
 	});
 
 	it("buildFocusTreePayload handles loader error as null", async () => {
-		const badLoader: any = {
-			file: "test.txt",
-			load: async () => {
-				throw new Error("boom");
-			},
-		};
-		const payload = await buildFocusTreePayload(badLoader, undefined, {
-			resolveIcons: false,
-		});
-		assert.strictEqual(payload, null);
+		const { consoleErrors, restore } = captureConsoleError();
+		try {
+			const badLoader: any = {
+				file: "test.txt",
+				load: async () => {
+					throw new Error("boom");
+				},
+			};
+			const payload = await buildFocusTreePayload(badLoader, undefined, {
+				resolveIcons: false,
+			});
+			assert.strictEqual(payload, null);
+			assert.ok(
+				consoleErrors.some((message) => message.includes("boom")),
+				"expected the loader error to be logged",
+			);
+		} finally {
+			restore();
+		}
 	});
 
 	it("buildFocusTreePayload renders payload with one tree", async () => {
@@ -311,14 +340,30 @@ describe("previewdef/focustree contentbuilder", () => {
 	});
 
 	it("buildFocusTreePayload with real icon resolution registers focus-icon styles", async () => {
-		const tree = minimalFocusTree();
-		const payload = await buildFocusTreePayload(
-			loaderWithTrees([tree]),
-			undefined,
-			{ resolveIcons: true },
+		// resolveIcons: true drives the real imagecache/imagedecoder path; GFX_focus_a and its
+		// goal_unknown.dds fallback don't resolve to real game files here, so this also exercises
+		// (and quiets) the image-not-found logging that path produces. Point the decoder at the
+		// worker compiled into this test's outDir (imagedecoder.ts's default workerPath assumes the
+		// webpack bundle layout) so decode failures are reported normally instead of via a worker
+		// spawn crash, whose exit event can otherwise still be settling after this test returns.
+		_setImageWorkerPathForTest(
+			path.resolve(__dirname, "../util/image/imageworker.js"),
 		);
-		assert.ok(payload);
-		const css = payload!.styleTable.toRawCss();
-		assert.ok(css.includes("focus-icon-"));
+		const { restore } = captureConsoleError();
+		try {
+			const tree = minimalFocusTree();
+			const payload = await buildFocusTreePayload(
+				loaderWithTrees([tree]),
+				undefined,
+				{ resolveIcons: true },
+			);
+			assert.ok(payload);
+			const css = payload!.styleTable.toRawCss();
+			assert.ok(css.includes("focus-icon-"));
+		} finally {
+			restore();
+			await _terminateImageWorkerForTest();
+			_resetImageWorkerPathForTest();
+		}
 	});
 });
