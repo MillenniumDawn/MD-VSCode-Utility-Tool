@@ -362,6 +362,11 @@ describe("previewdef/worldmap/loader missing files (0% → smoke)", () => {
 		const fileloader: any = await import("../util/fileloader");
 		const origJson = fileloader.readFileFromModOrHOI4AsJson;
 		const orig = fileloader.readFileFromModOrHOI4;
+		const originalConsoleError = console.error;
+		const consoleErrors: string[] = [];
+		console.error = (...args: any[]) => {
+			consoleErrors.push(args.map(String).join(" "));
+		};
 		fileloader.readFileFromModOrHOI4AsJson = async (path: string) => {
 			if (path.includes("colors.txt")) {
 				throw new Error("missing");
@@ -380,9 +385,14 @@ describe("previewdef/worldmap/loader missing files (0% → smoke)", () => {
 			const loader = new CountriesLoader();
 			const result = await loader.load(new LoaderSession(false));
 			assert.ok(Array.isArray(result.result));
+			assert.ok(
+				consoleErrors.some((message) => message.includes("missing")),
+				"expected the colors.txt load failure to be logged",
+			);
 		} finally {
 			fileloader.readFileFromModOrHOI4AsJson = origJson;
 			fileloader.readFileFromModOrHOI4 = orig;
+			console.error = originalConsoleError;
 		}
 	});
 

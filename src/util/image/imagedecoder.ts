@@ -69,7 +69,8 @@ const workers: WorkerState[] = [];
 // sync fallback (see the brief). In-flight jobs at crash time are rejected.
 let workerUnavailable = false;
 // In the bundle __dirname is dist/, next to extension.js, where the imageWorker entry is emitted.
-let workerPath = path.join(__dirname, "imageWorker.js");
+const defaultWorkerPath = path.join(__dirname, "imageWorker.js");
+let workerPath = defaultWorkerPath;
 
 // Default cap on concurrent decode workers (the mdHoi4Utilities.imageDecodeWorkers setting, which the
 // user can raise or lower). Each worker is a full V8 isolate holding its own PNG buffers, so the pool
@@ -101,7 +102,12 @@ if (!IS_WEB_EXT) {
 		try {
 			const { Worker } =
 				require("worker_threads") as typeof import("worker_threads");
-			const spawned = new Worker(workerPath);
+			// stderr: true keeps a worker that fails to even load its entry file (e.g. a stale
+			// workerPath) from dumping its raw startup error onto the extension host's real stderr;
+			// onWorkerError/onWorkerExit already log that same failure through error(), so the
+			// redirected stream is just drained and dropped here to avoid a duplicate raw dump.
+			const spawned = new Worker(workerPath, { stderr: true });
+			spawned.stderr.on("data", () => undefined);
 			const state: WorkerState = { worker: spawned, inFlight: 0 };
 			spawned.on("message", (response: WorkerResponse) =>
 				onWorkerMessage(state, response),
@@ -309,6 +315,16 @@ export function _setImageWorkerPathForTest(newPath: string): void {
 	workers.length = 0;
 	pendingJobs.clear();
 	nextJobId = 1;
+}
+
+// Test-only: undo _setImageWorkerPathForTest, restoring both the production-default worker path
+// (see defaultWorkerPath above) and the disabled pool every other test in the suite expects by
+// default. Without this, a test that points the decoder at a real compiled worker would leave the
+// pool armed with a path that doesn't exist outside its own outDir, so the next test to decode an
+// image anywhere in the suite would spawn (and crash) a worker it never asked for.
+export function _resetImageWorkerPathForTest(): void {
+	workerPath = defaultWorkerPath;
+	workerUnavailable = true;
 }
 
 // Test-only: terminate the worker pool so the test process can settle between cases.

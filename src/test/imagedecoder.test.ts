@@ -164,10 +164,16 @@ describe("util/image/imagedecoder", () => {
 		});
 
 		it("rejects a malformed DDS via the worker without killing the worker", async () => {
-			await assert.rejects(decodeImageToPng(Buffer.alloc(8), "dds"));
-			// Worker survives a decode error: a subsequent valid decode still succeeds.
-			const ok = await decodeImageToPng(makeTga(), "tga");
-			assert.strictEqual(ok.width, 2);
+			const originalConsoleError = console.error;
+			console.error = () => undefined;
+			try {
+				await assert.rejects(decodeImageToPng(Buffer.alloc(8), "dds"));
+				// Worker survives a decode error: a subsequent valid decode still succeeds.
+				const ok = await decodeImageToPng(makeTga(), "tga");
+				assert.strictEqual(ok.width, 2);
+			} finally {
+				console.error = originalConsoleError;
+			}
 		});
 
 		it("grows the pool under a concurrent decode burst", async () => {
@@ -194,7 +200,14 @@ describe("util/image/imagedecoder", () => {
 	});
 
 	describe("decodeImageToPng (unusable worker file)", () => {
+		// The doomed worker's crash/exit is handled and logged by onWorkerError/onWorkerExit, and can
+		// land after either `it` below has already returned; stub console.error for the whole block
+		// rather than racing per-test capture against that async cleanup.
+		let originalConsoleError: typeof console.error;
+
 		before(() => {
+			originalConsoleError = console.error;
+			console.error = () => undefined;
 			// A missing entry file is reported on the worker's 'error' event, not by `new Worker`, so
 			// the spawn succeeds and the job is only rejected once the worker is already dead.
 			_setImageWorkerPathForTest(
@@ -204,6 +217,7 @@ describe("util/image/imagedecoder", () => {
 
 		after(async () => {
 			await _terminateImageWorkerForTest();
+			console.error = originalConsoleError;
 		});
 
 		it("falls back to the sync decode instead of failing the image", async () => {

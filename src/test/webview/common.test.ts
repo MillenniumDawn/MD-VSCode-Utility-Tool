@@ -36,14 +36,26 @@ describe('webview/util/common', function () {
         });
 
         it('returns undefined on sync error', function () {
-            const wrapped = tryRun(() => { throw new Error('fail'); });
-            assert.strictEqual(wrapped(), undefined);
+            const originalConsoleError = console.error;
+            console.error = () => undefined;
+            try {
+                const wrapped = tryRun(() => { throw new Error('fail'); });
+                assert.strictEqual(wrapped(), undefined);
+            } finally {
+                console.error = originalConsoleError;
+            }
         });
 
         it('catches async errors and returns undefined', async function () {
-            const wrapped = tryRun(async () => { throw new Error('async fail'); });
-            const result = await wrapped();
-            assert.strictEqual(result, undefined);
+            const originalConsoleError = console.error;
+            console.error = () => undefined;
+            try {
+                const wrapped = tryRun(async () => { throw new Error('async fail'); });
+                const result = await wrapped();
+                assert.strictEqual(result, undefined);
+            } finally {
+                console.error = originalConsoleError;
+            }
         });
     });
 

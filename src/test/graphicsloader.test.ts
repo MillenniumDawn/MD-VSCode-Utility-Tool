@@ -197,7 +197,13 @@ describe("util/image/graphicsloader (headless)", function () {
 	});
 
 	it("returns undefined for a missing texture", async function () {
-		const image = await getImageByPath("gfx/interface/goals/missing.dds");
-		assert.strictEqual(image, undefined);
+		const originalConsoleError = console.error;
+		console.error = () => undefined;
+		try {
+			const image = await getImageByPath("gfx/interface/goals/missing.dds");
+			assert.strictEqual(image, undefined);
+		} finally {
+			console.error = originalConsoleError;
+		}
 	});
 });
