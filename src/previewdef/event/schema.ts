@@ -2,12 +2,12 @@ import { Node, Token } from "../../hoiformat/hoiparser";
 import { Raw, SchemaDef, convertNodeToJson, HOIPartial, isSymbolNode } from "../../hoiformat/schema";
 import { extractEffectValue, EffectItem, EffectComplexExpr } from "../../hoiformat/effect";
 import {
+    andCondition,
     ConditionComplexExpr,
     ConditionItem,
     conditionToString,
     extractConditionValue,
     extractConditionalExprs,
-    simplifyCondition,
 } from "../../hoiformat/condition";
 import { Scope, ScopeType } from "../../hoiformat/scope";
 import { uniqBy } from "lodash";
@@ -304,12 +304,23 @@ function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs:
     const childEvents = childEventItems
         .map(effectItemToChildEvent)
         .filter((e): e is ChildEvent => e !== undefined);
-    // Two calls to the same event under the same scope are only the same edge when the same
-    // condition guards them. Keying on the condition as well keeps the `if` and the `else_if`
-    // branch of a fork apart, which is exactly what makes the chain readable as a workflow.
+    // Two calls to the same event are only the same edge when everything the edge shows is the
+    // same: scope, guarding condition, delay and `random_list` weight. Keying on all of it keeps
+    // the `if` and the `else_if` branch of a fork apart -- which is what makes the chain readable
+    // as a workflow -- and stops a call fired after a different delay from inheriting the first
+    // call's timing.
     const uniqueChildEvents = uniqBy(
         childEvents,
-        e => `${e.eventName}@${e.scopeName}@${conditionToString(e.condition)}`,
+        e => [
+            e.eventName,
+            e.scopeName,
+            conditionToString(e.condition),
+            e.days,
+            e.hours,
+            e.randomDays,
+            e.randomHours,
+            e.possibility ?? '',
+        ].join('@'),
     );
 
     for (const childEvent of uniqueChildEvents) {
@@ -351,8 +362,9 @@ function findChildEventItems(
         }
     } else if ('condition' in effect) {
         // `extractEffectByCondition` has already folded any enclosing `if` into this node's own
-        // condition, but a `random_list` resets it, so keep and-folding on the way down anyway.
-        const inner = simplifyCondition({ type: 'and', items: [condition, effect.condition] });
+        // condition, so the two usually overlap; `andCondition` drops the duplicate rather than
+        // stating the same guard twice.
+        const inner = andCondition(condition, effect.condition);
         effect.items.forEach(item => findChildEventItems(item, inner, possibility, result));
     } else {
         effect.items.forEach(item => findChildEventItems(item.effect, condition, item.possibility, result));

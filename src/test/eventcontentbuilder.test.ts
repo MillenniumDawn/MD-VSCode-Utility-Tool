@@ -155,6 +155,23 @@ describe('previewdef/event renderEventFile in-place update', () => {
         assert.ok(rendered.html.includes('window.eventGraph = '));
     });
 
+    it('escapes a payload string that would otherwise end the inline script', async () => {
+        // The payload carries text straight from the workspace. The HTML parser ends the script at
+        // the first `</script`, whatever the JavaScript around it means.
+        const rendered = await renderEventFile(
+            loaderFor(['test.</script><img src=x>']),
+            uri,
+            webview,
+        ) as LoaderRenderResult;
+
+        const script = /window\.eventGraph = (.*?);<\/script>/.exec(rendered.html);
+        assert.ok(script, 'expected the payload script');
+        assert.ok(!script![1]!.includes('</script'), script![1]!);
+        const parsed = JSON.parse(script![1]!) as EventGraphPayload;
+        const ids = parsed.nodes.filter(n => n.kind === 'event').map(n => (n as EventGraphEventNode).eventId);
+        assert.ok(ids.includes('test.</script><img src=x>'), ids.join(','));
+    });
+
     it('carries the option trigger and the per-call condition into the payload', async () => {
         const optionTrigger = { scopeName: '', nodeContent: 'tag = FROM' };
         const callCondition = { scopeName: '', nodeContent: 'is_subject = yes' };
@@ -302,6 +319,62 @@ describe('previewdef/event renderEventFile in-place update', () => {
         const shared = graph.nodes.filter(n => n.kind === 'event' && n.eventId === 'test.shared');
         assert.strictEqual(shared.length, 2, 'a different scope is a different box');
         assert.notStrictEqual((shared[0] as EventGraphEventNode).scope, (shared[1] as EventGraphEventNode).scope);
+    });
+
+    // test.a is entered at ALPHA and test.b at BETA, and both call test.shared at SHARED -- so the
+    // two routes converge on one scope but with different callers behind them.
+    const joinChain = (tailOfShared: unknown[]) => {
+        const call = (eventName: string, scopeName: string) => ({
+            scopeName, eventName, days: 0, hours: 0, randomDays: 0, randomHours: 0, condition: true,
+        });
+        return [
+            {
+                id: 'test.1',
+                options: [{
+                    name: 'test.1.a',
+                    childEvents: [call('test.a', 'ALPHA'), call('test.b', 'BETA')],
+                }],
+            },
+            { id: 'test.a', options: [{ name: 'test.a.a', childEvents: [call('test.shared', 'SHARED')] }] },
+            { id: 'test.b', options: [{ name: 'test.b.a', childEvents: [call('test.shared', 'SHARED')] }] },
+            { id: 'test.shared', options: [{ name: 'test.shared.a', childEvents: tailOfShared }] },
+            'test.last',
+        ];
+    };
+
+    it('keeps a join apart when the callers differ and a later call reads FROM', async () => {
+        // FROM resolves to whichever event fired this one, so merging the two arrivals at
+        // test.shared would give the route through test.b the scope of the route through test.a.
+        const rendered = await renderEventFile(loaderFor(joinChain([{
+            scopeName: 'FROM', eventName: 'test.last',
+            days: 0, hours: 0, randomDays: 0, randomHours: 0, condition: true,
+        }])), uri, webview) as LoaderRenderResult;
+
+        const graph = payloadOf(rendered);
+        const last = graph.nodes
+            .filter(n => n.kind === 'event' && n.eventId === 'test.last')
+            .map(n => (n as EventGraphEventNode).scope)
+            .sort();
+        assert.deepStrictEqual(last, ['ALPHA', 'BETA']);
+    });
+
+    it('still collapses that join when nothing downstream reads FROM', async () => {
+        // The counterpart: with no FROM call anywhere in the file the caller history can never be
+        // observed, so the two arrivals are one box and the payload stays small.
+        const rendered = await renderEventFile(
+            loaderFor(joinChain([])),
+            uri,
+            webview,
+        ) as LoaderRenderResult;
+
+        const graph = payloadOf(rendered);
+        const shared = graph.nodes.filter(n => n.kind === 'event' && n.eventId === 'test.shared');
+        assert.strictEqual(shared.length, 1, 'the shared event must still be emitted once');
+        assert.strictEqual(
+            graph.edges.filter(e => e.to === shared[0]!.id && !e.structural).length,
+            2,
+            'both callers must still link to it',
+        );
     });
 
     it('renders a group of events that only call each other', async () => {

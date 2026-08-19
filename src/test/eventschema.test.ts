@@ -256,6 +256,58 @@ describe('previewdef/event/schema child event conditions', () => {
         assert.strictEqual(two!.possibility, 70);
         assert.strictEqual(three!.possibility, 30);
     });
+
+    it('keeps the guard on a call inside a random_list nested in an if', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                option = {
+                    name = test.1.a
+                    if = {
+                        limit = { is_subject = yes }
+                        random_list = {
+                            70 = { country_event = { id = test.2 } }
+                            30 = { country_event = { id = test.3 } }
+                        }
+                    }
+                }
+            }
+        `);
+
+        const children = childrenOf(byId(events, 'test.1'), 'test.1.a');
+        assert.strictEqual(children.length, 2);
+        for (const child of children) {
+            const condition = conditionToString(child.condition);
+            assert.ok(
+                condition.includes('is_subject = yes'),
+                `${child.eventName} lost its guard: ${condition}`,
+            );
+            // The guard is stated once; the enclosing `if` is not folded onto itself.
+            assert.strictEqual(condition.split('is_subject = yes').length - 1, 1, condition);
+        }
+    });
+
+    it('keeps two calls to the same event apart when only the delay differs', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                option = {
+                    name = test.1.a
+                    country_event = { id = test.2 days = 1 }
+                    country_event = { id = test.2 days = 30 }
+                }
+            }
+        `);
+
+        const children = childrenOf(byId(events, 'test.1'), 'test.1.a');
+        assert.deepStrictEqual(children.map(c => c.days).sort((a, b) => a - b), [1, 30]);
+    });
 });
 
 describe('previewdef/event/schema condition expressions', () => {

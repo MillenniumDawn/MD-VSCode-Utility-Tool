@@ -1,4 +1,5 @@
 import { error } from "./debug";
+import { jsonForScript } from "./common";
 import { __table } from "../../i18n/en";
 
 let table: Record<string, string> = {};
@@ -80,5 +81,5 @@ export function localizeText(text: string): string {
 }
 
 export function i18nTableAsScript(): string {
-	return "window.__i18ntable = " + JSON.stringify(table) + ";";
+	return "window.__i18ntable = " + jsonForScript(table) + ";";
 }

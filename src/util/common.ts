@@ -373,3 +373,15 @@ export function forceError(e: unknown): Error {
 
 	return new Error();
 }
+
+// JSON for embedding in an inline <script>. The HTML parser ends the script at the first `</script`
+// it sees, whatever the JavaScript around it means, so a workspace string containing one would
+// otherwise truncate the payload and spill the rest into the document as markup. Escaping `<`
+// prevents that; U+2028 and U+2029 are escaped because they are valid JSON but line terminators in
+// older JavaScript parsers.
+export function jsonForScript(value: unknown): string {
+	return JSON.stringify(value).replace(
+		/[<\u2028\u2029]/g,
+		(c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
+	);
+}

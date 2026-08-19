@@ -178,7 +178,7 @@ describe('webview/eventtree conditionToDom', () => {
         assert.strictEqual(label('and'), 'all of');
         assert.strictEqual(label('or'), 'any of');
         assert.strictEqual(label('ornot'), 'none of');
-        assert.strictEqual(label('andnot'), 'not');
+        assert.strictEqual(label('andnot'), 'not all of');
     });
 
     it('shows the threshold on a count folder', () => {
@@ -209,6 +209,28 @@ describe('webview/eventtree conditionToLabel', () => {
     it('joins an or with or and an and with commas', () => {
         assert.strictEqual(conditionToLabel({ type: 'or', items: [leaf('a'), leaf('b')] }), 'a or b');
         assert.strictEqual(conditionToLabel({ type: 'and', items: [leaf('a'), leaf('b')] }), 'a, b');
+    });
+
+    it('keeps the negation on a multi-item andnot and ornot', () => {
+        assert.strictEqual(
+            conditionToLabel({ type: 'ornot', items: [leaf('a'), leaf('b')] }),
+            'none of (a, b)',
+        );
+        assert.strictEqual(
+            conditionToLabel({ type: 'andnot', items: [leaf('a'), leaf('b')] }),
+            'not all of (a, b)',
+        );
+    });
+
+    it('keeps the threshold on a count folder', () => {
+        assert.strictEqual(
+            conditionToLabel({ type: 'count', amount: 2, items: [leaf('a'), leaf('b')] }),
+            'count == 2 (a, b)',
+        );
+    });
+
+    it('leaves no empty slot behind an item that is always true', () => {
+        assert.strictEqual(conditionToLabel({ type: 'and', items: [leaf('a'), true, leaf('b')] }), 'a, b');
     });
 });
 
@@ -246,6 +268,28 @@ describe('webview/eventtree visibleGraph', () => {
         ), false);
         assert.deepStrictEqual(visible.nodes.map(n => n.id), ['a:0']);
         assert.strictEqual(visible.edges.length, 0);
+    });
+
+    it('keeps an event a visible route also reaches', () => {
+        const visible = visibleGraph(payload(
+            [eventNode('root:0'), eventNode('hidden:1', { hidden: true }), eventNode('shared:2')],
+            [edge('root:0', 'hidden:1'), edge('hidden:1', 'shared:2'), edge('root:0', 'shared:2')],
+            ['root:0'],
+        ), false);
+        const ids = visible.nodes.map(n => n.id).sort();
+        assert.deepStrictEqual(ids, ['root:0', 'shared:2']);
+        assert.deepStrictEqual(visible.edges.map(e => `${e.from}->${e.to}`), ['root:0->shared:2']);
+    });
+
+    it('keeps the target of an immediate call that a normal call also reaches', () => {
+        const visible = visibleGraph(payload(
+            [eventNode('a:0'), eventNode('b:1'), eventNode('c:2')],
+            [edge('a:0', 'b:1', { immediate: true }), edge('a:0', 'c:2'), edge('c:2', 'b:1')],
+            ['a:0'],
+        ), false);
+        assert.deepStrictEqual(visible.nodes.map(n => n.id).sort(), ['a:0', 'b:1', 'c:2']);
+        // The immediate route itself is still gone; b is reached through c.
+        assert.deepStrictEqual(visible.edges.map(e => `${e.from}->${e.to}`), ['a:0->c:2', 'c:2->b:1']);
     });
 
     it('never leaves an edge pointing at a dropped node', () => {
@@ -333,6 +377,33 @@ describe('webview/eventtree layoutGraph', () => {
         assert.ok(result.positions['orphan'], 'an unreferenced node must still be positioned');
     });
 
+    it('places a node reached twice to the right of both callers', () => {
+        // a -> b -> c -> d and a -> d: ranking on the first edge into d would put it in column 1,
+        // left of c, and the edge from c would point backwards.
+        const result = layoutGraph(
+            [size('a'), size('b'), size('c'), size('d')],
+            [
+                { from: 'a', to: 'd' },
+                { from: 'a', to: 'b' },
+                { from: 'b', to: 'c' },
+                { from: 'c', to: 'd' },
+            ],
+            ['a'],
+        );
+        const x = (id: string) => result.positions[id]!.x;
+        assert.ok(x('d') > x('a'), 'd must sit right of a');
+        assert.ok(x('d') > x('c'), 'd must sit right of c, its deeper caller');
+    });
+
+    it('stacks a node with two callers beside the nearer one', () => {
+        const result = layoutGraph(
+            [size('a'), size('b'), size('c')],
+            [{ from: 'a', to: 'b' }, { from: 'a', to: 'c' }, { from: 'b', to: 'c' }],
+            ['a'],
+        );
+        assert.ok(result.positions['c']!.x > result.positions['b']!.x);
+    });
+
     it('terminates on a cycle instead of hanging', () => {
         const result = layoutGraph(
             [size('a'), size('b')],
@@ -415,6 +486,21 @@ describe('webview/eventtree rendering', () => {
         assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
         assert.strictEqual(content().querySelectorAll('.ev-card-event').length, 3);
         assert.strictEqual(content().querySelectorAll('.ev-card-option').length, 1);
+    });
+
+    it('announces a toggle that is on as checked', () => {
+        // The shared widget is built before the saved values are restored, so without a resync it
+        // would report every toggle as unchecked until the first click.
+        for (const id of ['show-localisation', 'show-triggers', 'show-event-conditions', 'show-hidden']) {
+            const input = toggle(id);
+            const widget = input.parentElement!.querySelector('[role=checkbox]')!;
+            assert.strictEqual(
+                widget.getAttribute('aria-checked'),
+                input.checked.toString(),
+                `${id} announces the wrong state`,
+            );
+            assert.strictEqual(input.checked, true, `${id} should default to on`);
+        }
     });
 
     it('draws one svg path per edge', () => {

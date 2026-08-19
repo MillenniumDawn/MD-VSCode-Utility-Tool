@@ -17,8 +17,24 @@ Only when the entire feature is finalized:
    - Bullets with `  - ` (two-space indent), like existing entries.
    - Use a `[ Component ]` prefix where appropriate (`[ Focus Tree ]`, `[ MIO ]`,
      `[ Technology ]`, ...).
-   - Substantive and encyclopedic; describe what actually changed.
 3. **Keep `package.json` and the CHANGELOG heading at exactly the same version.**
+
+### Changelog writing style
+
+Entries are for users of the extension, not for whoever wrote the code. Keep them
+**short and plain**: one or two sentences per bullet, describing what is different
+when you use the extension.
+
+- Say what changed and, where it helps, why it was wrong before.
+- No internals: no function names, no type names, no file paths, no counts of
+  nodes, bytes or lint warnings, and no reasoning about how it was implemented.
+- Game syntax (`random_list`, `var:my_array^0`, `FROM`) is fine, because that is
+  what the reader has open in the editor.
+- One bullet per user-visible change. If a change is only visible to a developer
+  reading the source, it usually does not need a bullet at all.
+- Reference the issue with a trailing `Issue #NN.` where there is one.
+
+Anything longer belongs in the pull request description, not in the changelog.
 
 ### In implementation plans
 When you create a plan that adds or changes functionality, include the version bump

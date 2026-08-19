@@ -1,4 +1,5 @@
 import { tryRun, subscribeNavigators, enableZoom, initCommon, getState, setState } from "./util/common";
+import { syncCheckbox } from "./util/checkbox";
 import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
 import { ConditionComplexExpr } from "../src/hoiformat/condition";
@@ -38,11 +39,13 @@ const scopeClassByType: Record<string, string> = {
 
 //#region Condition rendering
 
+// `andnot` is NOT(a AND b) and `ornot` is NOT(a OR b), so with more than one item they read as
+// "not all of" and "none of" respectively. A bare "not" would be ambiguous for the first.
 const foldLabels: Record<string, string> = {
 	and: "all of",
 	or: "any of",
 	ornot: "none of",
-	andnot: "not",
+	andnot: "not all of",
 	count: "count",
 };
 
@@ -100,7 +103,9 @@ function leafItem(text: string, scopeName: string): HTMLLIElement {
 	return item;
 }
 
-// A one-line form, for an edge chip where the full tree would not fit.
+// A one-line form, for an edge chip where the full tree would not fit. Every folder type names
+// itself: a comma list alone would read a negated group as a positive one, which is the opposite of
+// what the file says, and would drop the threshold off a `count`.
 export function conditionToLabel(condition: ConditionComplexExpr): string {
 	if (condition === true) {
 		return "";
@@ -111,16 +116,36 @@ export function conditionToLabel(condition: ConditionComplexExpr): string {
 	if (!("items" in condition)) {
 		return (condition.scopeName ? "[" + condition.scopeName + "] " : "") + condition.nodeContent;
 	}
-	const first = condition.items[0];
-	if (condition.items.length === 1 && first !== undefined) {
-		if (condition.type === "and") {
-			return conditionToLabel(first);
+
+	// A nested `true` contributes nothing, and leaving it in would show up as an empty slot in the
+	// comma list.
+	const parts = condition.items.map((item) => conditionToLabel(item)).filter((part) => part !== "");
+	const first = parts[0];
+	if (parts.length === 0 || first === undefined) {
+		return "";
+	}
+
+	if (parts.length === 1) {
+		if (condition.type === "and" || condition.type === "or") {
+			return first;
 		}
 		if (condition.type === "andnot" || condition.type === "ornot") {
-			return "not " + conditionToLabel(first);
+			return "not " + first;
 		}
 	}
-	return condition.items.map(conditionToLabel).join(condition.type === "or" ? " or " : ", ");
+
+	if (condition.type === "and") {
+		return parts.join(", ");
+	}
+	if (condition.type === "or") {
+		return parts.join(" or ");
+	}
+
+	const label =
+		condition.type === "count"
+			? foldLabels.count + " == " + condition.amount
+			: (foldLabels[condition.type] ?? condition.type);
+	return label + " (" + parts.join(", ") + ")";
 }
 
 function conditionPanel(condition: ConditionComplexExpr, label: string): HTMLDivElement {
@@ -144,28 +169,29 @@ export interface VisibleGraph {
 	roots: string[];
 }
 
-// Hiding a hidden event hides everything reachable only through it, so the chain never shows an
-// edge dangling into nothing.
+// Hiding a hidden event hides everything reachable *only* through it, so the chain never shows an
+// edge dangling into nothing -- but an event a visible route also reaches stays, because it is still
+// part of the chain the reader is looking at. That is a reachability question, not a cascade: what
+// survives is what is still reachable from a root once the hidden events and the immediate routes
+// are taken out of the graph.
 export function visibleGraph(source: EventGraphPayload, includeHidden: boolean): VisibleGraph {
 	if (includeHidden) {
 		return { nodes: source.nodes, edges: source.edges, roots: source.roots };
 	}
 
-	const dropped = new Set<string>();
+	const blocked = new Set<string>();
 	for (const node of source.nodes) {
 		if (node.kind === "event" && node.hidden) {
-			dropped.add(node.id);
-		}
-	}
-	for (const edge of source.edges) {
-		if (edge.immediate) {
-			dropped.add(edge.to);
+			blocked.add(node.id);
 		}
 	}
 
-	// Cascade: anything whose only route in is through a dropped node goes too.
+	// An immediate call is a route, not a node: the target may well be reachable another way.
+	const keptEdges = source.edges.filter(
+		(e) => !e.immediate && !blocked.has(e.from) && !blocked.has(e.to),
+	);
 	const childrenOf = new Map<string, string[]>();
-	for (const edge of source.edges) {
+	for (const edge of keptEdges) {
 		const list = childrenOf.get(edge.from);
 		if (list) {
 			list.push(edge.to);
@@ -173,24 +199,27 @@ export function visibleGraph(source: EventGraphPayload, includeHidden: boolean):
 			childrenOf.set(edge.from, [edge.to]);
 		}
 	}
-	const stack = Array.from(dropped);
+
+	const roots = source.roots.filter((r) => !blocked.has(r));
+	const reachable = new Set<string>(roots);
+	const stack = [...roots];
 	while (stack.length > 0) {
 		const current = stack.pop();
 		if (current === undefined) {
 			continue;
 		}
 		for (const child of childrenOf.get(current) ?? []) {
-			if (!dropped.has(child)) {
-				dropped.add(child);
+			if (!reachable.has(child)) {
+				reachable.add(child);
 				stack.push(child);
 			}
 		}
 	}
 
 	return {
-		nodes: source.nodes.filter((n) => !dropped.has(n.id)),
-		edges: source.edges.filter((e) => !dropped.has(e.from) && !dropped.has(e.to)),
-		roots: source.roots.filter((r) => !dropped.has(r)),
+		nodes: source.nodes.filter((n) => reachable.has(n.id)),
+		edges: keptEdges.filter((e) => reachable.has(e.from) && reachable.has(e.to)),
+		roots,
 	};
 }
 
@@ -226,42 +255,97 @@ export function layoutGraph(
 	roots: string[],
 ): LayoutResult {
 	const byId = new Map(nodes.map((n) => [n.id, n]));
-	const children = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
-	const hasParent = new Set<string>();
+	const outEdges = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
+	const inEdges = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
+	const seenEdges = new Set<string>();
 
 	for (const edge of edges) {
 		if (!byId.has(edge.from) || !byId.has(edge.to) || edge.from === edge.to) {
 			continue;
 		}
-		// The payload is a forest -- the host assigns a fresh id per visit -- so a node reached
-		// twice would be a bug upstream. Guard anyway so a cycle can never hang the layout.
-		if (hasParent.has(edge.to)) {
+		// The payload is a DAG, so the same pair can carry several edges -- two differently guarded
+		// calls to one event, say. They are one relationship as far as the layout is concerned.
+		const key = edge.from + " " + edge.to;
+		if (seenEdges.has(key)) {
 			continue;
 		}
-		hasParent.add(edge.to);
-		children.get(edge.from)?.push(edge.to);
+		seenEdges.add(key);
+		outEdges.get(edge.from)?.push(edge.to);
+		inEdges.get(edge.to)?.push(edge.from);
 	}
 
-	const effectiveRoots = roots.filter((r) => byId.has(r) && !hasParent.has(r));
+	// Longest path from a root decides the column, over every incoming edge rather than the first
+	// one seen: a node reached both directly and through a longer detour belongs to the right of
+	// both callers, or the edge from the deeper one would point backwards.
+	const rank = new Map<string, number>();
+	const remaining = new Map<string, number>(
+		nodes.map((n) => [n.id, (inEdges.get(n.id) ?? []).length]),
+	);
+	const queue: string[] = [];
+	const queued = new Set<string>();
+	const processed = new Set<string>();
 	for (const node of nodes) {
-		if (!hasParent.has(node.id) && !effectiveRoots.includes(node.id)) {
+		if ((remaining.get(node.id) ?? 0) === 0) {
+			rank.set(node.id, 0);
+			queue.push(node.id);
+			queued.add(node.id);
+		}
+	}
+
+	let cursorIndex = 0;
+	while (processed.size < nodes.length) {
+		if (cursorIndex >= queue.length) {
+			// Everything left sits on a cycle, so nothing will ever reach in-degree zero. Release the
+			// first such node in payload order and carry on; the layout stays deterministic and the
+			// cycle gets one arbitrary but stable entry point.
+			const stuck = nodes.find((n) => !queued.has(n.id));
+			if (!stuck) {
+				break;
+			}
+			if (!rank.has(stuck.id)) {
+				rank.set(stuck.id, 0);
+			}
+			queue.push(stuck.id);
+			queued.add(stuck.id);
+		}
+
+		const current = queue[cursorIndex++];
+		if (current === undefined) {
+			continue;
+		}
+		processed.add(current);
+		const depth = rank.get(current) ?? 0;
+		for (const child of outEdges.get(current) ?? []) {
+			rank.set(child, Math.max(rank.get(child) ?? 0, depth + 1));
+			const left = (remaining.get(child) ?? 0) - 1;
+			remaining.set(child, left);
+			if (left <= 0 && !queued.has(child)) {
+				queue.push(child);
+				queued.add(child);
+			}
+		}
+	}
+
+	// The vertical pack needs a tree. Each node keeps the incoming edge from the column immediately
+	// to its left where there is one, so a node with several callers is stacked beside the caller it
+	// actually sits next to rather than beside whichever one happened to be first in the payload.
+	const children = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
+	const treeParent = new Map<string, string>();
+	for (const node of nodes) {
+		const parents = inEdges.get(node.id) ?? [];
+		const own = rank.get(node.id) ?? 0;
+		const parent = parents.find((p) => (rank.get(p) ?? 0) === own - 1) ?? parents[0];
+		if (parent !== undefined) {
+			treeParent.set(node.id, parent);
+			children.get(parent)?.push(node.id);
+		}
+	}
+
+	const effectiveRoots = roots.filter((r) => byId.has(r) && !treeParent.has(r));
+	for (const node of nodes) {
+		if (!treeParent.has(node.id) && !effectiveRoots.includes(node.id)) {
 			effectiveRoots.push(node.id);
 		}
-	}
-
-	const rank = new Map<string, number>();
-	const assignRank = (id: string, depth: number, seen: Set<string>) => {
-		if (seen.has(id)) {
-			return;
-		}
-		seen.add(id);
-		rank.set(id, Math.max(rank.get(id) ?? 0, depth));
-		for (const child of children.get(id) ?? []) {
-			assignRank(child, depth + 1, seen);
-		}
-	};
-	for (const root of effectiveRoots) {
-		assignRank(root, 0, new Set<string>());
 	}
 
 	const columnWidth: number[] = [];
@@ -669,7 +753,10 @@ function renderEdges(
 			bits.push(feLocalize("eventtree.immediate", "immediate"));
 		}
 		if (edge.possibility !== undefined) {
-			bits.push(edge.possibility + "%");
+			// A random_list key is a weight relative to its siblings, not a percentage: a 3 next to a
+			// 1 means three chances in four. The siblings are not on this edge, and a branch modifier
+			// can change the totals at runtime anyway, so the weight is shown as written.
+			bits.push(feLocalize("eventtree.weight", "weight {0}", edge.possibility));
 		}
 		if (guarded) {
 			bits.push(conditionToLabel(edge.condition));
@@ -848,6 +935,9 @@ function bindToggle(id: string, initial: boolean, apply: (value: boolean) => voi
 		return;
 	}
 	input.checked = initial;
+	// initCommon's load handler runs before this one, so the codicon checkbox over this input was
+	// already built from the unrestored value and would announce a toggle that is on as unchecked.
+	syncCheckbox(input);
 	input.addEventListener(
 		"change",
 		tryRun(() => {

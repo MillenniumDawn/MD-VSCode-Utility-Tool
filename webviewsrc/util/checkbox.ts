@@ -14,10 +14,23 @@ export function enableCheckboxes() {
     }
 }
 
+// Assigning input.checked from script fires no event, so the widget built over it keeps the state
+// it read when it was constructed. Callers that restore a saved value after enableCheckboxes has
+// already run call this to bring the widget back in step.
+export function syncCheckbox(input: HTMLInputElement): void {
+    checkboxes.find(c => c.input === input)?.syncAriaChecked();
+}
+
 export class Checkbox extends Subscriber {
+    private checkboxContainer: HTMLDivElement | undefined;
+
     constructor(readonly input: HTMLInputElement, private text?: string) {
         super();
         this.init();
+    }
+
+    public syncAriaChecked(): void {
+        this.checkboxContainer?.setAttribute('aria-checked', this.input.checked.toString());
     }
 
     private init() {
@@ -36,6 +49,7 @@ export class Checkbox extends Subscriber {
         checkboxContainerOut.classList.add('checkbox-container-out');
 
         const checkboxContainer = document.createElement('div');
+        this.checkboxContainer = checkboxContainer;
         checkboxContainer.classList.add('checkbox-container');
         checkboxContainerOut.appendChild(checkboxContainer);
         checkboxContainer.tabIndex = 0;

@@ -7,7 +7,7 @@ import { localize, i18nTableAsScript } from "../../util/i18n";
 import { StyleTable } from "../../util/styletable";
 import { HOIEvent } from "./schema";
 import { flatten } from "lodash";
-import { arrayToMap, forceError } from "../../util/common";
+import { arrayToMap, forceError, jsonForScript } from "../../util/common";
 import { buildEventGraphPayload, eventsToGraph } from "./graph";
 import { EventGraphPayload } from "./payload";
 import { LoaderRender } from "../loaderpreview";
@@ -36,7 +36,9 @@ export async function renderEventFile(
 			baseContent,
 			[
 				previewedFileUriScript(uri),
-				{ content: `window.eventGraph = ${JSON.stringify(eventGraph)};` },
+				// jsonForScript, not JSON.stringify: the payload carries localisation text straight
+				// from the workspace, and a string containing `</script>` would end the tag here.
+				{ content: `window.eventGraph = ${jsonForScript(eventGraph)};` },
 				{ content: i18nTableAsScript() },
 				"common.js",
 				"eventtree.js",

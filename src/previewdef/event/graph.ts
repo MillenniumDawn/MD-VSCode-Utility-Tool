@@ -203,9 +203,45 @@ interface ScopeContext {
 	currentScopeName: string;
 }
 
+// Case-insensitive because tryMoveScope keeps the scope name as the file spells it, and a file
+// spells it FROM. Matching only the lowercase form left every FROM call resolving to the literal
+// name instead of to the event that fired it.
+const fromScopeRegex = /^from(?:\.from)*$/i;
+
+// How deep a `FROM` chain the file actually uses: 1 for `from`, 2 for `from.from`, 0 when no call
+// names FROM at all. Only that many entries at the top of the scope stack can ever be read back,
+// which is what makes bounding the node identity in visitNode safe.
+function maxFromDepthOf(graph: EventNode[]): number {
+	let depth = 0;
+	const seen = new Set<EventNode | OptionNode>();
+
+	const visit = (node: EventNode | OptionNode): void => {
+		if (seen.has(node)) {
+			return;
+		}
+		seen.add(node);
+
+		for (const child of node.children) {
+			if ("toNode" in child) {
+				if (fromScopeRegex.test(child.toScope)) {
+					depth = Math.max(depth, child.toScope.split(".").length);
+				}
+				if (typeof child.toNode !== "string") {
+					visit(child.toNode);
+				}
+			} else {
+				visit(child);
+			}
+		}
+	};
+
+	graph.forEach(visit);
+	return depth;
+}
+
 function nextScope(scopeContext: ScopeContext, toScope: string): ScopeContext {
 	let currentScopeName: string;
-	if (toScope.match(/^from(?:\.from)*$/)) {
+	if (fromScopeRegex.test(toScope)) {
 		const fromCount = toScope.split(".").length;
 		const fromIndex = scopeContext.fromStack.length - fromCount;
 		if (fromIndex < 0) {
@@ -234,7 +270,9 @@ interface BuildContext {
 	loaderResult: EventsLoaderResult;
 	styleTable: StyleTable;
 	nextId: { value: number };
-	// An event reached again under the same resolved scope is the same box in the diagram, so the
+	// See maxFromDepthOf. Bounds how much of the scope stack takes part in node identity.
+	maxFromDepth: number;
+	// An event reached again in the same scope situation is the same box in the diagram, so the
 	// second arrival links to the box already emitted instead of walking its subtree again.
 	//
 	// Without this the payload is a tree, and a densely cross-linked file explodes: every extra
@@ -242,6 +280,13 @@ interface BuildContext {
 	// produced 94,951 nodes and a 55 MB payload from 588 events that way. Keying on the scope as
 	// well as the event keeps the distinction that actually matters -- the same event fired at
 	// OVERLORD and at FROM stays two boxes -- while collapsing the identical re-walks.
+	//
+	// The key is the current scope plus the top maxFromDepth entries of the FROM stack, not the
+	// current scope alone: two routes can arrive in the same scope with different callers behind
+	// them, and a `FROM` call further down resolves against those callers. Anything deeper in the
+	// stack than maxFromDepth is unreachable by any call in the file, so leaving it out of the key
+	// cannot merge two boxes that would go on to differ -- and keeps the collapsing effective,
+	// which keying on the whole stack would not.
 	visited: Map<EventNode | OptionNode, Map<string, string>>;
 }
 
@@ -256,6 +301,7 @@ export async function buildEventGraphPayload(
 		loaderResult,
 		styleTable,
 		nextId: { value: 0 },
+		maxFromDepth: maxFromDepthOf(graph),
 		visited: new Map(),
 	};
 
@@ -284,7 +330,10 @@ async function visitNode(
 		return id;
 	}
 
-	const scopeKey = scopeContext.currentScopeName;
+	const scopeKey = [
+		...scopeContext.fromStack.slice(scopeContext.fromStack.length - context.maxFromDepth),
+		scopeContext.currentScopeName,
+	].join(">");
 	const perScope = context.visited.get(node);
 	const seen = perScope?.get(scopeKey);
 	if (seen !== undefined) {
