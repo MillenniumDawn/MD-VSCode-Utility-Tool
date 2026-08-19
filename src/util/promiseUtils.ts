@@ -29,3 +29,44 @@ export async function appendEntriesWithErrorLogging(
 		reportError(formatLogMessage(context, cause));
 	}
 }
+
+export interface BuildGate {
+	start(task: Promise<unknown>): void;
+	runAfterBuild(fn: () => void): void;
+	reset(): void;
+}
+
+// Lets a handler defer a mutation until a pending build settles, so it doesn't race the build's writes.
+export function createBuildGate(): BuildGate {
+	let task: Promise<unknown> | undefined;
+	let settled = false;
+
+	return {
+		start(newTask) {
+			task = newTask;
+			settled = false;
+			newTask.then(
+				() => {
+					settled = true;
+				},
+				() => {
+					settled = true;
+				},
+			);
+		},
+		runAfterBuild(fn) {
+			if (!task) {
+				return;
+			}
+			if (settled) {
+				fn();
+				return;
+			}
+			task.then(fn, fn);
+		},
+		reset() {
+			task = undefined;
+			settled = false;
+		},
+	};
+}
