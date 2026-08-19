@@ -1,10 +1,12 @@
 import * as assert from 'assert';
+import * as vscode from 'vscode';
 import * as featureflags from '../util/featureflags';
 import {
     parseLocalisation,
     getLocalisedText,
     registerLocalisationIndex,
     __resetLocalisationIndexForTests,
+    __testHandlers,
 } from '../util/localisationIndex';
 import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
@@ -92,6 +94,27 @@ function waitForAsyncTasks(): Promise<void> {
     return new Promise((resolve) => setImmediate(resolve));
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+    let resolve: (v: T) => void = () => undefined;
+    const promise = new Promise<T>((r) => {
+        resolve = r;
+    });
+    return { promise, resolve };
+}
+
+const WORKSPACE_FOLDER = {
+    uri: { path: '/ws', scheme: 'file', toString: () => 'file:///ws' },
+} as unknown as vscode.WorkspaceFolder;
+
+function locFileUri(relativePath: string): vscode.Uri {
+    const fullPath = '/ws/' + relativePath;
+    return {
+        path: fullPath,
+        scheme: 'file',
+        toString: () => 'file://' + fullPath,
+    } as unknown as vscode.Uri;
+}
+
 describe('util/localisationIndex lazy build', function () {
     let originalListFiles: FileloaderModule['listFilesFromModOrHOI4'];
     let originalReadFile: FileloaderModule['readFileFromModOrHOI4'];
@@ -101,6 +124,7 @@ describe('util/localisationIndex lazy build', function () {
         __resetLocalisationIndexForTests();
         stubVscode({
             getConfiguration: () => ({ localisationIndex: true }),
+            getWorkspaceFolder: () => WORKSPACE_FOLDER,
         });
         featureflags.refreshFeatureFlags();
 
@@ -171,5 +195,70 @@ describe('util/localisationIndex lazy build', function () {
         const third = await getLocalisedText('KEY_A', 'en');
         assert.strictEqual(third, 'Value A');
         assert.strictEqual(listFilesCallCount, 2);
+    });
+
+    describe('incremental events vs. an in-flight build', function () {
+        // The global build passes { hoi4: true, ... }, the workspace build { hoi4: false, ... };
+        // route the file into the workspace build only, so getLocalisedText's fallback to the
+        // global index can't mask a workspace-only mutation.
+        beforeEach(function () {
+            (
+                fileloader as typeof fileloader & {
+                    listFilesFromModOrHOI4: FileloaderModule['listFilesFromModOrHOI4'];
+                }
+            ).listFilesFromModOrHOI4 = async (_relativePath, options) => {
+                listFilesCallCount++;
+                return options?.hoi4 ? [] : ['test_l_english.yml'];
+            };
+        });
+
+        it('ignores incremental events that arrive before any build has started', async function () {
+            __testHandlers.onDeleteFiles({
+                files: [locFileUri('localisation/test_l_english.yml')],
+            });
+            await waitForAsyncTasks();
+
+            assert.strictEqual(listFilesCallCount, 0);
+
+            const result = await getLocalisedText('KEY_A', 'en');
+            assert.strictEqual(result, 'Value A');
+        });
+
+        it('defers an event that arrives while the build is pending, and applies it once the build settles', async function () {
+            const read = deferred<[Buffer, unknown]>();
+            (
+                fileloader as typeof fileloader & {
+                    readFileFromModOrHOI4: FileloaderModule['readFileFromModOrHOI4'];
+                }
+            ).readFileFromModOrHOI4 = () => read.promise;
+
+            const lookup = getLocalisedText('KEY_A', 'en');
+            await waitForAsyncTasks();
+
+            // Fired while the build is still awaiting readFileFromModOrHOI4, before it has written
+            // anything into the index.
+            __testHandlers.onDeleteFiles({
+                files: [locFileUri('localisation/test_l_english.yml')],
+            });
+
+            read.resolve([LOC_FILE_CONTENT, {} as unknown]);
+            await lookup;
+            await waitForAsyncTasks();
+
+            const result = await getLocalisedText('KEY_A', 'en');
+            assert.strictEqual(result, 'KEY_A');
+        });
+
+        it('applies an event immediately once the build has already settled', async function () {
+            const primed = await getLocalisedText('KEY_A', 'en');
+            assert.strictEqual(primed, 'Value A');
+
+            __testHandlers.onDeleteFiles({
+                files: [locFileUri('localisation/test_l_english.yml')],
+            });
+
+            const result = await getLocalisedText('KEY_A', 'en');
+            assert.strictEqual(result, 'KEY_A');
+        });
     });
 });

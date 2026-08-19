@@ -8,7 +8,7 @@ import {
 } from "./fileloader";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
-import { attachTaskWithErrorLogging } from "./promiseUtils";
+import { attachTaskWithErrorLogging, createBuildGate } from "./promiseUtils";
 import { Logger } from "./logger";
 import { extractFocusIds } from "../previewdef/focustree/schema";
 import { parseHoi4File } from "../hoiformat/hoiparser";
@@ -57,6 +57,8 @@ export function registerSharedFocusIndex(): vscode.Disposable {
 
 // Memoized build promise: first caller starts the build, concurrent callers await the same one.
 let buildTask: Promise<[void, void]> | undefined;
+// Gates incremental-event handlers so they don't race the build's writes to the index maps.
+const buildGate = createBuildGate();
 
 function ensureIndexBuilt(): Promise<[void, void]> {
 	if (buildTask) {
@@ -69,6 +71,7 @@ function ensureIndexBuilt(): Promise<[void, void]> {
 		buildWorkspaceFocusIndex(estimatedSize),
 	]);
 	buildTask = task;
+	buildGate.start(task);
 
 	vscode.window.setStatusBarMessage(
 		"$(loading~spin) " +
@@ -307,8 +310,10 @@ function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
 
 const onChangeTextDocumentImpl = debounceByInput(
 	(file: vscode.Uri) => {
-		removeWorkspaceFocusIndex(file);
-		addWorkspaceFocusIndex(file);
+		buildGate.runAfterBuild(() => {
+			removeWorkspaceFocusIndex(file);
+			addWorkspaceFocusIndex(file);
+		});
 	},
 	(file) => file.toString(),
 	1000,
@@ -322,8 +327,10 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 
 	const file = document.uri;
 	if (file.path.endsWith(".txt") && document.isDirty) {
-		removeWorkspaceFocusIndex(file);
-		addWorkspaceFocusIndex(file);
+		buildGate.runAfterBuild(() => {
+			removeWorkspaceFocusIndex(file);
+			addWorkspaceFocusIndex(file);
+		});
 	}
 }
 
@@ -332,11 +339,13 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 		return;
 	}
 
-	for (const file of e.files) {
-		if (file.path.endsWith(".txt")) {
-			addWorkspaceFocusIndex(file);
+	buildGate.runAfterBuild(() => {
+		for (const file of e.files) {
+			if (file.path.endsWith(".txt")) {
+				addWorkspaceFocusIndex(file);
+			}
 		}
-	}
+	});
 }
 
 function onDeleteFiles(e: vscode.FileDeleteEvent) {
@@ -344,11 +353,13 @@ function onDeleteFiles(e: vscode.FileDeleteEvent) {
 		return;
 	}
 
-	for (const file of e.files) {
-		if (file.path.endsWith(".txt")) {
-			removeWorkspaceFocusIndex(file);
+	buildGate.runAfterBuild(() => {
+		for (const file of e.files) {
+			if (file.path.endsWith(".txt")) {
+				removeWorkspaceFocusIndex(file);
+			}
 		}
-	}
+	});
 }
 
 function onRenameFiles(e: vscode.FileRenameEvent) {
@@ -396,6 +407,7 @@ function addWorkspaceFocusIndex(file: vscode.Uri) {
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
 export function __resetSharedFocusIndexForTests(): void {
 	buildTask = undefined;
+	buildGate.reset();
 	for (const file of Object.keys(globalFocusIndex)) {
 		delete globalFocusIndex[file];
 	}
@@ -403,3 +415,10 @@ export function __resetSharedFocusIndexForTests(): void {
 	globalFocusKeyToFile.clear();
 	workspaceFocusKeyToFile.clear();
 }
+
+// Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
+export const __testHandlers = {
+	onCreateFiles,
+	onDeleteFiles,
+	onCloseTextDocument,
+};

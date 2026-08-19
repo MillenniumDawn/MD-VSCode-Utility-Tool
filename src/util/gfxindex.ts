@@ -13,7 +13,7 @@ import {
 import { localize } from "./i18n";
 import { uniq } from "lodash";
 import { sendEvent } from "./telemetry";
-import { attachTaskWithErrorLogging } from "./promiseUtils";
+import { attachTaskWithErrorLogging, createBuildGate } from "./promiseUtils";
 import { Logger } from "./logger";
 import {
 	loadCacheManifest,
@@ -58,6 +58,8 @@ export function registerGfxIndex(): vscode.Disposable {
 
 // Memoized build promise: first caller starts the build, concurrent callers await the same one.
 let buildTask: Promise<[void, void]> | undefined;
+// Gates incremental-event handlers so they don't race the build's writes to the index maps.
+const buildGate = createBuildGate();
 
 function ensureIndexBuilt(): Promise<[void, void]> {
 	if (buildTask) {
@@ -70,6 +72,7 @@ function ensureIndexBuilt(): Promise<[void, void]> {
 		buildWorkspaceGfxIndex(estimatedSize),
 	]);
 	buildTask = task;
+	buildGate.start(task);
 
 	vscode.window.setStatusBarMessage(
 		"$(loading~spin) " +
@@ -311,8 +314,10 @@ function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
 
 const onChangeTextDocumentImpl = debounceByInput(
 	(file: vscode.Uri) => {
-		removeWorkspaceGfxIndex(file);
-		addWorkspaceGfxIndex(file);
+		buildGate.runAfterBuild(() => {
+			removeWorkspaceGfxIndex(file);
+			addWorkspaceGfxIndex(file);
+		});
 	},
 	(file) => file.toString(),
 	1000,
@@ -326,8 +331,10 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 
 	const file = document.uri;
 	if (file.path.endsWith(".gfx") && document.isDirty) {
-		removeWorkspaceGfxIndex(file);
-		addWorkspaceGfxIndex(file);
+		buildGate.runAfterBuild(() => {
+			removeWorkspaceGfxIndex(file);
+			addWorkspaceGfxIndex(file);
+		});
 	}
 }
 
@@ -336,11 +343,13 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 		return;
 	}
 
-	for (const file of e.files) {
-		if (file.path.endsWith(".gfx")) {
-			addWorkspaceGfxIndex(file);
+	buildGate.runAfterBuild(() => {
+		for (const file of e.files) {
+			if (file.path.endsWith(".gfx")) {
+				addWorkspaceGfxIndex(file);
+			}
 		}
-	}
+	});
 }
 
 function onDeleteFiles(e: vscode.FileDeleteEvent) {
@@ -348,11 +357,13 @@ function onDeleteFiles(e: vscode.FileDeleteEvent) {
 		return;
 	}
 
-	for (const file of e.files) {
-		if (file.path.endsWith(".gfx")) {
-			removeWorkspaceGfxIndex(file);
+	buildGate.runAfterBuild(() => {
+		for (const file of e.files) {
+			if (file.path.endsWith(".gfx")) {
+				removeWorkspaceGfxIndex(file);
+			}
 		}
-	}
+	});
 }
 
 function onRenameFiles(e: vscode.FileRenameEvent) {
@@ -395,9 +406,17 @@ function addWorkspaceGfxIndex(file: vscode.Uri) {
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
 export function __resetGfxIndexForTests(): void {
 	buildTask = undefined;
+	buildGate.reset();
 	for (const key of Object.keys(globalGfxIndex)) {
 		delete globalGfxIndex[key];
 	}
 	workspaceGfxIndex = {};
 	workspaceGfxFileToKeys.clear();
 }
+
+// Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
+export const __testHandlers = {
+	onCreateFiles,
+	onDeleteFiles,
+	onCloseTextDocument,
+};

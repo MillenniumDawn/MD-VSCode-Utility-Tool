@@ -9,7 +9,7 @@ import {
 } from "./fileloader";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
-import { attachTaskWithErrorLogging } from "./promiseUtils";
+import { attachTaskWithErrorLogging, createBuildGate } from "./promiseUtils";
 import { Logger } from "./logger";
 import { ConfigurationKey } from "../constants";
 import {
@@ -83,6 +83,8 @@ export function registerLocalisationIndex(): vscode.Disposable {
 
 // Memoized build promise: first caller starts the build, concurrent callers await the same one.
 let buildTask: Promise<[void, void]> | undefined;
+// Gates incremental-event handlers so they don't race the build's writes to the index maps.
+const buildGate = createBuildGate();
 
 function ensureIndexBuilt(): Promise<[void, void]> {
 	if (buildTask) {
@@ -95,6 +97,7 @@ function ensureIndexBuilt(): Promise<[void, void]> {
 		buildWorkspaceLocalisationIndex(estimatedSize),
 	]);
 	buildTask = task;
+	buildGate.start(task);
 
 	vscode.window.setStatusBarMessage(
 		"$(loading~spin) " +
@@ -466,8 +469,10 @@ function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
 
 const onChangeTextDocumentImpl = debounceByInput(
 	(file: vscode.Uri) => {
-		removeWorkspaceLocalisationIndex(file);
-		addWorkspaceLocalisationIndex(file);
+		buildGate.runAfterBuild(() => {
+			removeWorkspaceLocalisationIndex(file);
+			addWorkspaceLocalisationIndex(file);
+		});
 	},
 	(file) => file.toString(),
 	1000,
@@ -481,8 +486,10 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 
 	const file = document.uri;
 	if (file.path.endsWith(".yml") && document.isDirty) {
-		removeWorkspaceLocalisationIndex(file);
-		addWorkspaceLocalisationIndex(file);
+		buildGate.runAfterBuild(() => {
+			removeWorkspaceLocalisationIndex(file);
+			addWorkspaceLocalisationIndex(file);
+		});
 	}
 }
 
@@ -491,11 +498,13 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 		return;
 	}
 
-	for (const file of e.files) {
-		if (file.path.endsWith(".yml")) {
-			addWorkspaceLocalisationIndex(file);
+	buildGate.runAfterBuild(() => {
+		for (const file of e.files) {
+			if (file.path.endsWith(".yml")) {
+				addWorkspaceLocalisationIndex(file);
+			}
 		}
-	}
+	});
 }
 
 function onDeleteFiles(e: vscode.FileDeleteEvent) {
@@ -503,11 +512,13 @@ function onDeleteFiles(e: vscode.FileDeleteEvent) {
 		return;
 	}
 
-	for (const file of e.files) {
-		if (file.path.endsWith(".yml")) {
-			removeWorkspaceLocalisationIndex(file);
+	buildGate.runAfterBuild(() => {
+		for (const file of e.files) {
+			if (file.path.endsWith(".yml")) {
+				removeWorkspaceLocalisationIndex(file);
+			}
 		}
-	}
+	});
 }
 
 function onRenameFiles(e: vscode.FileRenameEvent) {
@@ -559,6 +570,7 @@ function getLangKeyFromPath(filePath: string): string {
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
 export function __resetLocalisationIndexForTests(): void {
 	buildTask = undefined;
+	buildGate.reset();
 	for (const key of Object.keys(globalLocalisationIndex)) {
 		delete globalLocalisationIndex[key];
 	}
@@ -567,3 +579,10 @@ export function __resetLocalisationIndexForTests(): void {
 		delete workspaceLocalisationFileMap[key];
 	}
 }
+
+// Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
+export const __testHandlers = {
+	onCreateFiles,
+	onDeleteFiles,
+	onCloseTextDocument,
+};

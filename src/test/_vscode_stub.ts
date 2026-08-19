@@ -94,6 +94,10 @@ function buildStub() {
         showQuickPick: async () => undefined,
         showOpenDialog: async () => undefined,
         setStatusBarMessage: () => disposable(),
+        createOutputChannel: () => ({
+            appendLine: noop, append: noop, clear: noop,
+            show: noop, hide: noop, dispose: noop,
+        }),
         createStatusBarItem: () => ({
             text: '', tooltip: '', command: undefined,
             show: noop, hide: noop, dispose: noop,
@@ -203,6 +207,7 @@ const pristine = {
     stat: stub.workspace.fs.stat,
     readDirectory: stub.workspace.fs.readDirectory,
     readFile: stub.workspace.fs.readFile,
+    getWorkspaceFolder: stub.workspace.getWorkspaceFolder,
     openTextDocument: stub.workspace.openTextDocument,
     textDocuments: stub.workspace.textDocuments as unknown,
     showErrorMessage: stub.window.showErrorMessage,
@@ -225,6 +230,7 @@ export interface VscodeStubOverrides {
     stat?: (uri: any) => Promise<any>;
     readDirectory?: (uri: any) => Promise<[string, number][]>;
     readFile?: (uri: any) => Promise<Uint8Array>;
+    getWorkspaceFolder?: (uri: any) => any;
     openTextDocument?: (uri: any) => Promise<any>;
     /** Replaces `workspace.textDocuments`, for suites driving `getDocumentByUri` lookups. */
     textDocuments?: readonly any[];
@@ -273,6 +279,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.readFile !== undefined) {
         fs.readFile = overrides.readFile;
     }
+    if (overrides.getWorkspaceFolder !== undefined) {
+        workspace.getWorkspaceFolder = overrides.getWorkspaceFolder;
+    }
     if (overrides.openTextDocument !== undefined) {
         workspace.openTextDocument = overrides.openTextDocument;
     }
@@ -305,6 +314,7 @@ export function restoreVscodeStubs(): void {
     fs.stat = pristine.stat;
     fs.readDirectory = pristine.readDirectory;
     fs.readFile = pristine.readFile;
+    workspace.getWorkspaceFolder = pristine.getWorkspaceFolder;
     workspace.openTextDocument = pristine.openTextDocument;
     workspace.textDocuments = pristine.textDocuments;
     window.showErrorMessage = pristine.showErrorMessage;
