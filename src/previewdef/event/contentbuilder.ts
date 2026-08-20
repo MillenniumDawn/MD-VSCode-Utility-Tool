@@ -120,6 +120,7 @@ function renderToolBar(styleTable: StyleTable): string {
 		toggle("show-triggers", localize("eventtree.showtriggers", "Show triggers")),
 		toggle("show-event-conditions", localize("eventtree.showeventconditions", "Show event conditions")),
 		toggle("show-hidden", localize("eventtree.showhidden", "Show hidden & immediate")),
+		toggle("show-picture", localize("eventtree.showpicture", "Show event picture")),
 	].join("");
 
 	return `<div class="toolbar-outer ${styleTable.style(

@@ -67,6 +67,7 @@ const shellHtml = `
         <input type="checkbox" id="show-triggers">
         <input type="checkbox" id="show-event-conditions">
         <input type="checkbox" id="show-hidden">
+        <input type="checkbox" id="show-picture">
     </div></div>
     <div id="dragger"></div>
     <div id="eventtreecontent"></div>`;
@@ -739,6 +740,41 @@ describe('webview/eventtree rendering', () => {
         assert.ok(!content().textContent!.includes('Ally under Threat'));
         setToggle('show-hidden', true);
         assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
+    });
+
+    it('shows the event picture on hover only while the toggle is on', () => {
+        const pictured: EventGraphPayload = payload(
+            [eventNode('pictured:0', {
+                picture: { styleKey: 'event-picture-GFX_test', width: 400 },
+            } as Partial<EventGraphEventNode>)],
+            [],
+            ['pictured:0'],
+        );
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: pictured } },
+        }));
+
+        assert.ok(content().querySelector('.event-picture-host'), 'the pictured event must be a hover host');
+        const popups = () => document.querySelectorAll('.event-hover-picture').length;
+        // Each toggle rebuilds the cards, so the host has to be looked up again every time -- the
+        // element captured before a toggle is a detached copy that still carries its old listener.
+        const send = (type: string) => content()
+            .querySelector('.event-picture-host')!
+            .dispatchEvent(new (window as any).MouseEvent(type));
+
+        setToggle('show-picture', false);
+        send('mouseenter');
+        assert.strictEqual(popups(), 0, 'no picture may appear while the toggle is off');
+
+        setToggle('show-picture', true);
+        send('mouseenter');
+        assert.strictEqual(popups(), 1, 'the picture must appear while the toggle is on');
+        send('mouseleave');
+        assert.strictEqual(popups(), 0, 'the picture must go away again');
+
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: integrationPayload } },
+        }));
     });
 
     it('re-renders from a pushed update instead of reloading', () => {

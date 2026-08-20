@@ -28,6 +28,7 @@ let showLocalisation: boolean = getState().showLocalisation ?? true;
 let showTriggers: boolean = getState().showTriggers ?? true;
 let showEventConditions: boolean = getState().showEventConditions ?? true;
 let showHidden: boolean = getState().showHidden ?? true;
+let showPicture: boolean = getState().showPicture ?? true;
 
 const scopeClassByType: Record<string, string> = {
 	country: "--ev-country",
@@ -819,7 +820,9 @@ function buildContent(): void {
 	}
 
 	wireIsolation();
-	showPictureWhenHover();
+	if (showPicture) {
+		showPictureWhenHover();
+	}
 	subscribeNavigators();
 }
 
@@ -1065,12 +1068,17 @@ function showPictureWhenHoverElement(eventNode: HTMLDivElement) {
 	let hoverElement: HTMLDivElement | undefined = undefined;
 
 	eventNode.addEventListener("mouseenter", () => {
+		// getBoundingClientRect is already in zoomed pixels, but the sprite style is not, so the
+		// popup is scaled to match the card it belongs to rather than dwarfing it when zoomed out.
+		const scale = currentScale();
 		const position = eventNode.getBoundingClientRect();
 		hoverElement = document.createElement("div");
 		hoverElement.className = pictureKey + " " + hoverPictureClass;
 		hoverElement.style.position = "absolute";
+		hoverElement.style.transform = `scale(${scale})`;
+		hoverElement.style.transformOrigin = "top left";
 		hoverElement.style.left =
-			position.left + window.scrollX - (pictureWidth - position.width) / 2 + "px";
+			position.left + window.scrollX - (pictureWidth * scale - position.width) / 2 + "px";
 		hoverElement.style.top = position.top + position.height + window.scrollY + "px";
 		document.body.append(hoverElement);
 	});
@@ -1138,6 +1146,10 @@ window.addEventListener(
 		bindToggle("show-hidden", showHidden, (value) => {
 			showHidden = value;
 			setState({ showHidden: value });
+		});
+		bindToggle("show-picture", showPicture, (value) => {
+			showPicture = value;
+			setState({ showPicture: value });
 		});
 
 		buildContent();

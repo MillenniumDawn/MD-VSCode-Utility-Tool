@@ -127,9 +127,10 @@ describe('previewdef/event renderEventFile in-place update', () => {
         assert.ok(styleCss.includes(`.${contentOne} {`));
     });
 
-    it('renders the four toggles into the toolbar', async () => {
+    it('renders the five toggles into the toolbar', async () => {
         const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
-        for (const id of ['show-localisation', 'show-triggers', 'show-event-conditions', 'show-hidden']) {
+        for (const id of ['show-localisation', 'show-triggers', 'show-event-conditions', 'show-hidden',
+            'show-picture']) {
             assert.ok(rendered.html.includes(`id="${id}"`), `expected a toggle with id="${id}"`);
         }
         assert.ok(rendered.html.includes('class="toolbar-outer'));

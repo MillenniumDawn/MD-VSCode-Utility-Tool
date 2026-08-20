@@ -23,6 +23,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"eventtree.showeventconditions": "Show event conditions",
 	"eventtree.showhidden": "Show hidden & immediate",
 	"eventtree.showlocalisation": "Show localisation",
+	"eventtree.showpicture": "Show event picture",
 	"eventtree.showtriggers": "Show triggers",
 	"eventtree.step": "step {0}",
 	"eventtree.title": "Title: ",
