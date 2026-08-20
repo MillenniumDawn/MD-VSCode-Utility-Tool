@@ -28,6 +28,7 @@
 		"onWebviewPanel:mdftpreview",
 		"onWebviewPanel:mdworldmappreview",
 		"workspaceContains:**/*.gfx",
+		"workspaceContains:common/ideas/*.txt",
 		"workspaceContains:common/national_focus/*.txt",
 		"workspaceContains:common/technologies/*.txt",
 		"workspaceContains:events/*.txt",
@@ -124,6 +125,18 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%hoi4modutilities.eventTreePreview.desc%"
+					},
+					"mdHoi4Utilities.ideaPreview": {
+						"title": "%hoi4modutilities.ideaPreview.title%",
+						"type": "boolean",
+						"default": true,
+						"description": "%hoi4modutilities.ideaPreview.desc%"
+					},
+					"mdHoi4Utilities.ideaSwapIndex": {
+						"title": "%hoi4modutilities.ideaSwapIndex.title%",
+						"type": "boolean",
+						"default": false,
+						"description": "%hoi4modutilities.ideaSwapIndex.desc%"
 					},
 					"mdHoi4Utilities.sharedFocusIndex": {
 						"title": "%hoi4modutilities.sharedFocusIndex.title%",

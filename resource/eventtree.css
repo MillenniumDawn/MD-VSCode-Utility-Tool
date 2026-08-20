@@ -1,78 +1,14 @@
 /*
  * Event workflow view.
  *
- * Every colour here resolves from a VS Code theme variable, so the preview follows whatever
- * theme the editor is running rather than shipping its own palette. The fallbacks after each
- * var() only matter when a theme omits the variable.
+ * The theme tokens and the card primitives this builds on live in hoicard.css, which the event
+ * preview loads alongside this file; what is here is the canvas the cards are laid out on.
  *
  * Colour carries meaning and nothing else: each glyph shape has one hue and keeps it on every
  * card, so a card carrying three glyphs shows three colours rather than one; the accent marks a
  * gated option and the condition that gates it; and the "immediate" hue marks a call fired
  * outside player choice.
  */
-
-:root {
-	--ev-surface: var(--vscode-editorWidget-background, var(--vscode-editor-background));
-	--ev-surface-alt: var(--vscode-editorHoverWidget-background, var(--vscode-editorWidget-background));
-	--ev-border: var(--vscode-panel-border, var(--vscode-editorWidget-border));
-	--ev-border-strong: var(--vscode-focusBorder);
-	--ev-fg: var(--vscode-editor-foreground, var(--vscode-foreground));
-	--ev-fg-muted: var(--vscode-descriptionForeground);
-	--ev-accent: var(--vscode-textLink-foreground);
-	--ev-accent-bg: var(--vscode-textBlockQuote-background);
-
-	/*
-	 * One hue per glyph shape, fixed, so a shape is the same colour on every card and two glyphs
-	 * on one card are never the same colour. charts.* is the one theme-provided categorical ramp.
-	 */
-	--ev-mtth: var(--vscode-charts-green);
-	--ev-triggered: var(--vscode-charts-blue);
-	--ev-news: var(--vscode-charts-yellow);
-	--ev-major: var(--vscode-charts-red);
-	--ev-hidden: var(--vscode-charts-purple);
-
-	/* Not a glyph: a call fired outside player choice, and the loop badge that goes with it. */
-	--ev-immediate: var(--vscode-charts-orange);
-
-	--ev-radius: 6px;
-
-	/*
-	 * The preview is four layers deep. Until now the order was decided by nothing but the order the
-	 * shell writes them in -- every one of them is positioned with z-index auto -- and the popups
-	 * appended to <body> escaped it entirely and painted across the toolbar. Naming the layers
-	 * makes the toolbar strip solid whatever the document order happens to be.
-	 *
-	 * This stylesheet is loaded by the event preview alone, so the .toolbar-outer rule below leaves
-	 * the other previews' toolbars as they are.
-	 */
-	--ev-layer-dragger: 0;
-	--ev-layer-canvas: 1;
-	--ev-layer-popup: 2;
-	--ev-layer-toolbar: 3;
-}
-
-/*
- * A card is painted on the surface the theme gives widgets, and in several themes -- Dark Modern
- * among them -- that surface is one step off the editor background it sits on, which on a canvas
- * this size reads as no card at all. Rather than pick a colour, which would stop following the
- * theme, the card lifts whatever surface it was given by a fixed amount and casts a shadow: the
- * lift is relative, so it separates the card in any theme without deciding what either is.
- *
- * The direction is the one thing that cannot be relative -- light lifts towards white, dark towards
- * black -- so it is keyed off the theme class VS Code puts on <body>.
- */
-body,
-body.vscode-dark,
-body.vscode-high-contrast {
-	--ev-card-raise: rgb(255 255 255 / 6.5%);
-	--ev-card-shadow: 0 1px 4px rgb(0 0 0 / 45%);
-}
-
-body.vscode-light,
-body.vscode-high-contrast-light {
-	--ev-card-raise: rgb(0 0 0 / 4.5%);
-	--ev-card-shadow: 0 1px 4px rgb(0 0 0 / 12%);
-}
 
 /*
  * The canvas is sized to the whole graph and paints over the fixed #dragger behind it, so without
@@ -89,17 +25,6 @@ body.vscode-high-contrast-light {
 #dragger {
 	z-index: var(--ev-layer-dragger);
 	cursor: grab;
-}
-
-.toolbar-outer {
-	z-index: var(--ev-layer-toolbar);
-}
-
-/* The toggles are a row of codicon checkboxes: the gap has to sit on the widget the Checkbox class
-   renders, because the margin on the <input> it hides is overridden by input[type=checkbox].hidden
-   in common.css and never reaches the page. */
-.toolbar > div.checkbox-container-out {
-	margin-right: 12px;
 }
 
 /* The label and the counter are single-line text next to 20px-tall controls, so they need centring
@@ -121,22 +46,6 @@ body.vscode-high-contrast-light {
 	margin-right: 12px;
 	font-size: 11px;
 	color: var(--ev-fg-muted);
-}
-
-/* A search box and eight toggles do not fit a narrow editor pane, so the strip scrolls. The
-   scrollbar sits inside the fixed 52px strip, so it is kept thin and the height accounts for it --
-   see toolbarHeight in src/previewdef/event/contentbuilder.ts. */
-.toolbar-outer::-webkit-scrollbar {
-	height: 6px;
-}
-
-.toolbar-outer::-webkit-scrollbar-thumb {
-	border-radius: 3px;
-	background: var(--vscode-scrollbarSlider-background);
-}
-
-.toolbar-outer::-webkit-scrollbar-thumb:hover {
-	background: var(--vscode-scrollbarSlider-hoverBackground);
 }
 
 /* initCommon puts this class on <body> for as long as the mouse is held down on the drag layer. */
@@ -201,29 +110,6 @@ body.panning .ev-chip {
 	}
 }
 
-/* The lift is a flat gradient rather than a second element, so it stays part of the card's own
-   background and adds nothing to the measured height the layout reserves space from. A box-shadow
-   is outside the border box for the same reason. */
-.ev-card {
-	position: relative;
-	background-color: var(--ev-surface);
-	background-image: linear-gradient(var(--ev-card-raise), var(--ev-card-raise));
-	border: 1px solid var(--ev-border);
-	border-radius: var(--ev-radius);
-	box-shadow: var(--ev-card-shadow);
-	cursor: pointer;
-	transition: border-color 0.1s;
-}
-
-.ev-card:hover {
-	border-color: var(--ev-border-strong);
-}
-
-.ev-card:focus-visible {
-	outline: 1px solid var(--ev-border-strong);
-	outline-offset: 2px;
-}
-
 .ev-card-event {
 	width: 250px;
 }
@@ -241,46 +127,6 @@ body.panning .ev-chip {
 
 .ev-card-gated {
 	border-color: var(--ev-accent);
-}
-
-/* ---------- Search hits ---------- */
-
-/* The highlight sits on the card while hover isolation dims the .ev-node wrapper around it, so the
-   two never select the same element and neither needs !important. A highlighted card inside a
-   dimmed chain fades with its tint intact: isolation is transient and mouse-driven, the highlight
-   is persistent and must not fight it.
-
-   Two classes deep so this beats .ev-card and .ev-card-hidden wherever they sit in the file. The
-   editor's own find-match colours, so a hit here reads like a hit in the editor. */
-.ev-card.ev-hit {
-	background: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33));
-	border-color: var(--vscode-editor-findMatchHighlightBorder, var(--ev-border-strong));
-}
-
-/* The one Enter is parked on. An outline rather than a thicker border: a border would change the
-   measured height and re-flow the layout the next time the cards are measured. */
-.ev-card.ev-hit-current {
-	background: var(--vscode-editor-findMatchBackground, rgba(234, 92, 0, 0.6));
-	border-color: var(--vscode-editor-findMatchBorder, var(--ev-border-strong));
-	outline: 1px solid var(--vscode-editor-findMatchBorder, var(--ev-border-strong));
-	outline-offset: 1px;
-}
-
-.ev-head {
-	display: flex;
-	align-items: flex-start;
-	gap: 8px;
-	padding: 9px 11px;
-}
-
-.ev-marker {
-	width: 7px;
-	height: 7px;
-	flex: none;
-	margin-top: 5px;
-	border-radius: 50%;
-	/* Only the two bare dots -- an ungated option, an unresolved card -- still set --ev-dot. */
-	background: var(--ev-dot, var(--ev-border));
 }
 
 /* The one non-round glyph on the canvas, so a gated option is findable at a glance. */
@@ -347,47 +193,7 @@ body.panning .ev-chip {
 	margin-top: 0;
 }
 
-.ev-text {
-	min-width: 0;
-	flex: 1;
-}
-
-.ev-id {
-	font-family: var(--vscode-editor-font-family, monospace);
-	font-size: 12px;
-	color: var(--ev-fg);
-	overflow-wrap: anywhere;
-}
-
 .ev-card-option .ev-id {
-	color: var(--ev-fg-muted);
-}
-
-.ev-sub {
-	margin-top: 1px;
-	font-size: 12px;
-	line-height: 1.4;
-	color: var(--ev-fg-muted);
-	overflow-wrap: anywhere;
-}
-
-.ev-meta {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	padding: 0 11px 9px;
-}
-
-/* The same lift the card takes, so a badge reads as a chip on the card rather than as an outline
-   drawn on it. It is painted over a surface that is already lifted, so the two compound. */
-.ev-badge {
-	padding: 0 6px;
-	border: 1px solid var(--ev-border);
-	border-radius: 2em;
-	background: var(--ev-card-raise);
-	font-size: 11px;
-	line-height: 17px;
-	white-space: nowrap;
 	color: var(--ev-fg-muted);
 }
 
@@ -412,51 +218,6 @@ body.panning .ev-chip {
 	border-style: dashed;
 	border-color: var(--ev-accent);
 	color: var(--ev-accent);
-}
-
-/* ---------- Condition panels ---------- */
-
-.ev-cond {
-	padding: 7px 11px 8px;
-	border-top: 1px solid var(--ev-border);
-	border-radius: 0 0 5px 5px;
-	background: var(--ev-accent-bg);
-	font-family: var(--vscode-editor-font-family, monospace);
-	font-size: 11px;
-	line-height: 1.65;
-	color: var(--ev-fg-muted);
-}
-
-.ev-cond-head {
-	margin-bottom: 3px;
-	font-family: var(--vscode-font-family);
-	font-size: 11px;
-	font-weight: 600;
-	color: var(--ev-fg-muted);
-}
-
-.ev-cond ul {
-	margin: 0;
-	padding: 0 0 0 10px;
-	list-style: none;
-	border-left: 1px solid var(--ev-border);
-}
-
-.ev-cond > ul {
-	padding-left: 0;
-	border-left: 0;
-}
-
-.ev-cond .ev-fold {
-	color: var(--ev-accent);
-}
-
-.ev-cond .ev-cond-scope {
-	opacity: 0.75;
-}
-
-.ev-cond li {
-	overflow-wrap: anywhere;
 }
 
 /* ---------- Effects ---------- */
