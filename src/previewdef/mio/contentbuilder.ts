@@ -13,6 +13,8 @@ import { Mio, MioTrait, TraitEffect } from './schema';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { localisationIndex } from "../../util/featureflags";
 import { LoaderRender } from '../loaderpreview';
+import { registerExclusiveLinkStyles } from '../../util/hoi4gui/exclusivelink';
+import { loadExclusiveLinkImages } from '../../util/hoi4gui/exclusivelinkimages';
 
 const defaultTraitIcon = 'gfx/interface/goals/goal_unknown.dds';
 const traitEffectIconMap: Record<TraitEffect, string> = {
@@ -87,6 +89,11 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
         size: { width: toNumberLike(xGridSize), height: undefined },
         slotsize: { width: toNumberLike(xGridSize), height: toNumberLike(yGridSize) },
     } as HOIPartial<GridBoxType>;
+
+    // The textures for a mutually exclusive pair of traits, drawn the way the game's
+    // `industrial_organisation_mutually_exclusive_item` composes them. Unresolvable sprites (no
+    // install path) leave the class on the plain red line, which is what the tree drew before.
+    registerExclusiveLinkStyles(styleTable, await loadExclusiveLinkImages(), xGridSize);
 
     // The mio dropdown <option> list. Built once and shared between the initial toolbar render and
     // the update payload, so an in-place update refreshes the (localised) labels and add/remove of

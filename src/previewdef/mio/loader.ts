@@ -5,6 +5,7 @@ import { uniq, flatten, chain, flatMap } from "lodash";
 import { Mio, getMiosFromFile } from "./schema";
 import { getGfxContainerFiles } from "../../util/gfxindex";
 import { listFilesFromModOrHOI4 } from "../../util/fileloader";
+import { nationalFocusViewGfxFile } from "../../util/hoi4gui/exclusivelinkimages";
 
 export interface MioLoaderResult {
     mios: Mio[];
@@ -13,6 +14,9 @@ export interface MioLoaderResult {
 
 const mioGFX = 'interface/military_industrial_organization/industrial_organization_policies_and_traits_icons.gfx';
 const ideaGFX = 'interface/ideas.gfx';
+// The mutually exclusive link textures live here, not in the mio interface folder: the game's mio
+// view reuses the focus view's sprites. Listed as a dependency so editing it refreshes the preview.
+const exclusiveLinkGFX = nationalFocusViewGfxFile;
 const mioOrgDir = 'common/military_industrial_organization/organizations';
 const genericMio = `${mioOrgDir}/00_generic_organization.txt`;
 
@@ -42,12 +46,13 @@ export class MioLoader extends ContentLoader<MioLoaderResult> {
         return {
             result: {
                 mios,
-                gfxFiles: uniq([...gfxDependencies, mioGFX, ideaGFX]),
+                gfxFiles: uniq([...gfxDependencies, mioGFX, ideaGFX, exclusiveLinkGFX]),
             },
             dependencies: uniq([
                 this.file,
                 mioGFX,
                 ideaGFX,
+                exclusiveLinkGFX,
                 ...gfxDependencies,
                 ...mioDependencies,
                 ...mergeInLoadResult(mioDepFiles, 'dependencies')
