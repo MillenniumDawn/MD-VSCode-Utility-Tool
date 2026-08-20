@@ -1,3 +1,9 @@
+v1.1.27
+
+  Functionality:
+
+- Preview a decisions file as a graph of categories, decisions and missions. Issue #123.
+
 v1.1.26
 
   Functionality:
