@@ -9,25 +9,16 @@ import { LocText, NavTarget } from "../sharedpayload";
 // LoaderPreview hashes it to decide whether an edit changed anything, so a stable order and
 // counter-free ids are what make an unchanged edit skip the re-render.
 
-export { LocText, NavTarget } from "../sharedpayload";
-
-export type ModifierTone = "good" | "bad" | "neutral";
-
-// One formatted `key = value` line, ready to draw: "Stability" / "-10.0%" / bad. The raw key rides
-// along so search can still find a modifier by the token the file was written with.
-export interface ModifierLine {
-	key: string;
-	name: string;
-	value: string;
-	tone: ModifierTone;
-}
-
-// A named run of modifier lines -- an equipment archetype, or the country a targeted_modifier
-// points at.
-export interface ModifierGroup {
-	title: string;
-	lines: ModifierLine[];
-}
+// The modifier shapes are written the same way by an idea and by a decision, so they live in
+// sharedpayload.ts alongside LocText and NavTarget.
+export {
+	LocText,
+	NavTarget,
+	ModifierTone,
+	ModifierLine,
+	ModifierGroup,
+} from "../sharedpayload";
+import { ModifierLine, ModifierGroup } from "../sharedpayload";
 
 // The idea's icon, as a StyleTable class carrying the decoded image as a data URL, plus the size to
 // draw it at.

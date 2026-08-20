@@ -1,11 +1,10 @@
-import { Node } from "../../hoiformat/hoiparser";
-import { listFilesFromModOrHOI4, parseHoi4FileCached } from "../../util/fileloader";
-import { getLocalisedTextQuick } from "../../util/localisationIndex";
-import { localisationIndex } from "../../util/featureflags";
-import { isSymbolNode } from "../../hoiformat/schema";
-import { debug } from "../../util/debug";
-import { ModifierPair } from "./schema";
-import { ModifierLine, ModifierTone } from "./payload";
+import { Node } from "../hoiformat/hoiparser";
+import { listFilesFromModOrHOI4, parseHoi4FileCached } from "./fileloader";
+import { getLocalisedTextQuick } from "./localisationIndex";
+import { localisationIndex } from "./featureflags";
+import { isSymbolNode } from "../hoiformat/schema";
+import { debug } from "./debug";
+import { ModifierPair, ModifierLine, ModifierTone } from "../previewdef/sharedpayload";
 
 /*
  * Turning `stability_factor = -0.1` into "Stability: -10.0%" in red.

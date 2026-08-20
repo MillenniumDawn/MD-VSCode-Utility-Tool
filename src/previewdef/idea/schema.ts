@@ -26,13 +26,10 @@ export interface HOIIdeaCategory {
 	token: Token | undefined;
 }
 
-// One `key = value` out of a `modifier`, `research_bonus` or equipment stat block. The value is
-// kept raw here and formatted in modifiers.ts, which is the only place that knows how a given
-// modifier is meant to read.
-export interface ModifierPair {
-	key: string;
-	value: number | string | boolean;
-}
+// ModifierPair is written the same way by an idea and by a decision, so it lives in
+// sharedpayload.ts; re-exported here so this module's importers keep reaching it in one place.
+export { ModifierPair } from "../sharedpayload";
+import { ModifierPair } from "../sharedpayload";
 
 // `targeted_modifier = { tag = SOV attack_bonus = 0.1 }` -- modifiers that apply against one
 // country rather than to the owner.

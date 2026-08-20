@@ -48,3 +48,29 @@ export interface EffectChoice {
 }
 
 export type EffectTreeNode = EffectLine | EffectGroup | EffectChoice;
+
+// One `key = value` out of a `modifier`, `research_bonus` or equipment stat block. The value is
+// kept raw here and formatted in util/modifiers.ts, which is the only place that knows how a given
+// modifier is meant to read. An idea and a decision write the same block, so they share the shape.
+export interface ModifierPair {
+	key: string;
+	value: number | string | boolean;
+}
+
+export type ModifierTone = "good" | "bad" | "neutral";
+
+// One formatted `key = value` line, ready to draw: "Stability" / "-10.0%" / bad. The raw key rides
+// along so search can still find a modifier by the token the file was written with.
+export interface ModifierLine {
+	key: string;
+	name: string;
+	value: string;
+	tone: ModifierTone;
+}
+
+// A named run of modifier lines -- an equipment archetype, or the country a targeted_modifier
+// points at.
+export interface ModifierGroup {
+	title: string;
+	lines: ModifierLine[];
+}

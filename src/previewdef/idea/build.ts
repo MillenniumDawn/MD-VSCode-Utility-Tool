@@ -6,7 +6,7 @@ import { localize } from "../../util/i18n";
 import { IdeaSwap } from "../../util/ideaSwapIndex";
 import { HOIIdea } from "./schema";
 import { IdeasLoaderResult, ideaSpriteName } from "./loader";
-import { formatModifiers, formatResearchBonuses } from "./modifiers";
+import { formatModifiers, formatResearchBonuses } from "../../util/modifiers";
 import {
 	IdeaCard,
 	IdeaChain,

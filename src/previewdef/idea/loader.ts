@@ -11,7 +11,7 @@ import { localize } from "../../util/i18n";
 import { uniq, flatten } from "lodash";
 import { getGfxContainerFiles } from "../../util/gfxindex";
 import { getLanguageIdInYml } from "../../util/vsccommon";
-import { ModifierDefinitions, loadModifierDefinitions } from "./modifiers";
+import { ModifierDefinitions, loadModifierDefinitions } from "../../util/modifiers";
 import { IdeaSwap, getIdeaSwaps } from "../../util/ideaSwapIndex";
 import { ideaSwapIndex } from "../../util/featureflags";
 

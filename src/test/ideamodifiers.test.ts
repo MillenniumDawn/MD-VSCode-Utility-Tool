@@ -8,7 +8,7 @@ import {
 	readModifierDefinitions,
 	resolveDefinition,
 	toneFor,
-} from "../previewdef/idea/modifiers";
+} from "../util/modifiers";
 
 // The definitions below are transcribed from Millennium Dawn's
 // common/modifier_definitions/political_modifier_definitions.txt and the vanilla

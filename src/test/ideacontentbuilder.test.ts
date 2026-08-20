@@ -6,7 +6,7 @@ import { IdeaPreviewPayload } from "../previewdef/idea/payload";
 import { getIdeasFromFile } from "../previewdef/idea/schema";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import { IdeaSwap } from "../util/ideaSwapIndex";
-import { ModifierDefinitions } from "../previewdef/idea/modifiers";
+import { ModifierDefinitions } from "../util/modifiers";
 import { contextContainer } from "../context";
 
 // renderIdeaFile returns the in-place update parts { html, update } on success and a plain html
