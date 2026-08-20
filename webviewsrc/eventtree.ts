@@ -233,9 +233,22 @@ export interface LayoutInput {
 	height: number;
 }
 
+// The measured size of an arrow's label. A chip lives in the gap that follows its source column, so
+// the gap has to be wide enough to hold it clear of the cards on either side.
+export interface ChipInput {
+	from: string;
+	to: string;
+	width: number;
+}
+
 export interface LayoutResult {
 	positions: Record<string, { x: number; y: number }>;
+	rank: Record<string, number>;
 	columnX: number[];
+	// gapX[i] is the left edge of the empty band between column i and column i + 1, gapWidth[i] its
+	// width. Both are indexed by the column on the left of the gap.
+	gapX: number[];
+	gapWidth: number[];
 	width: number;
 	height: number;
 }
@@ -244,15 +257,24 @@ const columnGap = 78;
 const rowGap = 18;
 const padX = 34;
 const padY = 42;
+// Clearance kept on either side of a chip inside its gap, and between two chips stacked in one gap.
+const chipPadX = 10;
+const chipGapY = 6;
 
 // Left-to-right layered layout. The rank of a node picks its column, the column's x comes from the
 // widest card in it, and a bottom-up pack stacks each subtree vertically and centres a parent over
-// its children. Because column width is measured rather than fixed, expanding a condition panel
-// widens its lane instead of overlapping the next one.
+// its children.
+//
+// Two things then guarantee that nothing can overlap, whatever the toggles do to the measured sizes.
+// Horizontally, a column is as wide as its widest card and the gap after it is as wide as its widest
+// arrow label, so a card and a label can never share space. Vertically, a final per-column sweep
+// pushes any card that would still sit on top of the one above it down far enough to clear it; the
+// centring survives wherever there is room for it.
 export function layoutGraph(
 	nodes: LayoutInput[],
 	edges: { from: string; to: string }[],
 	roots: string[],
+	chips: ChipInput[] = [],
 ): LayoutResult {
 	const byId = new Map(nodes.map((n) => [n.id, n]));
 	const outEdges = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
@@ -353,11 +375,29 @@ export function layoutGraph(
 		const column = rank.get(node.id) ?? 0;
 		columnWidth[column] = Math.max(columnWidth[column] ?? 0, node.width);
 	}
+
+	// A chip is parked in the gap right after its source column even when the arrow spans several
+	// columns, because the space between two columns is the only place on the canvas where no card
+	// can ever be. The gap grows to fit the widest chip that lands in it.
+	const gapWidth: number[] = [];
+	for (let i = 0; i < columnWidth.length; i++) {
+		gapWidth[i] = columnGap;
+	}
+	for (const chip of chips) {
+		const gap = rank.get(chip.from);
+		if (gap === undefined || gap >= columnWidth.length) {
+			continue;
+		}
+		gapWidth[gap] = Math.max(gapWidth[gap] ?? columnGap, chip.width + chipPadX * 2);
+	}
+
 	const columnX: number[] = [];
+	const gapX: number[] = [];
 	let x = padX;
 	for (let i = 0; i < columnWidth.length; i++) {
 		columnX[i] = x;
-		x += (columnWidth[i] ?? 0) + columnGap;
+		gapX[i] = x + (columnWidth[i] ?? 0);
+		x += (columnWidth[i] ?? 0) + (gapWidth[i] ?? columnGap);
 	}
 
 	const positions: Record<string, { x: number; y: number }> = {};
@@ -389,16 +429,67 @@ export function layoutGraph(
 		positions[id] = { x: nodeX, y };
 		return { top: Math.min(top, y), bottom: Math.max(bottom, y + node.height) };
 	};
+	// A centred parent taller than its children's band reaches past both ends of it, so the next
+	// subtree has to start below the whole span rather than below the last leaf the cursor happened
+	// to see.
 	for (const root of effectiveRoots) {
-		pack(root);
-		cursor += rowGap * 2;
+		const span = pack(root);
+		cursor = Math.max(cursor, span.bottom + rowGap) + rowGap;
 	}
 	// A graph in which every node has a parent -- a pure cycle -- yields no roots at all. Pack
 	// whatever is left so a node can never silently vanish from the canvas.
 	for (const node of nodes) {
 		if (!positions[node.id]) {
-			pack(node.id);
-			cursor += rowGap * 2;
+			const span = pack(node.id);
+			cursor = Math.max(cursor, span.bottom + rowGap) + rowGap;
+		}
+	}
+
+	// The guarantee. Centring a parent, and reusing the position of a node several callers share,
+	// can both put two cards of one column on the same pixels; walking each column top to bottom and
+	// pushing anything that still collides below its predecessor removes that for good. Nodes that
+	// already clear each other are untouched, so the centring stays visible wherever it fits.
+	const byColumn = new Map<number, string[]>();
+	for (const node of nodes) {
+		const column = rank.get(node.id) ?? 0;
+		const list = byColumn.get(column);
+		if (list) {
+			list.push(node.id);
+		} else {
+			byColumn.set(column, [node.id]);
+		}
+	}
+	for (const column of byColumn.values()) {
+		column.sort((a, b) => {
+			const top = (positions[a]?.y ?? 0) - (positions[b]?.y ?? 0);
+			// Ties would otherwise resolve by Map insertion order, which is stable but arbitrary.
+			return top !== 0 ? top : a.localeCompare(b);
+		});
+		let previousBottom = -Infinity;
+		for (const id of column) {
+			const position = positions[id];
+			const node = byId.get(id);
+			if (!position || !node) {
+				continue;
+			}
+			position.y = Math.max(position.y, previousBottom + rowGap);
+			previousBottom = position.y + node.height;
+		}
+	}
+
+	// Centring can also push a card above the canvas, where it slides under the fixed toolbar. The
+	// sweep never moves anything up, so one shift afterwards is enough.
+	let minY = Infinity;
+	for (const node of nodes) {
+		minY = Math.min(minY, positions[node.id]?.y ?? 0);
+	}
+	if (minY < padY && minY !== Infinity) {
+		const shift = padY - minY;
+		for (const node of nodes) {
+			const position = positions[node.id];
+			if (position) {
+				position.y += shift;
+			}
 		}
 	}
 
@@ -411,8 +502,41 @@ export function layoutGraph(
 			height = Math.max(height, position.y + node.height);
 		}
 	}
+	// The last gap holds no chip, but the rail drawn down its middle should still be on the canvas.
+	width = Math.max(width, (gapX[gapX.length - 1] ?? padX) + (gapWidth[gapWidth.length - 1] ?? 0));
 
-	return { positions, columnX, width: width + padX, height: height + padY };
+	return {
+		positions,
+		rank: Object.fromEntries(rank),
+		columnX,
+		gapX,
+		gapWidth,
+		width: width + padX,
+		height: height + padY,
+	};
+}
+
+// Pushes chips that share a gap apart, top to bottom, so two arrow labels can never cover each
+// other. Only the y moves: the x is already the centre of a gap no card reaches into.
+export function separateChips<T extends { gap: number; y: number; height: number }>(chips: T[]): T[] {
+	const byGap = new Map<number, T[]>();
+	for (const chip of chips) {
+		const list = byGap.get(chip.gap);
+		if (list) {
+			list.push(chip);
+		} else {
+			byGap.set(chip.gap, [chip]);
+		}
+	}
+	for (const gap of byGap.values()) {
+		gap.sort((a, b) => a.y - b.y);
+		let previousBottom = -Infinity;
+		for (const chip of gap) {
+			chip.y = Math.max(chip.y, previousBottom + chipGapY);
+			previousBottom = chip.y + chip.height;
+		}
+	}
+	return chips;
 }
 
 //#endregion
@@ -648,12 +772,25 @@ function buildContent(): void {
 		content.appendChild(box);
 		rendered.push({ node, element: box });
 	}
+	// The arrow labels are measured alongside the cards, because a gap is only wide enough to keep a
+	// label clear of the cards if the layout knows how wide the label is.
+	const built = buildChips(content, graph);
 	for (const item of rendered) {
 		const rect = item.element.getBoundingClientRect();
 		measured.push({ id: item.node.id, width: rect.width / scale, height: rect.height / scale });
 	}
+	const chipSizes: ChipInput[] = [];
+	for (const { edge, chip } of built) {
+		if (chip) {
+			chipSizes.push({
+				from: edge.from,
+				to: edge.to,
+				width: chip.getBoundingClientRect().width / scale,
+			});
+		}
+	}
 
-	const layout = layoutGraph(measured, graph.edges, graph.roots);
+	const layout = layoutGraph(measured, graph.edges, graph.roots, chipSizes);
 
 	for (const item of rendered) {
 		const position = layout.positions[item.node.id];
@@ -669,7 +806,7 @@ function buildContent(): void {
 	svg.setAttribute("height", String(layout.height));
 
 	renderRails(content, layout);
-	renderEdges(content, svg, graph, layout, measured);
+	renderEdges(content, svg, layout, measured, built);
 
 	childrenById = new Map();
 	for (const edge of graph.edges) {
@@ -690,7 +827,8 @@ function renderRails(content: HTMLDivElement, layout: LayoutResult): void {
 	for (let i = 1; i < layout.columnX.length; i++) {
 		const rail = document.createElement("div");
 		rail.className = "ev-rail";
-		rail.style.left = (layout.columnX[i] ?? 0) - columnGap / 2 + "px";
+		// Down the middle of the gap before this column, which is no longer a fixed width.
+		rail.style.left = (layout.gapX[i - 1] ?? 0) + (layout.gapWidth[i - 1] ?? columnGap) / 2 + "px";
 		rail.style.height = layout.height + "px";
 		const label = document.createElement("span");
 		label.textContent = feLocalize("eventtree.step", "step {0}", i);
@@ -699,22 +837,102 @@ function renderRails(content: HTMLDivElement, layout: LayoutResult): void {
 	}
 }
 
+// Everything an arrow says next to itself: the scope it fires in, its delay, its random_list weight
+// and the condition that guards it.
+export function chipTextFor(edge: EventGraphEdge, guarded: boolean): string {
+	const bits: string[] = [];
+	if (edge.scope && edge.scope !== "{event_target}") {
+		bits.push(edge.scope);
+	}
+	if (edge.days) {
+		bits.push(
+			`${edge.randomDays ? `${edge.days}-${edge.days + edge.randomDays}` : edge.days} ${feLocalize("days", "day(s)")}`,
+		);
+	} else if (edge.hours) {
+		bits.push(
+			`${edge.randomHours ? `${edge.hours}-${edge.hours + edge.randomHours}` : edge.hours} ${feLocalize("hours", "hour(s)")}`,
+		);
+	}
+	if (edge.immediate) {
+		bits.push(feLocalize("eventtree.immediate", "immediate"));
+	}
+	if (edge.possibility !== undefined) {
+		// A random_list key is a weight relative to its siblings, not a percentage: a 3 next to a
+		// 1 means three chances in four. The siblings are not on this edge, and a branch modifier
+		// can change the totals at runtime anyway, so the weight is shown as written.
+		bits.push(feLocalize("eventtree.weight", "weight {0}", edge.possibility));
+	}
+	if (guarded) {
+		bits.push(conditionToLabel(edge.condition));
+	}
+	return bits.join(" · ");
+}
+
+interface BuiltChip {
+	edge: EventGraphEdge;
+	guarded: boolean;
+	chip?: HTMLDivElement;
+}
+
+// Chips are created before the layout runs, because their measured width is what decides how wide
+// the gap they sit in has to be. They are hidden until the layout says where they go.
+function buildChips(content: HTMLDivElement, graph: VisibleGraph): BuiltChip[] {
+	return graph.edges.map((edge) => {
+		const guarded = showTriggers && edge.condition !== true;
+		const text = chipTextFor(edge, guarded);
+		if (!text) {
+			return { edge, guarded };
+		}
+		const chip = document.createElement("div");
+		chip.className = "ev-chip" + (guarded ? " ev-chip-guarded" : "");
+		chip.textContent = text;
+		chip.style.left = "0px";
+		chip.style.top = "0px";
+		chip.style.visibility = "hidden";
+		content.appendChild(chip);
+		return { edge, guarded, chip };
+	});
+}
+
+// x of the cubic used for the arrows, which is monotonic from x1 to x2, so a bisection finds the
+// parameter that puts a point at a given x.
+function cubicAt(a: number, b: number, c: number, d: number, t: number): number {
+	const s = 1 - t;
+	return s * s * s * a + 3 * s * s * t * b + 3 * s * t * t * c + t * t * t * d;
+}
+
+function parameterAtX(x1: number, c1: number, c2: number, x2: number, target: number): number {
+	let low = 0;
+	let high = 1;
+	for (let i = 0; i < 20; i++) {
+		const mid = (low + high) / 2;
+		if (cubicAt(x1, c1, c2, x2, mid) < target) {
+			low = mid;
+		} else {
+			high = mid;
+		}
+	}
+	return (low + high) / 2;
+}
+
 function renderEdges(
 	content: HTMLDivElement,
 	svg: SVGSVGElement,
-	graph: VisibleGraph,
 	layout: LayoutResult,
 	measured: LayoutInput[],
+	built: BuiltChip[],
 ): void {
 	const sizeById = new Map(measured.map((m) => [m.id, m]));
 	const fanOut = new Map<string, number>();
+	const placements: { gap: number; x: number; y: number; height: number; chip: HTMLDivElement }[] = [];
 
-	for (const edge of graph.edges) {
+	for (const { edge, guarded, chip } of built) {
 		const from = layout.positions[edge.from];
 		const to = layout.positions[edge.to];
 		const fromSize = sizeById.get(edge.from);
 		const toSize = sizeById.get(edge.to);
 		if (!from || !to || !fromSize || !toSize) {
+			chip?.remove();
 			continue;
 		}
 
@@ -722,12 +940,14 @@ function renderEdges(
 		fanOut.set(edge.from, index + 1);
 
 		const x1 = from.x + fromSize.width;
-		const y1 = from.y + fromSize.height / 2 + (index - 0.5) * 7;
+		// Fanning the origins apart keeps parallel arrows readable, but the spread has to stay on the
+		// card it leaves from -- unclamped, a node with a dozen calls put the last arrow below its box.
+		const spread = Math.min(7, Math.max(2, (fromSize.height - 8) / Math.max(1, index + 1)));
+		const y1 = from.y + fromSize.height / 2 + (index - 0.5) * spread;
 		const x2 = to.x;
 		const y2 = to.y + toSize.height / 2;
 		const dx = Math.max(28, (x2 - x1) * 0.5);
 
-		const guarded = showTriggers && edge.condition !== true;
 		const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
 		path.setAttribute("d", `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`);
 		path.setAttribute(
@@ -736,44 +956,39 @@ function renderEdges(
 		);
 		svg.appendChild(path);
 
-		const bits: string[] = [];
-		if (edge.scope && edge.scope !== "{event_target}") {
-			bits.push(edge.scope);
-		}
-		if (edge.days) {
-			bits.push(
-				`${edge.randomDays ? `${edge.days}-${edge.days + edge.randomDays}` : edge.days} ${feLocalize("days", "day(s)")}`,
-			);
-		} else if (edge.hours) {
-			bits.push(
-				`${edge.randomHours ? `${edge.hours}-${edge.hours + edge.randomHours}` : edge.hours} ${feLocalize("hours", "hour(s)")}`,
-			);
-		}
-		if (edge.immediate) {
-			bits.push(feLocalize("eventtree.immediate", "immediate"));
-		}
-		if (edge.possibility !== undefined) {
-			// A random_list key is a weight relative to its siblings, not a percentage: a 3 next to a
-			// 1 means three chances in four. The siblings are not on this edge, and a branch modifier
-			// can change the totals at runtime anyway, so the weight is shown as written.
-			bits.push(feLocalize("eventtree.weight", "weight {0}", edge.possibility));
-		}
-		if (guarded) {
-			bits.push(conditionToLabel(edge.condition));
-		}
-
-		let chip: HTMLDivElement | undefined = undefined;
-		if (bits.length > 0) {
-			chip = document.createElement("div");
-			chip.className = "ev-chip" + (guarded ? " ev-chip-guarded" : "");
-			chip.textContent = bits.join(" · ");
-			// The midpoint of the cubic is the weighted average of its endpoints and controls.
-			chip.style.left = (x1 + 3 * (x1 + dx) + 3 * (x2 - dx) + x2) / 8 + "px";
-			chip.style.top = (y1 + 3 * y1 + 3 * y2 + y2) / 8 + "px";
-			content.appendChild(chip);
+		if (chip) {
+			// The gap after the source column is the one the layout widened for this chip, and the only
+			// band on the canvas guaranteed to be free of cards -- an arrow that skips a column would
+			// otherwise drop its label onto a card in between.
+			const gap = layout.rank[edge.from] ?? 0;
+			const centre = (layout.gapX[gap] ?? x1) + (layout.gapWidth[gap] ?? 0) / 2;
+			const t = parameterAtX(x1, x1 + dx, x2 - dx, x2, centre);
+			const height = chip.getBoundingClientRect().height / currentScale();
+			placements.push({
+				gap,
+				x: centre,
+				y: cubicAt(y1, y1, y2, y2, t) - height / 2,
+				height,
+				chip,
+			});
 		}
 
 		renderedEdges.push({ edge, path, chip });
+	}
+
+	let bottom = 0;
+	for (const placement of separateChips(placements)) {
+		placement.chip.style.left = placement.x + "px";
+		// .ev-chip is translated by -50% on both axes, so the style position is its centre.
+		placement.chip.style.top = placement.y + placement.height / 2 + "px";
+		placement.chip.style.visibility = "";
+		bottom = Math.max(bottom, placement.y + placement.height);
+	}
+	if (bottom + padY > layout.height) {
+		layout.height = bottom + padY;
+		content.style.height = layout.height + "px";
+		svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
+		svg.setAttribute("height", String(layout.height));
 	}
 }
 

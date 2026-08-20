@@ -72,7 +72,7 @@ const shellHtml = `
     <div id="eventtreecontent"></div>`;
 
 const eventtree = require('../../../webviewsrc/eventtree') as typeof import('../../../webviewsrc/eventtree');
-const { conditionToDom, conditionToLabel, visibleGraph, layoutGraph } = eventtree;
+const { conditionToDom, conditionToLabel, visibleGraph, layoutGraph, separateChips } = eventtree;
 
 function leaf(nodeContent: string, scopeName = ''): ConditionComplexExpr {
     return { scopeName, nodeContent };
@@ -424,6 +424,170 @@ describe('webview/eventtree layoutGraph', () => {
             assert.ok(result.positions[id]!.x + 100 <= result.width);
             assert.ok(result.positions[id]!.y + 50 <= result.height);
         }
+    });
+});
+
+describe('webview/eventtree layout never overlaps', () => {
+    const size = (id: string, width = 100, height = 50) => ({ id, width, height });
+
+    // The only assertion that matters: no two cards may share a pixel. Turning "show triggers" and
+    // "show event conditions" on is what makes a card tall enough to reach into its neighbours.
+    function assertNoOverlap(
+        result: ReturnType<typeof layoutGraph>,
+        nodes: { id: string; width: number; height: number }[],
+    ): void {
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                const a = nodes[i]!;
+                const b = nodes[j]!;
+                const pa = result.positions[a.id]!;
+                const pb = result.positions[b.id]!;
+                const apart =
+                    pa.x + a.width <= pb.x || pb.x + b.width <= pa.x ||
+                    pa.y + a.height <= pb.y || pb.y + b.height <= pa.y;
+                assert.ok(apart, `${a.id} and ${b.id} overlap: ${JSON.stringify(pa)} ${JSON.stringify(pb)}`);
+            }
+        }
+    }
+
+    it('keeps a parent taller than its children clear of the next subtree', () => {
+        // p1 is 400 tall because its condition panel is expanded, while its only child is 50. Centring
+        // p1 on that child used to reach far above and below the child's band, into p2's rows.
+        const nodes = [
+            size('root'), size('p1', 100, 400), size('c1'), size('p2'), size('c2'),
+        ];
+        const result = layoutGraph(
+            nodes,
+            [
+                { from: 'root', to: 'p1' }, { from: 'p1', to: 'c1' },
+                { from: 'root', to: 'p2' }, { from: 'p2', to: 'c2' },
+            ],
+            ['root'],
+        );
+        assertNoOverlap(result, nodes);
+    });
+
+    it('keeps two tall roots apart', () => {
+        const nodes = [size('r1', 100, 300), size('l1'), size('r2', 100, 300), size('l2')];
+        const result = layoutGraph(
+            nodes,
+            [{ from: 'r1', to: 'l1' }, { from: 'r2', to: 'l2' }],
+            ['r1', 'r2'],
+        );
+        assertNoOverlap(result, nodes);
+    });
+
+    it('separates every card of a mixed-height tree', () => {
+        // Heights chosen so several parents outgrow their children's band at once.
+        const heights = [30, 420, 60, 250, 40, 380, 55, 90, 310, 45, 70, 200];
+        const nodes = heights.map((height, i) => size('n' + i, 100, height));
+        const edges = [];
+        for (let i = 1; i < nodes.length; i++) {
+            edges.push({ from: 'n' + Math.floor((i - 1) / 2), to: 'n' + i });
+        }
+        const result = layoutGraph(nodes, edges, ['n0']);
+        assertNoOverlap(result, nodes);
+    });
+
+    it('separates cards that several callers share', () => {
+        // A node reached from three places is placed once and reused, which used to drag its parent's
+        // centre far from its siblings.
+        const nodes = [
+            size('a', 100, 200), size('b', 100, 60), size('c', 100, 300), size('shared'), size('d'),
+        ];
+        const result = layoutGraph(
+            nodes,
+            [
+                { from: 'a', to: 'shared' }, { from: 'b', to: 'shared' }, { from: 'c', to: 'shared' },
+                { from: 'a', to: 'd' },
+            ],
+            ['a', 'b', 'c'],
+        );
+        assertNoOverlap(result, nodes);
+    });
+
+    it('never places a card above the canvas, where the toolbar would cover it', () => {
+        const nodes = [size('p', 100, 500), size('c')];
+        const result = layoutGraph(nodes, [{ from: 'p', to: 'c' }], ['p']);
+        for (const node of nodes) {
+            assert.ok(result.positions[node.id]!.y >= 0, `${node.id} is above the canvas`);
+            assert.ok(result.positions[node.id]!.y + node.height <= result.height);
+        }
+    });
+
+    it('still centres a parent when its children leave room for it', () => {
+        const result = layoutGraph(
+            [size('p'), size('c1'), size('c2')],
+            [{ from: 'p', to: 'c1' }, { from: 'p', to: 'c2' }],
+            ['p'],
+        );
+        const middle = (result.positions['c1']!.y + result.positions['c2']!.y + 50) / 2;
+        assert.ok(Math.abs(result.positions['p']!.y + 25 - middle) < 1, 'the parent must stay centred');
+    });
+});
+
+describe('webview/eventtree chip spacing', () => {
+    const size = (id: string, width = 100, height = 50) => ({ id, width, height });
+
+    it('widens the gap so a wide condition label clears both columns', () => {
+        const nodes = [size('a'), size('b')];
+        const edges = [{ from: 'a', to: 'b' }];
+        const narrow = layoutGraph(nodes, edges, ['a'], [{ from: 'a', to: 'b', width: 20 }]);
+        const wide = layoutGraph(nodes, edges, ['a'], [{ from: 'a', to: 'b', width: 220 }]);
+
+        assert.ok(wide.gapWidth[0]! >= 220, 'the gap must hold the chip');
+        assert.ok(wide.gapWidth[0]! > narrow.gapWidth[0]!, 'a wider chip must widen the gap');
+        // The chip is centred in the gap, so clearing the gap is what keeps it off the cards.
+        const chipLeft = wide.gapX[0]! + wide.gapWidth[0]! / 2 - 110;
+        const chipRight = chipLeft + 220;
+        assert.ok(chipLeft >= wide.positions['a']!.x + 100, 'the chip must clear the source card');
+        assert.ok(chipRight <= wide.positions['b']!.x, 'the chip must clear the target card');
+    });
+
+    it('leaves the gap alone when no chip needs the room', () => {
+        const result = layoutGraph([size('a'), size('b')], [{ from: 'a', to: 'b' }], ['a']);
+        assert.strictEqual(result.gapWidth[0], 78);
+    });
+
+    it('sizes the gap after the source column even when the arrow skips a column', () => {
+        // a -> c jumps over b's column. Parking the label in the gap after a keeps it off b's card.
+        const result = layoutGraph(
+            [size('a'), size('b'), size('c')],
+            [{ from: 'a', to: 'b' }, { from: 'b', to: 'c' }, { from: 'a', to: 'c' }],
+            ['a'],
+            [{ from: 'a', to: 'c', width: 200 }],
+        );
+        assert.ok(result.gapWidth[0]! >= 200, 'the gap after a holds the label');
+        assert.strictEqual(result.gapWidth[1], 78, 'the gap after b is untouched');
+    });
+
+    it('pushes two labels in one gap apart', () => {
+        const chips = [
+            { gap: 0, y: 100, height: 20 },
+            { gap: 0, y: 105, height: 20 },
+            { gap: 0, y: 108, height: 20 },
+        ];
+        separateChips(chips);
+        for (let i = 1; i < chips.length; i++) {
+            assert.ok(
+                chips[i]!.y >= chips[i - 1]!.y + chips[i - 1]!.height,
+                'labels in one gap must not overlap',
+            );
+        }
+    });
+
+    it('leaves labels in different gaps alone', () => {
+        const chips = [{ gap: 0, y: 100, height: 20 }, { gap: 1, y: 100, height: 20 }];
+        separateChips(chips);
+        assert.strictEqual(chips[0]!.y, 100);
+        assert.strictEqual(chips[1]!.y, 100);
+    });
+
+    it('leaves labels that already clear each other where they are', () => {
+        const chips = [{ gap: 0, y: 100, height: 20 }, { gap: 0, y: 300, height: 20 }];
+        separateChips(chips);
+        assert.strictEqual(chips[0]!.y, 100);
+        assert.strictEqual(chips[1]!.y, 300);
     });
 });
 
