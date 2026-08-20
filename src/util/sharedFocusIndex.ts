@@ -245,9 +245,9 @@ async function fillFocusItems(
 			"sharedFocusIndex.parseFailure",
 			"Parsing failed! Please check if the file has issues!",
 		);
-		if (e instanceof Error) {
-			Logger.error(`${baseMessage} ${focusFile} ${failureMessage}\n${e.stack}`);
-		}
+		Logger.error(
+			`${baseMessage} ${focusFile} ${failureMessage}\n${e instanceof Error ? (e.stack ?? e.message) : String(e)}`,
+		);
 	}
 }
 
