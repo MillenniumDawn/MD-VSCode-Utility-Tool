@@ -2,6 +2,7 @@ import './setup';
 import * as assert from 'assert';
 import { ConditionComplexExpr } from '../../hoiformat/condition';
 import {
+    EffectTreeNode,
     EventGraphEdge,
     EventGraphEventNode,
     EventGraphNode,
@@ -15,6 +16,16 @@ import {
 const integrationPayload: EventGraphPayload = {
     roots: ['arab_spring.0:0'],
     conditionExprs: [],
+    toolbarFlags: {
+        hasChains: true,
+        hasEffects: true,
+        hasHidden: true,
+        hasLocalisation: true,
+        hasPicture: false,
+    },
+    effectBlocks: [
+        [{ kind: 'line', scopeName: '', content: 'add_political_power = 50' }],
+    ],
     nodes: [
         {
             id: 'arab_spring.0:0', kind: 'event', eventId: 'arab_spring.0', eventType: 'country',
@@ -31,6 +42,7 @@ const integrationPayload: EventGraphPayload = {
             id: 'arab_spring.0.a:1', kind: 'option',
             name: { key: 'arab_spring.0.a', text: 'We must mitigate this crisis!' },
             trigger: { scopeName: '', nodeContent: 'tag = FROM' },
+            effectsRef: 0,
         },
         {
             id: 'arab_spring.1:2', kind: 'event', eventId: 'arab_spring.1', eventType: 'news',
@@ -64,15 +76,24 @@ const integrationPayload: EventGraphPayload = {
 const shellHtml = `
     <div class="toolbar-outer"><div class="toolbar">
         <input type="checkbox" id="show-localisation">
-        <input type="checkbox" id="show-triggers">
+        <input type="checkbox" id="show-option-triggers">
+        <input type="checkbox" id="show-edge-conditions">
         <input type="checkbox" id="show-event-conditions">
         <input type="checkbox" id="show-hidden">
+        <input type="checkbox" id="show-picture">
+        <input type="checkbox" id="show-effects">
+        <input type="checkbox" id="show-chains-only">
+        <input type="text" id="ev-searchbox">
+        <span id="ev-search-count"></span>
     </div></div>
     <div id="dragger"></div>
     <div id="eventtreecontent"></div>`;
 
 const eventtree = require('../../../webviewsrc/eventtree') as typeof import('../../../webviewsrc/eventtree');
-const { conditionToDom, conditionToLabel, visibleGraph, layoutGraph } = eventtree;
+const {
+    conditionToDom, conditionToLabel, effectsToDom, visibleGraph, chainedGraph, matchesQuery,
+    layoutGraph, separateChips,
+} = eventtree;
 
 function leaf(nodeContent: string, scopeName = ''): ConditionComplexExpr {
     return { scopeName, nodeContent };
@@ -124,7 +145,17 @@ function edge(from: string, to: string, extra: Partial<EventGraphEdge> = {}): Ev
 }
 
 function payload(nodes: EventGraphNode[], edges: EventGraphEdge[], roots: string[]): EventGraphPayload {
-    return { nodes, edges, roots, conditionExprs: [] };
+    return {
+        nodes, edges, roots, conditionExprs: [], effectBlocks: [],
+        toolbarFlags: {
+            hasChains: true, hasEffects: true, hasHidden: true, hasLocalisation: true, hasPicture: true,
+        },
+    };
+}
+
+// chainedGraph takes what visibleGraph returns, not a payload.
+function visible(nodes: EventGraphNode[], edges: EventGraphEdge[], roots: string[]) {
+    return { nodes, edges, roots };
 }
 
 describe('webview/eventtree conditionToDom', () => {
@@ -234,6 +265,74 @@ describe('webview/eventtree conditionToLabel', () => {
     });
 });
 
+describe('webview/eventtree effectsToDom', () => {
+    function line(content: string, scopeName = ''): EffectTreeNode {
+        return { kind: 'line', scopeName, content };
+    }
+
+    it('renders a plain effect as one item', () => {
+        const list = effectsToDom([line('add_political_power = 50')]);
+        assert.strictEqual(list.children.length, 1);
+        assert.strictEqual(list.textContent, 'add_political_power = 50');
+    });
+
+    it('prefixes an effect that runs in another scope', () => {
+        const list = effectsToDom([line('add_stability = 0.05', 'FROM')]);
+        assert.ok(list.textContent!.includes('[FROM]'), list.textContent!);
+    });
+
+    it('nests a guarded group under the condition that guards it', () => {
+        const list = effectsToDom([
+            { kind: 'group', condition: leaf('is_subject = yes'), items: [line('set_country_flag = paid')] },
+        ]);
+
+        const fold = list.querySelector('.ev-fold')!;
+        assert.strictEqual(fold.textContent, 'if is_subject = yes');
+        assert.strictEqual(list.querySelector('li ul')!.children.length, 1, 'the effect hangs under the fold');
+        assert.ok(list.textContent!.includes('set_country_flag = paid'));
+    });
+
+    it('shows a random_list as one branch per weight, as written', () => {
+        const list = effectsToDom([
+            {
+                kind: 'choice',
+                items: [
+                    { possibility: 30, effect: [line('add_stability = 0.05')] },
+                    { possibility: 70, effect: [line('add_war_support = 0.05')] },
+                ],
+            },
+        ]);
+
+        const folds = Array.from(list.querySelectorAll('.ev-fold')).map(f => f.textContent);
+        assert.deepStrictEqual(folds, ['weight 30', 'weight 70']);
+        assert.ok(list.textContent!.includes('add_stability = 0.05'));
+        assert.ok(list.textContent!.includes('add_war_support = 0.05'));
+    });
+
+    it('renders nothing for an empty block', () => {
+        assert.strictEqual(effectsToDom([]).children.length, 0);
+    });
+
+    it('summarises the tail rather than filling the screen', () => {
+        const many = Array.from({ length: 50 }, (_, i) => line(`add_political_power = ${i}`));
+        const list = effectsToDom(many);
+
+        assert.strictEqual(list.children.length, 41, 'forty lines and one summary');
+        assert.strictEqual(list.lastElementChild!.textContent, '+10 more');
+    });
+
+    it('counts what it skipped inside a group it did not render', () => {
+        const many = Array.from({ length: 40 }, (_, i) => line(`add_political_power = ${i}`));
+        const list = effectsToDom([
+            ...many,
+            { kind: 'group', condition: leaf('is_subject = yes'), items: [line('a'), line('b')] },
+        ]);
+
+        assert.strictEqual(list.querySelectorAll('.ev-fold').length, 1, 'the group is summarised, not half drawn');
+        assert.strictEqual(list.lastElementChild!.textContent, '+2 more');
+    });
+});
+
 describe('webview/eventtree visibleGraph', () => {
     const nodes = [
         eventNode('root:0'),
@@ -298,6 +397,164 @@ describe('webview/eventtree visibleGraph', () => {
         for (const e of visible.edges) {
             assert.ok(ids.has(e.from) && ids.has(e.to), `edge ${e.from} -> ${e.to} dangles`);
         }
+    });
+});
+
+describe('webview/eventtree chainedGraph', () => {
+    // E1 offers two options: one calls E2, the other leads nowhere. E9 stands alone.
+    const chain = visible(
+        [
+            eventNode('e1:0'), optionNode('a:1'), optionNode('b:2'), eventNode('e2:3'),
+            eventNode('e9:4'), optionNode('x:5'),
+        ],
+        [
+            edge('e1:0', 'a:1', { structural: true }),
+            edge('e1:0', 'b:2', { structural: true }),
+            edge('a:1', 'e2:3'),
+            edge('e9:4', 'x:5', { structural: true }),
+        ],
+        ['e1:0', 'e9:4'],
+    );
+
+    it('passes the graph through untouched when the filter is off', () => {
+        const result = chainedGraph(chain, false);
+        assert.strictEqual(result.nodes.length, 6);
+        assert.strictEqual(result.edges.length, 4);
+    });
+
+    it('keeps a chained event and every option it offers, dead ends included', () => {
+        const ids = chainedGraph(chain, true).nodes.map(n => n.id).sort();
+        assert.deepStrictEqual(ids, ['a:1', 'b:2', 'e1:0', 'e2:3']);
+    });
+
+    it('drops an event that calls nothing, and its options with it', () => {
+        const ids = new Set(chainedGraph(chain, true).nodes.map(n => n.id));
+        assert.ok(!ids.has('e9:4'));
+        assert.ok(!ids.has('x:5'));
+    });
+
+    it('keeps an unresolved target and the event that calls it', () => {
+        const result = chainedGraph(visible(
+            [eventNode('e1:0'), optionNode('a:1'), {
+                id: 'gone:2', kind: 'unresolved', eventId: 'other.4', scope: 'EVENT_TARGET',
+            } as EventGraphNode],
+            [edge('e1:0', 'a:1', { structural: true }), edge('a:1', 'gone:2')],
+            ['e1:0'],
+        ), true);
+        assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:1', 'e1:0', 'gone:2']);
+    });
+
+    it('keeps an event linked by an immediate call with no option in between', () => {
+        const result = chainedGraph(visible(
+            [eventNode('a:0'), eventNode('b:1')],
+            [edge('a:0', 'b:1', { immediate: true })],
+            ['a:0'],
+        ), true);
+        assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:0', 'b:1']);
+    });
+
+    it('keeps an event that fires itself', () => {
+        const result = chainedGraph(visible(
+            [eventNode('e:0'), optionNode('a:1')],
+            [edge('e:0', 'a:1', { structural: true }), edge('a:1', 'e:0')],
+            ['e:0'],
+        ), true);
+        assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:1', 'e:0']);
+    });
+
+    it('counts every owner of an option reached from two events', () => {
+        // The same option node is emitted once per scope situation, so it can hang off two events.
+        const result = chainedGraph(visible(
+            [eventNode('e1:0'), eventNode('e2:1'), optionNode('shared:2'), eventNode('e3:3')],
+            [
+                edge('e1:0', 'shared:2', { structural: true }),
+                edge('e2:1', 'shared:2', { structural: true }),
+                edge('shared:2', 'e3:3'),
+            ],
+            ['e1:0', 'e2:1'],
+        ), true);
+        assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['e1:0', 'e2:1', 'e3:3', 'shared:2']);
+    });
+
+    it('makes an event whose only caller was dropped a root', () => {
+        // e2 is called from e1, which the filter keeps -- but c1, the only caller of e1, is not an
+        // event at all here, so the root list has to be rebuilt from what survived.
+        const result = chainedGraph(chain, true);
+        assert.ok(result.roots.includes('e1:0'));
+        assert.ok(!result.roots.includes('e9:4'));
+    });
+
+    it('keeps the declared root of a group that is nothing but a cycle', () => {
+        const result = chainedGraph(visible(
+            [eventNode('a:0'), optionNode('ao:1'), eventNode('b:2'), optionNode('bo:3')],
+            [
+                edge('a:0', 'ao:1', { structural: true }), edge('ao:1', 'b:2'),
+                edge('b:2', 'bo:3', { structural: true }), edge('bo:3', 'a:0'),
+            ],
+            ['a:0'],
+        ), true);
+        assert.deepStrictEqual(result.roots, ['a:0']);
+    });
+
+    it('never leaves an edge pointing at a dropped node', () => {
+        const result = chainedGraph(chain, true);
+        const ids = new Set(result.nodes.map(n => n.id));
+        for (const e of result.edges) {
+            assert.ok(ids.has(e.from) && ids.has(e.to), `edge ${e.from} -> ${e.to} dangles`);
+        }
+    });
+
+    it('does not mutate the graph it was given', () => {
+        const roots = [...chain.roots];
+        chainedGraph(chain, true);
+        assert.deepStrictEqual(chain.roots, roots);
+        assert.strictEqual(chain.nodes.length, 6);
+    });
+
+    it('asks the question of the graph on screen, not of the payload', () => {
+        // The only link is an immediate call, which the hidden filter removes. Running the chain
+        // filter first would keep both events on the strength of a link that is no longer there.
+        const source = payload(
+            [eventNode('a:0'), eventNode('b:1')],
+            [edge('a:0', 'b:1', { immediate: true })],
+            ['a:0'],
+        );
+        assert.strictEqual(chainedGraph(visibleGraph(source, false), true).nodes.length, 0);
+        assert.strictEqual(chainedGraph(visibleGraph(source, true), true).nodes.length, 2);
+    });
+});
+
+describe('webview/eventtree matchesQuery', () => {
+    const event = eventNode('arab_spring.1', { title: { key: 'arab_spring.1.t', text: 'Protests Erupt' } });
+
+    it('matches on the event id', () => {
+        assert.ok(matchesQuery(event, 'spring.1'));
+    });
+
+    it('matches on the localised title', () => {
+        assert.ok(matchesQuery(event, 'protests'));
+    });
+
+    it('matches on the localisation key', () => {
+        assert.ok(matchesQuery(event, 'arab_spring.1.t'));
+    });
+
+    it('is case insensitive', () => {
+        assert.ok(matchesQuery(event, 'erupt'));
+    });
+
+    it('never matches an option', () => {
+        assert.ok(!matchesQuery(optionNode('arab_spring.0.a'), 'arab_spring'));
+    });
+
+    it('matches an unresolved node by id, with or without a title', () => {
+        const bare = { id: 'gone:0', kind: 'unresolved', eventId: 'other.4', scope: 'EVENT_TARGET' } as EventGraphNode;
+        assert.ok(matchesQuery(bare, 'other.4'));
+        assert.ok(!matchesQuery(bare, 'nothing'));
+    });
+
+    it('matches nothing for an empty query', () => {
+        assert.ok(!matchesQuery(event, ''));
     });
 });
 
@@ -427,6 +684,170 @@ describe('webview/eventtree layoutGraph', () => {
     });
 });
 
+describe('webview/eventtree layout never overlaps', () => {
+    const size = (id: string, width = 100, height = 50) => ({ id, width, height });
+
+    // The only assertion that matters: no two cards may share a pixel. Turning "show triggers" and
+    // "show event conditions" on is what makes a card tall enough to reach into its neighbours.
+    function assertNoOverlap(
+        result: ReturnType<typeof layoutGraph>,
+        nodes: { id: string; width: number; height: number }[],
+    ): void {
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                const a = nodes[i]!;
+                const b = nodes[j]!;
+                const pa = result.positions[a.id]!;
+                const pb = result.positions[b.id]!;
+                const apart =
+                    pa.x + a.width <= pb.x || pb.x + b.width <= pa.x ||
+                    pa.y + a.height <= pb.y || pb.y + b.height <= pa.y;
+                assert.ok(apart, `${a.id} and ${b.id} overlap: ${JSON.stringify(pa)} ${JSON.stringify(pb)}`);
+            }
+        }
+    }
+
+    it('keeps a parent taller than its children clear of the next subtree', () => {
+        // p1 is 400 tall because its condition panel is expanded, while its only child is 50. Centring
+        // p1 on that child used to reach far above and below the child's band, into p2's rows.
+        const nodes = [
+            size('root'), size('p1', 100, 400), size('c1'), size('p2'), size('c2'),
+        ];
+        const result = layoutGraph(
+            nodes,
+            [
+                { from: 'root', to: 'p1' }, { from: 'p1', to: 'c1' },
+                { from: 'root', to: 'p2' }, { from: 'p2', to: 'c2' },
+            ],
+            ['root'],
+        );
+        assertNoOverlap(result, nodes);
+    });
+
+    it('keeps two tall roots apart', () => {
+        const nodes = [size('r1', 100, 300), size('l1'), size('r2', 100, 300), size('l2')];
+        const result = layoutGraph(
+            nodes,
+            [{ from: 'r1', to: 'l1' }, { from: 'r2', to: 'l2' }],
+            ['r1', 'r2'],
+        );
+        assertNoOverlap(result, nodes);
+    });
+
+    it('separates every card of a mixed-height tree', () => {
+        // Heights chosen so several parents outgrow their children's band at once.
+        const heights = [30, 420, 60, 250, 40, 380, 55, 90, 310, 45, 70, 200];
+        const nodes = heights.map((height, i) => size('n' + i, 100, height));
+        const edges = [];
+        for (let i = 1; i < nodes.length; i++) {
+            edges.push({ from: 'n' + Math.floor((i - 1) / 2), to: 'n' + i });
+        }
+        const result = layoutGraph(nodes, edges, ['n0']);
+        assertNoOverlap(result, nodes);
+    });
+
+    it('separates cards that several callers share', () => {
+        // A node reached from three places is placed once and reused, which used to drag its parent's
+        // centre far from its siblings.
+        const nodes = [
+            size('a', 100, 200), size('b', 100, 60), size('c', 100, 300), size('shared'), size('d'),
+        ];
+        const result = layoutGraph(
+            nodes,
+            [
+                { from: 'a', to: 'shared' }, { from: 'b', to: 'shared' }, { from: 'c', to: 'shared' },
+                { from: 'a', to: 'd' },
+            ],
+            ['a', 'b', 'c'],
+        );
+        assertNoOverlap(result, nodes);
+    });
+
+    it('never places a card above the canvas, where the toolbar would cover it', () => {
+        const nodes = [size('p', 100, 500), size('c')];
+        const result = layoutGraph(nodes, [{ from: 'p', to: 'c' }], ['p']);
+        for (const node of nodes) {
+            assert.ok(result.positions[node.id]!.y >= 0, `${node.id} is above the canvas`);
+            assert.ok(result.positions[node.id]!.y + node.height <= result.height);
+        }
+    });
+
+    it('still centres a parent when its children leave room for it', () => {
+        const result = layoutGraph(
+            [size('p'), size('c1'), size('c2')],
+            [{ from: 'p', to: 'c1' }, { from: 'p', to: 'c2' }],
+            ['p'],
+        );
+        const middle = (result.positions['c1']!.y + result.positions['c2']!.y + 50) / 2;
+        assert.ok(Math.abs(result.positions['p']!.y + 25 - middle) < 1, 'the parent must stay centred');
+    });
+});
+
+describe('webview/eventtree chip spacing', () => {
+    const size = (id: string, width = 100, height = 50) => ({ id, width, height });
+
+    it('widens the gap so a wide condition label clears both columns', () => {
+        const nodes = [size('a'), size('b')];
+        const edges = [{ from: 'a', to: 'b' }];
+        const narrow = layoutGraph(nodes, edges, ['a'], [{ from: 'a', to: 'b', width: 20 }]);
+        const wide = layoutGraph(nodes, edges, ['a'], [{ from: 'a', to: 'b', width: 220 }]);
+
+        assert.ok(wide.gapWidth[0]! >= 220, 'the gap must hold the chip');
+        assert.ok(wide.gapWidth[0]! > narrow.gapWidth[0]!, 'a wider chip must widen the gap');
+        // The chip is centred in the gap, so clearing the gap is what keeps it off the cards.
+        const chipLeft = wide.gapX[0]! + wide.gapWidth[0]! / 2 - 110;
+        const chipRight = chipLeft + 220;
+        assert.ok(chipLeft >= wide.positions['a']!.x + 100, 'the chip must clear the source card');
+        assert.ok(chipRight <= wide.positions['b']!.x, 'the chip must clear the target card');
+    });
+
+    it('leaves the gap alone when no chip needs the room', () => {
+        const result = layoutGraph([size('a'), size('b')], [{ from: 'a', to: 'b' }], ['a']);
+        assert.strictEqual(result.gapWidth[0], 78);
+    });
+
+    it('sizes the gap after the source column even when the arrow skips a column', () => {
+        // a -> c jumps over b's column. Parking the label in the gap after a keeps it off b's card.
+        const result = layoutGraph(
+            [size('a'), size('b'), size('c')],
+            [{ from: 'a', to: 'b' }, { from: 'b', to: 'c' }, { from: 'a', to: 'c' }],
+            ['a'],
+            [{ from: 'a', to: 'c', width: 200 }],
+        );
+        assert.ok(result.gapWidth[0]! >= 200, 'the gap after a holds the label');
+        assert.strictEqual(result.gapWidth[1], 78, 'the gap after b is untouched');
+    });
+
+    it('pushes two labels in one gap apart', () => {
+        const chips = [
+            { gap: 0, y: 100, height: 20 },
+            { gap: 0, y: 105, height: 20 },
+            { gap: 0, y: 108, height: 20 },
+        ];
+        separateChips(chips);
+        for (let i = 1; i < chips.length; i++) {
+            assert.ok(
+                chips[i]!.y >= chips[i - 1]!.y + chips[i - 1]!.height,
+                'labels in one gap must not overlap',
+            );
+        }
+    });
+
+    it('leaves labels in different gaps alone', () => {
+        const chips = [{ gap: 0, y: 100, height: 20 }, { gap: 1, y: 100, height: 20 }];
+        separateChips(chips);
+        assert.strictEqual(chips[0]!.y, 100);
+        assert.strictEqual(chips[1]!.y, 100);
+    });
+
+    it('leaves labels that already clear each other where they are', () => {
+        const chips = [{ gap: 0, y: 100, height: 20 }, { gap: 0, y: 300, height: 20 }];
+        separateChips(chips);
+        assert.strictEqual(chips[0]!.y, 100);
+        assert.strictEqual(chips[1]!.y, 300);
+    });
+});
+
 describe('webview/eventtree layout over a realistic chain', () => {
     // arab_spring.0 -> option .0.a -> { arab_spring.1, arab_spring.3 }, with the two guarded
     // calls to arab_spring.3 that the schema now keeps apart.
@@ -462,6 +883,9 @@ describe('webview/eventtree layout over a realistic chain', () => {
 describe('webview/eventtree rendering', () => {
     const content = () => document.getElementById('eventtreecontent')!;
     const toggle = (id: string) => document.getElementById(id) as HTMLInputElement;
+    // The effects panel waits out a hover delay before it appears, so the tests that drive it have
+    // to wait too.
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     function setToggle(id: string, value: boolean): void {
         const input = toggle(id);
@@ -491,7 +915,8 @@ describe('webview/eventtree rendering', () => {
     it('announces a toggle that is on as checked', () => {
         // The shared widget is built before the saved values are restored, so without a resync it
         // would report every toggle as unchecked until the first click.
-        for (const id of ['show-localisation', 'show-triggers', 'show-event-conditions', 'show-hidden']) {
+        for (const id of ['show-localisation', 'show-option-triggers', 'show-edge-conditions',
+            'show-event-conditions', 'show-hidden']) {
             const input = toggle(id);
             const widget = input.parentElement!.querySelector('[role=checkbox]')!;
             assert.strictEqual(
@@ -549,13 +974,27 @@ describe('webview/eventtree rendering', () => {
         setToggle('show-localisation', true);
     });
 
-    it('drops the trigger panels and the guarded styling when triggers are hidden', () => {
-        setToggle('show-triggers', false);
+    it('drops only the option trigger panel when option triggers are hidden', () => {
+        setToggle('show-option-triggers', false);
         assert.strictEqual(content().querySelectorAll('.ev-marker-decision').length, 0);
+        assert.strictEqual(content().querySelectorAll('.ev-card-option .ev-cond').length, 0);
+        // The arrows have their own toggle and must be untouched.
+        assert.strictEqual(content().querySelectorAll('path.ev-edge-guarded').length, 1);
+        assert.strictEqual(content().querySelectorAll('.ev-chip-guarded').length, 1);
+        setToggle('show-option-triggers', true);
+        assert.strictEqual(content().querySelectorAll('.ev-marker-decision').length, 1);
+        assert.ok(content().querySelector('.ev-card-option .ev-cond'));
+    });
+
+    it('drops only the arrow conditions when they are hidden', () => {
+        setToggle('show-edge-conditions', false);
         assert.strictEqual(content().querySelectorAll('path.ev-edge-guarded').length, 0);
         assert.strictEqual(content().querySelectorAll('.ev-chip-guarded').length, 0);
-        setToggle('show-triggers', true);
+        // The option card keeps its trigger, which is a different condition.
         assert.strictEqual(content().querySelectorAll('.ev-marker-decision').length, 1);
+        assert.ok(content().querySelector('.ev-card-option .ev-cond'));
+        setToggle('show-edge-conditions', true);
+        assert.strictEqual(content().querySelectorAll('path.ev-edge-guarded').length, 1);
     });
 
     it('drops only the event trigger panel when event conditions are hidden', () => {
@@ -577,13 +1016,194 @@ describe('webview/eventtree rendering', () => {
         assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
     });
 
+    it('marks a card that has effects and shows them on hover', async () => {
+        const tips = () => document.querySelectorAll('.ev-effects-tip').length;
+        const hover = (type: string) => content()
+            .querySelector('.ev-card-option')!
+            .parentElement!
+            .dispatchEvent(new (window as any).MouseEvent(type));
+
+        assert.ok(content().querySelector('.ev-card-option .ev-effects-dot'), 'the option must be marked');
+
+        hover('mouseenter');
+        assert.strictEqual(tips(), 0, 'nothing may appear before the hover delay');
+        await wait(250);
+        assert.strictEqual(tips(), 1, 'the panel must appear once the delay is up');
+        const panel = document.querySelector('.ev-effects-tip')!;
+        assert.ok(panel.textContent!.includes('Effects'));
+        assert.ok(panel.textContent!.includes('add_political_power = 50'), panel.textContent!);
+
+        hover('mouseleave');
+        assert.strictEqual(tips(), 0, 'the panel must go away again');
+    });
+
+    it('drops the dot and the panel when effects are off', async () => {
+        setToggle('show-effects', false);
+        assert.strictEqual(content().querySelectorAll('.ev-effects-dot').length, 0);
+
+        content().querySelector('.ev-card-option')!.parentElement!
+            .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
+        await wait(250);
+        assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
+
+        setToggle('show-effects', true);
+        assert.strictEqual(content().querySelectorAll('.ev-effects-dot').length, 1);
+    });
+
+    // The panel is a <body> child placed by hand, and the toolbar strip is drawn over it, so a panel
+    // put under the strip would simply be invisible.
+    it('keeps the effects panel clear of the toolbar strip', async () => {
+        content().querySelector('.ev-card-option')!.parentElement!
+            .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
+        await wait(250);
+        const panel = document.querySelector('.ev-effects-tip') as HTMLElement;
+        assert.ok(panel, 'the panel must be open');
+        assert.ok(parseFloat(panel.style.top) >= 52, `panel placed at ${panel.style.top}`);
+
+        content().querySelector('.ev-card-option')!.parentElement!
+            .dispatchEvent(new (window as any).MouseEvent('mouseleave'));
+    });
+
+    it('leaves no panel behind when the file is re-rendered mid-hover', async () => {
+        content().querySelector('.ev-card-option')!.parentElement!
+            .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
+        await wait(250);
+        assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
+
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: integrationPayload } },
+        }));
+        assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
+    });
+
+    // Dragging the canvas moves the cards under a stationary cursor, so every card the graph slides
+    // past would otherwise announce itself. The drag layer publishes the press; these check the
+    // preview acts on it, and that letting go puts hovering back exactly as it was.
+    describe('while the canvas is being dragged', () => {
+        const press = () => document.getElementById('dragger')!
+            .dispatchEvent(new (window as any).MouseEvent('mousedown', { bubbles: true }));
+        const release = () => document.body
+            .dispatchEvent(new (window as any).MouseEvent('mouseup', { bubbles: true }));
+        const hover = (type: string) => content()
+            .querySelector('.ev-card-option')!
+            .parentElement!
+            .dispatchEvent(new (window as any).MouseEvent(type));
+
+        // A nested suite runs after every test of its parent, so the chain and the toggles are put
+        // back rather than assumed: whichever payload the last of those left behind is not this
+        // suite's concern.
+        before(() => {
+            window.dispatchEvent(new (window as any).MessageEvent('message', {
+                data: { type: 'updateBody', styleCss: '', data: { eventGraph: integrationPayload } },
+            }));
+            setToggle('show-effects', true);
+        });
+
+        afterEach(() => {
+            release();
+            hover('mouseleave');
+        });
+
+        it('marks the body so the cursor can show the drag, and clears it on release', () => {
+            press();
+            assert.ok(document.body.classList.contains('panning'));
+            release();
+            assert.ok(!document.body.classList.contains('panning'));
+        });
+
+        it('opens no effects panel for a card the drag passes under', async () => {
+            press();
+            hover('mouseenter');
+            await wait(250);
+            assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
+        });
+
+        it('does not dim the chain for a card the drag passes under', () => {
+            press();
+            hover('mouseenter');
+            assert.strictEqual(content().querySelectorAll('.ev-node.ev-dim').length, 0);
+        });
+
+        it('closes a panel that was already open when the drag starts', async () => {
+            hover('mouseenter');
+            await wait(250);
+            assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
+
+            press();
+            assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
+        });
+
+        it('hovers normally again once the button is released', async () => {
+            press();
+            release();
+            hover('mouseenter');
+            await wait(250);
+            assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
+        });
+
+        // The drag layer spans the toolbar strip too. The layering keeps a press off it, but if
+        // anything ever puts the layer back on top, a mis-hit on a checkbox must not pan the view.
+        it('starts no drag from a press inside the toolbar strip', () => {
+            const toolbar = document.querySelector('.toolbar-outer') as HTMLElement;
+            const previous = toolbar.getBoundingClientRect;
+            toolbar.getBoundingClientRect = () => ({
+                left: 0, top: 0, right: 800, bottom: 40, width: 800, height: 40, x: 0, y: 0,
+                toJSON: () => ({}),
+            }) as DOMRect;
+            try {
+                document.getElementById('dragger')!.dispatchEvent(
+                    new (window as any).MouseEvent('mousedown', { bubbles: true, clientX: 30, clientY: 20 }));
+                assert.ok(!document.body.classList.contains('panning'), 'a toolbar press is not a drag');
+
+                document.getElementById('dragger')!.dispatchEvent(
+                    new (window as any).MouseEvent('mousedown', { bubbles: true, clientX: 30, clientY: 200 }));
+                assert.ok(document.body.classList.contains('panning'), 'a press below the strip still drags');
+            } finally {
+                toolbar.getBoundingClientRect = previous;
+            }
+        });
+    });
+
+    it('shows the event picture on hover only while the toggle is on', () => {
+        const pictured: EventGraphPayload = payload(
+            [eventNode('pictured:0', {
+                picture: { styleKey: 'event-picture-GFX_test', width: 400 },
+            } as Partial<EventGraphEventNode>)],
+            [],
+            ['pictured:0'],
+        );
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: pictured } },
+        }));
+
+        assert.ok(content().querySelector('.event-picture-host'), 'the pictured event must be a hover host');
+        const popups = () => document.querySelectorAll('.event-hover-picture').length;
+        // Each toggle rebuilds the cards, so the host has to be looked up again every time -- the
+        // element captured before a toggle is a detached copy that still carries its old listener.
+        const send = (type: string) => content()
+            .querySelector('.event-picture-host')!
+            .dispatchEvent(new (window as any).MouseEvent(type));
+
+        setToggle('show-picture', false);
+        send('mouseenter');
+        assert.strictEqual(popups(), 0, 'no picture may appear while the toggle is off');
+
+        setToggle('show-picture', true);
+        send('mouseenter');
+        assert.strictEqual(popups(), 1, 'the picture must appear while the toggle is on');
+        // Placed by hand on <body>, under a toolbar strip that is drawn over it.
+        const picture = document.querySelector('.event-hover-picture') as HTMLElement;
+        assert.ok(parseFloat(picture.style.top) >= 52, `picture placed at ${picture.style.top}`);
+        send('mouseleave');
+        assert.strictEqual(popups(), 0, 'the picture must go away again');
+
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: integrationPayload } },
+        }));
+    });
+
     it('re-renders from a pushed update instead of reloading', () => {
-        const next: EventGraphPayload = {
-            roots: ['only:0'],
-            conditionExprs: [],
-            edges: [],
-            nodes: [eventNode('only:0', { eventId: 'replaced.1' })],
-        };
+        const next: EventGraphPayload = payload([eventNode('only:0', { eventId: 'replaced.1' })], [], ['only:0']);
         window.dispatchEvent(new (window as any).MessageEvent('message', {
             data: { type: 'updateBody', styleCss: '', data: { eventGraph: next } },
         }));
@@ -605,5 +1225,208 @@ describe('webview/eventtree rendering', () => {
         window.dispatchEvent(new (window as any).MessageEvent('message', {
             data: { type: 'updateBody', data: { eventGraph: integrationPayload } },
         }));
+    });
+
+    // A nested suite runs after every test of its parent, so each of these puts the chain and the
+    // toggles back rather than assuming what the last one left behind.
+    describe('the search box', () => {
+        const searchbox = () => document.getElementById('ev-searchbox') as HTMLInputElement;
+        const counter = () => document.getElementById('ev-search-count')!;
+        const hits = () => content().querySelectorAll('.ev-card.ev-hit');
+        const current = () => content().querySelectorAll('.ev-card.ev-hit-current');
+
+        function type(text: string): void {
+            searchbox().value = text;
+            searchbox().dispatchEvent(new (window as any).Event('keyup'));
+        }
+
+        function enter(shiftKey = false): void {
+            searchbox().dispatchEvent(new (window as any).KeyboardEvent('keypress', { key: 'Enter', shiftKey }));
+        }
+
+        const restore = () => window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: integrationPayload } },
+        }));
+
+        before(restore);
+        afterEach(() => type(''));
+
+        it('highlights the matching card without moving anything', () => {
+            const before = content().querySelectorAll('.ev-node').length;
+            type('arab_spring.1');
+            assert.strictEqual(hits().length, 1);
+            assert.ok(hits()[0]!.textContent!.includes('arab_spring.1'));
+            assert.strictEqual(content().querySelectorAll('.ev-node').length, before,
+                'search highlights, it does not filter');
+        });
+
+        it('matches the localised title as well as the id', () => {
+            type('mass protests');
+            assert.strictEqual(hits().length, 1);
+            assert.ok(hits()[0]!.textContent!.includes('arab_spring.0'));
+        });
+
+        it('never matches an option card', () => {
+            type('mitigate this crisis');
+            assert.strictEqual(hits().length, 0);
+        });
+
+        it('counts the matches, and says so when there are none', () => {
+            type('arab_spring');
+            // No hit is picked until Enter, so the left half is a dash rather than a number.
+            assert.strictEqual(counter().textContent, '-/3');
+            type('no_such_event');
+            assert.strictEqual(counter().textContent, 'no matches');
+            type('');
+            assert.strictEqual(counter().textContent, '');
+        });
+
+        it('walks the matches with Enter, one at a time, and back with Shift+Enter', () => {
+            type('arab_spring');
+            assert.strictEqual(current().length, 0, 'typing highlights, Enter is what jumps');
+
+            enter();
+            assert.strictEqual(current().length, 1);
+            const first = current()[0]!.textContent;
+            assert.ok(counter().textContent!.startsWith('1/'), counter().textContent!);
+
+            enter();
+            assert.strictEqual(current().length, 1);
+            assert.notStrictEqual(current()[0]!.textContent, first);
+
+            enter(true);
+            assert.strictEqual(current()[0]!.textContent, first);
+        });
+
+        it('wraps around at the end', () => {
+            type('arab_spring');
+            enter(true);
+            assert.ok(counter().textContent!.startsWith('3/'), counter().textContent!);
+            enter();
+            assert.ok(counter().textContent!.startsWith('1/'), counter().textContent!);
+        });
+
+        it('keeps the highlight across a toggle change and an in-place update', () => {
+            type('arab_spring.1');
+            setToggle('show-localisation', false);
+            assert.strictEqual(hits().length, 1, 'the cards were rebuilt, the query was not');
+            setToggle('show-localisation', true);
+
+            restore();
+            assert.strictEqual(hits().length, 1);
+        });
+
+        it('counts only the matches a filter left on the canvas', () => {
+            type('arab_spring');
+            assert.ok(counter().textContent!.endsWith('/3'), counter().textContent!);
+            setToggle('show-hidden', false);
+            assert.ok(counter().textContent!.endsWith('/2'), counter().textContent!);
+            setToggle('show-hidden', true);
+        });
+
+        // The two states live on different elements on purpose, so neither needs !important.
+        it('leaves the highlight on the card while hover isolation dims the wrapper', () => {
+            type('arab_spring.3');
+            const wrapper = content().querySelector('.ev-card-option')!.parentElement!;
+            wrapper.dispatchEvent(new (window as any).MouseEvent('mouseenter'));
+            assert.ok(content().querySelectorAll('.ev-node.ev-dim').length > 0, 'something must be dimmed');
+            assert.strictEqual(hits().length, 1, 'the highlight survives the dimming');
+            wrapper.dispatchEvent(new (window as any).MouseEvent('mouseleave'));
+        });
+    });
+
+    describe('the chains-only filter', () => {
+        // One chain (e1 -> a -> e2) plus a standalone event that calls nothing.
+        const mixed = payload(
+            [eventNode('e1:0'), optionNode('a:1'), eventNode('e2:2'), eventNode('alone:3')],
+            [edge('e1:0', 'a:1', { structural: true }), edge('a:1', 'e2:2')],
+            ['e1:0', 'alone:3'],
+        );
+
+        const push = (next: EventGraphPayload) => window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: next } },
+        }));
+
+        afterEach(() => {
+            setToggle('show-chains-only', false);
+            push(integrationPayload);
+        });
+
+        it('starts off, so nothing is hidden the first time the preview is opened', () => {
+            assert.strictEqual(toggle('show-chains-only').checked, false);
+        });
+
+        it('removes the unlinked event and puts it back', () => {
+            push(mixed);
+            assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
+
+            setToggle('show-chains-only', true);
+            assert.strictEqual(content().querySelectorAll('.ev-node').length, 3);
+            assert.ok(!content().textContent!.includes('alone:3'));
+
+            setToggle('show-chains-only', false);
+            assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
+        });
+    });
+
+    describe('the toolbar', () => {
+        const widgetOf = (id: string) => toggle(id).nextElementSibling as HTMLElement;
+
+        const push = (next: EventGraphPayload) => window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: next } },
+        }));
+
+        afterEach(() => push(integrationPayload));
+
+        it('offers every control the file can use', () => {
+            for (const id of ['show-localisation', 'show-hidden', 'show-effects', 'show-chains-only']) {
+                assert.notStrictEqual(widgetOf(id).style.display, 'none', `${id} must be offered`);
+            }
+            // Nothing in this chain has a picture, so that one control is not offered.
+            assert.strictEqual(widgetOf('show-picture').style.display, 'none');
+        });
+
+        it('hides a toggle that cannot change anything for this file', () => {
+            push({ ...payload([eventNode('lonely:0')], [], ['lonely:0']), toolbarFlags: {
+                hasChains: false, hasEffects: false, hasHidden: false, hasLocalisation: false, hasPicture: false,
+            } });
+            for (const id of ['show-localisation', 'show-hidden', 'show-picture', 'show-effects',
+                'show-chains-only']) {
+                assert.strictEqual(widgetOf(id).style.display, 'none', `${id} must be hidden`);
+            }
+            // The three condition toggles are never gated -- they would flip on every typed trigger.
+            assert.notStrictEqual(widgetOf('show-option-triggers').style.display, 'none');
+        });
+
+        it('forces a hidden chains filter off so the canvas cannot be emptied with no control to undo it', () => {
+            setToggle('show-chains-only', true);
+            const unchained = { ...payload([eventNode('lonely:0')], [], ['lonely:0']), toolbarFlags: {
+                hasChains: false, hasEffects: false, hasHidden: false, hasLocalisation: false, hasPicture: false,
+            } };
+            push(unchained);
+            assert.strictEqual(content().querySelectorAll('.ev-node').length, 1, 'the event must still be drawn');
+            assert.strictEqual(toggle('show-chains-only').checked, false);
+            const widget = widgetOf('show-chains-only').querySelector('[role=checkbox]')!;
+            assert.strictEqual(widget.getAttribute('aria-checked'), 'false');
+        });
+
+        it('gives a control that comes back the position its reader last put it in', () => {
+            setToggle('show-chains-only', true);
+            push({ ...payload([eventNode('lonely:0')], [], ['lonely:0']), toolbarFlags: {
+                hasChains: false, hasEffects: false, hasHidden: false, hasLocalisation: false, hasPicture: false,
+            } });
+            assert.strictEqual(toggle('show-chains-only').checked, false, 'forced off while unusable');
+
+            push(integrationPayload);
+            assert.strictEqual(toggle('show-chains-only').checked, true,
+                'the forced value must not survive the control coming back');
+        });
+
+        it('shows every control again for a payload that carries no flags at all', () => {
+            window.dispatchEvent(new (window as any).MessageEvent('message', {
+                data: { type: 'updateBody', data: { eventGraph: { roots: [], nodes: [], edges: [], conditionExprs: [] } } },
+            }));
+            assert.notStrictEqual(widgetOf('show-localisation').style.display, 'none');
+        });
     });
 });

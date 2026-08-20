@@ -1,6 +1,7 @@
 import { Node, Token } from "../../hoiformat/hoiparser";
 import { Raw, SchemaDef, convertNodeToJson, HOIPartial, isSymbolNode } from "../../hoiformat/schema";
 import { extractEffectValue, EffectItem, EffectComplexExpr } from "../../hoiformat/effect";
+import { EffectTreeNode } from "./payload";
 import {
     andCondition,
     ConditionComplexExpr,
@@ -47,6 +48,9 @@ export interface HOIEventOption {
     // The option's `trigger = { ... }` gate: the condition under which the option is offered at
     // all. `true` when the option declares none.
     trigger: ConditionComplexExpr;
+    // Everything the option does, for the preview to show on hover. The same tree the child events
+    // are found in, minus the parse nodes -- see projectEffects.
+    effects: EffectTreeNode[];
 }
 
 export interface ChildEvent {
@@ -289,7 +293,7 @@ function convertEvent<T extends HOIEventType>(
 
 function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs: ConditionItem[]): HOIEventOption {
     if (optionRaw === undefined) {
-        return { childEvents: [], token: undefined, trigger: true };
+        return { childEvents: [], token: undefined, trigger: true, effects: [] };
     }
 
     const optionDef = convertNodeToJson<EventOptionDef>(optionRaw._raw, eventOptionDefSchema);
@@ -299,7 +303,11 @@ function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs:
         extractConditionValue(optionDef.trigger._raw.value, scope, conditionExprs).condition :
         true;
 
-    const effect = extractEffectValue(optionRaw._raw.value, scope);
+    // The option's own keys are metadata, not effects: without excluding them the tree lists
+    // `name`, `trigger` and `ai_chance` next to the things the option actually does. They are only
+    // excluded at the top level of the block, which is where they can appear -- a `trigger` nested
+    // inside an effect is a different key and stays.
+    const effect = extractEffectValue(optionRaw._raw.value, scope, optionOwnKeys);
     const childEventItems = findChildEventItems(effect.effect);
     const childEvents = childEventItems
         .map(effectItemToChildEvent)
@@ -332,7 +340,37 @@ function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs:
         childEvents: uniqueChildEvents,
         token: optionDef._token,
         trigger,
+        effects: projectEffects(effect.effect),
     };
+}
+
+const optionOwnKeys = ['name', 'trigger', 'ai_chance', 'original_recipient_only'];
+
+// The serializable projection of an effect tree. It keeps the structure -- what is guarded by what,
+// which branches a random_list has -- and drops EffectItem.node, the parse tree of the statement,
+// which is both large and full of cycles. A top-level unconditional group is unwrapped rather than
+// shown as an `if` over everything.
+function projectEffects(effect: EffectComplexExpr): EffectTreeNode[] {
+    if (effect === null) {
+        return [];
+    }
+
+    if ('nodeContent' in effect) {
+        return [{ kind: 'line', scopeName: effect.scopeName, content: effect.nodeContent }];
+    }
+
+    if ('condition' in effect) {
+        const items = effect.items.flatMap(projectEffects);
+        if (items.length === 0) {
+            return [];
+        }
+        return effect.condition === true ? items : [{ kind: 'group', condition: effect.condition, items }];
+    }
+
+    const items = effect.items
+        .map(item => ({ possibility: item.possibility, effect: projectEffects(item.effect) }))
+        .filter(item => item.effect.length > 0);
+    return items.length === 0 ? [] : [{ kind: 'choice', items }];
 }
 
 const eventTypes = ['country_event', 'news_event', 'state_event', 'unit_leader_event', 'operative_leader_event'];

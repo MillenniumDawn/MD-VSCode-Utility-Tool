@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { renderEventFile } from '../previewdef/event/contentbuilder';
 import { serializeUpdate, LoaderRenderResult } from '../previewdef/loaderpreview';
-import { EventGraphEventNode, EventGraphOptionNode, EventGraphPayload } from '../previewdef/event/payload';
+import { EffectTreeNode, EventGraphEventNode, EventGraphOptionNode, EventGraphPayload } from '../previewdef/event/payload';
 import { conditionToString } from '../hoiformat/condition';
 import { contextContainer } from '../context';
 
@@ -19,6 +19,7 @@ interface StubOption {
     name?: string;
     trigger?: unknown;
     childEvents?: unknown[];
+    effects?: EffectTreeNode[];
 }
 
 interface StubEvent {
@@ -35,6 +36,7 @@ function makeOption(option: StubOption | undefined): any {
         trigger: option?.trigger ?? true,
         childEvents: option?.childEvents ?? [],
         token: undefined,
+        effects: option?.effects ?? [],
     };
 }
 
@@ -127,12 +129,33 @@ describe('previewdef/event renderEventFile in-place update', () => {
         assert.ok(styleCss.includes(`.${contentOne} {`));
     });
 
-    it('renders the four toggles into the toolbar', async () => {
+    it('writes the shell in the order the layers stack', async () => {
+        // What actually keeps the toolbar on top is the --ev-layer-* scale in eventtree.css; the
+        // document order no longer decides it. Kept so the shell still reads bottom layer first.
+        const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+        const dragger = html.indexOf('id="dragger"');
+        const toolbar = html.indexOf('class="toolbar-outer');
+        assert.ok(dragger > 0 && toolbar > 0, 'both must be rendered');
+        assert.ok(dragger < toolbar, 'the drag layer must come first');
+    });
+
+    // Every control is rendered for every file. Which of them are actually shown is decided in the
+    // webview from payload.toolbarFlags, so the markup does not depend on the file and an in-place
+    // update never has to reassign the shell to change the toolbar.
+    it('renders the search box and all eight toggles into the toolbar', async () => {
         const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
-        for (const id of ['show-localisation', 'show-triggers', 'show-event-conditions', 'show-hidden']) {
+        for (const id of ['show-localisation', 'show-option-triggers', 'show-edge-conditions',
+            'show-event-conditions', 'show-hidden', 'show-picture', 'show-effects', 'show-chains-only']) {
             assert.ok(rendered.html.includes(`id="${id}"`), `expected a toggle with id="${id}"`);
         }
+        assert.ok(rendered.html.includes('id="ev-searchbox"'), 'the search box must be rendered');
+        assert.ok(rendered.html.includes('id="ev-search-count"'), 'the match counter must be rendered');
         assert.ok(rendered.html.includes('class="toolbar-outer'));
+    });
+
+    it('puts the search box before the toggles, where a narrow pane cannot scroll it away', async () => {
+        const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+        assert.ok(html.indexOf('id="ev-searchbox"') < html.indexOf('id="show-localisation"'));
     });
 
     it('loads common.css so the toolbar and its checkboxes are styled', async () => {
@@ -269,6 +292,71 @@ describe('previewdef/event renderEventFile in-place update', () => {
         const unresolved = graph.nodes.find(n => n.kind === 'unresolved');
         assert.ok(unresolved, 'expected an unresolved node');
         assert.strictEqual((unresolved as { eventId: string }).eventId, 'test.missing');
+    });
+
+    // Which toolbar controls are worth offering travels in the payload rather than deciding the
+    // markup, so a change in it applies through an ordinary in-place update.
+    describe('toolbar flags', () => {
+        const call = (eventName: string) => ({
+            scopeName: '{event_target}', eventName, days: 0, hours: 0, randomDays: 0, randomHours: 0,
+            condition: true,
+        });
+
+        const flagsFor = async (events: (string | StubEvent)[]) =>
+            payloadOf(await renderEventFile(loaderFor(events), uri, webview) as LoaderRenderResult).toolbarFlags;
+
+        it('reports nothing to offer for a file of unconnected events', async () => {
+            assert.deepStrictEqual(await flagsFor(['test.1', 'test.2']), {
+                hasChains: false,
+                hasEffects: false,
+                hasHidden: false,
+                // The localisation index is off in the test environment.
+                hasLocalisation: false,
+                hasPicture: false,
+            });
+        });
+
+        it('reports a chain as soon as one option calls another event', async () => {
+            const flags = await flagsFor([
+                { id: 'test.1', options: [{ name: 'test.1.a', childEvents: [call('test.2')] }] },
+                'test.2',
+            ]);
+            assert.strictEqual(flags.hasChains, true);
+        });
+
+        it('reports a chain for an immediate call with no option in between', async () => {
+            const flags = await flagsFor([
+                { id: 'test.1', immediate: { childEvents: [call('test.2')] } },
+                'test.2',
+            ]);
+            assert.strictEqual(flags.hasChains, true);
+        });
+
+        it('reports hidden for a hidden event, and for an immediate call', async () => {
+            assert.strictEqual((await flagsFor([{ id: 'test.1', hidden: true }])).hasHidden, true);
+            assert.strictEqual((await flagsFor([
+                { id: 'test.1', immediate: { childEvents: [call('test.2')] } },
+                'test.2',
+            ])).hasHidden, true);
+        });
+
+        it('reports effects only when something actually has any', async () => {
+            const flags = await flagsFor([{
+                id: 'test.1',
+                options: [{
+                    name: 'test.1.a',
+                    effects: [{ kind: 'line', scopeName: '', content: 'add_political_power = 50' }],
+                }],
+            }]);
+            assert.strictEqual(flags.hasEffects, true);
+        });
+
+        it('changes the serialized update, so a flags-only change is never skipped', async () => {
+            const plain = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+            const hidden = await renderEventFile(
+                loaderFor([{ id: 'test.1', hidden: true }]), uri, webview) as LoaderRenderResult;
+            assert.notStrictEqual(serializeUpdate(plain.update!), serializeUpdate(hidden.update!));
+        });
     });
 
     it('emits one node per event reached twice under the same scope, and links both callers to it', async () => {

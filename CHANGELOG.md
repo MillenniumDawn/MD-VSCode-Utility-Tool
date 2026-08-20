@@ -1,3 +1,23 @@
+v1.1.24
+
+  Functionality:
+
+- [ Event Tree ] Hovering an option now shows what it does, and hovering an event shows the effects it runs immediately. Effects under an `if` or inside a `random_list` are listed under the condition or the weight that decides them. A small dot in the corner of a box marks the boxes that have any.
+- [ Event Tree ] Two more toggles: `Show event picture` turns the picture that appears when you hover an event on and off, and `Show effects` does the same for the effect panel. Both start on, and your choices are remembered like the other toggles.
+- [ Event Tree ] You can now drag the preview around with the mouse, the way the focus tree preview already works: press anywhere on the empty canvas and move, and the chain follows the cursor. Hover panels stay out of the way until you let go.
+- [ Event Tree ] A search box in the toolbar finds an event by its id or its title. Matching events are highlighted where they are, nothing moves, and `Enter` jumps to each match in turn — `Shift+Enter` walks back. The counter next to the box says how many matches are on the canvas.
+- [ Event Tree ] A new `Only event chains` toggle hides every event that does not lead to, or come from, another event. Events that are part of a chain keep all of their options, including the ones that lead nowhere. It starts off.
+- [ Event Tree ] The toolbar no longer offers a toggle that cannot do anything for the file you have open. `Show localisation` is gone when the localisation index is off, `Show event picture` when none of the events have a picture, and the same for `Show effects`, `Show hidden & immediate` and `Only event chains`.
+
+  Bugfixes:
+
+- [ Event Tree ] Events in the preview no longer land on top of each other. An event whose trigger panel is open is taller than the events it leads to, and the extra height was not reserved, so it covered whatever was beside it — which is why the preview looked worst with `Show triggers` and `Show event conditions` on. Overlapping is now impossible whatever the toggles do.
+- [ Event Tree ] An event can no longer be drawn above the top of the preview, where the toolbar hid it.
+- [ Event Tree ] The labels on the arrows now sit in a lane of their own, which widens to fit the longest condition, so a label never covers an event box. Two labels between the same pair of columns are spread apart instead of printed on top of each other.
+- [ Event Tree ] An arrow leaving an event with many calls now starts on the event box instead of below it.
+- [ Event Tree ] The hovered event picture is now drawn at the zoom level of the preview, instead of always at full size next to a zoomed-out event box.
+- [ Event Tree ] The preview toolbar is tall enough for its own contents again: the search box, the toggle labels and the checkboxes are no longer cut off along the bottom. The toggles also sit closer together, so more of them fit before the strip has to scroll.
+
 v1.1.23
 
   Functionality:
