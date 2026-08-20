@@ -36,6 +36,10 @@ jobs:
       HAS_BUMP_TOKEN: ${{ secrets.BUMP_TOKEN != '' }}
       RELEASE_BRANCH: release/version-bump
       RELEASE_TYPE: ${{ inputs.release_type || 'patch' }}
+      # Writes the changelog bullets in the wording CHANGELOG.md uses. Optional: without the key the
+      # bullets keep their pull request titles and nothing else changes.
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -47,33 +51,24 @@ jobs:
         run: node scripts/release-check.js ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
       # From the last version that shipped, which is the tag itself unless a branch bumped
       # package.json by hand -- then that version has no tag yet and the range starts one release back.
+      #
+      # This is every pull request in the release, prefix and subsection included. Which of them
+      # still need a bullet written is decided per path below, because only the refresh path knows
+      # what the open pull request already covers.
+      #
+      # Scratch files go to $RUNNER_TEMP rather than the working tree, so a stray `git add` can
+      # never commit one.
       - name: Collect the changelog bullets
         id: bullets
         if: ${{ steps.state.outputs.bump == 'true' }}
-        env:
-          ADOPTED_FROM: ${{ steps.state.outputs.adoptedFrom }}
         run: |
-          node scripts/pr-bullets.js --tag "${{ steps.state.outputs.lastTag }}" --output bullets.json >/dev/null
-          # The pull request that carried a hand-written bump already wrote its own changelog
-          # section on main. Count it as covered, but do not seed a second bullet from its title.
-          # bullets[i] belongs to pullRequests[i], so both sides are dropped together; anything past
-          # the end of pullRequests came from a commit with no pull request behind it and stays.
-          node -e '
-            const fs = require("fs");
-            const skip = String(process.argv[1] || "").trim();
-            const found = JSON.parse(fs.readFileSync("bullets.json", "utf8"));
-            fs.writeFileSync("covered.txt", found.pullRequests.join(","));
-            if (skip) {
-              const keep = found.pullRequests.map((_, i) => i).filter((i) => String(found.pullRequests[i]) !== skip);
-              const tail = found.bullets.slice(found.pullRequests.length);
-              fs.writeFileSync("bullets.json", JSON.stringify({
-                bullets: keep.map((i) => found.bullets[i]).concat(tail),
-                pullRequests: keep.map((i) => found.pullRequests[i]),
-              }, undefined, "\t") + "\n");
-            }
-          ' "$ADOPTED_FROM"
-          echo "prs=$(cat covered.txt)" >> "$GITHUB_OUTPUT"
-          rm -f covered.txt
+          node scripts/pr-bullets.js --tag "${{ steps.state.outputs.lastTag }}" --output "$RUNNER_TEMP/all-bullets.json" >/dev/null
+          echo "prs=$(node -p "require('$RUNNER_TEMP/all-bullets.json').pullRequests.join(',')")" >> "$GITHUB_OUTPUT"
+      # Says in the log whether the key works, so a rejected or exhausted one is visible instead of
+      # looking exactly like a release whose bullets happened not to need rewriting.
+      - name: Check the release model key
+        if: ${{ steps.state.outputs.bump == 'true' }}
+        run: node scripts/rewrite-bullets.js --check
       - name: Look for an open release pull request
         id: existing
         if: ${{ steps.state.outputs.bump == 'true' }}
@@ -92,17 +87,22 @@ jobs:
         if: ${{ steps.state.outputs.bump == 'true' && steps.existing.outputs.number == '' }}
         env:
           ADOPT: ${{ steps.state.outputs.adopt }}
+          ADOPTED_FROM: ${{ steps.state.outputs.adoptedFrom }}
           VERSION: ${{ steps.state.outputs.version }}
         run: |
           git checkout -B "$RELEASE_BRANCH"
+          # The pull request that carried a hand-written bump already wrote its own changelog section
+          # on main, so it is listed in the body but seeds no second bullet from its title.
+          node scripts/select-bullets.js --bullets-file "$RUNNER_TEMP/all-bullets.json" --output "$RUNNER_TEMP/bullets.json" \
+            --skip "$ADOPTED_FROM" >/dev/null
+          node scripts/rewrite-bullets.js --bullets-file "$RUNNER_TEMP/bullets.json"
           if [ "$ADOPT" = "true" ]; then
-            # A branch already bumped package.json and wrote its own changelog section on main.
-            # Keep that version and add the seeded bullets to the section it wrote, rather than
-            # bumping past a version that was never published.
-            node scripts/bump-version.js --append --bullets-file bullets.json >/dev/null
+            # Keep the version that branch bumped to and add the seeded bullets to the section it
+            # wrote, rather than bumping past a version that was never published.
+            node scripts/bump-version.js --append --bullets-file "$RUNNER_TEMP/bullets.json" >/dev/null
             echo "next=$VERSION" >> "$GITHUB_OUTPUT"
           else
-            node scripts/bump-version.js --type "$RELEASE_TYPE" --bullets-file bullets.json >> "$GITHUB_OUTPUT"
+            node scripts/bump-version.js --type "$RELEASE_TYPE" --bullets-file "$RUNNER_TEMP/bullets.json" >> "$GITHUB_OUTPUT"
           fi
           git add package.json CHANGELOG.md
           version=$(node -p "require('./package.json').version")
@@ -119,86 +119,66 @@ jobs:
         if: ${{ steps.state.outputs.bump == 'true' && steps.existing.outputs.number == '' }}
         env:
           NEXT: ${{ steps.bump.outputs.next }}
-          PRS: ${{ steps.bullets.outputs.prs }}
         run: |
-          {
-            printf '**This pull request stays open and updates itself.** Every merge into `main` adds its changes here, so a run of merges becomes one release instead of one release each. Nothing is published until you merge this.\n\n'
-            printf 'Merging it publishes `v%s`.\n\n' "$NEXT"
-            printf 'Before merging, reword the bullets in `CHANGELOG.md` so they say what is different for someone using the extension, and give each one a `[ Component ]` prefix. They were seeded from pull request titles, which is a starting point and rarely the final wording.\n\n'
-            if [ "$HAS_BUMP_TOKEN" != "true" ]; then
-              printf 'No `BUMP_TOKEN` secret is set, so the test and version workflows do not run on this pull request. Close and reopen it to make them run.\n\n'
-            fi
-            printf '<!-- release-pr -->\n'
-            printf 'Included pull requests: %s\n' "$PRS"
-          } > release-pr-body.md
+          node scripts/release-pr-body.js --version "$NEXT" --bullets-file "$RUNNER_TEMP/all-bullets.json" \
+            --output "$RUNNER_TEMP/release-pr-body.md"
           gh pr create \
             --base main \
             --head "$RELEASE_BRANCH" \
             --title "Release v$NEXT - collects every merge until you merge it" \
-            --body-file release-pr-body.md
+            --body-file "$RUNNER_TEMP/release-pr-body.md"
 
       # --- One is already open: catch it up with main and add only the new bullets. ---
       - name: Refresh the open release pull request
         if: ${{ steps.state.outputs.bump == 'true' && steps.existing.outputs.number != '' }}
         env:
+          ADOPTED_FROM: ${{ steps.state.outputs.adoptedFrom }}
           PR: ${{ steps.existing.outputs.number }}
           PRS: ${{ steps.bullets.outputs.prs }}
         run: |
           git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
           ours=$(node -p "require('./package.json').version")
           theirs=$(git show origin/main:package.json | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
+          # Before the merge, and not inside the conflict branch where it is used: a conflicted
+          # package.json holds merge markers, and node refuses to load any module from a directory
+          # whose package.json will not parse.
+          higher=$(node -p "require('./scripts/bump-version').higherVersion('$ours', '$theirs')")
 
           if ! git merge --no-edit origin/main; then
-            # A branch that bumped the version on its own collides with the bump this pull request
-            # already carries, in both files at once. That is the one conflict worth resolving here:
-            # keep this branch's changelog, which may have been reworded by hand, and carry over the
-            # version and the bullets the branch wrote.
+            # A branch that wrote its own changelog section on main collides with the section this
+            # pull request is collecting, and a branch that also bumped the version collides in
+            # package.json as well. Both are worth resolving here rather than asking for a hand
+            # merge: keep this branch's changelog, which may have been reworded, take the higher
+            # version, and carry over the bullets main has that this branch does not.
             conflicts=$(git diff --name-only --diff-filter=U | sort)
-            expected=$(printf 'CHANGELOG.md\npackage.json')
-            if [ "$conflicts" != "$expected" ]; then
+            if printf '%s\n' "$conflicts" | grep -qvE '^(CHANGELOG\.md|package\.json)$'; then
               git merge --abort || true
               gh pr comment "$PR" --body "\`main\` moved on and this branch no longer merges cleanly. Resolve the conflict here and the next push to \`main\` will pick up from there."
               exit 0
             fi
-            git checkout --ours -- package.json CHANGELOG.md
-            git show origin/main:CHANGELOG.md > main-changelog.md
-            node -e '
-              const fs = require("fs");
-              const { topSectionBullets } = require("./scripts/bump-version");
-              const bullets = topSectionBullets(fs.readFileSync("main-changelog.md", "utf8"));
-              fs.writeFileSync("adopted.json", JSON.stringify({ bullets }));
-            '
-            node scripts/bump-version.js --set-version "$(node -p "require('./scripts/bump-version').higherVersion('$ours', '$theirs')")" \
-              --append --bullets-file adopted.json >/dev/null
-            rm -f main-changelog.md adopted.json
+            # Only the paths that actually conflicted -- `--ours` fails on a path git merged cleanly.
+            git checkout --ours -- $conflicts
+            git show origin/main:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
+            node scripts/merge-changelog.js --theirs "$RUNNER_TEMP/main-changelog.md" --version "$higher" >/dev/null
             git add package.json CHANGELOG.md
             git commit --no-edit
           elif [ "$ours" != "$theirs" ]; then
             # No conflict, but main carried a version this branch did not have. The merge took
             # main's package.json wholesale, so put the higher of the two back and move the section
             # heading with it.
-            node scripts/bump-version.js \
-              --set-version "$(node -p "require('./scripts/bump-version').higherVersion('$ours', '$theirs')")" >/dev/null
+            node scripts/bump-version.js --set-version "$higher" >/dev/null
           fi
 
-          # The pull request body lists what is already covered, so hand-reworded bullets in
-          # CHANGELOG.md are never rewritten -- only genuinely new ones are added.
-          gh pr view "$PR" --json body --jq .body > release-pr-body.md
-          covered=$(sed -n 's/^Included pull requests: //p' release-pr-body.md | head -1)
-          node -e '
-            const fs = require("fs");
-            const covered = new Set((process.argv[1] || "").split(",").map((n) => n.trim()).filter(Boolean));
-            const found = JSON.parse(fs.readFileSync("bullets.json", "utf8"));
-            const fresh = [];
-            found.pullRequests.forEach((number, index) => {
-              if (!covered.has(String(number))) { fresh.push(found.bullets[index]); }
-            });
-            fs.writeFileSync("fresh.json", JSON.stringify({ bullets: fresh }));
-          ' "$covered"
+          # The pull request body lists what is already covered, so a bullet reworded by hand is
+          # never rewritten and never sent to the model twice -- only genuinely new ones are added.
+          gh pr view "$PR" --json body --jq .body > "$RUNNER_TEMP/current-body.md"
+          covered=$(sed -n 's/^Included pull requests: //p' "$RUNNER_TEMP/current-body.md" | head -1)
+          node scripts/select-bullets.js --bullets-file "$RUNNER_TEMP/all-bullets.json" --output "$RUNNER_TEMP/fresh.json" \
+            --skip "$ADOPTED_FROM" --covered "$covered" >/dev/null
+          node scripts/rewrite-bullets.js --bullets-file "$RUNNER_TEMP/fresh.json"
+          node scripts/bump-version.js --append --bullets-file "$RUNNER_TEMP/fresh.json" >/dev/null
 
-          node scripts/bump-version.js --append --bullets-file fresh.json >/dev/null
-          rm -f fresh.json bullets.json release-pr-body.md
-          git add -A
+          git add package.json CHANGELOG.md
           # Nothing new to say: main moved, but this pull request already covers all of it. Saying
           # so on every merge is noise, so say nothing at all.
           if git diff --cached --quiet && git diff --quiet "origin/$RELEASE_BRANCH" HEAD; then
@@ -211,12 +191,8 @@ jobs:
           next=$(node -p "require('./package.json').version")
           gh pr edit "$PR" --title "Release v$next - collects every merge until you merge it"
 
-          body=$(gh pr view "$PR" --json body --jq .body)
-          if printf '%s' "$body" | grep -q '^Included pull requests: '; then
-            printf '%s' "$body" | sed "s|^Included pull requests: .*|Included pull requests: $PRS|" > updated-body.md
-          else
-            # The line was edited away; put it back so the next refresh knows what is covered.
-            { printf '%s\n\n<!-- release-pr -->\n' "$body"; printf 'Included pull requests: %s\n' "$PRS"; } > updated-body.md
-          fi
-          gh pr edit "$PR" --body-file updated-body.md
+          gh pr view "$PR" --json body --jq .body > "$RUNNER_TEMP/current-body.md"
+          node scripts/release-pr-body.js --version "$next" --bullets-file "$RUNNER_TEMP/all-bullets.json" \
+            --existing "$RUNNER_TEMP/current-body.md" --output "$RUNNER_TEMP/updated-body.md"
+          gh pr edit "$PR" --body-file "$RUNNER_TEMP/updated-body.md"
           gh pr comment "$PR" --body "Caught up with \`main\`, now releasing \`v$next\`. Included pull requests: $PRS"

@@ -18,6 +18,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { newBullets } = require('./changelog-bullets');
+
 const releaseTypes = ['patch', 'minor', 'major'];
 
 function parseVersion(value) {
@@ -79,9 +81,24 @@ function bulletFor(title, issue) {
 	return issue === undefined ? `- ${text}` : `- ${text} Issue #${issue}.`;
 }
 
-// A bullet may arrive already formatted (from scripts/pr-bullets.js) or as a bare sentence.
+// The subsection headings, in the order CHANGELOG.md writes them. A bullet is filed under one of
+// these by scripts/changelog-bullets.js; anything unrecognised falls back to the first.
+const sections = ['Functionality', 'Bugfixes'];
+const sectionHeadingPattern = /^\s{2}(\w[\w ]*):\s*$/;
+
+function sectionOf(bullet) {
+	const name = typeof bullet === 'object' && bullet !== null ? bullet.section : undefined;
+	return sections.includes(name) ? name : sections[0];
+}
+
+function textOf(bullet) {
+	return typeof bullet === 'object' && bullet !== null ? bullet.text : bullet;
+}
+
+// A bullet may arrive already formatted (from scripts/pr-bullets.js), as a bare sentence, or as a
+// { text, section } pair once it knows which subsection it belongs under.
 function normalizeBullet(bullet) {
-	const text = String(bullet ?? '').trim();
+	const text = String(textOf(bullet) ?? '').trim();
 	if (!text) {
 		return '';
 	}
@@ -97,8 +114,40 @@ function toBullets(titleOrBullets, issue) {
 	return [bulletFor(titleOrBullets, issue)];
 }
 
+// The same list, grouped by subsection and keeping each group's original order. An entry that is a
+// plain string has no opinion and lands under Functionality.
+function bySection(titleOrBullets, issue) {
+	const grouped = new Map();
+	const entries = Array.isArray(titleOrBullets) ? titleOrBullets : [titleOrBullets];
+
+	entries.forEach((bullet, index) => {
+		const text = Array.isArray(titleOrBullets)
+			? normalizeBullet(bullet)
+			: toBullets(titleOrBullets, issue)[index];
+		if (!text) {
+			return;
+		}
+		const name = sectionOf(bullet);
+		grouped.set(name, [...(grouped.get(name) ?? []), text]);
+	});
+
+	return grouped;
+}
+
 function changelogSection(version, titleOrBullets, issue) {
-	return `v${version}\n\n  Functionality:\n\n${toBullets(titleOrBullets, issue).join('\n')}\n`;
+	const grouped = bySection(titleOrBullets, issue);
+	// An empty list still produces a section, the way it always has: a placeholder bullet under
+	// Functionality is more useful than a heading-less version number.
+	if (grouped.size === 0) {
+		grouped.set(sections[0], toBullets(titleOrBullets, issue));
+	}
+
+	const body = sections
+		.filter((name) => grouped.has(name))
+		.map((name) => `  ${name}:\n\n${grouped.get(name).join('\n')}\n`)
+		.join('\n');
+
+	return `v${version}\n\n${body}`;
 }
 
 function prependChangelog(existing, version, titleOrBullets, issue) {
@@ -128,18 +177,118 @@ function topSection(lines) {
 	return { start, end, version: lines[start].trim().slice(1) };
 }
 
-// The bullets of the section at the top of a changelog. Used to carry the bullets a branch wrote
-// on main over into the release pull request when the two changelogs conflict.
-function topSectionBullets(changelogText) {
+// The bullets of the section at the top of a changelog, each with the subsection heading it sits
+// under. Used to carry the bullets a branch wrote on main over into the release pull request when
+// the two changelogs conflict, without moving a bugfix into Functionality on the way.
+function topSectionEntries(changelogText) {
 	const lines = String(changelogText ?? '').split(/\r?\n/);
 	const section = topSection(lines);
 	if (!section) {
 		return [];
 	}
-	return lines
-		.slice(section.start + 1, section.end)
-		.map((line) => line.trim())
-		.filter((line) => line.startsWith('- '));
+
+	const entries = [];
+	let current = sections[0];
+	for (const line of lines.slice(section.start + 1, section.end)) {
+		const heading = sectionHeadingPattern.exec(line);
+		if (heading) {
+			current = sections.includes(heading[1]) ? heading[1] : sections[0];
+			continue;
+		}
+		const text = line.trim();
+		if (text.startsWith('- ')) {
+			entries.push({ text, section: current });
+		}
+	}
+
+	return entries;
+}
+
+function topSectionBullets(changelogText) {
+	return topSectionEntries(changelogText).map((entry) => entry.text);
+}
+
+// The release pull request's changelog wins, and the other side contributes only what it does not
+// already say. Called when a merge from main conflicts in CHANGELOG.md: ours may have been reworded
+// by hand, so it is never rewritten, but a bullet main carries for a change ours has no line for
+// would otherwise be lost.
+function combineChangelogs(oursText, theirsText, version) {
+	const ours = topSectionEntries(oursText);
+	const theirs = topSectionEntries(theirsText);
+
+	const fresh = new Set(newBullets(ours.map((entry) => entry.text), theirs.map((entry) => entry.text)));
+	const missing = theirs.filter((entry) => fresh.has(entry.text));
+
+	// The heading has to agree with the version the release is going out as before anything is
+	// appended, or appendBullets sees a different version and starts a whole new section.
+	const lines = String(oursText ?? '').split(/\r?\n/);
+	const top = topSection(lines);
+	if (top && version && top.version !== version) {
+		lines[top.start] = `v${version}`;
+	}
+	const renamed = lines.join('\n');
+
+	return missing.length === 0 ? renamed : appendBullets(renamed, top ? version ?? top.version : version, missing);
+}
+
+// Where each "  Functionality:" / "  Bugfixes:" heading sits inside a section, and how far its
+// bullets run. Used to file an appended bullet under the right heading instead of at the bottom.
+function subsectionRanges(section) {
+	const found = [];
+	for (let i = 1; i < section.length; i++) {
+		const match = sectionHeadingPattern.exec(section[i]);
+		if (match) {
+			found.push({ name: match[1], heading: i });
+		}
+	}
+	found.forEach((entry, index) => {
+		entry.end = index + 1 < found.length ? found[index + 1].heading : section.length;
+	});
+	return found;
+}
+
+// The last line with content in [from, to), or from - 1 when the range is empty.
+function lastContent(section, from, to) {
+	let last = to - 1;
+	while (last >= from && !section[last].trim()) {
+		last--;
+	}
+	return last;
+}
+
+// Puts bullets under their own subsection heading, creating it in file order when it is not there
+// yet. A section that has bullets but no headings at all keeps that shape -- inventing headings in
+// a changelog someone wrote by hand would be a bigger change than the caller asked for.
+function insertBySection(section, grouped) {
+	for (const name of sections) {
+		const wanted = grouped.get(name);
+		if (!wanted || wanted.length === 0) {
+			continue;
+		}
+
+		const ranges = subsectionRanges(section);
+		const existing = ranges.find((range) => range.name === name);
+		if (existing) {
+			section.splice(lastContent(section, existing.heading + 1, existing.end) + 1, 0, ...wanted);
+			continue;
+		}
+
+		if (ranges.length === 0) {
+			section.splice(lastContent(section, 1, section.length) + 1, 0, ...wanted);
+			continue;
+		}
+
+		const order = sections.indexOf(name);
+		const before = [...ranges].reverse().find((range) => sections.indexOf(range.name) < order);
+		if (before) {
+			const at = lastContent(section, before.heading + 1, before.end) + 1;
+			section.splice(at, 0, '', `  ${name}:`, '', ...wanted);
+			continue;
+		}
+
+		const after = ranges.find((range) => sections.indexOf(range.name) > order);
+		section.splice(after ? after.heading : section.length, 0, `  ${name}:`, '', ...wanted, '');
+	}
 }
 
 // Adds bullets to the section that is already at the top of the changelog, so a release pull
@@ -149,31 +298,35 @@ function topSectionBullets(changelogText) {
 function appendBullets(existing, version, bullets) {
 	const requested = Array.isArray(bullets) ? bullets : [bullets];
 	// Nothing new to say. Unlike a fresh section, an append has no reason to invent a placeholder.
-	if (requested.filter((bullet) => String(bullet ?? '').trim()).length === 0) {
+	if (requested.filter((bullet) => String(textOf(bullet) ?? '').trim()).length === 0) {
 		return String(existing ?? '');
 	}
 
-	const wanted = toBullets(requested);
 	const lines = String(existing ?? '').split(/\r?\n/);
 	const top = topSection(lines);
 
 	if (!top || top.version !== version) {
-		return prependChangelog(existing, version, wanted);
+		return prependChangelog(existing, version, requested);
 	}
 
 	const section = lines.slice(top.start, top.end);
-	const missing = wanted.filter((bullet) => !section.some((line) => line.trim() === bullet));
-	if (missing.length === 0) {
+	const grouped = new Map();
+	let missing = 0;
+	for (const bullet of requested) {
+		const text = normalizeBullet(bullet);
+		if (!text || section.some((line) => line.trim() === text)) {
+			continue;
+		}
+		const name = sectionOf(bullet);
+		grouped.set(name, [...(grouped.get(name) ?? []), text]);
+		missing++;
+	}
+
+	if (missing === 0) {
 		return String(existing ?? '');
 	}
 
-	// Append below the last line that has content, so the trailing blank line before the next
-	// section stays where it is.
-	let last = section.length - 1;
-	while (last >= 0 && !section[last].trim()) {
-		last--;
-	}
-	section.splice(last + 1, 0, ...missing);
+	insertBySection(section, grouped);
 
 	return [...lines.slice(0, top.start), ...section, ...lines.slice(top.end)].join('\n');
 }
@@ -358,6 +511,7 @@ module.exports = {
 	applyBump,
 	bulletFor,
 	changelogSection,
+	combineChangelogs,
 	compareVersions,
 	higherVersion,
 	issueFromBody,
@@ -367,7 +521,9 @@ module.exports = {
 	prependChangelog,
 	readBulletsFile,
 	readVersion,
+	sections,
 	setVersion,
 	topSectionBullets,
+	topSectionEntries,
 	writeVersion,
 };
