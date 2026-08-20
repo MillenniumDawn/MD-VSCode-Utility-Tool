@@ -362,9 +362,13 @@ export function toolbarFlagsOf(
 		// The blocks are interned per referencing node, so a non-empty table means at least one card
 		// carries a dot and a hover panel.
 		hasEffects: effectBlocks.length > 0,
-		// Without either, visibleGraph in the webview returns an identical graph in both positions.
-		hasHidden:
-			nodes.some((n) => n.kind === "event" && n.hidden) || edges.some((e) => e.immediate),
+		// Each filter is offered only when some event matches it: filtering on a property nothing in
+		// the file has could do nothing but empty the canvas.
+		hasHidden: nodes.some((n) => n.kind === "event" && n.hidden),
+		hasMajor: nodes.some((n) => n.kind === "event" && n.major),
+		hasNews: nodes.some((n) => n.kind === "event" && n.eventType === "news"),
+		hasMtth: nodes.some((n) => n.kind === "event" && !n.isTriggeredOnly),
+		hasTriggered: nodes.some((n) => n.kind === "event" && n.isTriggeredOnly),
 		// The flag, not "did anything resolve": with the index on the toggle is real even for a file
 		// whose .yml is still missing, and gating on resolution would make the control come and go as
 		// localisation files are edited. getConfiguration().get can hand back undefined, so coerce --

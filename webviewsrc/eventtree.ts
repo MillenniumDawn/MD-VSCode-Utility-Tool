@@ -1,5 +1,6 @@
 import { tryRun, subscribeNavigators, enableZoom, initCommon, getState, setState, panning$ } from "./util/common";
 import { syncCheckbox } from "./util/checkbox";
+import { DivDropdown } from "./util/dropdown";
 import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
 import { ConditionComplexExpr } from "../src/hoiformat/condition";
@@ -45,6 +46,10 @@ const emptyPayload: EventGraphPayload = {
 		hasChains: false,
 		hasEffects: false,
 		hasHidden: false,
+		hasMajor: false,
+		hasNews: false,
+		hasMtth: false,
+		hasTriggered: false,
 		hasLocalisation: false,
 		hasPicture: false,
 	},
@@ -59,11 +64,14 @@ let showLocalisation: boolean = getState().showLocalisation ?? true;
 let showOptionTriggers: boolean = getState().showOptionTriggers ?? true;
 let showEdgeConditions: boolean = getState().showEdgeConditions ?? true;
 let showEventConditions: boolean = getState().showEventConditions ?? true;
-let showHidden: boolean = getState().showHidden ?? true;
 let showPicture: boolean = getState().showPicture ?? true;
 let showEffects: boolean = getState().showEffects ?? true;
-// Off by default: an opt-in filter must never hide anything the first time the preview is opened.
-let showChainsOnly: boolean = getState().showChainsOnly ?? false;
+// Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
+let filters: EventFilter[] = readFilters(getState().eventFilters);
+let filterDropdown: DivDropdown | undefined = undefined;
+// Set while a gated selection is being pushed into the widget, so its subscription can tell a value
+// this module computed from one the reader chose. Only the second is worth storing.
+let syncingFilters = false;
 
 const scopeClassByType: Record<string, string> = {
 	country: "--ev-country",
@@ -290,100 +298,66 @@ export interface VisibleGraph {
 	roots: string[];
 }
 
-// Hiding a hidden event hides everything reachable *only* through it, so the chain never shows an
-// edge dangling into nothing -- but an event a visible route also reaches stays, because it is still
-// part of the chain the reader is looking at. That is a reachability question, not a cascade: what
-// survives is what is still reachable from a root once the hidden events and the immediate routes
-// are taken out of the graph.
-export function visibleGraph(source: EventGraphPayload, includeHidden: boolean): VisibleGraph {
-	if (includeHidden) {
-		return { nodes: source.nodes, edges: source.edges, roots: source.roots };
-	}
+// The entries of the toolbar's filter list. Each one answers "which events belong on the canvas",
+// which is why they are one control and not one checkbox each.
+export type EventFilter = "mtth" | "triggered" | "news" | "hidden" | "major" | "chains";
 
-	const blocked = new Set<string>();
-	for (const node of source.nodes) {
-		if (node.kind === "event" && node.hidden) {
-			blocked.add(node.id);
-		}
-	}
+// The order the list is written in, which is also the order a selection is stored and read back in,
+// so a saved selection cannot depend on the order the reader happened to tick the boxes.
+export const eventFilters: readonly EventFilter[] = [
+	"mtth",
+	"triggered",
+	"news",
+	"hidden",
+	"major",
+	"chains",
+];
 
-	// An immediate call is a route, not a node: the target may well be reachable another way.
-	const keptEdges = source.edges.filter(
-		(e) => !e.immediate && !blocked.has(e.from) && !blocked.has(e.to),
-	);
-	const childrenOf = new Map<string, string[]>();
-	for (const edge of keptEdges) {
-		const list = childrenOf.get(edge.from);
-		if (list) {
-			list.push(edge.to);
-		} else {
-			childrenOf.set(edge.from, [edge.to]);
-		}
+// State written by an older version -- or by nothing at all -- reaches this as whatever it happens
+// to be, so anything that is not a filter name is dropped rather than carried into the predicates.
+export function readFilters(stored: unknown): EventFilter[] {
+	if (!Array.isArray(stored)) {
+		return [];
 	}
+	return eventFilters.filter((filter) => stored.includes(filter));
+}
 
-	const roots = source.roots.filter((r) => !blocked.has(r));
-	const reachable = new Set<string>(roots);
-	const stack = [...roots];
-	while (stack.length > 0) {
-		const current = stack.pop();
-		if (current === undefined) {
+// One option is emitted as a node once per scope situation it is reached in, so it can have several
+// structural parents. Treating this as a single id would silently drop chain links.
+function ownersOfOptions(edges: EventGraphEdge[]): Map<string, string[]> {
+	const owners = new Map<string, string[]>();
+	for (const edge of edges) {
+		if (!edge.structural) {
 			continue;
 		}
-		for (const child of childrenOf.get(current) ?? []) {
-			if (!reachable.has(child)) {
-				reachable.add(child);
-				stack.push(child);
-			}
+		const list = owners.get(edge.to);
+		if (list) {
+			list.push(edge.from);
+		} else {
+			owners.set(edge.to, [edge.from]);
 		}
 	}
-
-	return {
-		nodes: source.nodes.filter((n) => reachable.has(n.id)),
-		edges: keptEdges.filter((e) => reachable.has(e.from) && reachable.has(e.to)),
-		roots,
-	};
+	return owners;
 }
 
 // An event is part of a chain when an option of it calls another event, or an option of another
 // event calls it. The link is two hops -- event --structural--> option --call--> event -- so the
 // option hop is collapsed onto its owning event before the ends are counted. An `immediate` call is
-// the same link with no option in between, and counts the same when it is still in the graph at all
-// -- which is why this runs after the hidden filter, not before it.
-//
-// Unlike visibleGraph this needs no reachability re-walk: it drops disconnected islands, never a
-// route through something, so nothing it keeps can be left orphaned mid-chain.
-export function chainedGraph(source: VisibleGraph, chainsOnly: boolean): VisibleGraph {
-	if (!chainsOnly) {
-		return source;
-	}
-
-	const byId = new Map(source.nodes.map((n) => [n.id, n]));
+// the same link with no option in between, and counts the same.
+export function chainedIds(nodes: EventGraphNode[], edges: EventGraphEdge[]): Set<string> {
+	const byId = new Map(nodes.map((n) => [n.id, n]));
 	// Anything that is not an option is an end of a chain: an event, or an unresolved call to an
 	// event no loaded file defines -- which exists only because an option called it, and is exactly
 	// the cross-file link a chain view is for.
 	const isChainEnd = (id: string): boolean => byId.get(id)?.kind !== "option";
-
-	// One option is emitted as a node once per scope situation it is reached in, so it can have
-	// several structural parents. Treating this as a single id would silently drop chain links.
-	const ownersOfOption = new Map<string, string[]>();
-	for (const edge of source.edges) {
-		if (!edge.structural) {
-			continue;
-		}
-		const list = ownersOfOption.get(edge.to);
-		if (list) {
-			list.push(edge.from);
-		} else {
-			ownersOfOption.set(edge.to, [edge.from]);
-		}
-	}
+	const owners = ownersOfOptions(edges);
 
 	const linked = new Set<string>();
-	for (const edge of source.edges) {
+	for (const edge of edges) {
 		if (edge.structural || !byId.has(edge.from) || !isChainEnd(edge.to)) {
 			continue;
 		}
-		const froms = isChainEnd(edge.from) ? [edge.from] : (ownersOfOption.get(edge.from) ?? []);
+		const froms = isChainEnd(edge.from) ? [edge.from] : (owners.get(edge.from) ?? []);
 		for (const from of froms) {
 			// An event that fires itself counts: the arrow is drawn on the canvas, so dropping the
 			// only card it connects would leave the reader wondering. Guard `from !== edge.to` here
@@ -393,16 +367,148 @@ export function chainedGraph(source: VisibleGraph, chainsOnly: boolean): Visible
 		}
 	}
 
-	// A chained event keeps every option card it has, dead ends included: what is being filtered out
-	// is unlinked events, not the choices they offer.
-	const kept = new Set(linked);
+	return linked;
+}
+
+function matchesFilter(
+	node: EventGraphEventNode,
+	filter: EventFilter,
+	linked: Set<string> | undefined,
+): boolean {
+	switch (filter) {
+		// meanTimeToHappenBase is 1 for an event that declares no mean_time_to_happen at all, so it
+		// cannot tell the two apart. `is_triggered_only` can, and it is the same line the card draws
+		// in its own badge: an event either waits on its own clock or waits to be called.
+		case "mtth":
+			return !node.isTriggeredOnly;
+		case "triggered":
+			return node.isTriggeredOnly;
+		case "news":
+			return node.eventType === "news";
+		case "hidden":
+			return node.hidden;
+		case "major":
+			return node.major;
+		case "chains":
+			return linked?.has(node.id) ?? false;
+	}
+}
+
+// Narrows the graph to the events matching any selected filter -- an OR, so two filters show more
+// than one does, and an empty selection is not a filter at all but the whole file.
+//
+// What it never does is cut a chain in half. An event dropped from the middle of one is contracted
+// out rather than deleted: the call that led into it is redirected to whatever it eventually
+// reached, carrying the ids it passed through so the arrow can say what is missing. An event with
+// nothing kept downstream loses its arrow, because there is nothing left for it to point at.
+export function filteredGraph(
+	source: EventGraphPayload,
+	filters: readonly EventFilter[],
+): VisibleGraph {
+	if (filters.length === 0) {
+		return { nodes: source.nodes, edges: source.edges, roots: source.roots };
+	}
+
+	const linked = filters.includes("chains")
+		? chainedIds(source.nodes, source.edges)
+		: undefined;
+
+	// An unresolved node is a call to an event no loaded file defines: it has no properties of its
+	// own to filter on, so it survives only as the far end of a chain.
+	const keptEvents = new Set<string>();
+	for (const node of source.nodes) {
+		if (node.kind === "event") {
+			if (filters.some((filter) => matchesFilter(node, filter, linked))) {
+				keptEvents.add(node.id);
+			}
+		} else if (node.kind === "unresolved" && linked?.has(node.id)) {
+			keptEvents.add(node.id);
+		}
+	}
+
+	// An option belongs to its event and is never filtered on its own: a kept event keeps every
+	// choice it offers, dead ends included.
+	const kept = new Set(keptEvents);
 	for (const edge of source.edges) {
-		if (edge.structural && linked.has(edge.from)) {
+		if (edge.structural && keptEvents.has(edge.from)) {
 			kept.add(edge.to);
 		}
 	}
 
-	const edges = source.edges.filter((e) => kept.has(e.from) && kept.has(e.to));
+	// Where an event's calls land, with the option hop collapsed away, so the walk below moves one
+	// event at a time rather than alternating between the two kinds of node.
+	const owners = ownersOfOptions(source.edges);
+	const callsOf = new Map<string, string[]>();
+	for (const edge of source.edges) {
+		if (edge.structural) {
+			continue;
+		}
+		// An id with owners is an option, and the call belongs to the event above it; anything else
+		// is an event making the call itself, which is what an `immediate` block is.
+		const froms = owners.get(edge.from) ?? [edge.from];
+		for (const from of froms) {
+			const list = callsOf.get(from);
+			if (list) {
+				list.push(edge.to);
+			} else {
+				callsOf.set(from, [edge.to]);
+			}
+		}
+	}
+
+	// Breadth first, so each kept event is reached over the shortest run of dropped ones and the
+	// count on the arrow is the number of cards actually missing between the two, not the size of
+	// the whole region the walk wandered into.
+	const bridgeCache = new Map<string, { to: string; skipped: string[] }[]>();
+	const bridgesFrom = (start: string): { to: string; skipped: string[] }[] => {
+		const cached = bridgeCache.get(start);
+		if (cached) {
+			return cached;
+		}
+
+		const bridges: { to: string; skipped: string[] }[] = [];
+		const parent = new Map<string, string | undefined>([[start, undefined]]);
+		const queue = [start];
+		while (queue.length > 0) {
+			const current = queue.shift();
+			if (current === undefined) {
+				continue;
+			}
+			for (const next of callsOf.get(current) ?? []) {
+				if (parent.has(next)) {
+					continue;
+				}
+				parent.set(next, current);
+				if (kept.has(next)) {
+					const skipped: string[] = [];
+					for (let at: string | undefined = current; at !== undefined; at = parent.get(at)) {
+						skipped.unshift(at);
+					}
+					bridges.push({ to: next, skipped });
+				} else {
+					queue.push(next);
+				}
+			}
+		}
+
+		bridgeCache.set(start, bridges);
+		return bridges;
+	};
+
+	const edges: EventGraphEdge[] = [];
+	for (const edge of source.edges) {
+		if (!kept.has(edge.from)) {
+			continue;
+		}
+		if (kept.has(edge.to)) {
+			edges.push(edge);
+		} else if (!edge.structural) {
+			for (const bridge of bridgesFrom(edge.to)) {
+				edges.push({ ...edge, to: bridge.to, skipped: bridge.skipped });
+			}
+		}
+	}
+
 	const hasParent = new Set(edges.map((e) => e.to));
 	// A surviving declared root keeps its place first: that is what keeps a group which is nothing
 	// but a cycle -- no parentless member at all -- reachable. Anything left without a parent because
@@ -761,6 +867,68 @@ function badge(container: HTMLElement, className: string, text: string): void {
 	container.appendChild(element);
 }
 
+// What a card says about the events a filter took out from under it: every id its own arrows now
+// step over, in the order they were walked. Collected per event, so an event whose three options all
+// bridge past the same card mentions it once.
+function skippedByEventOf(graph: VisibleGraph): Map<string, string[]> {
+	const owners = ownersOfOptions(graph.edges);
+	const byEvent = new Map<string, string[]>();
+	for (const edge of graph.edges) {
+		if (!edge.skipped?.length) {
+			continue;
+		}
+		for (const from of owners.get(edge.from) ?? [edge.from]) {
+			const list = byEvent.get(from) ?? [];
+			for (const id of edge.skipped) {
+				if (!list.includes(id)) {
+					list.push(id);
+				}
+			}
+			byEvent.set(from, list);
+		}
+	}
+	return byEvent;
+}
+
+// One glyph per kind the event actually is, in a fixed order, so the row reads the same way on every
+// card and a major news event is not made to choose which of the two it advertises. Colour is left
+// saying what it has always said -- the scope -- and is set once on the row for every glyph to
+// inherit.
+function buildMarkers(node: EventGraphEventNode): HTMLDivElement {
+	const markers = document.createElement("div");
+	markers.className = "ev-markers";
+	markers.style.setProperty(
+		"--ev-dot",
+		`var(${scopeClassByType[node.eventType] ?? "--ev-country"})`,
+	);
+	markers.title = node.eventType + "_event";
+
+	const glyph = (className: string, title: string) => {
+		const element = document.createElement("span");
+		element.className = "ev-marker " + className;
+		element.title = title;
+		markers.appendChild(element);
+	};
+
+	if (node.eventType === "news") {
+		glyph("ev-marker-news", feLocalize("eventtree.news", "News"));
+	}
+	if (node.major) {
+		glyph("ev-marker-major", feLocalize("eventtree.major", "Major"));
+	}
+	if (node.hidden) {
+		glyph("ev-marker-hidden", feLocalize("eventtree.hidden", "Hidden"));
+	}
+	// Every event is one or the other, so the row is never empty.
+	if (node.isTriggeredOnly) {
+		glyph("ev-marker-triggered", feLocalize("eventtree.istriggeredonly", "Is triggered only"));
+	} else {
+		glyph("ev-marker-mtth", feLocalize("eventtree.mtth", "Mean time to happen"));
+	}
+
+	return markers;
+}
+
 function applyNav(element: HTMLElement, node: EventGraphNode): void {
 	if (!node.nav) {
 		return;
@@ -802,11 +970,7 @@ function buildEventCard(node: EventGraphEventNode): HTMLDivElement {
 	const head = document.createElement("div");
 	head.className = "ev-head";
 
-	const marker = document.createElement("span");
-	marker.className = "ev-marker";
-	marker.style.setProperty("--ev-dot", `var(${scopeClassByType[node.eventType] ?? "--ev-country"})`);
-	marker.title = node.eventType + "_event";
-	head.appendChild(marker);
+	head.appendChild(buildMarkers(node));
 
 	const text = document.createElement("div");
 	text.className = "ev-text";
@@ -834,6 +998,16 @@ function buildEventCard(node: EventGraphEventNode): HTMLDivElement {
 	}
 	if (node.loop) {
 		badge(meta, "ev-badge-loop", feLocalize("eventtree.loop", "Loop"));
+	}
+	const skipped = skippedByEvent.get(node.id);
+	if (skipped?.length) {
+		badge(meta, "ev-badge-skipped", feLocalize("eventtree.skipped", "{0} filtered out", skipped.length));
+		const element = meta.lastElementChild as HTMLElement;
+		element.title = feLocalize(
+			"eventtree.skippedtitle",
+			"Filtered out between this event and the next: {0}",
+			skipped.join(", "),
+		);
 	}
 	badge(
 		meta,
@@ -958,6 +1132,9 @@ interface RenderedNode {
 let rendered: RenderedNode[] = [];
 let renderedEdges: { edge: EventGraphEdge; path: SVGPathElement; chip?: HTMLDivElement }[] = [];
 let childrenById = new Map<string, string[]>();
+// Filled by buildContent before the cards are built, and read by buildEventCard. Empty whenever no
+// filter is selected, because nothing can have been left out.
+let skippedByEvent = new Map<string, string[]>();
 
 function currentScale(): number {
 	return getState().scale || 1;
@@ -976,15 +1153,14 @@ function buildContent(): void {
 	rendered = [];
 	renderedEdges = [];
 
-	// Before the filters: a toggle this file cannot use is forced back to its neutral position here,
-	// and showChainsOnly is one the stored value must not be allowed to keep.
+	// Before the filters: a control this file cannot use is forced back to its neutral position here,
+	// and a filter entry it cannot use is one the stored selection must not be allowed to keep.
 	applyToolbarFlags();
 
-	// Hidden first, chains second. "Is this event chained?" has to be asked of the graph that is
-	// actually on screen: with hidden & immediate off, an event whose only link was an immediate call
-	// has already lost it, and asking first would keep an unlinked card -- the exact thing this
-	// filter exists to remove.
-	const graph = chainedGraph(visibleGraph(payload, showHidden), showChainsOnly);
+	const graph = filteredGraph(payload, filters);
+	// The cards are built below and the arrows only afterwards, so what each card has to say about
+	// the events missing beneath it is collected from the edges first.
+	skippedByEvent = skippedByEventOf(graph);
 	if (graph.nodes.length === 0) {
 		const empty = document.createElement("div");
 		empty.className = "ev-empty";
@@ -1113,6 +1289,9 @@ export function chipTextFor(edge: EventGraphEdge, guarded: boolean): string {
 		// can change the totals at runtime anyway, so the weight is shown as written.
 		bits.push(feLocalize("eventtree.weight", "weight {0}", edge.possibility));
 	}
+	if (edge.skipped?.length) {
+		bits.push(feLocalize("eventtree.skipped", "{0} filtered out", edge.skipped.length));
+	}
 	if (guarded) {
 		bits.push(conditionToLabel(edge.condition));
 	}
@@ -1135,7 +1314,10 @@ function buildChips(content: HTMLDivElement, graph: VisibleGraph): BuiltChip[] {
 			return { edge, guarded };
 		}
 		const chip = document.createElement("div");
-		chip.className = "ev-chip" + (guarded ? " ev-chip-guarded" : "");
+		chip.className =
+			"ev-chip" +
+			(guarded ? " ev-chip-guarded" : "") +
+			(edge.skipped?.length ? " ev-chip-bridged" : "");
 		chip.textContent = text;
 		chip.style.left = "0px";
 		chip.style.top = "0px";
@@ -1203,7 +1385,9 @@ function renderEdges(
 		path.setAttribute("d", `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`);
 		path.setAttribute(
 			"class",
-			"ev-edge" + (edge.immediate ? " ev-edge-immediate" : guarded ? " ev-edge-guarded" : ""),
+			"ev-edge" +
+				(edge.immediate ? " ev-edge-immediate" : guarded ? " ev-edge-guarded" : "") +
+				(edge.skipped?.length ? " ev-edge-bridged" : ""),
 		);
 		svg.appendChild(path);
 
@@ -1415,32 +1599,79 @@ function wireSearch(): void {
 // over its input is hidden. The widget is the input's next sibling (Checkbox.init inserts it with
 // input.after) and the <label> was hidden when the widget was built, so this is one element each.
 //
-// The stored state of a hidden toggle is forced back to the position that changes nothing. It
-// matters most for show-chains-only: a stored `true` with no control on screen would empty the
-// canvas with no way to undo it. The forced value is deliberately not written back through
-// setState, so the reader's own preference returns when the file gains pictures (or effects, or
-// hidden events) again.
+// The stored state of a hidden toggle is forced back to the position that changes nothing. The
+// forced value is deliberately not written back through setState, so the reader's own preference
+// returns when the file gains pictures (or effects, or localisation) again. The filter list follows
+// the same rule: an entry no event in the file matches is taken out of the list and out of the
+// working selection, but never out of the stored one -- a stored `hidden` with no hidden event left
+// would otherwise empty the canvas with no control on screen to undo it.
 // Offering a control the file cannot use is a much smaller failure than hiding one it can, so a
 // payload that carries no flags at all falls back to showing everything.
 const allToolbarControls: EventToolbarFlags = {
 	hasChains: true,
 	hasEffects: true,
 	hasHidden: true,
+	hasMajor: true,
+	hasNews: true,
+	hasMtth: true,
+	hasTriggered: true,
 	hasLocalisation: true,
 	hasPicture: true,
+};
+
+const filterAvailability: Record<EventFilter, keyof EventToolbarFlags> = {
+	mtth: "hasMtth",
+	triggered: "hasTriggered",
+	news: "hasNews",
+	hidden: "hasHidden",
+	major: "hasMajor",
+	chains: "hasChains",
 };
 
 function applyToolbarFlags(): void {
 	const flags = payload.toolbarFlags ?? allToolbarControls;
 	const state = getState();
 	// The neutral value is the position that shows the most: with nothing to filter out, "show
-	// everything" is the honest state. show-chains-only is the odd one -- it hides rather than
-	// reveals, so its neutral position is off.
+	// everything" is the honest state.
 	showLocalisation = gateToggle("show-localisation", flags.hasLocalisation, state.showLocalisation, true);
-	showHidden = gateToggle("show-hidden", flags.hasHidden, state.showHidden, true);
 	showPicture = gateToggle("show-picture", flags.hasPicture, state.showPicture, true);
 	showEffects = gateToggle("show-effects", flags.hasEffects, state.showEffects, true);
-	showChainsOnly = gateToggle("show-chains-only", flags.hasChains, state.showChainsOnly, false);
+	filters = gateFilters(flags, readFilters(state.eventFilters));
+}
+
+// Returns the selection that should be in force, and puts the list on screen in step with it: an
+// entry this file cannot match is hidden, which is enough for DivDropdown to stop offering it, and
+// the whole control goes when every entry is gone.
+function gateFilters(flags: EventToolbarFlags, stored: EventFilter[]): EventFilter[] {
+	const available = eventFilters.filter((filter) => flags[filterAvailability[filter]]);
+	const select = document.getElementById("ev-filters");
+	const container = document.getElementById("ev-filter-container");
+
+	if (container) {
+		container.style.display = available.length === 0 ? "none" : "";
+	}
+	select?.querySelectorAll(".option").forEach((option) => {
+		const value = option.getAttribute("value") as EventFilter | null;
+		if (value !== null && available.includes(value)) {
+			option.removeAttribute("hidden");
+		} else {
+			option.setAttribute("hidden", "");
+		}
+	});
+
+	const selection = stored.filter((filter) => available.includes(filter));
+	if (filterDropdown) {
+		// Pushing this back into the widget is what puts the closed combobox in step with a gating
+		// that just dropped an entry. The guard keeps that push out of the subscription below: it is
+		// this code's own value, not a click, and storing it would lose the reader's real preference.
+		syncingFilters = true;
+		try {
+			filterDropdown.selectedValues$.next(selection);
+		} finally {
+			syncingFilters = false;
+		}
+	}
+	return selection;
 }
 
 // Returns the value the toggle should hold, and puts the input and its widget in step with it.
@@ -1690,10 +1921,6 @@ window.addEventListener(
 			showEventConditions = value;
 			setState({ showEventConditions: value });
 		});
-		bindToggle("show-hidden", showHidden, (value) => {
-			showHidden = value;
-			setState({ showHidden: value });
-		});
 		bindToggle("show-picture", showPicture, (value) => {
 			showPicture = value;
 			setState({ showPicture: value });
@@ -1702,10 +1929,7 @@ window.addEventListener(
 			showEffects = value;
 			setState({ showEffects: value });
 		});
-		bindToggle("show-chains-only", showChainsOnly, (value) => {
-			showChainsOnly = value;
-			setState({ showChainsOnly: value });
-		});
+		wireFilters();
 
 		// Before the first buildContent, so the restored query is applied by the first render rather
 		// than only by the next one.
@@ -1714,6 +1938,38 @@ window.addEventListener(
 		buildContent();
 	}),
 );
+
+// The restored selection is pushed into the widget before the subscription is attached, so the
+// BehaviorSubject's immediate first emission -- which carries whatever the widget was built with,
+// not a choice anyone made -- cannot write an empty selection over the stored one.
+function wireFilters(): void {
+	const element = document.getElementById("ev-filters") as HTMLDivElement | null;
+	if (!element) {
+		return;
+	}
+
+	filterDropdown = new DivDropdown(element, true, {
+		// Selecting nothing is not "no selection" here: it is the whole file, unfiltered.
+		empty: feLocalize("eventtree.filterall", "(All events)"),
+	});
+
+	syncingFilters = true;
+	try {
+		filterDropdown.selectedValues$.next(filters);
+		filterDropdown.selectedValues$.subscribe(
+			tryRun((selection: readonly string[]) => {
+				if (syncingFilters) {
+					return;
+				}
+				filters = readFilters(selection);
+				setState({ eventFilters: filters });
+				buildContent();
+			}),
+		);
+	} finally {
+		syncingFilters = false;
+	}
+}
 
 function bindToggle(id: string, initial: boolean, apply: (value: boolean) => void): void {
 	const input = document.getElementById(id) as HTMLInputElement | null;

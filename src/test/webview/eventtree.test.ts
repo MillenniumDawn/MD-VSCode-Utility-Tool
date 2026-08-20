@@ -20,6 +20,10 @@ const integrationPayload: EventGraphPayload = {
         hasChains: true,
         hasEffects: true,
         hasHidden: true,
+        hasMajor: true,
+        hasNews: true,
+        hasMtth: false,
+        hasTriggered: true,
         hasLocalisation: true,
         hasPicture: false,
     },
@@ -79,10 +83,21 @@ const shellHtml = `
         <input type="checkbox" id="show-option-triggers">
         <input type="checkbox" id="show-edge-conditions">
         <input type="checkbox" id="show-event-conditions">
-        <input type="checkbox" id="show-hidden">
         <input type="checkbox" id="show-picture">
         <input type="checkbox" id="show-effects">
-        <input type="checkbox" id="show-chains-only">
+        <div id="ev-filter-container">
+            <div class="select-container">
+                <div id="ev-filters" class="select multiple-select" tabindex="0" role="combobox">
+                    <span class="value"></span>
+                    <div class="option" value="mtth">MTTH events</div>
+                    <div class="option" value="triggered">Triggered only</div>
+                    <div class="option" value="news">News events</div>
+                    <div class="option" value="hidden">Hidden</div>
+                    <div class="option" value="major">Major</div>
+                    <div class="option" value="chains">Event chains</div>
+                </div>
+            </div>
+        </div>
         <input type="text" id="ev-searchbox">
         <span id="ev-search-count"></span>
     </div></div>
@@ -91,9 +106,10 @@ const shellHtml = `
 
 const eventtree = require('../../../webviewsrc/eventtree') as typeof import('../../../webviewsrc/eventtree');
 const {
-    conditionToDom, conditionToLabel, effectsToDom, visibleGraph, chainedGraph, matchesQuery,
+    conditionToDom, conditionToLabel, effectsToDom, filteredGraph, readFilters, matchesQuery,
     layoutGraph, separateChips,
 } = eventtree;
+type EventFilter = import('../../../webviewsrc/eventtree').EventFilter;
 
 function leaf(nodeContent: string, scopeName = ''): ConditionComplexExpr {
     return { scopeName, nodeContent };
@@ -148,14 +164,10 @@ function payload(nodes: EventGraphNode[], edges: EventGraphEdge[], roots: string
     return {
         nodes, edges, roots, conditionExprs: [], effectBlocks: [],
         toolbarFlags: {
-            hasChains: true, hasEffects: true, hasHidden: true, hasLocalisation: true, hasPicture: true,
+            hasChains: true, hasEffects: true, hasHidden: true, hasMajor: true, hasNews: true,
+            hasMtth: true, hasTriggered: true, hasLocalisation: true, hasPicture: true,
         },
     };
-}
-
-// chainedGraph takes what visibleGraph returns, not a payload.
-function visible(nodes: EventGraphNode[], edges: EventGraphEdge[], roots: string[]) {
-    return { nodes, edges, roots };
 }
 
 describe('webview/eventtree conditionToDom', () => {
@@ -333,76 +345,172 @@ describe('webview/eventtree effectsToDom', () => {
     });
 });
 
-describe('webview/eventtree visibleGraph', () => {
-    const nodes = [
-        eventNode('root:0'),
-        eventNode('hidden:1', { hidden: true }),
-        eventNode('afterHidden:2'),
-        eventNode('afterImmediate:3'),
-    ];
-    const edges = [
-        edge('root:0', 'hidden:1'),
-        edge('hidden:1', 'afterHidden:2'),
-        edge('root:0', 'afterImmediate:3', { immediate: true }),
-    ];
-    const source = payload(nodes, edges, ['root:0']);
-
-    it('passes the graph through untouched when hidden events are shown', () => {
-        const visible = visibleGraph(source, true);
-        assert.strictEqual(visible.nodes.length, 4);
-        assert.strictEqual(visible.edges.length, 3);
+describe('webview/eventtree readFilters', () => {
+    it('reads nothing out of a state that has never held a selection', () => {
+        assert.deepStrictEqual(readFilters(undefined), []);
+        assert.deepStrictEqual(readFilters('major'), []);
     });
 
-    it('drops a hidden event and everything reachable only through it', () => {
-        const visible = visibleGraph(source, false);
-        const ids = visible.nodes.map(n => n.id).sort();
-        assert.deepStrictEqual(ids, ['root:0']);
+    it('drops a value that is not a filter', () => {
+        assert.deepStrictEqual(readFilters(['major', 'show-hidden', 7]), ['major']);
     });
 
-    it('drops the target of an immediate call', () => {
-        const visible = visibleGraph(payload(
-            [eventNode('a:0'), eventNode('b:1')],
-            [edge('a:0', 'b:1', { immediate: true })],
+    it('normalises the order, so the same selection is the same list however it was ticked', () => {
+        assert.deepStrictEqual(readFilters(['chains', 'mtth', 'major']), ['mtth', 'major', 'chains']);
+    });
+});
+
+describe('webview/eventtree filteredGraph', () => {
+    const source = payload(
+        [
+            eventNode('plain:0'),
+            eventNode('hidden:1', { hidden: true }),
+            eventNode('major:2', { major: true }),
+            eventNode('news:3', { eventType: 'news' }),
+            eventNode('mtth:4', { isTriggeredOnly: false }),
+        ],
+        [],
+        ['plain:0', 'hidden:1', 'major:2', 'news:3', 'mtth:4'],
+    );
+
+    const idsOf = (filters: EventFilter[]) =>
+        filteredGraph(source, filters).nodes.map(n => n.id).sort();
+
+    it('is not a filter at all when nothing is selected', () => {
+        const result = filteredGraph(source, []);
+        assert.strictEqual(result.nodes, source.nodes);
+        assert.strictEqual(result.edges, source.edges);
+        assert.strictEqual(result.roots, source.roots);
+    });
+
+    it('keeps only the events matching the one selected filter', () => {
+        assert.deepStrictEqual(idsOf(['hidden']), ['hidden:1']);
+        assert.deepStrictEqual(idsOf(['major']), ['major:2']);
+        assert.deepStrictEqual(idsOf(['news']), ['news:3']);
+    });
+
+    it('splits every event between mtth and triggered only, and nowhere else', () => {
+        assert.deepStrictEqual(idsOf(['mtth']), ['mtth:4']);
+        assert.deepStrictEqual(idsOf(['triggered']), ['hidden:1', 'major:2', 'news:3', 'plain:0']);
+        assert.strictEqual(idsOf(['mtth', 'triggered']).length, source.nodes.length);
+    });
+
+    it('ors two filters together, so selecting more shows more', () => {
+        assert.deepStrictEqual(idsOf(['major', 'news']), ['major:2', 'news:3']);
+    });
+
+    it('does not mutate the payload it was given', () => {
+        const roots = [...source.roots];
+        filteredGraph(source, ['major']);
+        assert.deepStrictEqual(source.roots, roots);
+        assert.strictEqual(source.nodes.length, 5);
+    });
+});
+
+describe('webview/eventtree filteredGraph keeps chains connected', () => {
+    // a -> b -> c, each call going through an option, with only a and c kept by the filter.
+    const bridged = payload(
+        [
+            eventNode('a:0', { major: true }), optionNode('ao:1'),
+            eventNode('b:2'), optionNode('bo:3'),
+            eventNode('c:4', { major: true }),
+        ],
+        [
+            edge('a:0', 'ao:1', { structural: true }), edge('ao:1', 'b:2'),
+            edge('b:2', 'bo:3', { structural: true }), edge('bo:3', 'c:4'),
+        ],
+        ['a:0'],
+    );
+
+    it('redirects the call over the event it dropped rather than cutting the chain', () => {
+        const result = filteredGraph(bridged, ['major']);
+        assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:0', 'ao:1', 'c:4']);
+        assert.deepStrictEqual(
+            result.edges.map(e => `${e.from}->${e.to}`),
+            ['a:0->ao:1', 'ao:1->c:4'],
+        );
+    });
+
+    it('says on the arrow which events it now steps over', () => {
+        const bridge = filteredGraph(bridged, ['major']).edges.find(e => e.to === 'c:4');
+        assert.deepStrictEqual(bridge?.skipped, ['b:2']);
+    });
+
+    it('names every event in a longer run, in the order they were walked', () => {
+        const longer = payload(
+            [
+                eventNode('a:0', { major: true }), optionNode('ao:1'),
+                eventNode('b:2'), eventNode('c:3'),
+                eventNode('d:4', { major: true }),
+            ],
+            [
+                edge('a:0', 'ao:1', { structural: true }), edge('ao:1', 'b:2'),
+                edge('b:2', 'c:3', { immediate: true }), edge('c:3', 'd:4', { immediate: true }),
+            ],
             ['a:0'],
-        ), false);
-        assert.deepStrictEqual(visible.nodes.map(n => n.id), ['a:0']);
-        assert.strictEqual(visible.edges.length, 0);
+        );
+        const bridge = filteredGraph(longer, ['major']).edges.find(e => e.to === 'd:4');
+        assert.deepStrictEqual(bridge?.skipped, ['b:2', 'c:3']);
     });
 
-    it('keeps an event a visible route also reaches', () => {
-        const visible = visibleGraph(payload(
-            [eventNode('root:0'), eventNode('hidden:1', { hidden: true }), eventNode('shared:2')],
-            [edge('root:0', 'hidden:1'), edge('hidden:1', 'shared:2'), edge('root:0', 'shared:2')],
-            ['root:0'],
-        ), false);
-        const ids = visible.nodes.map(n => n.id).sort();
-        assert.deepStrictEqual(ids, ['root:0', 'shared:2']);
-        assert.deepStrictEqual(visible.edges.map(e => `${e.from}->${e.to}`), ['root:0->shared:2']);
-    });
-
-    it('keeps the target of an immediate call that a normal call also reaches', () => {
-        const visible = visibleGraph(payload(
-            [eventNode('a:0'), eventNode('b:1'), eventNode('c:2')],
-            [edge('a:0', 'b:1', { immediate: true }), edge('a:0', 'c:2'), edge('c:2', 'b:1')],
+    it('keeps what the call was, so the delay and the guard on it are not invented anew', () => {
+        const guarded = payload(
+            [
+                eventNode('a:0', { major: true }), optionNode('ao:1'),
+                eventNode('b:2'), optionNode('bo:3'), eventNode('c:4', { major: true }),
+            ],
+            [
+                edge('a:0', 'ao:1', { structural: true }),
+                edge('ao:1', 'b:2', { days: 5, scope: 'OVERLORD', condition: leaf('tag = FROM') }),
+                edge('b:2', 'bo:3', { structural: true }), edge('bo:3', 'c:4'),
+            ],
             ['a:0'],
-        ), false);
-        assert.deepStrictEqual(visible.nodes.map(n => n.id).sort(), ['a:0', 'b:1', 'c:2']);
-        // The immediate route itself is still gone; b is reached through c.
-        assert.deepStrictEqual(visible.edges.map(e => `${e.from}->${e.to}`), ['a:0->c:2', 'c:2->b:1']);
+        );
+        const bridge = filteredGraph(guarded, ['major']).edges.find(e => e.to === 'c:4');
+        assert.strictEqual(bridge?.days, 5);
+        assert.strictEqual(bridge?.scope, 'OVERLORD');
+        assert.deepStrictEqual(bridge?.condition, leaf('tag = FROM'));
+    });
+
+    it('drops the arrow when nothing kept is left downstream of it', () => {
+        const deadEnd = payload(
+            [eventNode('a:0', { major: true }), optionNode('ao:1'), eventNode('b:2')],
+            [edge('a:0', 'ao:1', { structural: true }), edge('ao:1', 'b:2')],
+            ['a:0'],
+        );
+        const result = filteredGraph(deadEnd, ['major']);
+        assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:0', 'ao:1']);
+        assert.deepStrictEqual(result.edges.map(e => `${e.from}->${e.to}`), ['a:0->ao:1']);
+    });
+
+    it('terminates on a cycle of dropped events instead of hanging', () => {
+        const cycle = payload(
+            [
+                eventNode('a:0', { major: true }), optionNode('ao:1'),
+                eventNode('b:2'), eventNode('c:3'),
+            ],
+            [
+                edge('a:0', 'ao:1', { structural: true }), edge('ao:1', 'b:2'),
+                edge('b:2', 'c:3', { immediate: true }), edge('c:3', 'b:2', { immediate: true }),
+            ],
+            ['a:0'],
+        );
+        const result = filteredGraph(cycle, ['major']);
+        assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:0', 'ao:1']);
     });
 
     it('never leaves an edge pointing at a dropped node', () => {
-        const visible = visibleGraph(source, false);
-        const ids = new Set(visible.nodes.map(n => n.id));
-        for (const e of visible.edges) {
+        const result = filteredGraph(bridged, ['major']);
+        const ids = new Set(result.nodes.map(n => n.id));
+        for (const e of result.edges) {
             assert.ok(ids.has(e.from) && ids.has(e.to), `edge ${e.from} -> ${e.to} dangles`);
         }
     });
 });
 
-describe('webview/eventtree chainedGraph', () => {
+describe('webview/eventtree filteredGraph chains', () => {
     // E1 offers two options: one calls E2, the other leads nowhere. E9 stands alone.
-    const chain = visible(
+    const chain = payload(
         [
             eventNode('e1:0'), optionNode('a:1'), optionNode('b:2'), eventNode('e2:3'),
             eventNode('e9:4'), optionNode('x:5'),
@@ -416,55 +524,60 @@ describe('webview/eventtree chainedGraph', () => {
         ['e1:0', 'e9:4'],
     );
 
-    it('passes the graph through untouched when the filter is off', () => {
-        const result = chainedGraph(chain, false);
-        assert.strictEqual(result.nodes.length, 6);
-        assert.strictEqual(result.edges.length, 4);
-    });
-
     it('keeps a chained event and every option it offers, dead ends included', () => {
-        const ids = chainedGraph(chain, true).nodes.map(n => n.id).sort();
+        const ids = filteredGraph(chain, ['chains']).nodes.map(n => n.id).sort();
         assert.deepStrictEqual(ids, ['a:1', 'b:2', 'e1:0', 'e2:3']);
     });
 
     it('drops an event that calls nothing, and its options with it', () => {
-        const ids = new Set(chainedGraph(chain, true).nodes.map(n => n.id));
+        const ids = new Set(filteredGraph(chain, ['chains']).nodes.map(n => n.id));
         assert.ok(!ids.has('e9:4'));
         assert.ok(!ids.has('x:5'));
     });
 
     it('keeps an unresolved target and the event that calls it', () => {
-        const result = chainedGraph(visible(
+        const result = filteredGraph(payload(
             [eventNode('e1:0'), optionNode('a:1'), {
                 id: 'gone:2', kind: 'unresolved', eventId: 'other.4', scope: 'EVENT_TARGET',
             } as EventGraphNode],
             [edge('e1:0', 'a:1', { structural: true }), edge('a:1', 'gone:2')],
             ['e1:0'],
-        ), true);
+        ), ['chains']);
         assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:1', 'e1:0', 'gone:2']);
     });
 
+    it('drops an unresolved target under a filter it has nothing to match with', () => {
+        const result = filteredGraph(payload(
+            [eventNode('e1:0', { major: true }), optionNode('a:1'), {
+                id: 'gone:2', kind: 'unresolved', eventId: 'other.4', scope: 'EVENT_TARGET',
+            } as EventGraphNode],
+            [edge('e1:0', 'a:1', { structural: true }), edge('a:1', 'gone:2')],
+            ['e1:0'],
+        ), ['major']);
+        assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:1', 'e1:0']);
+    });
+
     it('keeps an event linked by an immediate call with no option in between', () => {
-        const result = chainedGraph(visible(
+        const result = filteredGraph(payload(
             [eventNode('a:0'), eventNode('b:1')],
             [edge('a:0', 'b:1', { immediate: true })],
             ['a:0'],
-        ), true);
+        ), ['chains']);
         assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:0', 'b:1']);
     });
 
     it('keeps an event that fires itself', () => {
-        const result = chainedGraph(visible(
+        const result = filteredGraph(payload(
             [eventNode('e:0'), optionNode('a:1')],
             [edge('e:0', 'a:1', { structural: true }), edge('a:1', 'e:0')],
             ['e:0'],
-        ), true);
+        ), ['chains']);
         assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:1', 'e:0']);
     });
 
     it('counts every owner of an option reached from two events', () => {
         // The same option node is emitted once per scope situation, so it can hang off two events.
-        const result = chainedGraph(visible(
+        const result = filteredGraph(payload(
             [eventNode('e1:0'), eventNode('e2:1'), optionNode('shared:2'), eventNode('e3:3')],
             [
                 edge('e1:0', 'shared:2', { structural: true }),
@@ -472,55 +585,46 @@ describe('webview/eventtree chainedGraph', () => {
                 edge('shared:2', 'e3:3'),
             ],
             ['e1:0', 'e2:1'],
-        ), true);
+        ), ['chains']);
         assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['e1:0', 'e2:1', 'e3:3', 'shared:2']);
     });
 
     it('makes an event whose only caller was dropped a root', () => {
-        // e2 is called from e1, which the filter keeps -- but c1, the only caller of e1, is not an
-        // event at all here, so the root list has to be rebuilt from what survived.
-        const result = chainedGraph(chain, true);
-        assert.ok(result.roots.includes('e1:0'));
-        assert.ok(!result.roots.includes('e9:4'));
+        const result = filteredGraph(payload(
+            [
+                eventNode('caller:0', { major: true }), optionNode('co:1'),
+                eventNode('called:2'), optionNode('xo:3'), eventNode('last:4'),
+            ],
+            [
+                edge('caller:0', 'co:1', { structural: true }), edge('co:1', 'called:2'),
+                edge('called:2', 'xo:3', { structural: true }), edge('xo:3', 'last:4'),
+            ],
+            ['caller:0'],
+        ), ['triggered']);
+        // caller is major but also triggered, so all three survive; nothing is re-rooted here.
+        assert.deepStrictEqual(result.roots, ['caller:0']);
+
+        const withoutCaller = filteredGraph(payload(
+            [
+                eventNode('caller:0', { isTriggeredOnly: false }), optionNode('co:1'),
+                eventNode('called:2'),
+            ],
+            [edge('caller:0', 'co:1', { structural: true }), edge('co:1', 'called:2')],
+            ['caller:0'],
+        ), ['triggered']);
+        assert.deepStrictEqual(withoutCaller.roots, ['called:2']);
     });
 
     it('keeps the declared root of a group that is nothing but a cycle', () => {
-        const result = chainedGraph(visible(
+        const result = filteredGraph(payload(
             [eventNode('a:0'), optionNode('ao:1'), eventNode('b:2'), optionNode('bo:3')],
             [
                 edge('a:0', 'ao:1', { structural: true }), edge('ao:1', 'b:2'),
                 edge('b:2', 'bo:3', { structural: true }), edge('bo:3', 'a:0'),
             ],
             ['a:0'],
-        ), true);
+        ), ['chains']);
         assert.deepStrictEqual(result.roots, ['a:0']);
-    });
-
-    it('never leaves an edge pointing at a dropped node', () => {
-        const result = chainedGraph(chain, true);
-        const ids = new Set(result.nodes.map(n => n.id));
-        for (const e of result.edges) {
-            assert.ok(ids.has(e.from) && ids.has(e.to), `edge ${e.from} -> ${e.to} dangles`);
-        }
-    });
-
-    it('does not mutate the graph it was given', () => {
-        const roots = [...chain.roots];
-        chainedGraph(chain, true);
-        assert.deepStrictEqual(chain.roots, roots);
-        assert.strictEqual(chain.nodes.length, 6);
-    });
-
-    it('asks the question of the graph on screen, not of the payload', () => {
-        // The only link is an immediate call, which the hidden filter removes. Running the chain
-        // filter first would keep both events on the strength of a link that is no longer there.
-        const source = payload(
-            [eventNode('a:0'), eventNode('b:1')],
-            [edge('a:0', 'b:1', { immediate: true })],
-            ['a:0'],
-        );
-        assert.strictEqual(chainedGraph(visibleGraph(source, false), true).nodes.length, 0);
-        assert.strictEqual(chainedGraph(visibleGraph(source, true), true).nodes.length, 2);
     });
 });
 
@@ -893,6 +997,40 @@ describe('webview/eventtree rendering', () => {
         input.dispatchEvent(new (window as any).Event('change'));
     }
 
+    const push = (next: EventGraphPayload) => window.dispatchEvent(new (window as any).MessageEvent('message', {
+        data: { type: 'updateBody', styleCss: '', data: { eventGraph: next } },
+    }));
+
+    // What the closed combobox reads, which is the only place the current selection is shown.
+    const filterValue = () => document.querySelector('#ev-filters > span.value')!.textContent;
+
+    // The entries the file can use. A gated-out entry is hidden rather than removed, which is what
+    // stops DivDropdown from offering it.
+    const offeredFilters = () => Array.from(document.querySelectorAll('#ev-filters .option'))
+        .filter(option => !option.hasAttribute('hidden'))
+        .map(option => option.getAttribute('value'));
+
+    // Drives the real widget rather than reaching past it: open the menu, tick the boxes that
+    // should be on and untick the rest, then close it. The items follow the offered options in
+    // order, so an entry the flags took away cannot be selected here either.
+    function setFilters(values: string[]): void {
+        const select = document.getElementById('ev-filters')!;
+        select.dispatchEvent(new (window as any).MouseEvent('mousedown'));
+        const list = document.querySelector('ul.select-dropdown');
+        if (!list) {
+            assert.deepStrictEqual(values, [], 'the filter list is not open, so nothing can be selected');
+            return;
+        }
+        const offered = offeredFilters();
+        Array.from(list.querySelectorAll('li')).forEach((item, index) => {
+            const checkbox = item.querySelector('input[type=checkbox]') as HTMLInputElement;
+            if (checkbox.checked !== values.includes(offered[index] ?? '')) {
+                checkbox.click();
+            }
+        });
+        window.dispatchEvent(new (window as any).KeyboardEvent('keydown', { code: 'Escape' }));
+    }
+
     let previousBody = '';
 
     before(() => {
@@ -916,7 +1054,7 @@ describe('webview/eventtree rendering', () => {
         // The shared widget is built before the saved values are restored, so without a resync it
         // would report every toggle as unchecked until the first click.
         for (const id of ['show-localisation', 'show-option-triggers', 'show-edge-conditions',
-            'show-event-conditions', 'show-hidden']) {
+            'show-event-conditions']) {
             const input = toggle(id);
             const widget = input.parentElement!.querySelector('[role=checkbox]')!;
             assert.strictEqual(
@@ -955,6 +1093,50 @@ describe('webview/eventtree rendering', () => {
         const panel = card.querySelector('.ev-cond')!;
         assert.ok(panel.textContent!.includes('all of'));
         assert.ok(panel.textContent!.includes('is_in_array'));
+    });
+
+    // The glyph row, which is what says at a glance what kind of event a card is.
+    describe('the kind markers', () => {
+        const cardFor = (eventId: string) => Array.from(content().querySelectorAll('.ev-card-event'))
+            .find(c => c.textContent!.includes(eventId))!;
+        const glyphsOf = (eventId: string) => Array.from(
+            cardFor(eventId).querySelectorAll('.ev-markers > .ev-marker'),
+        ).map(glyph => glyph.className.replace('ev-marker ', ''));
+
+        it('gives a plain triggered-only event one square and nothing else', () => {
+            assert.deepStrictEqual(glyphsOf('arab_spring.0'), ['ev-marker-triggered']);
+        });
+
+        it('shows every kind an event is at once, in a fixed order', () => {
+            // arab_spring.1 is a major news event that is triggered only: all three, news first.
+            assert.deepStrictEqual(
+                glyphsOf('arab_spring.1'),
+                ['ev-marker-news', 'ev-marker-major', 'ev-marker-triggered'],
+            );
+        });
+
+        it('marks a hidden event hollow', () => {
+            assert.deepStrictEqual(
+                glyphsOf('arab_spring.3'),
+                ['ev-marker-hidden', 'ev-marker-triggered'],
+            );
+        });
+
+        it('leaves the scope on the row for every glyph to inherit', () => {
+            const row = cardFor('arab_spring.1').querySelector('.ev-markers') as HTMLElement;
+            assert.strictEqual(row.style.getPropertyValue('--ev-dot'), 'var(--ev-news)');
+            assert.strictEqual(row.title, 'news_event');
+        });
+
+        it('names each glyph, so what it stands for can be read off it', () => {
+            const glyphs = Array.from(
+                cardFor('arab_spring.1').querySelectorAll('.ev-markers > .ev-marker'),
+            ) as HTMLElement[];
+            assert.deepStrictEqual(
+                glyphs.map(g => g.title),
+                ['News', 'Major', 'Is triggered only'],
+            );
+        });
     });
 
     it('marks the event card navigable so clicking it jumps to the definition', () => {
@@ -1007,12 +1189,12 @@ describe('webview/eventtree rendering', () => {
         setToggle('show-event-conditions', true);
     });
 
-    it('removes the hidden event and its edge when hidden events are off', () => {
-        setToggle('show-hidden', false);
-        assert.strictEqual(content().querySelectorAll('.ev-node').length, 3);
-        assert.strictEqual(content().querySelectorAll('svg.ev-edges path').length, 2);
-        assert.ok(!content().textContent!.includes('Ally under Threat'));
-        setToggle('show-hidden', true);
+    it('narrows the canvas to the hidden event and puts the rest back', () => {
+        setFilters(['hidden']);
+        assert.strictEqual(content().querySelectorAll('.ev-node').length, 1);
+        assert.strictEqual(content().querySelectorAll('svg.ev-edges path').length, 0);
+        assert.ok(content().textContent!.includes('Ally under Threat'));
+        setFilters([]);
         assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
     });
 
@@ -1319,9 +1501,9 @@ describe('webview/eventtree rendering', () => {
         it('counts only the matches a filter left on the canvas', () => {
             type('arab_spring');
             assert.ok(counter().textContent!.endsWith('/3'), counter().textContent!);
-            setToggle('show-hidden', false);
-            assert.ok(counter().textContent!.endsWith('/2'), counter().textContent!);
-            setToggle('show-hidden', true);
+            setFilters(['hidden']);
+            assert.ok(counter().textContent!.endsWith('/1'), counter().textContent!);
+            setFilters([]);
         });
 
         // The two states live on different elements on purpose, so neither needs !important.
@@ -1335,7 +1517,7 @@ describe('webview/eventtree rendering', () => {
         });
     });
 
-    describe('the chains-only filter', () => {
+    describe('the filter list', () => {
         // One chain (e1 -> a -> e2) plus a standalone event that calls nothing.
         const mixed = payload(
             [eventNode('e1:0'), optionNode('a:1'), eventNode('e2:2'), eventNode('alone:3')],
@@ -1343,83 +1525,116 @@ describe('webview/eventtree rendering', () => {
             ['e1:0', 'alone:3'],
         );
 
-        const push = (next: EventGraphPayload) => window.dispatchEvent(new (window as any).MessageEvent('message', {
-            data: { type: 'updateBody', styleCss: '', data: { eventGraph: next } },
-        }));
-
         afterEach(() => {
-            setToggle('show-chains-only', false);
+            setFilters([]);
             push(integrationPayload);
         });
 
-        it('starts off, so nothing is hidden the first time the preview is opened', () => {
-            assert.strictEqual(toggle('show-chains-only').checked, false);
+        it('starts with nothing selected, so nothing is hidden when the preview is first opened', () => {
+            assert.strictEqual(filterValue(), '(All events)');
+            assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
         });
 
         it('removes the unlinked event and puts it back', () => {
             push(mixed);
             assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
 
-            setToggle('show-chains-only', true);
+            setFilters(['chains']);
             assert.strictEqual(content().querySelectorAll('.ev-node').length, 3);
             assert.ok(!content().textContent!.includes('alone:3'));
 
-            setToggle('show-chains-only', false);
+            setFilters([]);
             assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
+        });
+
+        it('shows more when a second filter is selected, not less', () => {
+            push(mixed);
+            setFilters(['major']);
+            assert.strictEqual(content().querySelectorAll('.ev-node').length, 0);
+            setFilters(['major', 'chains']);
+            assert.strictEqual(content().querySelectorAll('.ev-node').length, 3);
+        });
+
+        it('says on the card and on the arrow which events it stepped over', () => {
+            push(payload(
+                [
+                    eventNode('a:0', { major: true }), optionNode('ao:1'),
+                    eventNode('b:2'), optionNode('bo:3'), eventNode('c:4', { major: true }),
+                ],
+                [
+                    edge('a:0', 'ao:1', { structural: true }), edge('ao:1', 'b:2'),
+                    edge('b:2', 'bo:3', { structural: true }), edge('bo:3', 'c:4'),
+                ],
+                ['a:0'],
+            ));
+            setFilters(['major']);
+
+            assert.strictEqual(content().querySelectorAll('path.ev-edge-bridged').length, 1);
+            const chip = content().querySelector('.ev-chip-bridged');
+            assert.ok(chip, 'the bridged arrow must be labelled');
+            assert.ok(chip!.textContent!.includes('1 filtered out'), chip!.textContent!);
+
+            const badge = content().querySelector('.ev-badge-skipped');
+            assert.ok(badge, 'the card the arrow leaves must say so too');
+            assert.ok(badge!.getAttribute('title')!.includes('b:2'), badge!.getAttribute('title')!);
         });
     });
 
     describe('the toolbar', () => {
         const widgetOf = (id: string) => toggle(id).nextElementSibling as HTMLElement;
+        const noFlags = {
+            hasChains: false, hasEffects: false, hasHidden: false, hasMajor: false, hasNews: false,
+            hasMtth: false, hasTriggered: false, hasLocalisation: false, hasPicture: false,
+        };
 
-        const push = (next: EventGraphPayload) => window.dispatchEvent(new (window as any).MessageEvent('message', {
-            data: { type: 'updateBody', styleCss: '', data: { eventGraph: next } },
-        }));
-
-        afterEach(() => push(integrationPayload));
+        afterEach(() => {
+            setFilters([]);
+            push(integrationPayload);
+        });
 
         it('offers every control the file can use', () => {
-            for (const id of ['show-localisation', 'show-hidden', 'show-effects', 'show-chains-only']) {
+            for (const id of ['show-localisation', 'show-effects']) {
                 assert.notStrictEqual(widgetOf(id).style.display, 'none', `${id} must be offered`);
             }
             // Nothing in this chain has a picture, so that one control is not offered.
             assert.strictEqual(widgetOf('show-picture').style.display, 'none');
         });
 
+        it('offers only the filters some event in the file matches', () => {
+            // Every event in this chain is triggered only, so filtering on a mean time cannot help.
+            assert.deepStrictEqual(offeredFilters(), ['triggered', 'news', 'hidden', 'major', 'chains']);
+        });
+
         it('hides a toggle that cannot change anything for this file', () => {
-            push({ ...payload([eventNode('lonely:0')], [], ['lonely:0']), toolbarFlags: {
-                hasChains: false, hasEffects: false, hasHidden: false, hasLocalisation: false, hasPicture: false,
-            } });
-            for (const id of ['show-localisation', 'show-hidden', 'show-picture', 'show-effects',
-                'show-chains-only']) {
+            push({ ...payload([eventNode('lonely:0')], [], ['lonely:0']), toolbarFlags: noFlags });
+            for (const id of ['show-localisation', 'show-picture', 'show-effects']) {
                 assert.strictEqual(widgetOf(id).style.display, 'none', `${id} must be hidden`);
             }
             // The three condition toggles are never gated -- they would flip on every typed trigger.
             assert.notStrictEqual(widgetOf('show-option-triggers').style.display, 'none');
         });
 
-        it('forces a hidden chains filter off so the canvas cannot be emptied with no control to undo it', () => {
-            setToggle('show-chains-only', true);
-            const unchained = { ...payload([eventNode('lonely:0')], [], ['lonely:0']), toolbarFlags: {
-                hasChains: false, hasEffects: false, hasHidden: false, hasLocalisation: false, hasPicture: false,
-            } };
-            push(unchained);
-            assert.strictEqual(content().querySelectorAll('.ev-node').length, 1, 'the event must still be drawn');
-            assert.strictEqual(toggle('show-chains-only').checked, false);
-            const widget = widgetOf('show-chains-only').querySelector('[role=checkbox]')!;
-            assert.strictEqual(widget.getAttribute('aria-checked'), 'false');
+        it('takes the whole filter list away when there is nothing left to filter on', () => {
+            push({ ...payload([eventNode('lonely:0')], [], ['lonely:0']), toolbarFlags: noFlags });
+            assert.strictEqual(document.getElementById('ev-filter-container')!.style.display, 'none');
+            assert.deepStrictEqual(offeredFilters(), []);
         });
 
-        it('gives a control that comes back the position its reader last put it in', () => {
-            setToggle('show-chains-only', true);
-            push({ ...payload([eventNode('lonely:0')], [], ['lonely:0']), toolbarFlags: {
-                hasChains: false, hasEffects: false, hasHidden: false, hasLocalisation: false, hasPicture: false,
-            } });
-            assert.strictEqual(toggle('show-chains-only').checked, false, 'forced off while unusable');
+        it('forces a filter it cannot offer off, so the canvas cannot be emptied with no way back', () => {
+            setFilters(['hidden']);
+            push({ ...payload([eventNode('lonely:0')], [], ['lonely:0']), toolbarFlags: noFlags });
+            assert.strictEqual(content().querySelectorAll('.ev-node').length, 1, 'the event must still be drawn');
+            assert.strictEqual(filterValue(), '(All events)');
+        });
+
+        it('gives a filter that comes back the position its reader last put it in', () => {
+            setFilters(['hidden']);
+            push({ ...payload([eventNode('lonely:0')], [], ['lonely:0']), toolbarFlags: noFlags });
+            assert.strictEqual(filterValue(), '(All events)', 'forced off while unusable');
 
             push(integrationPayload);
-            assert.strictEqual(toggle('show-chains-only').checked, true,
-                'the forced value must not survive the control coming back');
+            assert.strictEqual(filterValue(), 'Hidden',
+                'the forced value must not survive the filter coming back');
         });
 
         it('shows every control again for a payload that carries no flags at all', () => {
@@ -1427,6 +1642,7 @@ describe('webview/eventtree rendering', () => {
                 data: { type: 'updateBody', data: { eventGraph: { roots: [], nodes: [], edges: [], conditionExprs: [] } } },
             }));
             assert.notStrictEqual(widgetOf('show-localisation').style.display, 'none');
+            assert.deepStrictEqual(offeredFilters(), ['mtth', 'triggered', 'news', 'hidden', 'major', 'chains']);
         });
     });
 });
