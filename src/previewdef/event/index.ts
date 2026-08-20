@@ -27,7 +27,16 @@ class EventPreview extends LoaderPreview<EventsLoader> {
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
         super(uri, panel, (file, contentProvider) => new EventsLoader(file, contentProvider), renderEventFile);
         this.configurationHandler = vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration(`${ConfigurationKey}.previewLocalisation`)) {
+            // previewLocalisation changes the text in the payload; localisationIndex changes whether
+            // there is any text to show and so whether the localisation toggle is offered at all;
+            // gfxIndex changes which pictures resolve, and so whether the picture toggle is.
+            //
+            // registerFeatureFlags subscribes to this same event during activation, long before any
+            // preview exists, and VS Code fires listeners in subscription order -- so the module
+            // flags graph.ts reads are already refreshed by the time this runs.
+            if (e.affectsConfiguration(`${ConfigurationKey}.previewLocalisation`) ||
+                e.affectsConfiguration(`${ConfigurationKey}.localisationIndex`) ||
+                e.affectsConfiguration(`${ConfigurationKey}.gfxIndex`)) {
                 this.reload();
             }
         });
