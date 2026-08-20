@@ -1,5 +1,4 @@
 import { ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
-import { LocText, NavTarget } from "../sharedpayload";
 
 // The serializable projection of an ideas file: what the host posts and the webview renders as a
 // roster of cards.
@@ -18,7 +17,7 @@ export {
 	ModifierLine,
 	ModifierGroup,
 } from "../sharedpayload";
-import { ModifierLine, ModifierGroup } from "../sharedpayload";
+import { LocText, NavTarget, ModifierLine, ModifierGroup } from "../sharedpayload";
 
 // The idea's icon, as a StyleTable class carrying the decoded image as a data URL, plus the size to
 // draw it at.

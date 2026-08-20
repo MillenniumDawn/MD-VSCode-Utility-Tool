@@ -1,8 +1,9 @@
 /*
  * Event workflow view.
  *
- * The theme tokens and the card primitives this builds on live in hoicard.css, which the event
- * preview loads alongside this file; what is here is the canvas the cards are laid out on.
+ * The theme tokens and the card primitives this builds on live in hoicard.css, and the canvas the
+ * cards are laid out on -- the drag layer, the rails, the arrows and their chips -- in hoigraph.css;
+ * the event preview loads both alongside this file. What is here is what belongs to events alone.
  *
  * Colour carries meaning and nothing else: each glyph shape has one hue and keeps it on every
  * card, so a card carrying three glyphs shows three colours rather than one; the accent marks a
@@ -20,11 +21,6 @@
 	z-index: var(--ev-layer-canvas);
 	transform-origin: 0 0;
 	pointer-events: none;
-}
-
-#dragger {
-	z-index: var(--ev-layer-dragger);
-	cursor: grab;
 }
 
 /* The label and the counter are single-line text next to 20px-tall controls, so they need centring
@@ -46,68 +42,6 @@
 	margin-right: 12px;
 	font-size: 11px;
 	color: var(--ev-fg-muted);
-}
-
-/* initCommon puts this class on <body> for as long as the mouse is held down on the drag layer. */
-body.panning #dragger,
-body.panning .ev-card,
-body.panning .ev-chip {
-	cursor: grabbing;
-}
-
-.ev-edges {
-	position: absolute;
-	left: 0;
-	top: 0;
-	overflow: visible;
-	pointer-events: none;
-}
-
-/* ---------- Column rails ---------- */
-
-/* One rail per rank. Rank is real information: how many events deep the chain is here. */
-.ev-rail {
-	position: absolute;
-	top: 0;
-	border-left: 1px dashed var(--ev-border);
-	pointer-events: none;
-}
-
-.ev-rail > span {
-	position: absolute;
-	top: 6px;
-	left: 8px;
-	padding: 0 5px;
-	font-size: 11px;
-	color: var(--ev-fg-muted);
-	background: var(--vscode-editor-background);
-	white-space: nowrap;
-}
-
-/* ---------- Nodes ---------- */
-
-.ev-node {
-	position: absolute;
-	/* Takes the mouse back from the transparent canvas: hovering, clicking and the popups all
-	   hang off the node, everything around it belongs to the drag layer. */
-	pointer-events: auto;
-}
-
-.ev-node.ev-dim,
-.ev-chip.ev-dim {
-	opacity: 0.25;
-}
-
-.ev-node,
-.ev-chip {
-	transition: opacity 0.12s linear;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.ev-node,
-	.ev-chip {
-		transition: none;
-	}
 }
 
 .ev-card-event {
@@ -212,65 +146,12 @@ body.panning .ev-chip {
 	border-color: var(--ev-immediate);
 }
 
-/* Says how many events a filter took out from under this card. Dashed, like everything else on the
-   canvas that stands for something not on it. */
-.ev-badge-skipped {
-	border-style: dashed;
-	border-color: var(--ev-accent);
-	color: var(--ev-accent);
-}
-
-/* ---------- Effects ---------- */
-
-/* Absolute, so a card that has effects is exactly as tall as one that has not -- the layout
-   reserves space from measured heights, and a dot must not be able to move a box. */
-.ev-effects-dot {
-	position: absolute;
-	top: 7px;
-	right: 8px;
-	width: 4px;
-	height: 4px;
-	border-radius: 50%;
-	background: var(--ev-fg-muted);
-	opacity: 0.45;
-}
-
-/* The hover panel lives on <body>, outside the zoomed canvas, and scales itself to match the card
-   it belongs to. It never takes the pointer: it may not come between the pointer and the card it
-   is describing, or hovering would flicker. */
-.ev-effects-tip {
-	position: absolute;
-	z-index: var(--ev-layer-popup);
-	max-width: 420px;
-	max-height: 60vh;
-	overflow: hidden;
-	padding: 8px 11px 9px;
-	border: 1px solid var(--ev-border);
-	border-radius: var(--ev-radius);
-	background: var(--ev-surface-alt);
-	box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
-	pointer-events: none;
-}
-
-/* The event picture popup, which is also a <body> child: the sprite class carries its background
-   and size, this carries the two things every hover popup here needs. Without pointer-events it
-   would take the click wherever it covers the toolbar. */
+/* The event picture popup, which is a <body> child: the sprite class carries its background and
+   size, this carries the two things every hover popup here needs. Without pointer-events it would
+   take the click wherever it covers the toolbar. */
 .event-hover-picture {
 	z-index: var(--ev-layer-popup);
 	pointer-events: none;
-}
-
-/* ---------- Edges ---------- */
-
-.ev-edge {
-	fill: none;
-	stroke: var(--ev-border);
-	stroke-width: 1.5;
-}
-
-.ev-edge-guarded {
-	stroke: var(--ev-accent);
-	stroke-dasharray: 4 3;
 }
 
 /* A call the event fires itself, from its immediate or its after block, rather than one the player
@@ -280,57 +161,4 @@ body.panning .ev-chip {
 	stroke-dasharray: 1 3;
 	stroke-width: 2;
 	stroke-linecap: round;
-}
-
-.ev-edge-dim {
-	opacity: 0.15;
-}
-
-/* An arrow that steps over events a filter removed. The long dash says the two cards it joins were
-   not neighbours in the file, and the chip on it says how many are missing. Last, so it wins over
-   the guarded and immediate dash patterns above -- what the arrow skips matters more to a reader
-   than how it was called. */
-.ev-edge-bridged {
-	stroke-dasharray: 8 4;
-	stroke-width: 1.5;
-	stroke-linecap: butt;
-}
-
-.ev-chip {
-	position: absolute;
-	/* A chip is built before the layout runs, so that its measured width can size the gap it sits
-	   in, which puts it in the page before the column rails. The rail is a dashed line down the
-	   middle of that same gap, so without this it would be drawn across the chip. */
-	z-index: 1;
-	transform: translate(-50%, -50%);
-	max-width: 220px;
-	padding: 0 6px;
-	border: 1px solid var(--ev-border);
-	border-radius: 2em;
-	background: var(--vscode-editor-background);
-	font-size: 11px;
-	line-height: 17px;
-	color: var(--ev-fg-muted);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	pointer-events: none;
-}
-
-.ev-chip-guarded {
-	border-color: var(--ev-accent);
-	color: var(--ev-accent);
-	font-family: var(--vscode-editor-font-family, monospace);
-}
-
-.ev-chip-bridged {
-	border-style: dashed;
-	border-color: var(--ev-accent);
-}
-
-/* ---------- Empty state ---------- */
-
-.ev-empty {
-	padding: 40px;
-	color: var(--ev-fg-muted);
 }

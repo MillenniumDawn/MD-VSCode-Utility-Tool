@@ -217,6 +217,7 @@ const webviewJsConfig = {
     guipreview: './webviewsrc/guipreview.ts',
     miopreview: './webviewsrc/miopreview.ts',
     ideapreview: './webviewsrc/ideapreview.ts',
+    decisiontree: './webviewsrc/decisiontree.ts',
   },
   
   output: {

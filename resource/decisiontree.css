@@ -1,0 +1,203 @@
+/*
+ * Decision graph view.
+ *
+ * The theme tokens and the card primitives live in hoicard.css, and the canvas the cards are laid
+ * out on in hoigraph.css; the decision preview loads both alongside this file. What is here is what
+ * belongs to decisions alone.
+ *
+ * Colour carries meaning and nothing else. A mission is the game's own countdown and reads as one:
+ * green when its timer is a goal, red when it is a threat, which is exactly what `is_good` decides.
+ * A plain decision is neutral, because a button the player may press says nothing about outcome.
+ */
+
+/*
+ * The canvas is sized to the whole graph and paints over the fixed #dragger behind it, so without
+ * this it would swallow every mousedown and drag-to-pan could never start. Only the nodes take the
+ * mouse back; arrows, rails and chips carry no listeners, so a drag can begin on those too.
+ */
+#decisiontreecontent {
+	position: relative;
+	z-index: var(--ev-layer-canvas);
+	transform-origin: 0 0;
+	pointer-events: none;
+}
+
+/* The label and the counter are single-line text next to 20px-tall controls, so they need centring
+   the flex row does not give them by default. */
+.toolbar > label[for="dec-searchbox"],
+.toolbar > .dec-search-count {
+	align-self: center;
+}
+
+.toolbar > #dec-searchbox {
+	width: 190px;
+	margin-right: 8px;
+}
+
+/* Wide enough that the strip does not shift sideways as the count goes from "1/9" to "no matches",
+   and spaced from the first toggle like one toggle is from the next. */
+.toolbar > .dec-search-count {
+	min-width: 5em;
+	margin-right: 12px;
+	font-size: 11px;
+	color: var(--ev-fg-muted);
+}
+
+/* ---------- Cards ---------- */
+
+/* The category is the tab the decisions sit in, so it is the widest card and the one a chain reads
+   left to right from. */
+.dec-card-category {
+	width: 264px;
+}
+
+.dec-card-decision,
+.dec-card-mission {
+	width: 250px;
+}
+
+/* background-color, not the shorthand: the shorthand would drop the lift painted by .ev-card. */
+.dec-card-unresolved {
+	width: 200px;
+	border-style: dashed;
+	background-color: var(--ev-surface-alt);
+}
+
+/* A mission runs on its own clock rather than waiting to be pressed, which is the one distinction
+   the reader is here for. */
+.dec-card-mission {
+	border-color: var(--ev-triggered);
+}
+
+/* ---------- Glyphs ---------- */
+
+/* Round for a decision the player presses, square for a mission that runs itself, and the accent
+   diamond for a tab the game draws with its own window. Shape and colour say the same thing, so the
+   three are told apart without counting corners. */
+.dec-marker-decision {
+	background: var(--ev-mtth);
+}
+
+.dec-marker-mission {
+	border-radius: 1px;
+	background: var(--ev-triggered);
+}
+
+.dec-marker-gui {
+	border-radius: 1px;
+	background: var(--ev-accent);
+	transform: rotate(45deg);
+}
+
+/* The same glyphs stand in front of the filter names, where the card spacing does not apply. */
+.ev-marker.checkbox-glyph {
+	margin-top: 0;
+}
+
+/* ---------- Badges ---------- */
+
+/* The mission timer, in the two colours the game's own bar uses. */
+.dec-badge-goal {
+	color: var(--ev-good);
+	border-color: var(--ev-good);
+}
+
+.dec-badge-threat {
+	color: var(--ev-bad);
+	border-color: var(--ev-bad);
+}
+
+.dec-badge-gui {
+	color: var(--ev-accent);
+	border-color: var(--ev-accent);
+}
+
+/* Something the file names that the preview could not find. Dashed, like everything else on the
+   canvas that stands for something not on it. */
+.dec-badge-warn {
+	border-style: dashed;
+	color: var(--ev-major);
+	border-color: var(--ev-major);
+}
+
+/* ---------- Icon ---------- */
+
+.dec-icon {
+	flex: none;
+	margin-right: 6px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+/* ---------- Modifiers ---------- */
+
+.dec-modifiers ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.dec-modifier {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.dec-modifier-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dec-modifier-value {
+	flex: none;
+	font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.dec-tone-good .dec-modifier-value {
+	color: var(--ev-good);
+}
+
+.dec-tone-bad .dec-modifier-value {
+	color: var(--ev-bad);
+}
+
+/* ---------- Scripted GUI ---------- */
+
+/* The window is drawn at the size the game draws it and scaled into this frame, which is what keeps
+   a 1920px screen from setting the width of a column. Clipped rather than scrollable: it is a look
+   at the window, and a scrollbar inside a card on a pannable canvas fights the pan. */
+.dec-gui-frame {
+	position: relative;
+	overflow: hidden;
+	margin-top: 6px;
+	border: 1px solid var(--ev-border);
+	border-radius: var(--ev-radius);
+	background: var(--ev-surface-alt);
+}
+
+.dec-gui-window {
+	position: relative;
+}
+
+/* ---------- Edges ---------- */
+
+/* The category holding its decisions -- the structure of the file, not something one decision does
+   to another. Faint, so the calls between decisions are what stands out. */
+.dec-edge-structural {
+	stroke: var(--ev-border);
+	opacity: 0.55;
+}
+
+/* One decision starting or unlocking another. */
+.dec-edge-call {
+	stroke: var(--ev-immediate);
+	stroke-width: 2;
+}
+
+/* Ending a mission is the opposite of starting one, and reads that way. */
+.dec-edge-remove {
+	stroke: var(--ev-bad);
+	stroke-dasharray: 3 3;
+}

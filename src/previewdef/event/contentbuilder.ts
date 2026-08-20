@@ -55,6 +55,9 @@ export async function renderEventFile(
 				"common.css",
 				// The theme tokens and the card primitives, shared with the idea preview.
 				"hoicard.css",
+				// The canvas the cards are laid out on -- rails, arrows, chips -- shared with the
+				// decision preview.
+				"hoigraph.css",
 				"eventtree.css",
 				// Addressable id so an in-place updateBody can refresh the server StyleTable -- which
 				// now only holds the event picture sprites -- by mutating this <style>.textContent

@@ -1,4 +1,5 @@
 import {
+	andCondition,
 	ConditionComplexExpr,
 	ConditionFolder,
 	extractConditionFolder,
@@ -80,6 +81,50 @@ export function projectEffects(effect: EffectComplexExpr): EffectTreeNode[] {
 		.map((item) => ({ possibility: item.possibility, effect: projectEffects(item.effect) }))
 		.filter((item) => item.effect.length > 0);
 	return items.length === 0 ? [] : [{ kind: "choice", items }];
+}
+
+// One effect statement together with the condition that has to hold for it to be reached. The
+// condition is accumulated on the way down, so a call nested in
+// `if { limit = A } { if { limit = B } ... } }` arrives carrying `and(A, B)`.
+export interface GuardedEffectItem {
+	item: EffectItem;
+	condition: ConditionComplexExpr;
+	// Set when the statement sits in a `random_list` branch, carrying that branch's weight.
+	possibility: number | undefined;
+}
+
+// Finds every statement in an effect tree whose key is one of `names`, with its guard. This is how
+// one thing in the file is discovered to call another: an event option firing `country_event`, a
+// decision firing `activate_mission`. The caller decides what the found statement means.
+export function findGuardedEffectItems(
+	effect: EffectComplexExpr,
+	names: readonly string[],
+	condition: ConditionComplexExpr = true,
+	possibility: number | undefined = undefined,
+	result: GuardedEffectItem[] = [],
+): GuardedEffectItem[] {
+	if (effect === null) {
+		return result;
+	}
+
+	if ("nodeContent" in effect) {
+		const name = effect.node.name?.toLowerCase();
+		if (name && names.includes(name)) {
+			result.push({ item: effect, condition, possibility });
+		}
+	} else if ("condition" in effect) {
+		// `extractEffectByCondition` has already folded any enclosing `if` into this node's own
+		// condition, so the two usually overlap; `andCondition` drops the duplicate rather than
+		// stating the same guard twice.
+		const inner = andCondition(condition, effect.condition);
+		effect.items.forEach((item) => findGuardedEffectItems(item, names, inner, possibility, result));
+	} else {
+		effect.items.forEach((item) =>
+			findGuardedEffectItems(item.effect, names, condition, item.possibility, result),
+		);
+	}
+
+	return result;
 }
 
 function extractEffectByCondition(

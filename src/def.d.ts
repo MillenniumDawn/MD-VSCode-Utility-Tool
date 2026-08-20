@@ -7,6 +7,7 @@ declare module 'vscode' {
             readonly useConditionInFocus: boolean;
             readonly eventTreePreview: boolean;
             readonly ideaPreview: boolean;
+        readonly decisionPreview: boolean;
             readonly ideaSwapIndex: boolean;
             readonly sharedFocusIndex: boolean;
             readonly gfxIndex: boolean;
