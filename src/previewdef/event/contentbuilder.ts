@@ -142,20 +142,28 @@ function renderToolBar(styleTable: StyleTable): string {
 	// the reader with no single place to read the answer off. Selecting nothing shows everything;
 	// selecting several is an OR. Which entries are offered is decided in the webview from
 	// EventGraphPayload.toolbarFlags, so the list itself is written out in full here.
-	const filterOption = (value: string, text: string) =>
-		`<div class="option" value="${value}">${text}</div>`;
+	//
+	// Each entry carries the glyph the matching events wear on the canvas, so the shape vocabulary is
+	// learned from the control that uses it. It travels as an attribute rather than as markup inside
+	// the div because the dropdown flattens an option with textContent, which would drop the element
+	// and leave its classes in the closed combobox caption. Event chains has no glyph -- nothing on a
+	// card stands for it -- so it passes the empty string, which still reserves the column and keeps
+	// the six labels aligned.
+	const filterOption = (value: string, text: string, glyph: string) =>
+		`<div class="option" value="${value}" data-glyph="${glyph}">${text}</div>`;
+	const marker = (kind: string) => `ev-marker ev-marker-${kind}`;
 	const filters = `
         <div id="ev-filter-container">
             <label for="ev-filters" class="${labelStyle}">${localize("eventtree.filters", "Filters: ")}</label>
             <div class="select-container ${styleTable.style("marginRight10", () => `margin-right:10px`)}">
                 <div id="ev-filters" class="select multiple-select" tabindex="0" role="combobox">
                     <span class="value"></span>
-                    ${filterOption("mtth", localize("eventtree.filtermtth", "MTTH events"))}
-                    ${filterOption("triggered", localize("eventtree.filtertriggered", "Triggered only"))}
-                    ${filterOption("news", localize("eventtree.filternews", "News events"))}
-                    ${filterOption("hidden", localize("eventtree.filterhidden", "Hidden"))}
-                    ${filterOption("major", localize("eventtree.filtermajor", "Major"))}
-                    ${filterOption("chains", localize("eventtree.filterchains", "Event chains"))}
+                    ${filterOption("mtth", localize("eventtree.filtermtth", "MTTH events"), marker("mtth"))}
+                    ${filterOption("triggered", localize("eventtree.filtertriggered", "Triggered only"), marker("triggered"))}
+                    ${filterOption("news", localize("eventtree.filternews", "News events"), marker("news"))}
+                    ${filterOption("hidden", localize("eventtree.filterhidden", "Hidden"), marker("hidden"))}
+                    ${filterOption("major", localize("eventtree.filtermajor", "Major"), marker("major"))}
+                    ${filterOption("chains", localize("eventtree.filterchains", "Event chains"), "")}
                 </div>
             </div>
         </div>`;

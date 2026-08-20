@@ -251,6 +251,9 @@ export class DivDropdown extends Subscriber {
 				optionForDropdownMenu.push({
 					text: option.textContent ?? "",
 					value: value ?? "",
+					// null and "" are different answers: no attribute means this list has no glyph
+					// column at all, an empty one means this entry leaves its cell blank.
+					glyph: option.getAttribute("data-glyph") ?? undefined,
 					selected: value !== null ? selectedValues!.includes(value) : false,
 				});
 			}
@@ -281,7 +284,9 @@ export class DivDropdown extends Subscriber {
 	}
 }
 
-type Option = { text: string; value: string; selected: boolean };
+// glyph is the class list for a small shape drawn in front of the label, taken from the option's
+// data-glyph attribute. undefined leaves the item as it was; "" reserves the space without drawing.
+type Option = { text: string; value: string; selected: boolean; glyph?: string };
 class DropdownMenu extends Subscriber {
 	private writableOptions$: Subject<Option[]>;
 	public options$: Observable<Option[]>;
@@ -364,7 +369,7 @@ class DropdownMenu extends Subscriber {
 			checkbox.checked = option.selected;
 
 			item.appendChild(checkbox);
-			const checkboxItem = new Checkbox(checkbox, option.text);
+			const checkboxItem = new Checkbox(checkbox, option.text, option.glyph);
 			this.addSubscription(checkboxItem);
 
 			fromEvent(checkbox, "change").subscribe(() => {

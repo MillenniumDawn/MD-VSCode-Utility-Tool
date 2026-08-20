@@ -89,12 +89,12 @@ const shellHtml = `
             <div class="select-container">
                 <div id="ev-filters" class="select multiple-select" tabindex="0" role="combobox">
                     <span class="value"></span>
-                    <div class="option" value="mtth">MTTH events</div>
-                    <div class="option" value="triggered">Triggered only</div>
-                    <div class="option" value="news">News events</div>
-                    <div class="option" value="hidden">Hidden</div>
-                    <div class="option" value="major">Major</div>
-                    <div class="option" value="chains">Event chains</div>
+                    <div class="option" value="mtth" data-glyph="ev-marker ev-marker-mtth">MTTH events</div>
+                    <div class="option" value="triggered" data-glyph="ev-marker ev-marker-triggered">Triggered only</div>
+                    <div class="option" value="news" data-glyph="ev-marker ev-marker-news">News events</div>
+                    <div class="option" value="hidden" data-glyph="ev-marker ev-marker-hidden">Hidden</div>
+                    <div class="option" value="major" data-glyph="ev-marker ev-marker-major">Major</div>
+                    <div class="option" value="chains" data-glyph="">Event chains</div>
                 </div>
             </div>
         </div>
@@ -1122,10 +1122,23 @@ describe('webview/eventtree rendering', () => {
             );
         });
 
-        it('leaves the scope on the row for every glyph to inherit', () => {
+        // Each shape owns a colour in the stylesheet, so the row must not paint over them with one.
+        it('leaves the colour to the shapes and names the scope on the row', () => {
             const row = cardFor('arab_spring.1').querySelector('.ev-markers') as HTMLElement;
-            assert.strictEqual(row.style.getPropertyValue('--ev-dot'), 'var(--ev-news)');
+            assert.strictEqual(row.style.getPropertyValue('--ev-dot'), '');
             assert.strictEqual(row.title, 'news_event');
+        });
+
+        const badgesOf = (eventId: string) => Array.from(
+            cardFor(eventId).querySelectorAll('.ev-meta > .ev-badge'),
+        ).map(b => b.textContent);
+
+        it('writes out the scope kind the row colour used to carry', () => {
+            assert.ok(badgesOf('arab_spring.1').includes('news_event'), badgesOf('arab_spring.1').join());
+        });
+
+        it('leaves a country event unbadged, since that is nearly every event', () => {
+            assert.ok(!badgesOf('arab_spring.0').some(t => t!.endsWith('_event')), badgesOf('arab_spring.0').join());
         });
 
         it('names each glyph, so what it stands for can be read off it', () => {
@@ -1603,6 +1616,29 @@ describe('webview/eventtree rendering', () => {
         it('offers only the filters some event in the file matches', () => {
             // Every event in this chain is triggered only, so filtering on a mean time cannot help.
             assert.deepStrictEqual(offeredFilters(), ['triggered', 'news', 'hidden', 'major', 'chains']);
+        });
+
+        // The filter list is where the shapes on the cards are learned, so every entry that has one
+        // carries it. Event chains has no shape on any card and gets an empty cell, which still holds
+        // the column open so the six labels start at the same place.
+        it('puts each filter behind the glyph its events wear on the canvas', () => {
+            const select = document.getElementById('ev-filters')!;
+            select.dispatchEvent(new (window as any).MouseEvent('mousedown'));
+            const items = Array.from(document.querySelectorAll('ul.select-dropdown li'));
+            try {
+                assert.deepStrictEqual(
+                    items.map(item => item.querySelector('.checkbox-glyph')!.className),
+                    [
+                        'checkbox-glyph ev-marker ev-marker-triggered',
+                        'checkbox-glyph ev-marker ev-marker-news',
+                        'checkbox-glyph ev-marker ev-marker-hidden',
+                        'checkbox-glyph ev-marker ev-marker-major',
+                        'checkbox-glyph',
+                    ],
+                );
+            } finally {
+                window.dispatchEvent(new (window as any).KeyboardEvent('keydown', { code: 'Escape' }));
+            }
         });
 
         it('hides a toggle that cannot change anything for this file', () => {

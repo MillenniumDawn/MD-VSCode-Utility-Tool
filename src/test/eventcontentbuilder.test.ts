@@ -167,6 +167,20 @@ describe('previewdef/event renderEventFile in-place update', () => {
         }
     });
 
+    // The glyph rides on an attribute because the dropdown flattens an option with textContent, and
+    // markup inside the div would be dropped from the item and left as class names in the caption.
+    it('carries each filter glyph on the entry, so the list shows what the cards show', async () => {
+        const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+        for (const kind of ['mtth', 'triggered', 'news', 'hidden', 'major']) {
+            assert.ok(
+                html.includes(`data-glyph="ev-marker ev-marker-${kind}"`),
+                `expected the ${kind} filter to carry its glyph`,
+            );
+        }
+        // Nothing on a card stands for a chain, so that entry keeps the column open and draws nothing.
+        assert.ok(html.includes('value="chains" data-glyph=""'), 'event chains must reserve a blank cell');
+    });
+
     it('puts the search box before the toggles, where a narrow pane cannot scroll it away', async () => {
         const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         assert.ok(html.indexOf('id="ev-searchbox"') < html.indexOf('id="show-localisation"'));

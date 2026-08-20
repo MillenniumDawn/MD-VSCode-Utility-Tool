@@ -73,14 +73,6 @@ let filterDropdown: DivDropdown | undefined = undefined;
 // this module computed from one the reader chose. Only the second is worth storing.
 let syncingFilters = false;
 
-const scopeClassByType: Record<string, string> = {
-	country: "--ev-country",
-	news: "--ev-news",
-	state: "--ev-state",
-	unit_leader: "--ev-leader",
-	operative_leader: "--ev-operative",
-};
-
 //#region Condition rendering
 
 // `andnot` is NOT(a AND b) and `ornot` is NOT(a OR b), so with more than one item they read as
@@ -891,16 +883,12 @@ function skippedByEventOf(graph: VisibleGraph): Map<string, string[]> {
 }
 
 // One glyph per kind the event actually is, in a fixed order, so the row reads the same way on every
-// card and a major news event is not made to choose which of the two it advertises. Colour is left
-// saying what it has always said -- the scope -- and is set once on the row for every glyph to
-// inherit.
+// card and a major news event is not made to choose which of the two it advertises. Each shape owns
+// one colour, fixed in the stylesheet, so three glyphs on one card are three colours rather than one
+// -- which is what colouring the row by scope used to make them.
 function buildMarkers(node: EventGraphEventNode): HTMLDivElement {
 	const markers = document.createElement("div");
 	markers.className = "ev-markers";
-	markers.style.setProperty(
-		"--ev-dot",
-		`var(${scopeClassByType[node.eventType] ?? "--ev-country"})`,
-	);
 	markers.title = node.eventType + "_event";
 
 	const glyph = (className: string, title: string) => {
@@ -1016,6 +1004,12 @@ function buildEventCard(node: EventGraphEventNode): HTMLDivElement {
 			? feLocalize("eventtree.istriggeredonly", "Is triggered only")
 			: `${node.meanTimeToHappenBase} ${feLocalize("days", "day(s)")}`,
 	);
+	// The glyph row's colour used to say which kind of scope the event fires in; it now says which
+	// kinds of event it is, so the scope is written out instead. A country event is the overwhelming
+	// majority and the badge would be on nearly every card, so only the rest is named.
+	if (node.eventType !== "country") {
+		badge(meta, "", node.eventType + "_event");
+	}
 	badge(meta, "", node.scope);
 	card.appendChild(meta);
 
