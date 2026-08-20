@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import * as featureflags from "../util/featureflags";
+import { Logger } from "../util/logger";
 import {
 	findFileByFocusKey,
 	registerSharedFocusIndex,
@@ -274,5 +275,159 @@ describe("util/sharedFocusIndex lazy build", function () {
 			const result = await findFileByFocusKey("my_shared_focus");
 			assert.strictEqual(result, "common/national_focus/shared.txt");
 		});
+	});
+});
+
+describe("util/sharedFocusIndex parse failure logging", function () {
+	let originalListFiles: FileloaderModule["listFilesFromModOrHOI4"];
+	let originalReadFile: FileloaderModule["readFileFromModOrHOI4"];
+	let originalLoggerError: typeof Logger.error;
+	let logs: string[];
+	let originalParseHoi4File: typeof import("../hoiformat/hoiparser").parseHoi4File;
+
+	beforeEach(function () {
+		__resetSharedFocusIndexForTests();
+		stubVscode({
+			getConfiguration: () => ({ sharedFocusIndex: true }),
+			getWorkspaceFolder: () => WORKSPACE_FOLDER,
+		});
+		featureflags.refreshFeatureFlags();
+
+		logs = [];
+		originalLoggerError = Logger.error;
+		Logger.error = (message: string) => {
+			logs.push(message);
+		};
+
+		originalListFiles = fileloader.listFilesFromModOrHOI4;
+		originalReadFile = fileloader.readFileFromModOrHOI4;
+		// Route the file into the workspace (mod) build so hoi4:true does not mask it.
+		(
+			fileloader as typeof fileloader & {
+				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+			}
+		).listFilesFromModOrHOI4 = async (_relativePath, options) =>
+			options?.hoi4 ? [] : ["bad.txt"];
+		(
+			fileloader as typeof fileloader & {
+				readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
+			}
+		).readFileFromModOrHOI4 = async () => [
+			Buffer.from("shared_focus = { id = bad }"),
+			{} as unknown,
+		];
+
+		const hoiparser = require("../hoiformat/hoiparser") as typeof import("../hoiformat/hoiparser");
+		originalParseHoi4File = hoiparser.parseHoi4File;
+	});
+
+	afterEach(function () {
+		(
+			fileloader as typeof fileloader & {
+				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+			}
+		).listFilesFromModOrHOI4 = originalListFiles;
+		(
+			fileloader as typeof fileloader & {
+				readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
+			}
+		).readFileFromModOrHOI4 = originalReadFile;
+		const hoiparser = require("../hoiformat/hoiparser") as typeof import("../hoiformat/hoiparser");
+		hoiparser.parseHoi4File = originalParseHoi4File;
+		Logger.error = originalLoggerError;
+		restoreVscodeStubs();
+		featureflags.refreshFeatureFlags();
+		__resetSharedFocusIndexForTests();
+	});
+
+	function stubParseToThrow(thrown: unknown) {
+		const hoiparser = require("../hoiformat/hoiparser") as typeof import("../hoiformat/hoiparser");
+		hoiparser.parseHoi4File = () => {
+			throw thrown;
+		};
+	}
+
+	it("logs stack for an Error that has a stack", async function () {
+		const err = new Error("boom");
+		assert.ok(err.stack, "test pre-condition: Error must have a stack");
+		stubParseToThrow(err);
+
+		await findFileByFocusKey("bad");
+
+		assert.strictEqual(logs.length, 1);
+		assert.ok(logs[0].includes("common/national_focus/bad.txt"));
+		assert.ok(logs[0].includes("boom"));
+		assert.ok(logs[0].includes(err.stack!));
+		assert.ok(logs[0].includes("[Mod]"));
+	});
+
+	it("falls back to message when an Error has no stack", async function () {
+		const err = new Error("no-stack");
+		(err as unknown as Record<string, unknown>).stack = undefined;
+		stubParseToThrow(err);
+
+		await findFileByFocusKey("bad");
+
+		assert.strictEqual(logs.length, 1);
+		assert.ok(logs[0].includes("common/national_focus/bad.txt"));
+		assert.ok(logs[0].includes("no-stack"));
+	});
+
+	it("logs String(e) for a thrown string", async function () {
+		stubParseToThrow("plain old string");
+
+		await findFileByFocusKey("bad");
+
+		assert.strictEqual(logs.length, 1);
+		assert.ok(logs[0].includes("common/national_focus/bad.txt"));
+		assert.ok(logs[0].includes("plain old string"));
+	});
+
+	it("logs String(e) for non-string primitives and nullish values", async function () {
+		for (const thrown of [42, null, undefined, 0]) {
+			__resetSharedFocusIndexForTests();
+			logs.length = 0;
+			stubParseToThrow(thrown);
+			await findFileByFocusKey("bad");
+			assert.strictEqual(logs.length, 1);
+			assert.ok(logs[0].includes(String(thrown)));
+			__resetSharedFocusIndexForTests();
+		}
+	});
+
+	it("logs String(e) for a thrown object", async function () {
+		const obj = { toString: () => "custom-obj" };
+		stubParseToThrow(obj);
+
+		await findFileByFocusKey("bad");
+
+		assert.strictEqual(logs.length, 1);
+		assert.ok(logs[0].includes("custom-obj"));
+	});
+
+	it("does not poison the index: a failed file leaves no entry", async function () {
+		stubParseToThrow("bad file");
+
+		const result = await findFileByFocusKey("bad");
+
+		assert.strictEqual(result, undefined);
+		assert.strictEqual(logs.length, 1);
+	});
+
+	it("uses [Vanilla] prefix for the global build", async function () {
+		// Re-route to the global (hoi4) build instead of workspace.
+		(
+			fileloader as typeof fileloader & {
+				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+			}
+		).listFilesFromModOrHOI4 = async (_relativePath, options) =>
+			options?.hoi4 ? ["vanilla_bad.txt"] : [];
+		stubParseToThrow(new Error("vanilla boom"));
+
+		await findFileByFocusKey("anything");
+
+		assert.strictEqual(logs.length, 1);
+		assert.ok(logs[0].includes("[Vanilla]"));
+		assert.ok(logs[0].includes("common/national_focus/vanilla_bad.txt"));
 	});
 });
