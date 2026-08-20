@@ -1,3 +1,9 @@
+v1.1.25
+
+  Functionality:
+
+- Filter the event preview by kind, and say what each event is. Issue #117.
+
 v1.1.24
 
   Functionality:
