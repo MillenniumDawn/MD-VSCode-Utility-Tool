@@ -17,6 +17,7 @@ v1.1.24
 - [ Event Tree ] An arrow leaving an event with many calls now starts on the event box instead of below it.
 - [ Event Tree ] The hovered event picture is now drawn at the zoom level of the preview, instead of always at full size next to a zoomed-out event box.
 - [ Event Tree ] The preview toolbar is tall enough for its own contents again: the search box, the toggle labels and the checkboxes are no longer cut off along the bottom. The toggles also sit closer together, so more of them fit before the strip has to scroll.
+- Stop drawing the red line under the exclusive link, and reuse it for MIO.
 
 v1.1.23
 
@@ -31,6 +32,7 @@ v1.1.23
   Bugfixes:
 
 - [ Focus Tree ] The red line between two mutually exclusive focuses is gone. It was still being drawn over the arrows and line that replaced it, which is why the link looked like it sat below a stray red line.
+- Always log focus parse failures, including non-Error throws. Issue #99.
 
 v1.1.22
 
