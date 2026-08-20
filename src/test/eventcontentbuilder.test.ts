@@ -26,6 +26,7 @@ interface StubEvent {
     id: string;
     options?: StubOption[];
     immediate?: StubOption;
+    after?: StubOption;
     trigger?: unknown;
     hidden?: boolean;
     major?: boolean;
@@ -52,6 +53,7 @@ function loaderFor(events: (string | StubEvent)[]): any {
             title: `${event.id}.t`,
             namespace: 'test',
             immediate: makeOption(event.immediate),
+            after: makeOption(event.after),
             options: (event.options ?? []).map(makeOption),
             token: undefined,
             major: !!event.major,
@@ -290,11 +292,65 @@ describe('previewdef/event renderEventFile in-place update', () => {
         const graph = payloadOf(rendered);
         const call = graph.edges.find(e => !e.structural);
         assert.ok(call);
-        assert.strictEqual(call!.immediate, true);
+        assert.strictEqual(call!.source, 'immediate');
         assert.strictEqual(call!.days, 30);
 
         const event = graph.nodes.find(n => n.kind === 'event' && n.eventId === 'test.1') as EventGraphEventNode;
         assert.strictEqual(event.hidden, true);
+    });
+
+    it('follows the chain on through a call made from the after block', async () => {
+        const rendered = await renderEventFile(loaderFor([
+            {
+                id: 'test.1',
+                options: [{ name: 'test.1.a' }],
+                after: {
+                    childEvents: [{
+                        scopeName: 'ANQ',
+                        eventName: 'test.2',
+                        days: 0,
+                        hours: 5,
+                        randomDays: 0,
+                        randomHours: 0,
+                        condition: true,
+                    }],
+                },
+            },
+            'test.2',
+        ]), uri, webview) as LoaderRenderResult;
+
+        const graph = payloadOf(rendered);
+        const event = graph.nodes.find(n => n.kind === 'event' && n.eventId === 'test.1') as EventGraphEventNode;
+        const target = graph.nodes.find(n => n.kind === 'event' && n.eventId === 'test.2') as EventGraphEventNode;
+        assert.ok(event && target);
+
+        const call = graph.edges.find(e => !e.structural);
+        assert.ok(call, 'expected the after call to reach the payload');
+        assert.strictEqual(call!.source, 'after');
+        assert.strictEqual(call!.scope, 'ANQ');
+        assert.strictEqual(call!.hours, 5);
+        // Off the event itself, not off the option: the after block runs whichever option was taken.
+        assert.strictEqual(call!.from, event.id);
+        assert.strictEqual(call!.to, target.id);
+    });
+
+    it('keeps the after block effects apart from the immediate ones', async () => {
+        const rendered = await renderEventFile(loaderFor([
+            {
+                id: 'test.1',
+                immediate: { effects: [{ kind: 'line', scopeName: '', content: 'set_country_flag = a' }] },
+                after: { effects: [{ kind: 'line', scopeName: '', content: 'swap_ideas = { }' }] },
+            },
+        ]), uri, webview) as LoaderRenderResult;
+
+        const graph = payloadOf(rendered);
+        const event = graph.nodes.find(n => n.kind === 'event') as EventGraphEventNode;
+        assert.ok(event.effectsRef !== undefined && event.afterEffectsRef !== undefined);
+        assert.notStrictEqual(event.effectsRef, event.afterEffectsRef);
+        assert.deepStrictEqual(
+            graph.effectBlocks[event.afterEffectsRef!],
+            [{ kind: 'line', scopeName: '', content: 'swap_ideas = { }' }],
+        );
     });
 
     it('reports a call to an undefined event id as an unresolved node', async () => {
@@ -379,6 +435,14 @@ describe('previewdef/event renderEventFile in-place update', () => {
         it('reports a chain for an immediate call with no option in between', async () => {
             const flags = await flagsFor([
                 { id: 'test.1', immediate: { childEvents: [call('test.2')] } },
+                'test.2',
+            ]);
+            assert.strictEqual(flags.hasChains, true);
+        });
+
+        it('reports a chain for a call the after block makes', async () => {
+            const flags = await flagsFor([
+                { id: 'test.1', after: { childEvents: [call('test.2')] } },
                 'test.2',
             ]);
             assert.strictEqual(flags.hasChains, true);

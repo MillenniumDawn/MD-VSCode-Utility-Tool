@@ -22,6 +22,11 @@ export interface NavTarget {
 	file: string;
 }
 
+// Which block of the event a call was written in. `immediate` and `after` are the event's own two
+// effect blocks -- one before the card is shown, one after it is dismissed -- and their calls hang
+// off the event itself; `option` is a call the player has to pick to make, and hangs off the option.
+export type EventCallSource = "immediate" | "after" | "option";
+
 // The effects of one option (or of an event's `immediate` block), projected out of
 // EffectComplexExpr. The shapes are the same three, minus EffectItem.node -- that field is the raw
 // parse tree of the whole statement, which must never travel to the webview.
@@ -72,6 +77,9 @@ export interface EventGraphEventNode extends GraphNodeBase {
 	// The event's `immediate` block, as an index into EventGraphPayload.effectBlocks. Absent when
 	// the event has no immediate effects.
 	effectsRef?: number;
+	// The event's `after` block, the same way. Neither block has a card of its own, so this is the
+	// only place either can surface.
+	afterEffectsRef?: number;
 }
 
 export interface EventGraphOptionNode extends GraphNodeBase {
@@ -102,8 +110,9 @@ export interface EventGraphEdge {
 	// An event to one of its own options. Carries no scope, delay or condition -- it is the
 	// structure of the event, not a call.
 	structural: boolean;
-	// Fired from the event's `immediate` block rather than from a player option.
-	immediate: boolean;
+	// Which block of the event fired this call. A structural edge leads to an option card, so it
+	// carries `option`.
+	source: EventCallSource;
 	scope: string;
 	days: number;
 	hours: number;
