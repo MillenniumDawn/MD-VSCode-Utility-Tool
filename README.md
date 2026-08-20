@@ -42,7 +42,6 @@ Very big shoutout to my friend AngriestBird for helping this project!
 
 * GUI of focus tree can't be configured like technology tree.
 * Edge lines on world map not alway fit edge of colors.
-* Event tree preview will duplicate events even they are same event if they are from different option.
 
 ## Contribute
 * If you have any suggestion, feel free to create issue on this [Github repo](https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool).

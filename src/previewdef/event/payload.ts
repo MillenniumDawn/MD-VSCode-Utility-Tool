@@ -113,11 +113,33 @@ export interface EventGraphEdge {
 	possibility?: number;
 }
 
+// Which toolbar toggles this file can actually use. A toggle whose flag is false produces
+// byte-identical output in either position, so the webview hides it rather than offering a control
+// that promises something the preview cannot deliver.
+//
+// These ride in the payload rather than deciding the toolbar markup on the host, because the
+// toolbar is part of the baked-in shell: markup that changed with the file would need a full html
+// reassignment to apply, tearing the page down and losing scroll and zoom on every flip. As a
+// payload field they reach the page through the initial script and every in-place update alike,
+// and they are inside the hashed update so a flags-only change is never skipped.
+export interface EventToolbarFlags {
+	// Some option (or immediate block) calls another event, so there is a chain to filter down to.
+	hasChains: boolean;
+	hasEffects: boolean;
+	// Some event is hidden, or some call is immediate.
+	hasHidden: boolean;
+	// The localisation index is on. With it off every LocText has text === key, so the toggle
+	// swaps a string for itself.
+	hasLocalisation: boolean;
+	hasPicture: boolean;
+}
+
 export interface EventGraphPayload {
 	roots: string[];
 	nodes: EventGraphNode[];
 	edges: EventGraphEdge[];
 	conditionExprs: ConditionItem[];
+	toolbarFlags: EventToolbarFlags;
 	// Every distinct effect block in the file, referenced by index from the nodes rather than
 	// carried on them. One option is emitted as a node once per scope situation it is reached in,
 	// so inlining its effects would multiply them by the walk instead of by the file -- the same

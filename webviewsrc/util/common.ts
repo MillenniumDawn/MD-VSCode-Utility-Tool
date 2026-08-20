@@ -148,6 +148,29 @@ export function subscribeRefreshButton() {
 	});
 }
 
+// True when the pointer is inside the fixed toolbar strip, if the preview has one. Read at press
+// time rather than cached: the strip is only as tall as its content and a preview can re-render it.
+function isOverToolbar(e: MouseEvent): boolean {
+	const toolbar = document.querySelector(".toolbar-outer");
+	if (!toolbar) {
+		return false;
+	}
+
+	const rect = toolbar.getBoundingClientRect();
+	// A strip with no area covers nothing, so it can hold no press. Guarding on it also keeps the
+	// point (0,0) from counting as a hit everywhere the layout has not been computed.
+	if (rect.width === 0 || rect.height === 0) {
+		return false;
+	}
+
+	return (
+		e.clientX >= rect.left &&
+		e.clientX <= rect.right &&
+		e.clientY >= rect.top &&
+		e.clientY <= rect.bottom
+	);
+}
+
 export function initCommon(): void {
 	if ((window as any).previewedFileUri) {
 		setState({ uri: (window as any).previewedFileUri });
@@ -196,6 +219,13 @@ export function initCommon(): void {
 			};
 
 			dragger.addEventListener("mousedown", function (e) {
+				// The drag layer spans the whole viewport, the toolbar strip included. The toolbar is
+				// drawn over it, so a press there does not normally reach this handler -- but a
+				// popup, or a preview that layers its shell differently, can put it back in the way,
+				// and a mis-hit on a checkbox must never pan the view instead of toggling it.
+				if (isOverToolbar(e)) {
+					return;
+				}
 				mdx = e.pageX;
 				mdy = e.pageY;
 				setPressed(true);

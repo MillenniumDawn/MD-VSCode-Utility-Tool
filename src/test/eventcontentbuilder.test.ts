@@ -129,10 +129,9 @@ describe('previewdef/event renderEventFile in-place update', () => {
         assert.ok(styleCss.includes(`.${contentOne} {`));
     });
 
-    it('puts the drag layer before the toolbar, which is what keeps the toolbar clickable', async () => {
-        // Both are position:fixed with no z-index, so the one later in the document is the one that
-        // takes a click in the strip they share. With the drag layer last, every toggle would be
-        // covered by it and pressing one would start a pan instead.
+    it('writes the shell in the order the layers stack', async () => {
+        // What actually keeps the toolbar on top is the --ev-layer-* scale in eventtree.css; the
+        // document order no longer decides it. Kept so the shell still reads bottom layer first.
         const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         const dragger = html.indexOf('id="dragger"');
         const toolbar = html.indexOf('class="toolbar-outer');
@@ -140,13 +139,23 @@ describe('previewdef/event renderEventFile in-place update', () => {
         assert.ok(dragger < toolbar, 'the drag layer must come first');
     });
 
-    it('renders the six toggles into the toolbar', async () => {
+    // Every control is rendered for every file. Which of them are actually shown is decided in the
+    // webview from payload.toolbarFlags, so the markup does not depend on the file and an in-place
+    // update never has to reassign the shell to change the toolbar.
+    it('renders the search box and all eight toggles into the toolbar', async () => {
         const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
-        for (const id of ['show-localisation', 'show-triggers', 'show-event-conditions', 'show-hidden',
-            'show-picture', 'show-effects']) {
+        for (const id of ['show-localisation', 'show-option-triggers', 'show-edge-conditions',
+            'show-event-conditions', 'show-hidden', 'show-picture', 'show-effects', 'show-chains-only']) {
             assert.ok(rendered.html.includes(`id="${id}"`), `expected a toggle with id="${id}"`);
         }
+        assert.ok(rendered.html.includes('id="ev-searchbox"'), 'the search box must be rendered');
+        assert.ok(rendered.html.includes('id="ev-search-count"'), 'the match counter must be rendered');
         assert.ok(rendered.html.includes('class="toolbar-outer'));
+    });
+
+    it('puts the search box before the toggles, where a narrow pane cannot scroll it away', async () => {
+        const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+        assert.ok(html.indexOf('id="ev-searchbox"') < html.indexOf('id="show-localisation"'));
     });
 
     it('loads common.css so the toolbar and its checkboxes are styled', async () => {
@@ -283,6 +292,71 @@ describe('previewdef/event renderEventFile in-place update', () => {
         const unresolved = graph.nodes.find(n => n.kind === 'unresolved');
         assert.ok(unresolved, 'expected an unresolved node');
         assert.strictEqual((unresolved as { eventId: string }).eventId, 'test.missing');
+    });
+
+    // Which toolbar controls are worth offering travels in the payload rather than deciding the
+    // markup, so a change in it applies through an ordinary in-place update.
+    describe('toolbar flags', () => {
+        const call = (eventName: string) => ({
+            scopeName: '{event_target}', eventName, days: 0, hours: 0, randomDays: 0, randomHours: 0,
+            condition: true,
+        });
+
+        const flagsFor = async (events: (string | StubEvent)[]) =>
+            payloadOf(await renderEventFile(loaderFor(events), uri, webview) as LoaderRenderResult).toolbarFlags;
+
+        it('reports nothing to offer for a file of unconnected events', async () => {
+            assert.deepStrictEqual(await flagsFor(['test.1', 'test.2']), {
+                hasChains: false,
+                hasEffects: false,
+                hasHidden: false,
+                // The localisation index is off in the test environment.
+                hasLocalisation: false,
+                hasPicture: false,
+            });
+        });
+
+        it('reports a chain as soon as one option calls another event', async () => {
+            const flags = await flagsFor([
+                { id: 'test.1', options: [{ name: 'test.1.a', childEvents: [call('test.2')] }] },
+                'test.2',
+            ]);
+            assert.strictEqual(flags.hasChains, true);
+        });
+
+        it('reports a chain for an immediate call with no option in between', async () => {
+            const flags = await flagsFor([
+                { id: 'test.1', immediate: { childEvents: [call('test.2')] } },
+                'test.2',
+            ]);
+            assert.strictEqual(flags.hasChains, true);
+        });
+
+        it('reports hidden for a hidden event, and for an immediate call', async () => {
+            assert.strictEqual((await flagsFor([{ id: 'test.1', hidden: true }])).hasHidden, true);
+            assert.strictEqual((await flagsFor([
+                { id: 'test.1', immediate: { childEvents: [call('test.2')] } },
+                'test.2',
+            ])).hasHidden, true);
+        });
+
+        it('reports effects only when something actually has any', async () => {
+            const flags = await flagsFor([{
+                id: 'test.1',
+                options: [{
+                    name: 'test.1.a',
+                    effects: [{ kind: 'line', scopeName: '', content: 'add_political_power = 50' }],
+                }],
+            }]);
+            assert.strictEqual(flags.hasEffects, true);
+        });
+
+        it('changes the serialized update, so a flags-only change is never skipped', async () => {
+            const plain = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+            const hidden = await renderEventFile(
+                loaderFor([{ id: 'test.1', hidden: true }]), uri, webview) as LoaderRenderResult;
+            assert.notStrictEqual(serializeUpdate(plain.update!), serializeUpdate(hidden.update!));
+        });
     });
 
     it('emits one node per event reached twice under the same scope, and links both callers to it', async () => {

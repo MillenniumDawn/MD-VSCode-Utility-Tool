@@ -14,7 +14,12 @@ import { LoaderRender } from "../loaderpreview";
 
 // Height of the fixed toolbar strip. The content is offset by it and enableZoom is told about
 // it, so the graph never renders underneath the toolbar.
-const toolbarHeight = 40;
+//
+// It has to clear more than the row itself: common.css adds 10px of padding above, a 1px bottom
+// border, and the strip scrolls horizontally, so its 6px scrollbar eats into the same box. At 40
+// that left less room than the 24px-tall search box and checkboxes need and the row was clipped.
+// webviewsrc/eventtree.ts carries the same constant -- the two must move together.
+const toolbarHeight = 52;
 
 export async function renderEventFile(
 	loader: EventsLoader,
@@ -83,9 +88,9 @@ async function renderEvents(
 }
 
 // The drag layer is a fixed, viewport-sized, transparent div: pressing anywhere the graph does not
-// cover starts a pan (see initCommon in webviewsrc/util/common.ts). It has no z-index, so it comes
-// first and the toolbar last -- both are fixed, and the one later in the document is the one that
-// takes the click. The focus tree's shell is ordered the same way for the same reason.
+// cover starts a pan (see initCommon in webviewsrc/util/common.ts). Which of these three covers
+// which is settled by the --ev-layer-* scale in eventtree.css, not by the order they are written
+// in; the order below is kept only because it reads the way the layers stack.
 function renderShell(styleTable: StyleTable): string {
 	return `
         <div id="dragger" class="${styleTable.style(
@@ -111,21 +116,36 @@ function renderShell(styleTable: StyleTable): string {
 
 // The toolbar lives outside #eventtreecontent so its listeners are bound once and an in-place
 // update never rebinds them. Modelled on the MIO preview's toolbar.
+//
+// Every control is always rendered, including the ones a given file cannot use: which of them are
+// shown is decided in the webview from EventGraphPayload.toolbarFlags. Deciding it here would put
+// the answer in the baked-in shell, where the only way to apply a change is to reassign the whole
+// html -- a page teardown, losing scroll and zoom, on every flip.
 function renderToolBar(styleTable: StyleTable): string {
 	const labelStyle = styleTable.style("evToggleLabel", () => `margin-right:5px`);
-	const gapStyle = styleTable.style("evToggleGap", () => `margin-right:20px`);
 
+	// The <input> is hidden and replaced by a codicon checkbox as soon as the webview loads, so it
+	// carries no spacing: the gap between two toggles is on .checkbox-container-out in eventtree.css.
 	const toggle = (id: string, text: string) => `
         <label for="${id}" class="${labelStyle}">${text}</label>
-        <input type="checkbox" id="${id}" class="${gapStyle}">`;
+        <input type="checkbox" id="${id}">`;
+
+	// Leftmost, because the toolbar strip scrolls horizontally in a narrow pane and search is the one
+	// control that has to stay reachable without scrolling it.
+	const search = `
+        <label for="ev-searchbox" class="${labelStyle}">${localize("eventtree.search", "Search: ")}</label>
+        <input id="ev-searchbox" type="text" />
+        <span id="ev-search-count" class="ev-search-count"></span>`;
 
 	const toggles = [
 		toggle("show-localisation", localize("eventtree.showlocalisation", "Show localisation")),
-		toggle("show-triggers", localize("eventtree.showtriggers", "Show triggers")),
+		toggle("show-option-triggers", localize("eventtree.showoptiontriggers", "Show option triggers")),
+		toggle("show-edge-conditions", localize("eventtree.showedgeconditions", "Show arrow conditions")),
 		toggle("show-event-conditions", localize("eventtree.showeventconditions", "Show event conditions")),
 		toggle("show-hidden", localize("eventtree.showhidden", "Show hidden & immediate")),
 		toggle("show-picture", localize("eventtree.showpicture", "Show event picture")),
 		toggle("show-effects", localize("eventtree.showeffects", "Show effects")),
+		toggle("show-chains-only", localize("eventtree.showchainsonly", "Only event chains")),
 	].join("");
 
 	return `<div class="toolbar-outer ${styleTable.style(
@@ -133,7 +153,7 @@ function renderToolBar(styleTable: StyleTable): string {
 		() => `box-sizing: border-box; height: ${toolbarHeight}px;`,
 	)}">
         <div class="toolbar">
-            ${toggles}
+            ${search}${toggles}
         </div>
     </div>`;
 }

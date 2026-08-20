@@ -28,6 +28,20 @@
 	--ev-operative: var(--vscode-charts-orange);
 
 	--ev-radius: 6px;
+
+	/*
+	 * The preview is four layers deep. Until now the order was decided by nothing but the order the
+	 * shell writes them in -- every one of them is positioned with z-index auto -- and the popups
+	 * appended to <body> escaped it entirely and painted across the toolbar. Naming the layers
+	 * makes the toolbar strip solid whatever the document order happens to be.
+	 *
+	 * This stylesheet is loaded by the event preview alone, so the .toolbar-outer rule below leaves
+	 * the other previews' toolbars as they are.
+	 */
+	--ev-layer-dragger: 0;
+	--ev-layer-canvas: 1;
+	--ev-layer-popup: 2;
+	--ev-layer-toolbar: 3;
 }
 
 /*
@@ -37,12 +51,62 @@
  */
 #eventtreecontent {
 	position: relative;
+	z-index: var(--ev-layer-canvas);
 	transform-origin: 0 0;
 	pointer-events: none;
 }
 
 #dragger {
+	z-index: var(--ev-layer-dragger);
 	cursor: grab;
+}
+
+.toolbar-outer {
+	z-index: var(--ev-layer-toolbar);
+}
+
+/* The toggles are a row of codicon checkboxes: the gap has to sit on the widget the Checkbox class
+   renders, because the margin on the <input> it hides is overridden by input[type=checkbox].hidden
+   in common.css and never reaches the page. */
+.toolbar > div.checkbox-container-out {
+	margin-right: 12px;
+}
+
+/* The label and the counter are single-line text next to 20px-tall controls, so they need centring
+   the flex row does not give them by default. */
+.toolbar > label[for="ev-searchbox"],
+.toolbar > .ev-search-count {
+	align-self: center;
+}
+
+.toolbar > #ev-searchbox {
+	width: 190px;
+	margin-right: 8px;
+}
+
+/* Wide enough that the strip does not shift sideways as the count goes from "1/9" to "no matches",
+   and spaced from the first toggle like one toggle is from the next. */
+.toolbar > .ev-search-count {
+	min-width: 5em;
+	margin-right: 12px;
+	font-size: 11px;
+	color: var(--ev-fg-muted);
+}
+
+/* A search box and eight toggles do not fit a narrow editor pane, so the strip scrolls. The
+   scrollbar sits inside the fixed 52px strip, so it is kept thin and the height accounts for it --
+   see toolbarHeight in src/previewdef/event/contentbuilder.ts. */
+.toolbar-outer::-webkit-scrollbar {
+	height: 6px;
+}
+
+.toolbar-outer::-webkit-scrollbar-thumb {
+	border-radius: 3px;
+	background: var(--vscode-scrollbarSlider-background);
+}
+
+.toolbar-outer::-webkit-scrollbar-thumb:hover {
+	background: var(--vscode-scrollbarSlider-hoverBackground);
 }
 
 /* initCommon puts this class on <body> for as long as the mouse is held down on the drag layer. */
@@ -141,6 +205,29 @@ body.panning .ev-chip {
 
 .ev-card-gated {
 	border-color: var(--ev-accent);
+}
+
+/* ---------- Search hits ---------- */
+
+/* The highlight sits on the card while hover isolation dims the .ev-node wrapper around it, so the
+   two never select the same element and neither needs !important. A highlighted card inside a
+   dimmed chain fades with its tint intact: isolation is transient and mouse-driven, the highlight
+   is persistent and must not fight it.
+
+   Two classes deep so this beats .ev-card and .ev-card-hidden wherever they sit in the file. The
+   editor's own find-match colours, so a hit here reads like a hit in the editor. */
+.ev-card.ev-hit {
+	background: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33));
+	border-color: var(--vscode-editor-findMatchHighlightBorder, var(--ev-border-strong));
+}
+
+/* The one Enter is parked on. An outline rather than a thicker border: a border would change the
+   measured height and re-flow the layout the next time the cards are measured. */
+.ev-card.ev-hit-current {
+	background: var(--vscode-editor-findMatchBackground, rgba(234, 92, 0, 0.6));
+	border-color: var(--vscode-editor-findMatchBorder, var(--ev-border-strong));
+	outline: 1px solid var(--vscode-editor-findMatchBorder, var(--ev-border-strong));
+	outline-offset: 1px;
 }
 
 .ev-head {
@@ -286,7 +373,7 @@ body.panning .ev-chip {
    is describing, or hovering would flicker. */
 .ev-effects-tip {
 	position: absolute;
-	z-index: 2;
+	z-index: var(--ev-layer-popup);
 	max-width: 420px;
 	max-height: 60vh;
 	overflow: hidden;
@@ -295,6 +382,14 @@ body.panning .ev-chip {
 	border-radius: var(--ev-radius);
 	background: var(--ev-surface-alt);
 	box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+	pointer-events: none;
+}
+
+/* The event picture popup, which is also a <body> child: the sprite class carries its background
+   and size, this carries the two things every hover popup here needs. Without pointer-events it
+   would take the click wherever it covers the toolbar. */
+.event-hover-picture {
+	z-index: var(--ev-layer-popup);
 	pointer-events: none;
 }
 

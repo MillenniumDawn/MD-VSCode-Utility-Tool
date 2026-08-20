@@ -11,6 +11,7 @@ import {
 	EventGraphOptionNode,
 	EventGraphPayload,
 	EventGraphUnresolvedNode,
+	EventToolbarFlags,
 } from "../src/previewdef/event/payload";
 
 initCommon();
@@ -21,24 +22,48 @@ const hoverPictureClass = "event-hover-picture";
 // The same, for the effects panel.
 const effectTooltipClass = "ev-effects-tip";
 
-const toolbarHeight = 40;
+// Mirrors toolbarHeight in src/previewdef/event/contentbuilder.ts, which is what actually sizes
+// the strip. Change one and the other has to follow, or the popup clamp and the zoom offset below
+// stop matching where the toolbar really ends.
+const toolbarHeight = 52;
+
+// The hover popups are appended to <body>, so they are placed in viewport coordinates by hand
+// rather than by the layout. The toolbar strip is drawn above them now, so anything they put under
+// it would simply be invisible: this keeps them clear of it instead.
+const popupMargin = 4;
+
+function clampBelowToolbar(top: number): number {
+	return Math.max(toolbarHeight + popupMargin, top);
+}
 
 const emptyPayload: EventGraphPayload = {
 	roots: [],
 	nodes: [],
 	edges: [],
 	conditionExprs: [],
+	toolbarFlags: {
+		hasChains: false,
+		hasEffects: false,
+		hasHidden: false,
+		hasLocalisation: false,
+		hasPicture: false,
+	},
 	effectBlocks: [],
 };
 
 let payload: EventGraphPayload = (window as any).eventGraph ?? emptyPayload;
 
 let showLocalisation: boolean = getState().showLocalisation ?? true;
-let showTriggers: boolean = getState().showTriggers ?? true;
+// An option's own `trigger = { ... }` gate, shown on the card, and the condition on the arrow that
+// leads out of it are two different things, so they are two different toggles.
+let showOptionTriggers: boolean = getState().showOptionTriggers ?? true;
+let showEdgeConditions: boolean = getState().showEdgeConditions ?? true;
 let showEventConditions: boolean = getState().showEventConditions ?? true;
 let showHidden: boolean = getState().showHidden ?? true;
 let showPicture: boolean = getState().showPicture ?? true;
 let showEffects: boolean = getState().showEffects ?? true;
+// Off by default: an opt-in filter must never hide anything the first time the preview is opened.
+let showChainsOnly: boolean = getState().showChainsOnly ?? false;
 
 const scopeClassByType: Record<string, string> = {
 	country: "--ev-country",
@@ -317,6 +342,96 @@ export function visibleGraph(source: EventGraphPayload, includeHidden: boolean):
 		edges: keptEdges.filter((e) => reachable.has(e.from) && reachable.has(e.to)),
 		roots,
 	};
+}
+
+// An event is part of a chain when an option of it calls another event, or an option of another
+// event calls it. The link is two hops -- event --structural--> option --call--> event -- so the
+// option hop is collapsed onto its owning event before the ends are counted. An `immediate` call is
+// the same link with no option in between, and counts the same when it is still in the graph at all
+// -- which is why this runs after the hidden filter, not before it.
+//
+// Unlike visibleGraph this needs no reachability re-walk: it drops disconnected islands, never a
+// route through something, so nothing it keeps can be left orphaned mid-chain.
+export function chainedGraph(source: VisibleGraph, chainsOnly: boolean): VisibleGraph {
+	if (!chainsOnly) {
+		return source;
+	}
+
+	const byId = new Map(source.nodes.map((n) => [n.id, n]));
+	// Anything that is not an option is an end of a chain: an event, or an unresolved call to an
+	// event no loaded file defines -- which exists only because an option called it, and is exactly
+	// the cross-file link a chain view is for.
+	const isChainEnd = (id: string): boolean => byId.get(id)?.kind !== "option";
+
+	// One option is emitted as a node once per scope situation it is reached in, so it can have
+	// several structural parents. Treating this as a single id would silently drop chain links.
+	const ownersOfOption = new Map<string, string[]>();
+	for (const edge of source.edges) {
+		if (!edge.structural) {
+			continue;
+		}
+		const list = ownersOfOption.get(edge.to);
+		if (list) {
+			list.push(edge.from);
+		} else {
+			ownersOfOption.set(edge.to, [edge.from]);
+		}
+	}
+
+	const linked = new Set<string>();
+	for (const edge of source.edges) {
+		if (edge.structural || !byId.has(edge.from) || !isChainEnd(edge.to)) {
+			continue;
+		}
+		const froms = isChainEnd(edge.from) ? [edge.from] : (ownersOfOption.get(edge.from) ?? []);
+		for (const from of froms) {
+			// An event that fires itself counts: the arrow is drawn on the canvas, so dropping the
+			// only card it connects would leave the reader wondering. Guard `from !== edge.to` here
+			// to require two distinct events instead.
+			linked.add(from);
+			linked.add(edge.to);
+		}
+	}
+
+	// A chained event keeps every option card it has, dead ends included: what is being filtered out
+	// is unlinked events, not the choices they offer.
+	const kept = new Set(linked);
+	for (const edge of source.edges) {
+		if (edge.structural && linked.has(edge.from)) {
+			kept.add(edge.to);
+		}
+	}
+
+	const edges = source.edges.filter((e) => kept.has(e.from) && kept.has(e.to));
+	const hasParent = new Set(edges.map((e) => e.to));
+	// A surviving declared root keeps its place first: that is what keeps a group which is nothing
+	// but a cycle -- no parentless member at all -- reachable. Anything left without a parent because
+	// its only caller was dropped is appended, or the vertical pack never visits it.
+	const roots = source.roots.filter((r) => kept.has(r));
+	for (const node of source.nodes) {
+		if (kept.has(node.id) && !hasParent.has(node.id) && !roots.includes(node.id)) {
+			roots.push(node.id);
+		}
+	}
+
+	return { nodes: source.nodes.filter((n) => kept.has(n.id)), edges, roots };
+}
+
+// Case-insensitive substring over what identifies an event: its id, and its title in both forms.
+// Both forms, not the one the localisation toggle happens to show -- the toggle decides what is
+// drawn, not what the event is called, and matching only the displayed form would make the same
+// query find different cards depending on an unrelated toggle. With the localisation index off the
+// two are equal anyway, so the second field is free.
+//
+// Options are deliberately not searchable: the reader is looking for an event.
+export function matchesQuery(node: EventGraphNode, query: string): boolean {
+	if (query === "" || node.kind === "option") {
+		return false;
+	}
+	const title = node.title;
+	return [node.eventId, title?.text ?? "", title?.key ?? ""].some((field) =>
+		field.toLowerCase().includes(query),
+	);
 }
 
 //#endregion
@@ -739,7 +854,7 @@ function buildEventCard(node: EventGraphEventNode): HTMLDivElement {
 }
 
 function buildOptionCard(node: EventGraphOptionNode): HTMLDivElement {
-	const gated = showTriggers && node.trigger !== true;
+	const gated = showOptionTriggers && node.trigger !== true;
 	const card = document.createElement("div");
 	card.className = "ev-card ev-card-option" + (gated ? " ev-card-gated" : "");
 	card.tabIndex = 0;
@@ -833,7 +948,11 @@ function buildCard(node: EventGraphNode): HTMLDivElement {
 
 interface RenderedNode {
 	node: EventGraphNode;
+	// The positioned wrapper. Hover isolation dims this one.
 	element: HTMLDivElement;
+	// The card inside it. The search highlight goes here instead, so the two never fight over the
+	// same element and neither needs !important.
+	card: HTMLDivElement;
 }
 
 let rendered: RenderedNode[] = [];
@@ -857,12 +976,23 @@ function buildContent(): void {
 	rendered = [];
 	renderedEdges = [];
 
-	const graph = visibleGraph(payload, showHidden);
+	// Before the filters: a toggle this file cannot use is forced back to its neutral position here,
+	// and showChainsOnly is one the stored value must not be allowed to keep.
+	applyToolbarFlags();
+
+	// Hidden first, chains second. "Is this event chained?" has to be asked of the graph that is
+	// actually on screen: with hidden & immediate off, an event whose only link was an immediate call
+	// has already lost it, and asking first would keep an unlinked card -- the exact thing this
+	// filter exists to remove.
+	const graph = chainedGraph(visibleGraph(payload, showHidden), showChainsOnly);
 	if (graph.nodes.length === 0) {
 		const empty = document.createElement("div");
 		empty.className = "ev-empty";
 		empty.textContent = feLocalize("eventtree.noevents", "No event chain to show for this file.");
 		content.appendChild(empty);
+		// Nothing to highlight, but the counter still has to stop claiming the matches of the graph
+		// that was on screen a moment ago.
+		applySearch(false);
 		return;
 	}
 
@@ -880,9 +1010,10 @@ function buildContent(): void {
 		box.style.left = "0px";
 		box.style.top = "0px";
 		box.style.visibility = "hidden";
-		box.appendChild(buildCard(node));
+		const card = buildCard(node);
+		box.appendChild(card);
 		content.appendChild(box);
-		rendered.push({ node, element: box });
+		rendered.push({ node, element: box, card });
 	}
 	// The arrow labels are measured alongside the cards, because a gap is only wide enough to keep a
 	// label clear of the cards if the layout knows how wide the label is.
@@ -938,6 +1069,9 @@ function buildContent(): void {
 		wireEffectTooltips();
 	}
 	subscribeNavigators();
+	// The query survives every rebuild -- a toggle change, an in-place update, the first load -- so
+	// the highlight is re-applied to the cards that were just built. Class flipping only, no layout.
+	applySearch(false);
 }
 
 function renderRails(content: HTMLDivElement, layout: LayoutResult): void {
@@ -995,7 +1129,7 @@ interface BuiltChip {
 // the gap they sit in has to be. They are hidden until the layout says where they go.
 function buildChips(content: HTMLDivElement, graph: VisibleGraph): BuiltChip[] {
 	return graph.edges.map((edge) => {
-		const guarded = showTriggers && edge.condition !== true;
+		const guarded = showEdgeConditions && edge.condition !== true;
 		const text = chipTextFor(edge, guarded);
 		if (!text) {
 			return { edge, guarded };
@@ -1163,6 +1297,182 @@ function wireIsolation(): void {
 
 //#endregion
 
+//#region Search
+
+let searchQuery = "";
+let searchHits: RenderedNode[] = [];
+// The id of the hit Enter is parked on, not its index into searchHits: a rebuild can drop nodes, and
+// remembering the id keeps the cursor on the same card across a toggle change.
+let searchCurrentId: string | undefined = undefined;
+
+// Class flipping only -- never a re-layout, so typing stays cheap on a large file. Same contract as
+// setIsolation.
+function applySearch(navigate: boolean): void {
+	searchHits = searchQuery === "" ? [] : rendered.filter((r) => matchesQuery(r.node, searchQuery));
+	const hits = new Set(searchHits.map((h) => h.node.id));
+	if (searchCurrentId !== undefined && !hits.has(searchCurrentId)) {
+		searchCurrentId = undefined;
+	}
+	for (const item of rendered) {
+		item.card.classList.toggle("ev-hit", hits.has(item.node.id));
+		item.card.classList.toggle("ev-hit-current", item.node.id === searchCurrentId);
+	}
+	if (navigate && searchCurrentId !== undefined) {
+		scrollToHit(searchHits.find((h) => h.node.id === searchCurrentId));
+	}
+	updateSearchCount();
+}
+
+function cycleSearch(backwards: boolean): void {
+	const total = searchHits.length;
+	if (total === 0) {
+		return;
+	}
+	const current = searchHits.findIndex((h) => h.node.id === searchCurrentId);
+	const next =
+		current < 0
+			? // The first Enter lands on the first hit, the first Shift+Enter on the last.
+				backwards
+				? total - 1
+				: 0
+			: (current + (backwards ? total - 1 : 1)) % total;
+	searchCurrentId = searchHits[next]?.node.id;
+	applySearch(true);
+}
+
+function scrollToHit(hit: RenderedNode | undefined): void {
+	// Optional call, not a guard: jsdom leaves scrollIntoView undefined and the webview tests drive
+	// this path, where a throw would be swallowed by tryRun and strand the highlight half applied.
+	hit?.element.scrollIntoView?.({ block: "center", inline: "center" });
+}
+
+function updateSearchCount(): void {
+	const label = document.getElementById("ev-search-count");
+	if (!label) {
+		return;
+	}
+	if (searchQuery === "") {
+		label.textContent = "";
+		return;
+	}
+	if (searchHits.length === 0) {
+		label.textContent = feLocalize("eventtree.nomatches", "no matches");
+		return;
+	}
+	// Matches a filter took off the canvas are not in `rendered`, so this counts the ones actually on
+	// screen -- which is the number Enter can walk.
+	const current = searchHits.findIndex((h) => h.node.id === searchCurrentId);
+	label.textContent = feLocalize(
+		"eventtree.searchmatches",
+		"{0}/{1}",
+		current < 0 ? "-" : current + 1,
+		searchHits.length,
+	);
+}
+
+function wireSearch(): void {
+	const box = document.getElementById("ev-searchbox") as HTMLInputElement | null;
+	if (!box) {
+		return;
+	}
+	searchQuery = (getState().eventSearchQuery ?? "").toLowerCase();
+	box.value = searchQuery;
+
+	const onEdit = () => {
+		const next = box.value.trim().toLowerCase();
+		if (next === searchQuery) {
+			return;
+		}
+		searchQuery = next;
+		// Typing highlights; Enter is what jumps. Starting over from the top on every edit keeps the
+		// cursor from landing somewhere arbitrary in the new set of hits.
+		searchCurrentId = undefined;
+		setState({ eventSearchQuery: next });
+		applySearch(false);
+	};
+
+	box.addEventListener(
+		"keypress",
+		tryRun((e: KeyboardEvent) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				cycleSearch(e.shiftKey);
+			} else {
+				onEdit();
+			}
+		}),
+	);
+	for (const type of ["change", "keyup", "paste", "cut"]) {
+		box.addEventListener(type, tryRun(onEdit));
+	}
+}
+
+//#endregion
+
+//#region Toolbar flags
+
+// A toggle whose flag is false cannot change anything for this file, so the codicon widget built
+// over its input is hidden. The widget is the input's next sibling (Checkbox.init inserts it with
+// input.after) and the <label> was hidden when the widget was built, so this is one element each.
+//
+// The stored state of a hidden toggle is forced back to the position that changes nothing. It
+// matters most for show-chains-only: a stored `true` with no control on screen would empty the
+// canvas with no way to undo it. The forced value is deliberately not written back through
+// setState, so the reader's own preference returns when the file gains pictures (or effects, or
+// hidden events) again.
+// Offering a control the file cannot use is a much smaller failure than hiding one it can, so a
+// payload that carries no flags at all falls back to showing everything.
+const allToolbarControls: EventToolbarFlags = {
+	hasChains: true,
+	hasEffects: true,
+	hasHidden: true,
+	hasLocalisation: true,
+	hasPicture: true,
+};
+
+function applyToolbarFlags(): void {
+	const flags = payload.toolbarFlags ?? allToolbarControls;
+	const state = getState();
+	// The neutral value is the position that shows the most: with nothing to filter out, "show
+	// everything" is the honest state. show-chains-only is the odd one -- it hides rather than
+	// reveals, so its neutral position is off.
+	showLocalisation = gateToggle("show-localisation", flags.hasLocalisation, state.showLocalisation, true);
+	showHidden = gateToggle("show-hidden", flags.hasHidden, state.showHidden, true);
+	showPicture = gateToggle("show-picture", flags.hasPicture, state.showPicture, true);
+	showEffects = gateToggle("show-effects", flags.hasEffects, state.showEffects, true);
+	showChainsOnly = gateToggle("show-chains-only", flags.hasChains, state.showChainsOnly, false);
+}
+
+// Returns the value the toggle should hold, and puts the input and its widget in step with it.
+//
+// While the control is offered that is the reader's own choice, read from the stored state rather
+// than from the module variable: the variable may be holding a forced value from a moment ago, and
+// the stored one is only ever written by a deliberate click. So a file that gains pictures back --
+// through an ordinary in-place update, no reload -- gets the toggle back in the position its reader
+// last put it, not in the one the forcing left behind.
+function gateToggle(
+	id: string,
+	available: boolean,
+	stored: boolean | undefined,
+	neutral: boolean,
+): boolean {
+	const input = document.getElementById(id) as HTMLInputElement | null;
+	const widget = input?.nextElementSibling as HTMLElement | null;
+	if (widget) {
+		widget.style.display = available ? "" : "none";
+	}
+	// `neutral` doubles as the default here: a toggle that only shows things starts on, and the one
+	// that hides them starts off.
+	const value = available ? (stored ?? neutral) : neutral;
+	if (input && input.checked !== value) {
+		input.checked = value;
+		syncCheckbox(input);
+	}
+	return value;
+}
+
+//#endregion
+
 //#region Hover picture
 
 function showPictureWhenHover() {
@@ -1203,7 +1513,8 @@ function showPictureWhenHoverElement(eventNode: HTMLDivElement) {
 		hoverElement.style.transformOrigin = "top left";
 		hoverElement.style.left =
 			position.left + window.scrollX - (pictureWidth * scale - position.width) / 2 + "px";
-		hoverElement.style.top = position.top + position.height + window.scrollY + "px";
+		hoverElement.style.top =
+			clampBelowToolbar(position.top + position.height) + window.scrollY + "px";
 		document.body.append(hoverElement);
 	});
 
@@ -1299,7 +1610,7 @@ function placeEffectTooltip(panel: HTMLDivElement, host: DOMRect): void {
 	if (top + size.height > viewHeight) {
 		top = viewHeight - size.height - effectTipMargin;
 	}
-	top = Math.max(effectTipMargin, top);
+	top = clampBelowToolbar(top);
 
 	panel.style.left = left + window.scrollX + "px";
 	panel.style.top = top + window.scrollY + "px";
@@ -1367,9 +1678,13 @@ window.addEventListener(
 			showLocalisation = value;
 			setState({ showLocalisation: value });
 		});
-		bindToggle("show-triggers", showTriggers, (value) => {
-			showTriggers = value;
-			setState({ showTriggers: value });
+		bindToggle("show-option-triggers", showOptionTriggers, (value) => {
+			showOptionTriggers = value;
+			setState({ showOptionTriggers: value });
+		});
+		bindToggle("show-edge-conditions", showEdgeConditions, (value) => {
+			showEdgeConditions = value;
+			setState({ showEdgeConditions: value });
 		});
 		bindToggle("show-event-conditions", showEventConditions, (value) => {
 			showEventConditions = value;
@@ -1387,6 +1702,14 @@ window.addEventListener(
 			showEffects = value;
 			setState({ showEffects: value });
 		});
+		bindToggle("show-chains-only", showChainsOnly, (value) => {
+			showChainsOnly = value;
+			setState({ showChainsOnly: value });
+		});
+
+		// Before the first buildContent, so the restored query is applied by the first render rather
+		// than only by the next one.
+		wireSearch();
 
 		buildContent();
 	}),
