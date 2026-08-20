@@ -29,8 +29,8 @@ jobs:
           fetch-depth: 0
       - name: Check version bump
         id: check
-        # The failure is reported on the pull request first, so the job is failed at the end instead
-        # of here.
+        # Advisory only: a branch does not have to bump anything, because a release pull request is
+        # opened after the merge. The note is posted on the pull request and the job stays green.
         continue-on-error: true
         run: node scripts/check-version.js --base-ref "origin/${{ github.base_ref }}"
       # A pull request from a fork gets a read-only token, so the comment is skipped there and the
@@ -51,6 +51,3 @@ jobs:
           else
             gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@comment.md
           fi
-      - name: Resolve the check
-        if: ${{ steps.check.outputs.failed == 'true' }}
-        run: exit 1

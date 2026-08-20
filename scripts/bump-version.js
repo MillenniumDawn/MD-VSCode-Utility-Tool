@@ -1,13 +1,15 @@
 // Bumps package.json and seeds a matching CHANGELOG.md section.
 //
-// Used by .github/workflows/version-bump.yml when someone comments /bump on a pull request, and
+// Used by .github/workflows/version-bump.yml when a push to main needs a release pull request, and
 // usable by hand:
 //
 //   node scripts/bump-version.js --type patch --title "Fix the thing" --number 42
 //   node scripts/bump-version.js --type minor --title "..." --body-file pr-body.txt
+//   node scripts/bump-version.js --type patch --bullets-file bullets.json
 //
-// The seeded changelog bullet is a starting point taken from the pull request title. It carries no
-// [ Component ] prefix on purpose -- guessing one wrong is worse than leaving it to the author.
+// The seeded changelog bullets are a starting point taken from the titles of the pull requests that
+// are being released. They carry no [ Component ] prefix on purpose -- guessing one wrong is worse
+// than leaving it to whoever merges the release pull request.
 
 'use strict';
 
@@ -57,14 +59,79 @@ function bulletFor(title, issue) {
 	return issue === undefined ? `- ${text}` : `- ${text} Issue #${issue}.`;
 }
 
-function changelogSection(version, title, issue) {
-	return `v${version}\n\n  Functionality:\n\n${bulletFor(title, issue)}\n`;
+// A bullet may arrive already formatted (from scripts/pr-bullets.js) or as a bare sentence.
+function normalizeBullet(bullet) {
+	const text = String(bullet ?? '').trim();
+	if (!text) {
+		return '';
+	}
+	return text.startsWith('-') ? text : bulletFor(text);
 }
 
-function prependChangelog(existing, version, title, issue) {
-	const section = changelogSection(version, title, issue);
+// One title plus issue number, or a ready-made list of bullets -- both end up as a list here.
+function toBullets(titleOrBullets, issue) {
+	if (Array.isArray(titleOrBullets)) {
+		const bullets = titleOrBullets.map(normalizeBullet).filter(Boolean);
+		return bullets.length > 0 ? bullets : [bulletFor('')];
+	}
+	return [bulletFor(titleOrBullets, issue)];
+}
+
+function changelogSection(version, titleOrBullets, issue) {
+	return `v${version}\n\n  Functionality:\n\n${toBullets(titleOrBullets, issue).join('\n')}\n`;
+}
+
+function prependChangelog(existing, version, titleOrBullets, issue) {
+	const section = changelogSection(version, titleOrBullets, issue);
 	const rest = String(existing ?? '').replace(/^\s+/, '');
 	return rest ? `${section}\n${rest}` : section;
+}
+
+const headingPattern = /^v\d+\.\d+\.\d+$/;
+
+// Adds bullets to the section that is already at the top of the changelog, so a release pull
+// request that has been reworded by hand survives a later refresh. Bullets that are already there
+// word for word are skipped, and a changelog whose top section is a different version gets a new
+// section instead.
+function appendBullets(existing, version, bullets) {
+	const requested = Array.isArray(bullets) ? bullets : [bullets];
+	// Nothing new to say. Unlike a fresh section, an append has no reason to invent a placeholder.
+	if (requested.filter((bullet) => String(bullet ?? '').trim()).length === 0) {
+		return String(existing ?? '');
+	}
+
+	const wanted = toBullets(requested);
+	const lines = String(existing ?? '').split(/\r?\n/);
+	const start = lines.findIndex((line) => line.trim());
+
+	if (start === -1 || lines[start].trim() !== `v${version}`) {
+		return prependChangelog(existing, version, wanted);
+	}
+
+	// The section runs up to the next version heading, or to the end of the file.
+	let end = lines.length;
+	for (let i = start + 1; i < lines.length; i++) {
+		if (headingPattern.test(lines[i].trim())) {
+			end = i;
+			break;
+		}
+	}
+
+	const section = lines.slice(start, end);
+	const missing = wanted.filter((bullet) => !section.some((line) => line.trim() === bullet));
+	if (missing.length === 0) {
+		return String(existing ?? '');
+	}
+
+	// Append below the last line that has content, so the trailing blank line before the next
+	// section stays where it is.
+	let last = section.length - 1;
+	while (last >= 0 && !section[last].trim()) {
+		last--;
+	}
+	section.splice(last + 1, 0, ...missing);
+
+	return [...lines.slice(0, start), ...section, ...lines.slice(end)].join('\n');
 }
 
 function readVersion(packageJsonText) {
@@ -99,11 +166,36 @@ function applyBump(options = {}) {
 
 	const changelogText = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : '';
 	const issue = options.issue ?? issueFromBody(options.body);
+	const entry = Array.isArray(options.bullets) && options.bullets.length > 0 ? options.bullets : options.title;
 
 	fs.writeFileSync(packageJsonPath, writeVersion(packageJsonText, next));
-	fs.writeFileSync(changelogPath, prependChangelog(changelogText, next, options.title, issue));
+	fs.writeFileSync(changelogPath, prependChangelog(changelogText, next, entry, issue));
 
 	return { previous, next, issue };
+}
+
+// Used when a release pull request is already open: the version stays where it is and only the new
+// bullets are added to its section.
+function appendToChangelog(options = {}) {
+	const root = options.cwd ?? process.cwd();
+	const changelogPath = path.join(root, 'CHANGELOG.md');
+	const version = options.version ?? readVersion(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+
+	const changelogText = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : '';
+	const updated = appendBullets(changelogText, version, options.bullets ?? []);
+	fs.writeFileSync(changelogPath, updated);
+
+	return { version, changed: updated !== changelogText };
+}
+
+// scripts/pr-bullets.js writes { bullets: [...] }; a bare array is accepted too.
+function readBulletsFile(file) {
+	if (!file || !fs.existsSync(file)) {
+		return [];
+	}
+	const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+	const bullets = Array.isArray(parsed) ? parsed : parsed.bullets;
+	return Array.isArray(bullets) ? bullets : [];
 }
 
 function parseArgs(argv) {
@@ -132,6 +224,13 @@ function parseArgs(argv) {
 				options.body = value && fs.existsSync(value) ? fs.readFileSync(value, 'utf8') : '';
 				i++;
 				break;
+			case '--bullets-file':
+				options.bullets = readBulletsFile(value);
+				i++;
+				break;
+			case '--append':
+				options.append = true;
+				break;
 			default:
 				break;
 		}
@@ -141,6 +240,14 @@ function parseArgs(argv) {
 
 function main() {
 	const options = parseArgs(process.argv.slice(2));
+
+	if (options.append) {
+		const result = appendToChangelog(options);
+		process.stdout.write(`version=${result.version}\n`);
+		process.stdout.write(`changed=${result.changed}\n`);
+		return;
+	}
+
 	const result = applyBump(options);
 	// The workflow reads these two lines.
 	process.stdout.write(`previous=${result.previous}\n`);
@@ -152,6 +259,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+	appendBullets,
+	appendToChangelog,
 	applyBump,
 	bulletFor,
 	changelogSection,
@@ -160,6 +269,7 @@ module.exports = {
 	parseArgs,
 	parseVersion,
 	prependChangelog,
+	readBulletsFile,
 	readVersion,
 	writeVersion,
 };

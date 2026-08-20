@@ -1,23 +1,27 @@
 # Project: MD VSCode Utility Tool
 
-## Version & changelog — once per branch
+## Version & changelog — never by hand
 
-Version bumps happen **once per feature branch**, not on every individual turn.
-`package.json` and `CHANGELOG.md` are only updated at merge time (as part of a
-closing commit, or in a separate PR that merges the branch).
+**Do not bump the version and do not add a CHANGELOG entry on a feature branch.**
+[package.json](package.json) and [CHANGELOG.md](CHANGELOG.md) stay untouched while
+you are fixing a bug or building a feature.
 
-Within one branch (or multiple turns on the same feature), the version stays stable.
-Only when the entire feature is finalized:
+Releasing happens after the merge, on its own:
 
-1. **Bump the version** in [package.json](package.json) `version` field by **+1 patch**
-   (e.g. `1.1.2` -> `1.1.3`).
-2. **Add a new section at the top of [CHANGELOG.md](CHANGELOG.md)** with that same
-   version as heading (`v1.1.3`), in the existing style:
-   - Subsections `Functionality:` and/or `Bugfixes:`.
-   - Bullets with `  - ` (two-space indent), like existing entries.
-   - Use a `[ Component ]` prefix where appropriate (`[ Focus Tree ]`, `[ MIO ]`,
-     `[ Technology ]`, ...).
-3. **Keep `package.json` and the CHANGELOG heading at exactly the same version.**
+1. A push to `main` whose version is already tagged, and that changed anything
+   outside documentation and CI, makes
+   [.github/workflows/version-bump.yml](.github/workflows/version-bump.yml) open a
+   **release pull request** on branch `release/version-bump`.
+2. That pull request carries the +1 patch bump and a `vX.Y.Z` section seeded with one
+   bullet per pull request merged since the last release tag.
+3. Whoever merges it rewords those bullets to the style below and adds
+   `[ Component ]` prefixes. Merging it publishes the extension.
+
+The version check on a pull request is advisory: it comments when the branch carries
+no bump, and it never fails the check.
+
+Bump by hand only when a branch has to ship its own version (rare), and then keep
+`package.json` and the CHANGELOG heading at exactly the same version.
 
 ### Changelog writing style
 
@@ -33,15 +37,13 @@ when you use the extension.
 - One bullet per user-visible change. If a change is only visible to a developer
   reading the source, it usually does not need a bullet at all.
 - Reference the issue with a trailing `Issue #NN.` where there is one.
+- Subsections are `  Functionality:` and/or `  Bugfixes:`, bullets start at the
+  left margin with `- `.
 
 Anything longer belongs in the pull request description, not in the changelog.
 
 ### In implementation plans
-When you create a plan that adds or changes functionality, include the version bump
-(+1 patch) and the corresponding CHANGELOG entry **as an explicit step in the plan
-under "Finalize / merge"** -- not as an afterthought per turn. The changelog step
-belongs to finalizing the feature, not to each intermediate commit.
-
-### Enforcement
-The `Stop` hook ([.claude/hooks/changelog-guard.js](.claude/hooks/changelog-guard.js))
-has been adjusted or disabled for this workflow; follow the rule above at merges.
+A plan that adds or changes functionality needs **no** version-bump or changelog
+step. The release pull request covers both. What belongs in the pull request
+description is the detail a reviewer needs; the changelog wording is written when
+the release pull request is merged.

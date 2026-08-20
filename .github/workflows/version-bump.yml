@@ -1,105 +1,141 @@
 on:
-  issue_comment:
-    types:
-      - created
+  push:
+    branches:
+      - 'main'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'How far to bump the version'
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
 
-name: Bump version
+name: Release pull request
+
+# One release pull request at a time. Two pushes landing together would otherwise race for the same
+# branch, and the loser would fail on a stale ref.
+concurrency:
+  group: release-pull-request
+  cancel-in-progress: false
 
 jobs:
   bump:
-    # Only a /bump comment on a pull request, and only from someone who can write to the repository.
-    if: >-
-      github.event.issue.pull_request != null &&
-      startsWith(github.event.comment.body, '/bump') &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-      issues: write
 
     env:
-      # A personal access token makes the push retrigger the version check. Without it the push is
-      # made by GITHUB_TOKEN, which by design triggers no workflow, and the check has to be rerun by
-      # hand -- the comment posted at the end says so.
+      # A personal access token makes the pull request run the test and version workflows. A pull
+      # request opened with GITHUB_TOKEN triggers no workflow by design, so without the token the
+      # release pull request arrives with no checks -- the body says so.
       GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
       HAS_BUMP_TOKEN: ${{ secrets.BUMP_TOKEN != '' }}
-      PR: ${{ github.event.issue.number }}
-      COMMENT_ID: ${{ github.event.comment.id }}
-      COMMENT_BODY: ${{ github.event.comment.body }}
+      RELEASE_BRANCH: release/version-bump
+      RELEASE_TYPE: ${{ inputs.release_type || 'patch' }}
 
     steps:
-      - name: Acknowledge the comment
-        run: |
-          gh api -X POST \
-            "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
-            -f content=eyes >/dev/null
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
-      - name: Check out the pull request branch
-        id: pr
+      - name: Decide whether a release pull request is needed
+        id: state
+        run: node scripts/release-check.js ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
+      - name: Collect the changelog bullets
+        id: bullets
+        if: ${{ steps.state.outputs.bump == 'true' }}
         run: |
-          gh pr checkout "$PR"
-          {
-            echo "base=$(gh pr view "$PR" --json baseRefName --jq .baseRefName)"
-            echo "head=$(gh pr view "$PR" --json headRefName --jq .headRefName)"
-          } >> "$GITHUB_OUTPUT"
-      - name: Skip when the bump is already there
-        id: needed
+          node scripts/pr-bullets.js --tag "${{ steps.state.outputs.tag }}" --output bullets.json >/dev/null
+          echo "prs=$(node -p "require('./bullets.json').pullRequests.join(',')")" >> "$GITHUB_OUTPUT"
+      - name: Look for an open release pull request
+        id: existing
+        if: ${{ steps.state.outputs.bump == 'true' }}
         run: |
-          if node scripts/check-version.js --base-ref "origin/${{ steps.pr.outputs.base }}" >/dev/null 2>&1; then
-            echo "needed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Read the release type
-        id: type
-        if: ${{ steps.needed.outputs.needed == 'true' }}
-        run: |
-          # "/bump", "/bump patch", "/bump minor", "/bump major"
-          requested=$(printf '%s' "$COMMENT_BODY" | head -1 | awk '{print $2}')
-          case "$requested" in
-            minor|major|patch) ;;
-            *) requested=patch ;;
-          esac
-          echo "type=$requested" >> "$GITHUB_OUTPUT"
-      - name: Bump the version and seed the changelog
-        id: bump
-        if: ${{ steps.needed.outputs.needed == 'true' }}
-        run: |
-          gh pr view "$PR" --json title --jq .title > pr-title.txt
-          gh pr view "$PR" --json body --jq .body > pr-body.txt
-          node scripts/bump-version.js \
-            --type "${{ steps.type.outputs.type }}" \
-            --title "$(cat pr-title.txt)" \
-            --number "$PR" \
-            --body-file pr-body.txt >> "$GITHUB_OUTPUT"
-          rm -f pr-title.txt pr-body.txt
-      - name: Commit and push
-        if: ${{ steps.needed.outputs.needed == 'true' }}
+          number=$(gh pr list --head "$RELEASE_BRANCH" --state open --json number --jq '.[0].number // ""')
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+      - name: Configure git
+        if: ${{ steps.state.outputs.bump == 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # --- No release pull request yet: bump, seed the changelog, open one. ---
+      - name: Bump the version and seed the changelog
+        id: bump
+        if: ${{ steps.state.outputs.bump == 'true' && steps.existing.outputs.number == '' }}
+        run: |
+          git checkout -B "$RELEASE_BRANCH"
+          node scripts/bump-version.js --type "$RELEASE_TYPE" --bullets-file bullets.json >> "$GITHUB_OUTPUT"
           git add package.json CHANGELOG.md
-          git commit -m "Bump version to ${{ steps.bump.outputs.next }}"
-          git push origin "HEAD:${{ steps.pr.outputs.head }}"
-      - name: Report back
-        if: ${{ steps.needed.outputs.needed == 'true' }}
+          git commit -m "Bump version to $(node -p "require('./package.json').version")"
+          git push --force origin "HEAD:$RELEASE_BRANCH"
+      - name: Open the release pull request
+        if: ${{ steps.state.outputs.bump == 'true' && steps.existing.outputs.number == '' }}
+        env:
+          NEXT: ${{ steps.bump.outputs.next }}
+          PRS: ${{ steps.bullets.outputs.prs }}
         run: |
           {
-            printf 'Bumped `%s` to `%s` and added a `v%s` section to CHANGELOG.md.\n\n' \
-              "${{ steps.bump.outputs.previous }}" "${{ steps.bump.outputs.next }}" "${{ steps.bump.outputs.next }}"
-            printf 'The changelog entry was seeded from the pull request title -- please reword it to say what is different for someone using the extension, and give it a `[ Component ]` prefix.\n'
+            printf 'Everything merged into `main` since `%s` is ready to release.\n\n' "${{ steps.state.outputs.tag }}"
+            printf 'Before merging, reword the bullets in `CHANGELOG.md` so they say what is different for someone using the extension, and give each one a `[ Component ]` prefix. They were seeded from pull request titles, which is a starting point and rarely the final wording.\n\n'
+            printf 'Merging this publishes `v%s`.\n\n' "$NEXT"
             if [ "$HAS_BUMP_TOKEN" != "true" ]; then
-              printf '\nThe version check does not rerun by itself after a push made with the built-in token -- rerun it from the Checks tab, or push any commit.\n'
+              printf 'No `BUMP_TOKEN` secret is set, so the test and version workflows do not run on this pull request. Close and reopen it to make them run.\n\n'
             fi
-          } > bump-comment.md
-          gh pr comment "$PR" --body-file bump-comment.md
-          gh api -X POST \
-            "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
-            -f content=rocket >/dev/null
-      - name: Report that nothing needed bumping
-        if: ${{ steps.needed.outputs.needed == 'false' }}
-        run: gh pr comment "$PR" --body "Nothing to bump — this pull request already carries a version bump and a matching CHANGELOG section."
+            printf '<!-- release-pr -->\n'
+            printf 'Included pull requests: %s\n' "$PRS"
+          } > release-pr-body.md
+          gh pr create \
+            --base main \
+            --head "$RELEASE_BRANCH" \
+            --title "Release v$NEXT" \
+            --body-file release-pr-body.md
+
+      # --- One is already open: catch it up with main and add only the new bullets. ---
+      - name: Refresh the open release pull request
+        if: ${{ steps.state.outputs.bump == 'true' && steps.existing.outputs.number != '' }}
+        env:
+          PR: ${{ steps.existing.outputs.number }}
+          PRS: ${{ steps.bullets.outputs.prs }}
+        run: |
+          git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+          if ! git merge --no-edit origin/main; then
+            git merge --abort || true
+            gh pr comment "$PR" --body "\`main\` moved on and this branch no longer merges cleanly. Resolve the conflict here and the next push to \`main\` will pick up from there."
+            exit 0
+          fi
+
+          # The pull request body lists what is already covered, so hand-reworded bullets in
+          # CHANGELOG.md are never rewritten -- only genuinely new ones are added.
+          gh pr view "$PR" --json body --jq .body > release-pr-body.md
+          covered=$(sed -n 's/^Included pull requests: //p' release-pr-body.md | head -1)
+          node -e '
+            const fs = require("fs");
+            const covered = new Set((process.argv[1] || "").split(",").map((n) => n.trim()).filter(Boolean));
+            const found = JSON.parse(fs.readFileSync("bullets.json", "utf8"));
+            const fresh = [];
+            found.pullRequests.forEach((number, index) => {
+              if (!covered.has(String(number))) { fresh.push(found.bullets[index]); }
+            });
+            fs.writeFileSync("fresh.json", JSON.stringify({ bullets: fresh }));
+          ' "$covered"
+
+          node scripts/bump-version.js --append --bullets-file fresh.json
+          rm -f fresh.json bullets.json release-pr-body.md
+          git add -A
+          git diff --cached --quiet || git commit -m "Catch up with main"
+          git push origin "HEAD:$RELEASE_BRANCH"
+
+          body=$(gh pr view "$PR" --json body --jq .body)
+          if printf '%s' "$body" | grep -q '^Included pull requests: '; then
+            printf '%s' "$body" | sed "s|^Included pull requests: .*|Included pull requests: $PRS|" > updated-body.md
+          else
+            # The line was edited away; put it back so the next refresh knows what is covered.
+            { printf '%s\n\n<!-- release-pr -->\n' "$body"; printf 'Included pull requests: %s\n' "$PRS"; } > updated-body.md
+          fi
+          gh pr edit "$PR" --body-file updated-body.md
+          gh pr comment "$PR" --body "Caught up with \`main\`. Included pull requests: $PRS"

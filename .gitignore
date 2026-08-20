@@ -92,3 +92,7 @@ Thumbs.db
 version-check-message.md
 bump-comment.md
 comment.md
+bullets.json
+fresh.json
+release-pr-body.md
+updated-body.md

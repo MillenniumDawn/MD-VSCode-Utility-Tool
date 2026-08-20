@@ -1,13 +1,15 @@
-// Verifies that a pull request carries the version bump a release needs.
-//
-// A push to main only publishes when the tag v<package.json version> does not exist yet
-// (.github/workflows/release.yml), so a branch that forgets the bump merges green and then releases
-// nothing. This runs the same reasoning while the pull request is still open.
+// Reports whether a pull request already carries the version bump a release needs.
 //
 //   node scripts/check-version.js --base-ref origin/main
 //
-// Exit code 0 means the pull request is releasable (or is exempt); 1 means it is not, and the reason
-// is written to stdout, to $GITHUB_STEP_SUMMARY and to $GITHUB_OUTPUT as `message`.
+// This is advisory only. A branch does not have to bump anything: once it is merged,
+// .github/workflows/version-bump.yml opens a release pull request that carries the bump and a
+// seeded CHANGELOG.md section. The note this writes on the pull request is there for the branch
+// that wanted to ship the bump itself and got it half right.
+//
+// Exit code 0 means nothing to say; 1 means there is a note, written to stdout, to
+// $GITHUB_STEP_SUMMARY, to $GITHUB_OUTPUT as `failed`, and to version-check-message.md. The
+// workflow never fails the job on it.
 
 'use strict';
 
@@ -17,9 +19,9 @@ const path = require('path');
 
 const { nextVersion, parseVersion, readVersion } = require('./bump-version');
 
-// Paths that cannot change what the packaged extension does, so a pull request touching only these
-// does not need a version bump. release.yml carries the same list, or a documentation-only merge
-// would fail there instead.
+// Paths that cannot change what the packaged extension does, so a change touching only these does
+// not need a version bump. scripts/release-check.js reads this same list to decide whether a push
+// to main deserves a release pull request, so the two can never drift apart.
 const exemptPatterns = [
 	/\.md$/i,
 	/^\.github\//,
@@ -78,14 +80,14 @@ function baseVersion(baseRef) {
 	return readVersion(git(['show', `${baseRef}:package.json`]));
 }
 
-// Every failure ends with the same instruction, because there is one way to fix all of them.
+// Every note ends the same way, because nothing here has to be fixed before merging.
 function fixHint(expected) {
 	return [
 		'',
-		`Comment \`/bump\` on this pull request and the version bump plus a CHANGELOG section are pushed for you.`,
-		`Use \`/bump minor\` or \`/bump major\` for a bigger step.`,
+		'**This does not block the merge.** Once this lands on `main`, a release pull request with the ',
+		'version bump and a seeded `CHANGELOG.md` section is opened for you.',
 		'',
-		'To do it by hand instead:',
+		'To ship the bump with this pull request instead:',
 		'',
 		'```',
 		'npm version patch --no-git-tag-version',
@@ -113,11 +115,11 @@ function evaluate(options) {
 	if (compareVersions(head, base) <= 0) {
 		return {
 			ok: false,
-			title: 'The version has not been bumped',
+			title: 'No version bump in this pull request',
 			message:
-				`\`package.json\` is at **${head}**, and \`${baseRef}\` is at **${base}**. ` +
-				`A merge without a bump publishes nothing, because the release workflow refuses to reuse tag \`v${base}\`.\n` +
-				`\nExpected at least **${expected}**.\n` +
+				`\`package.json\` is at **${head}**, the same as \`${baseRef}\`, so merging this releases nothing ` +
+				`on its own — the release workflow cannot reuse tag \`v${base}\`.\n` +
+				`\nA release pull request taking it to **${expected}** is opened after the merge.\n` +
 				fixHint(expected),
 		};
 	}
@@ -166,7 +168,7 @@ function report(result) {
 	}
 
 	const body = `### ${result.title}\n\n${result.message}\n`;
-	process.stdout.write(`::error::${result.title}. Comment /bump on this pull request to fix it.\n`);
+	process.stdout.write(`::warning::${result.title}. The merge is not blocked by this.\n`);
 	process.stdout.write(body);
 	if (summaryPath) {
 		fs.appendFileSync(summaryPath, body);
