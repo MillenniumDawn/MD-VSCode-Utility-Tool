@@ -9,18 +9,10 @@ import { HOIEventType } from "./schema";
 // graph.ts (which does depend on all three) means an accidental value import from the webview
 // fails loudly at build time instead of dragging the extension host into the bundle.
 
-// A localisation key together with the text it resolves to. Both travel to the webview so the
-// "show localisation" toggle can swap between them without a round trip to the host.
-export interface LocText {
-	key: string;
-	text: string;
-}
-
-export interface NavTarget {
-	start: number;
-	end: number;
-	file: string;
-}
+// LocText and NavTarget are shared with the other previews and live in sharedpayload.ts; they are
+// re-exported here so every importer of this module keeps working unchanged.
+export { LocText, NavTarget } from "../sharedpayload";
+import { LocText, NavTarget } from "../sharedpayload";
 
 // The effects of one option (or of an event's `immediate` block), projected out of
 // EffectComplexExpr. The shapes are the same three, minus EffectItem.node -- that field is the raw

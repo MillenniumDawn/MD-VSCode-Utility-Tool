@@ -53,6 +53,8 @@ export async function renderEventFile(
 				// The shared widget stylesheet: .toolbar-outer, .toolbar and the codicon checkbox
 				// the toggles are upgraded into. Without it the toolbar renders unstyled.
 				"common.css",
+				// The theme tokens and the card primitives, shared with the idea preview.
+				"hoicard.css",
 				"eventtree.css",
 				// Addressable id so an in-place updateBody can refresh the server StyleTable -- which
 				// now only holds the event picture sprites -- by mutating this <style>.textContent

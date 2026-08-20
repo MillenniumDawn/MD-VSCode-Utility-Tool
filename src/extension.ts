@@ -13,6 +13,7 @@ import { registerGfxIndex } from './util/gfxindex';
 import { Logger } from "./util/logger";
 import { registerLocalisationIndex } from "./util/localisationIndex";
 import { registerSharedFocusIndex } from "./util/sharedFocusIndex";
+import { registerIdeaSwapIndex } from "./util/ideaSwapIndex";
 import { registerFeatureFlags } from "./util/featureflags";
 import { disposeImageDecodeWorkers } from "./util/image/imagedecoder";
 
@@ -43,6 +44,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(registerSharedFocusIndex());
     context.subscriptions.push(registerGfxIndex());
     context.subscriptions.push(registerLocalisationIndex());
+    context.subscriptions.push(registerIdeaSwapIndex());
     context.subscriptions.push({ dispose: disposeImageDecodeWorkers });
 
     setVscodeContext(ContextName.Hoi4MULoaded, true);

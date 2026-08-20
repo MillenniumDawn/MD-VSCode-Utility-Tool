@@ -16,6 +16,7 @@ import { chain } from 'lodash';
 import { sendEvent } from '../util/telemetry';
 import { guiPreviewDef } from './gui';
 import { mioPreviewDef } from './mio';
+import { ideaPreviewDef } from './idea';
 
 export type PreviewProviderDef = PreviewProviderDefNormal | PreviewProviderDefAlternative;
 
@@ -42,6 +43,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         eventPreviewDef,
         guiPreviewDef,
         mioPreviewDef,
+        ideaPreviewDef,
     ];
     private _previewProvidersMap: Record<string, PreviewProviderDef> = arrayToMap(this._previewProviders, 'type');
 
