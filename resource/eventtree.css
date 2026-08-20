@@ -273,6 +273,8 @@ body.panning .ev-chip {
 	stroke-dasharray: 4 3;
 }
 
+/* A call the event fires itself, from its immediate or its after block, rather than one the player
+   picks. */
 .ev-edge-immediate {
 	stroke: var(--ev-immediate);
 	stroke-dasharray: 1 3;

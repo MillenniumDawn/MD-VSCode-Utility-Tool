@@ -334,8 +334,8 @@ function ownersOfOptions(edges: EventGraphEdge[]): Map<string, string[]> {
 
 // An event is part of a chain when an option of it calls another event, or an option of another
 // event calls it. The link is two hops -- event --structural--> option --call--> event -- so the
-// option hop is collapsed onto its owning event before the ends are counted. An `immediate` call is
-// the same link with no option in between, and counts the same.
+// option hop is collapsed onto its owning event before the ends are counted. A call from the event's
+// own `immediate` or `after` block is the same link with no option in between, and counts the same.
 export function chainedIds(nodes: EventGraphNode[], edges: EventGraphEdge[]): Set<string> {
 	const byId = new Map(nodes.map((n) => [n.id, n]));
 	// Anything that is not an option is an end of a chain: an event, or an unresolved call to an
@@ -436,7 +436,7 @@ export function filteredGraph(
 			continue;
 		}
 		// An id with owners is an option, and the call belongs to the event above it; anything else
-		// is an event making the call itself, which is what an `immediate` block is.
+		// is an event making the call itself, which is what an `immediate` or `after` block is.
 		const froms = owners.get(edge.from) ?? [edge.from];
 		for (const from of froms) {
 			const list = callsOf.get(from);
@@ -934,8 +934,8 @@ function textFor(loc: { key: string; text: string }): string {
 // The only hint that a card has an effects panel behind it. It is positioned absolutely, so a card
 // that has one is exactly as tall as a card that has not -- which the layout depends on, since it
 // reserves space from measured heights.
-function applyEffectsDot(card: HTMLDivElement, effectsRef: number | undefined): void {
-	if (!showEffects || effectsRef === undefined) {
+function applyEffectsDot(card: HTMLDivElement, ...effectsRefs: (number | undefined)[]): void {
+	if (!showEffects || effectsRefs.every((ref) => ref === undefined)) {
 		return;
 	}
 	const dot = document.createElement("span");
@@ -1017,7 +1017,7 @@ function buildEventCard(node: EventGraphEventNode): HTMLDivElement {
 		card.appendChild(conditionPanel(node.trigger, feLocalize("eventtree.eventtrigger", "Event trigger")));
 	}
 
-	applyEffectsDot(card, node.effectsRef);
+	applyEffectsDot(card, node.effectsRef, node.afterEffectsRef);
 	return card;
 }
 
@@ -1274,8 +1274,12 @@ export function chipTextFor(edge: EventGraphEdge, guarded: boolean): string {
 			`${edge.randomHours ? `${edge.hours}-${edge.hours + edge.randomHours}` : edge.hours} ${feLocalize("hours", "hour(s)")}`,
 		);
 	}
-	if (edge.immediate) {
+	// Which of the event's own blocks fired the call. A player option fires nothing by itself, so an
+	// arrow out of an option card says nothing here.
+	if (edge.source === "immediate") {
 		bits.push(feLocalize("eventtree.immediate", "immediate"));
+	} else if (edge.source === "after") {
+		bits.push(feLocalize("eventtree.after", "after"));
 	}
 	if (edge.possibility !== undefined) {
 		// A random_list key is a weight relative to its siblings, not a percentage: a 3 next to a
@@ -1380,7 +1384,13 @@ function renderEdges(
 		path.setAttribute(
 			"class",
 			"ev-edge" +
-				(edge.immediate ? " ev-edge-immediate" : guarded ? " ev-edge-guarded" : "") +
+				// The event fires this itself, from its immediate or its after block, rather than
+				// waiting for the player to pick an option: both get the same dotted arrow.
+				(edge.source !== "option"
+					? " ev-edge-immediate"
+					: guarded
+						? " ev-edge-guarded"
+						: "") +
 				(edge.skipped?.length ? " ev-edge-bridged" : ""),
 		);
 		svg.appendChild(path);
@@ -1758,19 +1768,46 @@ const effectHoverDelay = 150;
 const effectTipGap = 8;
 const effectTipMargin = 4;
 
+// One headed block in the hover panel. An event has two of them -- what it does before the card is
+// shown and what it does once the card is dismissed -- and an option has one.
+interface EffectSection {
+	head: string;
+	effects: EffectTreeNode[];
+}
+
+function effectSectionsOf(node: EventGraphNode): EffectSection[] {
+	if (node.kind === "unresolved") {
+		return [];
+	}
+
+	const refs: { head: string; ref: number | undefined }[] =
+		node.kind === "event"
+			? [
+					{ head: feLocalize("eventtree.immediateeffects", "Immediate effects"), ref: node.effectsRef },
+					{ head: feLocalize("eventtree.aftereffects", "After effects"), ref: node.afterEffectsRef },
+				]
+			: [{ head: feLocalize("eventtree.effects", "Effects"), ref: node.effectsRef }];
+
+	const sections: EffectSection[] = [];
+	for (const { head, ref } of refs) {
+		const effects = ref === undefined ? undefined : payload.effectBlocks[ref];
+		if (effects && effects.length > 0) {
+			sections.push({ head, effects });
+		}
+	}
+	return sections;
+}
+
 function wireEffectTooltips(): void {
 	for (const item of rendered) {
-		if (item.node.kind === "unresolved" || item.node.effectsRef === undefined) {
-			continue;
-		}
-		const effects = payload.effectBlocks[item.node.effectsRef];
-		if (effects && effects.length > 0) {
-			wireEffectTooltip(item.element, item.node, effects);
+		const sections = effectSectionsOf(item.node);
+		if (sections.length > 0) {
+			wireEffectTooltip(item.element, sections);
 		}
 	}
 }
 
-function wireEffectTooltip(host: HTMLDivElement, node: EventGraphNode, effects: EffectTreeNode[]): void {
+function wireEffectTooltip(host: HTMLDivElement, sections: EffectSection[]): void {
 	let panel: HTMLDivElement | undefined = undefined;
 	let timer: number | undefined = undefined;
 
@@ -1780,7 +1817,13 @@ function wireEffectTooltip(host: HTMLDivElement, node: EventGraphNode, effects: 
 		}
 		timer = window.setTimeout(() => {
 			timer = undefined;
-			panel = buildEffectTooltip(node, effects);
+			// The card can be gone by the time the delay is up: a re-render replaces every card, and
+			// the pointer resting on one leaves this timer behind. Without the check the panel of a
+			// card that is no longer on screen opens over the new graph.
+			if (!host.isConnected) {
+				return;
+			}
+			panel = buildEffectTooltip(sections);
 			document.body.append(panel);
 			placeEffectTooltip(panel, host.getBoundingClientRect());
 		}, effectHoverDelay);
@@ -1796,19 +1839,18 @@ function wireEffectTooltip(host: HTMLDivElement, node: EventGraphNode, effects: 
 	});
 }
 
-function buildEffectTooltip(node: EventGraphNode, effects: EffectTreeNode[]): HTMLDivElement {
+function buildEffectTooltip(sections: EffectSection[]): HTMLDivElement {
 	const panel = document.createElement("div");
 	// .ev-cond as well, so the panel is typeset exactly like the condition panels on the cards.
 	panel.className = "ev-cond " + effectTooltipClass;
 
-	const head = document.createElement("div");
-	head.className = "ev-cond-head";
-	head.textContent =
-		node.kind === "event"
-			? feLocalize("eventtree.immediateeffects", "Immediate effects")
-			: feLocalize("eventtree.effects", "Effects");
-	panel.appendChild(head);
-	panel.appendChild(effectsToDom(effects));
+	for (const section of sections) {
+		const head = document.createElement("div");
+		head.className = "ev-cond-head";
+		head.textContent = section.head;
+		panel.appendChild(head);
+		panel.appendChild(effectsToDom(section.effects));
+	}
 
 	// The panel sits outside #eventtreecontent, so it does not inherit the canvas zoom; scaling it
 	// by hand keeps it the size of the card it belongs to, the way the hover picture is scaled.

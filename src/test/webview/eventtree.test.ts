@@ -62,11 +62,11 @@ const integrationPayload: EventGraphPayload = {
         },
     ] as EventGraphNode[],
     edges: [
-        { from: 'arab_spring.0:0', to: 'arab_spring.0.a:1', structural: true, immediate: false,
+        { from: 'arab_spring.0:0', to: 'arab_spring.0.a:1', structural: true, source: 'option',
           scope: '', days: 0, hours: 0, randomDays: 0, randomHours: 0, condition: true },
-        { from: 'arab_spring.0.a:1', to: 'arab_spring.1:2', structural: false, immediate: false,
+        { from: 'arab_spring.0.a:1', to: 'arab_spring.1:2', structural: false, source: 'option',
           scope: '{event_target}', days: 0, hours: 0, randomDays: 0, randomHours: 0, condition: true },
-        { from: 'arab_spring.0.a:1', to: 'arab_spring.3:3', structural: false, immediate: false,
+        { from: 'arab_spring.0.a:1', to: 'arab_spring.3:3', structural: false, source: 'option',
           scope: 'OVERLORD', days: 1, hours: 0, randomDays: 0, randomHours: 0,
           condition: { scopeName: '', nodeContent: 'is_subject = yes' } },
     ],
@@ -106,8 +106,8 @@ const shellHtml = `
 
 const eventtree = require('../../../webviewsrc/eventtree') as typeof import('../../../webviewsrc/eventtree');
 const {
-    conditionToDom, conditionToLabel, effectsToDom, filteredGraph, readFilters, matchesQuery,
-    layoutGraph, separateChips,
+    chipTextFor, conditionToDom, conditionToLabel, effectsToDom, filteredGraph, readFilters,
+    matchesQuery, layoutGraph, separateChips,
 } = eventtree;
 type EventFilter = import('../../../webviewsrc/eventtree').EventFilter;
 
@@ -149,7 +149,7 @@ function edge(from: string, to: string, extra: Partial<EventGraphEdge> = {}): Ev
         from,
         to,
         structural: false,
-        immediate: false,
+        source: 'option',
         scope: '',
         days: 0,
         hours: 0,
@@ -445,7 +445,7 @@ describe('webview/eventtree filteredGraph keeps chains connected', () => {
             ],
             [
                 edge('a:0', 'ao:1', { structural: true }), edge('ao:1', 'b:2'),
-                edge('b:2', 'c:3', { immediate: true }), edge('c:3', 'd:4', { immediate: true }),
+                edge('b:2', 'c:3', { source: 'immediate' }), edge('c:3', 'd:4', { source: 'immediate' }),
             ],
             ['a:0'],
         );
@@ -491,7 +491,7 @@ describe('webview/eventtree filteredGraph keeps chains connected', () => {
             ],
             [
                 edge('a:0', 'ao:1', { structural: true }), edge('ao:1', 'b:2'),
-                edge('b:2', 'c:3', { immediate: true }), edge('c:3', 'b:2', { immediate: true }),
+                edge('b:2', 'c:3', { source: 'immediate' }), edge('c:3', 'b:2', { source: 'immediate' }),
             ],
             ['a:0'],
         );
@@ -560,7 +560,18 @@ describe('webview/eventtree filteredGraph chains', () => {
     it('keeps an event linked by an immediate call with no option in between', () => {
         const result = filteredGraph(payload(
             [eventNode('a:0'), eventNode('b:1')],
-            [edge('a:0', 'b:1', { immediate: true })],
+            [edge('a:0', 'b:1', { source: 'immediate' })],
+            ['a:0'],
+        ), ['chains']);
+        assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:0', 'b:1']);
+    });
+
+    it('keeps an event linked by a call from the after block', () => {
+        // The after block runs once the event is dismissed, so its calls continue the chain exactly
+        // like an immediate one -- and used to be dropped before they ever reached the canvas.
+        const result = filteredGraph(payload(
+            [eventNode('a:0'), eventNode('b:1')],
+            [edge('a:0', 'b:1', { source: 'after' })],
             ['a:0'],
         ), ['chains']);
         assert.deepStrictEqual(result.nodes.map(n => n.id).sort(), ['a:0', 'b:1']);
@@ -625,6 +636,48 @@ describe('webview/eventtree filteredGraph chains', () => {
             ['a:0'],
         ), ['chains']);
         assert.deepStrictEqual(result.roots, ['a:0']);
+    });
+});
+
+describe('webview/eventtree chipTextFor', () => {
+    it('says the scope and the delay of a call an option makes', () => {
+        assert.strictEqual(
+            chipTextFor(edge('a:0', 'b:1', { scope: 'ANQ', days: 239 }), false),
+            'ANQ · 239 day(s)',
+        );
+    });
+
+    it('leaves the scope off a call that stays in the event target', () => {
+        assert.strictEqual(chipTextFor(edge('a:0', 'b:1', { scope: '{event_target}', hours: 5 }), false), '5 hour(s)');
+    });
+
+    it('names the block an event fires a call from', () => {
+        assert.strictEqual(
+            chipTextFor(edge('a:0', 'b:1', { source: 'immediate', scope: 'GXC', days: 1 }), false),
+            'GXC · 1 day(s) · immediate',
+        );
+        assert.strictEqual(
+            chipTextFor(edge('a:0', 'b:1', { source: 'after', scope: 'ANQ', hours: 5 }), false),
+            'ANQ · 5 hour(s) · after',
+        );
+    });
+
+    it('writes a random delay as the range it can land in', () => {
+        assert.strictEqual(chipTextFor(edge('a:0', 'b:1', { days: 1, randomDays: 7 }), false), '1-8 day(s)');
+    });
+
+    it('adds the weight, the filtered-out count and the guard behind them', () => {
+        const text = chipTextFor(
+            edge('a:0', 'b:1', {
+                source: 'after',
+                days: 3,
+                possibility: 70,
+                skipped: ['x:2'],
+                condition: leaf('is_subject = yes'),
+            }),
+            true,
+        );
+        assert.strictEqual(text, '3 day(s) · after · weight 70 · 1 filtered out · is_subject = yes');
     });
 });
 
@@ -1526,6 +1579,49 @@ describe('webview/eventtree rendering', () => {
             wrapper.dispatchEvent(new (window as any).MouseEvent('mouseenter'));
             assert.ok(content().querySelectorAll('.ev-node.ev-dim').length > 0, 'something must be dimmed');
             assert.strictEqual(hits().length, 1, 'the highlight survives the dimming');
+            wrapper.dispatchEvent(new (window as any).MouseEvent('mouseleave'));
+        });
+    });
+
+    // An event whose chain continues from `after`, the way league_collapse_events.11 does.
+    describe('a call fired from the after block', () => {
+        const afterPayload = {
+            ...payload(
+                [eventNode('a:0', { effectsRef: 0, afterEffectsRef: 1 } as Partial<EventGraphEventNode>),
+                    eventNode('b:1')],
+                [edge('a:0', 'b:1', { source: 'after', scope: 'ANQ', hours: 5 })],
+                ['a:0'],
+            ),
+            effectBlocks: [
+                [{ kind: 'line', scopeName: '', content: 'set_country_flag = war' }],
+                [{ kind: 'line', scopeName: '', content: 'swap_ideas = { }' }],
+            ] as EffectTreeNode[][],
+        };
+
+        afterEach(() => {
+            push(integrationPayload);
+        });
+
+        it('draws it as an arrow the event fires itself, labelled after', () => {
+            push(afterPayload);
+            assert.strictEqual(content().querySelectorAll('path.ev-edge-immediate').length, 1);
+            const chip = content().querySelector('.ev-chip')!;
+            assert.strictEqual(chip.textContent, 'ANQ · 5 hour(s) · after');
+        });
+
+        it('shows what the after block does under its own heading', async () => {
+            push(afterPayload);
+            const wrapper = content().querySelector('.ev-card-event')!.parentElement!;
+            wrapper.dispatchEvent(new (window as any).MouseEvent('mouseenter'));
+            await wait(250);
+
+            const panel = document.querySelector('.ev-effects-tip')!;
+            assert.ok(panel, 'the event card must have a panel');
+            assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
+            const heads = Array.from(panel.querySelectorAll('.ev-cond-head')).map(h => h.textContent);
+            assert.deepStrictEqual(heads, ['Immediate effects', 'After effects']);
+            assert.ok(panel.textContent!.includes('swap_ideas = { }'), panel.textContent!);
+
             wrapper.dispatchEvent(new (window as any).MouseEvent('mouseleave'));
         });
     });

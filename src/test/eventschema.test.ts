@@ -232,6 +232,81 @@ describe('previewdef/event/schema child event conditions', () => {
         assert.ok(conditionToString(children[0]!.condition).includes('ENG_harmony_doctrine'));
     });
 
+    // Transcribed from Millennium Dawn's league_collapse_events.11, which continues its chain from
+    // `after` rather than from `immediate`. The block was not in the schema at all, so every call in
+    // it was dropped and the events it fires looked like chains of their own.
+    it('reads a call fired from the after block, through the hidden_effect around it', () => {
+        const events = eventsOf(`
+            add_namespace = league_collapse_events
+            country_event = {
+                id = league_collapse_events.11
+                title = league_collapse_events.11.t
+                is_triggered_only = yes
+                option = {
+                    name = league_collapse_events.11.a
+                }
+                after = {
+                    swap_ideas = {
+                        remove_idea = LEP_eight_provinces_allied_armies
+                        add_idea = LEP_the_disunited_armies_1
+                    }
+                    hidden_effect = {
+                        ANQ = { country_event = { id = league_collapse_events.13 hours = 5 } }
+                        QIE = { country_event = { id = league_collapse_flavour_events.4 hours = 12 } }
+                    }
+                }
+            }
+        `);
+
+        const event = byId(events, 'league_collapse_events.11');
+        const children = event.after.childEvents;
+        assert.deepStrictEqual(
+            children.map(c => `${c.scopeName}:${c.eventName}:${c.hours}`),
+            ['ANQ:league_collapse_events.13:5', 'QIE:league_collapse_flavour_events.4:12'],
+        );
+        // The option is left alone: the after block is the event's own, not part of any option.
+        assert.strictEqual(childrenOf(event, 'league_collapse_events.11.a').length, 0);
+        assert.ok(event.after.effects.length > 0, 'expected the after effects to be kept too');
+    });
+
+    it('carries the guard onto a call fired from after', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                after = {
+                    if = {
+                        limit = { is_subject = yes }
+                        country_event = { id = test.2 days = 30 }
+                    }
+                }
+            }
+        `);
+
+        const children = byId(events, 'test.1').after.childEvents;
+        assert.strictEqual(children.length, 1);
+        assert.strictEqual(children[0]!.eventName, 'test.2');
+        assert.strictEqual(children[0]!.days, 30);
+        assert.ok(conditionToString(children[0]!.condition).includes('is_subject = yes'));
+    });
+
+    it('reports an event without an after block as having nothing in it', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+            }
+        `);
+
+        const event = byId(events, 'test.1');
+        assert.deepStrictEqual(event.after.childEvents, []);
+        assert.deepStrictEqual(event.after.effects, []);
+    });
+
     it('records the branch weight for a call inside random_list', () => {
         const events = eventsOf(`
             add_namespace = test
