@@ -23,6 +23,7 @@ const table: Partial<typeof __table> = {
     "eventtree.showeventconditions": "Show event conditions",
     "eventtree.showhidden": "Show hidden & immediate",
     "eventtree.showlocalisation": "Show localisation",
+    "eventtree.showpicture": "Show event picture",
     "eventtree.showtriggers": "Show triggers",
     "eventtree.step": "step {0}",
     "eventtree.title": "Title: ",

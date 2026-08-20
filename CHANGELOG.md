@@ -1,3 +1,13 @@
+v1.1.25
+
+  Functionality:
+
+- [ Event Tree ] A fifth toggle, `Show event picture`, turns the picture that appears when you hover an event on and off. It starts on, and your choice is remembered like the other toggles.
+
+  Bugfixes:
+
+- [ Event Tree ] The hovered event picture is now drawn at the zoom level of the preview, instead of always at full size next to a zoomed-out event box.
+
 v1.1.22
 
   Functionality:
