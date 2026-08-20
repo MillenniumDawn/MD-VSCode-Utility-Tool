@@ -245,9 +245,18 @@ async function fillFocusItems(
 			"sharedFocusIndex.parseFailure",
 			"Parsing failed! Please check if the file has issues!",
 		);
-		Logger.error(
-			`${baseMessage} ${focusFile} ${failureMessage}\n${e instanceof Error ? (e.stack ?? e.message) : String(e)}`,
-		);
+		// prefer stack for focus parse failures, fall back to message (unlike localisationIndex which logs message only)
+		const errText =
+			e instanceof Error
+				? e.stack || e.message
+				: (() => {
+						try {
+							return String(e);
+						} catch {
+							return Object.prototype.toString.call(e);
+						}
+					})();
+		Logger.error(`${baseMessage} ${focusFile} ${failureMessage}\n${errText}`);
 	}
 }
 

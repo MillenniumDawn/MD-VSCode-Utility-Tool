@@ -371,6 +371,18 @@ describe("util/sharedFocusIndex parse failure logging", function () {
 		assert.strictEqual(logs.length, 1);
 		assert.ok(logs[0].includes("common/national_focus/bad.txt"));
 		assert.ok(logs[0].includes("no-stack"));
+		assert.ok(!logs[0].includes("undefined"));
+	});
+
+	it("falls back to message when an Error has an empty stack", async function () {
+		const err = new Error("empty-stack");
+		(err as unknown as Record<string, unknown>).stack = "";
+		stubParseToThrow(err);
+
+		await findFileByFocusKey("bad");
+
+		assert.strictEqual(logs.length, 1);
+		assert.ok(logs[0].includes("empty-stack"));
 	});
 
 	it("logs String(e) for a thrown string", async function () {
@@ -383,17 +395,16 @@ describe("util/sharedFocusIndex parse failure logging", function () {
 		assert.ok(logs[0].includes("plain old string"));
 	});
 
-	it("logs String(e) for non-string primitives and nullish values", async function () {
-		for (const thrown of [42, null, undefined, 0]) {
-			__resetSharedFocusIndexForTests();
-			logs.length = 0;
+	for (const thrown of [42, null, undefined, 0] as const) {
+		it(`logs String(e) for thrown ${String(thrown)}`, async function () {
 			stubParseToThrow(thrown);
+
 			await findFileByFocusKey("bad");
+
 			assert.strictEqual(logs.length, 1);
 			assert.ok(logs[0].includes(String(thrown)));
-			__resetSharedFocusIndexForTests();
-		}
-	});
+		});
+	}
 
 	it("logs String(e) for a thrown object", async function () {
 		const obj = { toString: () => "custom-obj" };
@@ -403,6 +414,30 @@ describe("util/sharedFocusIndex parse failure logging", function () {
 
 		assert.strictEqual(logs.length, 1);
 		assert.ok(logs[0].includes("custom-obj"));
+	});
+
+	it("logs String(e) for a thrown Symbol", async function () {
+		const sym = Symbol("sym");
+		stubParseToThrow(sym);
+
+		await findFileByFocusKey("bad");
+
+		assert.strictEqual(logs.length, 1);
+		assert.ok(logs[0].includes(String(sym)));
+	});
+
+	it("falls back to Object.prototype.toString when String(e) throws", async function () {
+		const evil = {
+			toString() {
+				throw new Error("inner");
+			},
+		};
+		stubParseToThrow(evil);
+
+		await findFileByFocusKey("bad");
+
+		assert.strictEqual(logs.length, 1);
+		assert.ok(logs[0].includes("[object Object]"));
 	});
 
 	it("does not poison the index: a failed file leaves no entry", async function () {
