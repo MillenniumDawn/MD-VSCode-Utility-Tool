@@ -6,9 +6,20 @@ on:
 
 name: Release
 
+# One publish at a time. Two of these overlapping would race for the same tag and the same
+# marketplace version.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Reading which pull request a commit came from is how "did this merge the release pull
+    # request?" is answered.
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       tag: ${{ steps.check.outputs.tag }}
       release: ${{ steps.check.outputs.release }}
@@ -16,11 +27,14 @@ jobs:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         fetch-depth: 0
-    # Publishes when the version in package.json has no tag yet. When the tag is taken, this push
-    # carries no bump -- version-bump.yml opens a release pull request for it, so nothing fails
-    # here. The script owns that decision for both workflows.
+    # Publishes when this push merged the release pull request and its version has no tag yet.
+    # Every other push publishes nothing -- a branch that bumped package.json by itself has that
+    # bump carried into the release pull request by version-bump.yml, so a run of merges becomes
+    # one release instead of one release each. The script owns that decision for both workflows.
     - name: Check version
       id: check
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: node scripts/release-check.js ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
 
   publish:

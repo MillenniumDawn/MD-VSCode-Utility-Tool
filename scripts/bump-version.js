@@ -6,6 +6,8 @@
 //   node scripts/bump-version.js --type patch --title "Fix the thing" --number 42
 //   node scripts/bump-version.js --type minor --title "..." --body-file pr-body.txt
 //   node scripts/bump-version.js --type patch --bullets-file bullets.json
+//   node scripts/bump-version.js --append --bullets-file fresh.json
+//   node scripts/bump-version.js --set-version 1.1.24
 //
 // The seeded changelog bullets are a starting point taken from the titles of the pull requests that
 // are being released. They carry no [ Component ] prefix on purpose -- guessing one wrong is worse
@@ -38,6 +40,24 @@ function nextVersion(current, releaseType = 'patch') {
 		return `${major}.${minor + 1}.0`;
 	}
 	return `${major}.${minor}.${patch + 1}`;
+}
+
+function compareVersions(a, b) {
+	const left = parseVersion(a);
+	const right = parseVersion(b);
+	for (let i = 0; i < 3; i++) {
+		if (left[i] !== right[i]) {
+			return left[i] < right[i] ? -1 : 1;
+		}
+	}
+	return 0;
+}
+
+// Which of two versions a release should carry. Used when a branch bumped the version while a
+// release pull request was already open: the release keeps the higher of the two rather than
+// silently dropping one of them.
+function higherVersion(a, b) {
+	return compareVersions(a, b) >= 0 ? a : b;
 }
 
 // "Closes #12", "fixes #12", "resolve #12" -- the keywords GitHub itself accepts. The first match
@@ -89,6 +109,39 @@ function prependChangelog(existing, version, titleOrBullets, issue) {
 
 const headingPattern = /^v\d+\.\d+\.\d+$/;
 
+// Where the section at the top of the changelog starts and ends, or undefined when the file does
+// not open with a version heading.
+function topSection(lines) {
+	const start = lines.findIndex((line) => line.trim());
+	if (start === -1 || !headingPattern.test(lines[start].trim())) {
+		return undefined;
+	}
+
+	let end = lines.length;
+	for (let i = start + 1; i < lines.length; i++) {
+		if (headingPattern.test(lines[i].trim())) {
+			end = i;
+			break;
+		}
+	}
+
+	return { start, end, version: lines[start].trim().slice(1) };
+}
+
+// The bullets of the section at the top of a changelog. Used to carry the bullets a branch wrote
+// on main over into the release pull request when the two changelogs conflict.
+function topSectionBullets(changelogText) {
+	const lines = String(changelogText ?? '').split(/\r?\n/);
+	const section = topSection(lines);
+	if (!section) {
+		return [];
+	}
+	return lines
+		.slice(section.start + 1, section.end)
+		.map((line) => line.trim())
+		.filter((line) => line.startsWith('- '));
+}
+
 // Adds bullets to the section that is already at the top of the changelog, so a release pull
 // request that has been reworded by hand survives a later refresh. Bullets that are already there
 // word for word are skipped, and a changelog whose top section is a different version gets a new
@@ -102,22 +155,13 @@ function appendBullets(existing, version, bullets) {
 
 	const wanted = toBullets(requested);
 	const lines = String(existing ?? '').split(/\r?\n/);
-	const start = lines.findIndex((line) => line.trim());
+	const top = topSection(lines);
 
-	if (start === -1 || lines[start].trim() !== `v${version}`) {
+	if (!top || top.version !== version) {
 		return prependChangelog(existing, version, wanted);
 	}
 
-	// The section runs up to the next version heading, or to the end of the file.
-	let end = lines.length;
-	for (let i = start + 1; i < lines.length; i++) {
-		if (headingPattern.test(lines[i].trim())) {
-			end = i;
-			break;
-		}
-	}
-
-	const section = lines.slice(start, end);
+	const section = lines.slice(top.start, top.end);
 	const missing = wanted.filter((bullet) => !section.some((line) => line.trim() === bullet));
 	if (missing.length === 0) {
 		return String(existing ?? '');
@@ -131,7 +175,7 @@ function appendBullets(existing, version, bullets) {
 	}
 	section.splice(last + 1, 0, ...missing);
 
-	return [...lines.slice(0, start), ...section, ...lines.slice(end)].join('\n');
+	return [...lines.slice(0, top.start), ...section, ...lines.slice(top.end)].join('\n');
 }
 
 function readVersion(packageJsonText) {
@@ -172,6 +216,40 @@ function applyBump(options = {}) {
 	fs.writeFileSync(changelogPath, prependChangelog(changelogText, next, entry, issue));
 
 	return { previous, next, issue };
+}
+
+// Puts the release pull request on a specific version instead of a computed one, and renames the
+// changelog section it is collecting into so the two agree.
+//
+// This assumes the section at the top of CHANGELOG.md is the unreleased one -- which it is on
+// release/version-bump, where the top section is exactly what the open release pull request is
+// gathering. Do not point this at a changelog whose top section has already shipped.
+function setVersion(options = {}) {
+	const root = options.cwd ?? process.cwd();
+	const packageJsonPath = path.join(root, 'package.json');
+	const changelogPath = path.join(root, 'CHANGELOG.md');
+
+	const version = parseVersion(options.version).join('.');
+	const packageJsonText = fs.readFileSync(packageJsonPath, 'utf8');
+	const previous = readVersion(packageJsonText);
+
+	if (previous !== version) {
+		fs.writeFileSync(packageJsonPath, writeVersion(packageJsonText, version));
+	}
+
+	let renamed = false;
+	if (fs.existsSync(changelogPath)) {
+		const changelogText = fs.readFileSync(changelogPath, 'utf8');
+		const lines = changelogText.split(/\r?\n/);
+		const top = topSection(lines);
+		if (top && top.version !== version) {
+			lines[top.start] = `v${version}`;
+			fs.writeFileSync(changelogPath, lines.join('\n'));
+			renamed = true;
+		}
+	}
+
+	return { previous, version, renamed, changed: renamed || previous !== version };
 }
 
 // Used when a release pull request is already open: the version stays where it is and only the new
@@ -228,6 +306,10 @@ function parseArgs(argv) {
 				options.bullets = readBulletsFile(value);
 				i++;
 				break;
+			case '--set-version':
+				options.version = value;
+				i++;
+				break;
 			case '--append':
 				options.append = true;
 				break;
@@ -238,20 +320,32 @@ function parseArgs(argv) {
 	return options;
 }
 
+// The workflow redirects this straight into $GITHUB_OUTPUT, so every key is written once.
 function main() {
 	const options = parseArgs(process.argv.slice(2));
+	let changed = false;
+
+	if (options.version !== undefined) {
+		const result = setVersion(options);
+		process.stdout.write(`version=${result.version}\nrenamed=${result.renamed}\n`);
+		changed = result.changed;
+	}
 
 	if (options.append) {
 		const result = appendToChangelog(options);
-		process.stdout.write(`version=${result.version}\n`);
-		process.stdout.write(`changed=${result.changed}\n`);
+		if (options.version === undefined) {
+			process.stdout.write(`version=${result.version}\n`);
+		}
+		changed = changed || result.changed;
+	}
+
+	if (options.version !== undefined || options.append) {
+		process.stdout.write(`changed=${changed}\n`);
 		return;
 	}
 
 	const result = applyBump(options);
-	// The workflow reads these two lines.
-	process.stdout.write(`previous=${result.previous}\n`);
-	process.stdout.write(`next=${result.next}\n`);
+	process.stdout.write(`previous=${result.previous}\nnext=${result.next}\n`);
 }
 
 if (require.main === module) {
@@ -264,6 +358,8 @@ module.exports = {
 	applyBump,
 	bulletFor,
 	changelogSection,
+	compareVersions,
+	higherVersion,
 	issueFromBody,
 	nextVersion,
 	parseArgs,
@@ -271,5 +367,7 @@ module.exports = {
 	prependChangelog,
 	readBulletsFile,
 	readVersion,
+	setVersion,
+	topSectionBullets,
 	writeVersion,
 };

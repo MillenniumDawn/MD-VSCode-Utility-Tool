@@ -33,6 +33,28 @@ describe('scripts/bump-version', function () {
         });
     });
 
+    describe('higherVersion', function () {
+        it('keeps the version a release should carry', function () {
+            assert.strictEqual(bumpVersion.higherVersion('1.1.23', '1.1.24'), '1.1.24');
+            assert.strictEqual(bumpVersion.higherVersion('1.1.24', '1.1.23'), '1.1.24');
+            assert.strictEqual(bumpVersion.higherVersion('1.2.0', '1.1.99'), '1.2.0');
+            assert.strictEqual(bumpVersion.higherVersion('1.1.23', '1.1.23'), '1.1.23');
+        });
+    });
+
+    describe('topSectionBullets', function () {
+        it('reads the bullets of the section on top', function () {
+            assert.deepStrictEqual(
+                bumpVersion.topSectionBullets('v1.1.24\n\n  Functionality:\n\n- One.\n- Two.\n\nv1.1.23\n\n- Old.\n'),
+                ['- One.', '- Two.']);
+        });
+
+        it('returns nothing when the changelog does not start with a version', function () {
+            assert.deepStrictEqual(bumpVersion.topSectionBullets('Some prose\n\n- Not a section.\n'), []);
+            assert.deepStrictEqual(bumpVersion.topSectionBullets(''), []);
+        });
+    });
+
     describe('issueFromBody', function () {
         it('reads the GitHub closing keywords', function () {
             assert.strictEqual(bumpVersion.issueFromBody('Closes #42'), 42);
@@ -217,6 +239,51 @@ describe('scripts/bump-version', function () {
         });
     });
 
+    describe('setVersion', function () {
+        let dir: string;
+
+        beforeEach(function () {
+            dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bump-'));
+            fs.writeFileSync(path.join(dir, 'package.json'), '{\n\t"version": "1.1.23"\n}\n');
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'),
+                'v1.1.23\n\n  Functionality:\n\n- Collected.\n\nv1.1.22\n\n  Bugfixes:\n\n- Shipped.\n');
+        });
+
+        afterEach(function () {
+            fs.rmSync(dir, { recursive: true, force: true });
+        });
+
+        it('moves the version and its changelog heading together', function () {
+            const result = bumpVersion.setVersion({ cwd: dir, version: '1.1.24' });
+
+            assert.deepStrictEqual(
+                { previous: result.previous, version: result.version, renamed: result.renamed, changed: result.changed },
+                { previous: '1.1.23', version: '1.1.24', renamed: true, changed: true });
+            assert.strictEqual(
+                JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).version, '1.1.24');
+            assert.strictEqual(
+                fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
+                'v1.1.24\n\n  Functionality:\n\n- Collected.\n\nv1.1.22\n\n  Bugfixes:\n\n- Shipped.\n');
+        });
+
+        it('leaves the released sections below it alone', function () {
+            bumpVersion.setVersion({ cwd: dir, version: '2.0.0' });
+
+            assert.ok(fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8').includes('v1.1.22\n'));
+        });
+
+        it('does nothing when it is already on that version', function () {
+            const result = bumpVersion.setVersion({ cwd: dir, version: '1.1.23' });
+
+            assert.strictEqual(result.changed, false);
+            assert.strictEqual(result.renamed, false);
+        });
+
+        it('rejects a version that is not three plain parts', function () {
+            assert.throws(() => bumpVersion.setVersion({ cwd: dir, version: 'latest' }), /three-part version/);
+        });
+    });
+
     describe('parseArgs', function () {
         it('reads the flags the workflow passes', function () {
             const options = bumpVersion.parseArgs(['--type', 'minor', '--title', 'A title', '--number', '9']);
@@ -228,6 +295,10 @@ describe('scripts/bump-version', function () {
         it('treats a missing body file as an empty body', function () {
             const options = bumpVersion.parseArgs(['--body-file', path.join(os.tmpdir(), 'no-such-file-here')]);
             assert.strictEqual(options.body, '');
+        });
+
+        it('reads the version to settle on', function () {
+            assert.strictEqual(bumpVersion.parseArgs(['--set-version', '1.1.24']).version, '1.1.24');
         });
     });
 });
@@ -259,6 +330,102 @@ describe('scripts/check-version', function () {
         });
     });
 
+    describe('evaluate', function () {
+        // The repository the script reads is the one it runs in, so these drive it through a
+        // throwaway clone rather than stubbing git.
+        let dir: string;
+        let cwd: string;
+
+        function git(...args: string[]): string {
+            return require('child_process').execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+        }
+
+        function write(version: string, changelog: string): void {
+            fs.writeFileSync(path.join(dir, 'package.json'), `{\n\t"version": "${version}"\n}\n`);
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), changelog);
+        }
+
+        beforeEach(function () {
+            dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'check-')));
+            git('init', '-q', '-b', 'main');
+            git('config', 'user.email', 'a@b.c');
+            git('config', 'user.name', 'Tester');
+            // Keeps the line-ending warnings out of the test output on Windows.
+            git('config', 'core.autocrlf', 'false');
+            write('1.1.22', 'v1.1.22\n\n  Bugfixes:\n\n- Shipped.\n');
+            fs.writeFileSync(path.join(dir, 'extension.ts'), 'source\n');
+            git('add', '-A');
+            git('commit', '-qm', 'Initial');
+            git('tag', 'v1.1.22');
+            git('checkout', '-qb', 'feature');
+            cwd = process.cwd();
+            process.chdir(dir);
+        });
+
+        afterEach(function () {
+            process.chdir(cwd);
+            fs.rmSync(dir, { recursive: true, force: true });
+        });
+
+        it('passes a branch that leaves the version alone', function () {
+            fs.writeFileSync(path.join(dir, 'extension.ts'), 'source\nmore\n');
+            git('commit', '-qam', 'Change the extension');
+
+            const result = checkVersion.evaluate({ baseRef: 'main' });
+
+            assert.strictEqual(result.ok, true);
+            assert.match(result.notice, /normal way to work/);
+        });
+
+        it('passes a branch that carries a correct bump', function () {
+            write('1.1.23', 'v1.1.23\n\n  Functionality:\n\n- New.\n\nv1.1.22\n\n  Bugfixes:\n\n- Shipped.\n');
+            git('commit', '-qam', 'Bump by hand');
+
+            assert.strictEqual(checkVersion.evaluate({ baseRef: 'main' }).ok, true);
+        });
+
+        it('notes a version that already shipped', function () {
+            fs.writeFileSync(path.join(dir, 'extension.ts'), 'source\nmore\n');
+            git('commit', '-qam', 'Change the extension');
+            git('tag', 'v1.1.23');
+            write('1.1.23', 'v1.1.23\n\n  Functionality:\n\n- New.\n');
+            git('commit', '-qam', 'Reuse a released version');
+
+            const result = checkVersion.evaluate({ baseRef: 'main' });
+
+            assert.strictEqual(result.ok, false);
+            assert.match(result.title, /already released/);
+        });
+
+        it('notes a version that goes backwards', function () {
+            write('1.1.21', 'v1.1.22\n\n  Bugfixes:\n\n- Shipped.\n');
+            git('commit', '-qam', 'Lower the version');
+
+            const result = checkVersion.evaluate({ baseRef: 'main' });
+
+            assert.strictEqual(result.ok, false);
+            assert.match(result.title, /lowers the version/);
+        });
+
+        it('notes a changelog heading that disagrees with package.json', function () {
+            write('1.1.23', 'v1.1.22\n\n  Bugfixes:\n\n- Shipped.\n');
+            git('commit', '-qam', 'Forget the changelog');
+
+            const result = checkVersion.evaluate({ baseRef: 'main' });
+
+            assert.strictEqual(result.ok, false);
+            assert.match(result.title, /does not match/);
+        });
+
+        it('says nothing about documentation-only branches', function () {
+            fs.writeFileSync(path.join(dir, 'README.md'), 'docs\n');
+            git('add', '-A');
+            git('commit', '-qm', 'Document');
+
+            assert.strictEqual(checkVersion.evaluate({ baseRef: 'main' }).ok, true);
+        });
+    });
+
     describe('firstHeading', function () {
         it('takes the first line that has content', function () {
             assert.strictEqual(checkVersion.firstHeading('\n\nv1.1.22\n\n  Bugfixes:\n'), 'v1.1.22');
@@ -283,10 +450,41 @@ describe('scripts/check-version', function () {
 
 describe('scripts/release-check', function () {
     describe('decide', function () {
-        it('publishes when the tag is still free', function () {
-            const result = releaseCheck.decide({ tag: 'v1.1.24', tagExists: false, changedFiles: [] });
+        it('publishes when the tag is still free and the release pull request was merged', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.24',
+                tagExists: false,
+                fromReleaseBranch: true,
+                changedFiles: [],
+            });
             assert.strictEqual(result.release, true);
             assert.strictEqual(result.bump, false);
+            assert.strictEqual(result.adopt, false);
+            assert.strictEqual(result.version, '1.1.24');
+        });
+
+        it('adopts a bump that came from any other branch instead of publishing it', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.24',
+                tagExists: false,
+                fromReleaseBranch: false,
+                changedFiles: [],
+            });
+            assert.strictEqual(result.release, false);
+            assert.strictEqual(result.bump, true);
+            assert.strictEqual(result.adopt, true);
+        });
+
+        it('publishes an untagged version anyway when a run is asked for by hand', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.24',
+                tagExists: false,
+                fromReleaseBranch: false,
+                manual: true,
+                changedFiles: [],
+            });
+            assert.strictEqual(result.release, true);
+            assert.strictEqual(result.adopt, false);
         });
 
         it('asks for a release pull request when the tag is taken and the extension changed', function () {
@@ -329,6 +527,12 @@ describe('scripts/release-check', function () {
         it('is automatic unless told otherwise', function () {
             assert.strictEqual(releaseCheck.parseArgs([]).manual, false);
             assert.strictEqual(releaseCheck.parseArgs(['--manual']).manual, true);
+        });
+
+        it('reads the commit to look at', function () {
+            const options = releaseCheck.parseArgs(['--repo', 'a/b', '--sha', 'abc123']);
+            assert.strictEqual(options.repo, 'a/b');
+            assert.strictEqual(options.sha, 'abc123');
         });
     });
 });

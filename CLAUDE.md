@@ -8,17 +8,24 @@ you are fixing a bug or building a feature.
 
 Releasing happens after the merge, on its own:
 
-1. A push to `main` whose version is already tagged, and that changed anything
-   outside documentation and CI, makes
+1. A push to `main` that changed anything outside documentation and CI makes
    [.github/workflows/version-bump.yml](.github/workflows/version-bump.yml) open a
    **release pull request** on branch `release/version-bump`.
 2. That pull request carries the +1 patch bump and a `vX.Y.Z` section seeded with one
    bullet per pull request merged since the last release tag.
-3. Whoever merges it rewords those bullets to the style below and adds
+3. **It stays open and updates itself.** Every later merge into `main` is merged into it
+   and adds its bullets, so five merges in an afternoon become one release, not five.
+4. Whoever merges it rewords those bullets to the style below and adds
    `[ Component ]` prefixes. Merging it publishes the extension.
 
-The version check on a pull request is advisory: it comments when the branch carries
-no bump, and it never fails the check.
+Nothing else publishes. A branch that does bump `package.json` no longer ships the moment
+it is merged: the release pull request takes that version over and publishes it from
+there, so the batching holds either way.
+
+The version check on a pull request is advisory and quiet: leaving the version alone
+passes without a comment. It only speaks up when a branch touched the version and got it
+wrong — a version that already shipped, one below `main`, or a CHANGELOG heading that
+disagrees — and even then it never fails the check.
 
 Bump by hand only when a branch has to ship its own version (rare), and then keep
 `package.json` and the CHANGELOG heading at exactly the same version.

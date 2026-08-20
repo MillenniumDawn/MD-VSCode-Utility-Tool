@@ -1,11 +1,12 @@
-// Reports whether a pull request already carries the version bump a release needs.
+// Reports whether a pull request that touched the version got it right.
 //
 //   node scripts/check-version.js --base-ref origin/main
 //
-// This is advisory only. A branch does not have to bump anything: once it is merged,
-// .github/workflows/version-bump.yml opens a release pull request that carries the bump and a
-// seeded CHANGELOG.md section. The note this writes on the pull request is there for the branch
-// that wanted to ship the bump itself and got it half right.
+// This is advisory only. A branch does not have to bump anything -- that is the normal way to work,
+// and it passes without a word. Once the branch is merged, .github/workflows/version-bump.yml opens
+// a release pull request that carries the bump and a seeded CHANGELOG.md section. The note this
+// writes is there for the branch that wanted to ship the bump itself and got it half right: a
+// version that already shipped, a version below the base, or a CHANGELOG heading that disagrees.
 //
 // Exit code 0 means nothing to say; 1 means there is a note, written to stdout, to
 // $GITHUB_STEP_SUMMARY, to $GITHUB_OUTPUT as `failed`, and to version-check-message.md. The
@@ -17,7 +18,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const { nextVersion, parseVersion, readVersion } = require('./bump-version');
+const { compareVersions, nextVersion, readVersion } = require('./bump-version');
 
 // Paths that cannot change what the packaged extension does, so a change touching only these does
 // not need a version bump. scripts/release-check.js reads this same list to decide whether a push
@@ -37,17 +38,6 @@ function git(args) {
 
 function isExempt(file) {
 	return exemptPatterns.some((pattern) => pattern.test(file));
-}
-
-function compareVersions(a, b) {
-	const left = parseVersion(a);
-	const right = parseVersion(b);
-	for (let i = 0; i < 3; i++) {
-		if (left[i] !== right[i]) {
-			return left[i] < right[i] ? -1 : 1;
-		}
-	}
-	return 0;
 }
 
 function firstHeading(changelogText) {
@@ -85,15 +75,17 @@ function fixHint(expected) {
 	return [
 		'',
 		'**This does not block the merge.** Once this lands on `main`, a release pull request with the ',
-		'version bump and a seeded `CHANGELOG.md` section is opened for you.',
+		'version bump and a seeded `CHANGELOG.md` section is opened for you, and it stays open and ',
+		'collects every later merge until you merge it.',
 		'',
-		'To ship the bump with this pull request instead:',
+		'To carry the bump in this pull request instead:',
 		'',
 		'```',
 		'npm version patch --no-git-tag-version',
 		'```',
 		'',
-		`and add a \`v${expected}\` section at the top of CHANGELOG.md.`,
+		`and add a \`v${expected}\` section at the top of CHANGELOG.md. That still publishes through the `,
+		'release pull request, which takes the version over rather than bumping past it.',
 	].join('\n');
 }
 
@@ -112,14 +104,27 @@ function evaluate(options) {
 	const head = readVersion(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
 	const expected = nextVersion(base, 'patch');
 
-	if (compareVersions(head, base) <= 0) {
+	const order = compareVersions(head, base);
+
+	// Leaving the version alone is the normal way to work, so it is not worth a note on every
+	// pull request. The release pull request opened after the merge carries the bump.
+	if (order === 0) {
+		return {
+			ok: true,
+			notice:
+				`Version ${head} is untouched, which is the normal way to work. A release pull request ` +
+				`taking it to ${expected} is opened after the merge.`,
+		};
+	}
+
+	if (order < 0) {
 		return {
 			ok: false,
-			title: 'No version bump in this pull request',
+			title: 'This pull request lowers the version',
 			message:
-				`\`package.json\` is at **${head}**, the same as \`${baseRef}\`, so merging this releases nothing ` +
-				`on its own — the release workflow cannot reuse tag \`v${base}\`.\n` +
-				`\nA release pull request taking it to **${expected}** is opened after the merge.\n` +
+				`\`package.json\` is at **${head}**, below the **${base}** on \`${baseRef}\`, so the release ` +
+				'would go backwards.\n' +
+				`\nLeave the version alone, or take it to **${expected}**.\n` +
 				fixHint(expected),
 		};
 	}

@@ -3,7 +3,8 @@ v1.1.23
   Functionality:
 
 - [ CI ] Releasing no longer depends on remembering the version bump. A merge to `main` that changed anything outside documentation and CI now opens a release pull request by itself, carrying the version bump and a `CHANGELOG.md` section with one bullet per pull request released since the last version. Reword those bullets, merge, and the extension is published.
-- [ CI ] A pull request no longer fails a check for leaving the version alone, because that is now the normal way to work. It still gets a note when the version and the `CHANGELOG.md` heading disagree, but nothing blocks the merge.
+- [ CI ] Merging several pull requests in a row now publishes once instead of once each. The release pull request stays open and collects every merge that lands after it, and nothing reaches the marketplace until you merge it. A branch that bumped the version itself is collected the same way rather than publishing on its own.
+- [ CI ] A pull request that leaves the version alone now passes the version check without a comment, because that is the normal way to work. It only gets a note when a branch touched the version and got it wrong.
 - [ CI ] A push to `main` that only touched documentation or CI files no longer fails the release workflow for having nothing to publish.
 
 v1.1.22

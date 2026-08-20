@@ -139,4 +139,4 @@ if (require.main === module) {
 	main();
 }
 
-module.exports = { bulletsFromPullRequests, collect, parseArgs };
+module.exports = { bulletsFromPullRequests, collect, parseArgs, pullRequestsForCommit };
