@@ -9,43 +9,23 @@ import { HOIEventType } from "./schema";
 // graph.ts (which does depend on all three) means an accidental value import from the webview
 // fails loudly at build time instead of dragging the extension host into the bundle.
 
-// LocText and NavTarget are shared with the other previews and live in sharedpayload.ts; they are
-// re-exported here so every importer of this module keeps working unchanged.
-export { LocText, NavTarget } from "../sharedpayload";
-import { LocText, NavTarget } from "../sharedpayload";
+// LocText, NavTarget and the effect tree are shared with the other previews and live in
+// sharedpayload.ts; they are re-exported here so every importer of this module keeps working
+// unchanged.
+export {
+	LocText,
+	NavTarget,
+	EffectLine,
+	EffectGroup,
+	EffectChoice,
+	EffectTreeNode,
+} from "../sharedpayload";
+import { LocText, NavTarget, EffectTreeNode } from "../sharedpayload";
 
 // Which block of the event a call was written in. `immediate` and `after` are the event's own two
 // effect blocks -- one before the card is shown, one after it is dismissed -- and their calls hang
 // off the event itself; `option` is a call the player has to pick to make, and hangs off the option.
 export type EventCallSource = "immediate" | "after" | "option";
-
-// The effects of one option (or of an event's `immediate` block), projected out of
-// EffectComplexExpr. The shapes are the same three, minus EffectItem.node -- that field is the raw
-// parse tree of the whole statement, which must never travel to the webview.
-//
-// Unlike EffectComplexExpr, which is sniffed structurally, each variant names itself: the renderer
-// walks this tree in the webview, where a `kind` reads better than probing for a property.
-export interface EffectLine {
-	kind: "line";
-	scopeName: string;
-	content: string;
-}
-
-// Effects that only run when a condition holds -- an `if` / `else_if` / `else` in the file, with
-// every enclosing guard already folded into `condition` by extractEffectValue.
-export interface EffectGroup {
-	kind: "group";
-	condition: ConditionComplexExpr;
-	items: EffectTreeNode[];
-}
-
-// One `random_list`: exactly one of the branches runs, with the weight it was written with.
-export interface EffectChoice {
-	kind: "choice";
-	items: { possibility: number; effect: EffectTreeNode[] }[];
-}
-
-export type EffectTreeNode = EffectLine | EffectGroup | EffectChoice;
 
 interface GraphNodeBase {
 	id: string;

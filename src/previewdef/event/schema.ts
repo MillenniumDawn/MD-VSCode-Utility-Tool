@@ -1,6 +1,6 @@
 import { Node, Token } from "../../hoiformat/hoiparser";
 import { Raw, SchemaDef, convertNodeToJson, HOIPartial, isSymbolNode } from "../../hoiformat/schema";
-import { extractEffectValue, EffectItem, EffectComplexExpr } from "../../hoiformat/effect";
+import { extractEffectValue, EffectItem, EffectComplexExpr, projectEffects } from "../../hoiformat/effect";
 import { EffectTreeNode } from "./payload";
 import {
     andCondition,
@@ -353,33 +353,6 @@ function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs:
 }
 
 const optionOwnKeys = ['name', 'trigger', 'ai_chance', 'original_recipient_only'];
-
-// The serializable projection of an effect tree. It keeps the structure -- what is guarded by what,
-// which branches a random_list has -- and drops EffectItem.node, the parse tree of the statement,
-// which is both large and full of cycles. A top-level unconditional group is unwrapped rather than
-// shown as an `if` over everything.
-function projectEffects(effect: EffectComplexExpr): EffectTreeNode[] {
-    if (effect === null) {
-        return [];
-    }
-
-    if ('nodeContent' in effect) {
-        return [{ kind: 'line', scopeName: effect.scopeName, content: effect.nodeContent }];
-    }
-
-    if ('condition' in effect) {
-        const items = effect.items.flatMap(projectEffects);
-        if (items.length === 0) {
-            return [];
-        }
-        return effect.condition === true ? items : [{ kind: 'group', condition: effect.condition, items }];
-    }
-
-    const items = effect.items
-        .map(item => ({ possibility: item.possibility, effect: projectEffects(item.effect) }))
-        .filter(item => item.effect.length > 0);
-    return items.length === 0 ? [] : [{ kind: 'choice', items }];
-}
 
 const eventTypes = ['country_event', 'news_event', 'state_event', 'unit_leader_event', 'operative_leader_event'];
 

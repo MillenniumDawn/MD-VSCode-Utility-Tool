@@ -5,6 +5,7 @@ import {
 	simplifyCondition,
 } from "./condition";
 import { Node, NodeValue } from "./hoiparser";
+import { EffectTreeNode } from "../previewdef/sharedpayload";
 import { countryScope, Scope, tryMoveScope } from "./scope";
 import { nodeToString } from "./tostring";
 
@@ -49,6 +50,36 @@ export function extractEffectValue(
 	return {
 		effect,
 	};
+}
+
+// The serializable projection of an effect tree. It keeps the structure -- what is guarded by what,
+// which branches a random_list has -- and drops EffectItem.node, the parse tree of the statement,
+// which is both large and full of cycles. A top-level unconditional group is unwrapped rather than
+// shown as an `if` over everything.
+//
+// This is the one gate between the parse tree and a webview, so it lives beside extractEffectValue
+// rather than inside any one preview: the event and decision previews both cross it.
+export function projectEffects(effect: EffectComplexExpr): EffectTreeNode[] {
+	if (effect === null) {
+		return [];
+	}
+
+	if ("nodeContent" in effect) {
+		return [{ kind: "line", scopeName: effect.scopeName, content: effect.nodeContent }];
+	}
+
+	if ("condition" in effect) {
+		const items = effect.items.flatMap(projectEffects);
+		if (items.length === 0) {
+			return [];
+		}
+		return effect.condition === true ? items : [{ kind: "group", condition: effect.condition, items }];
+	}
+
+	const items = effect.items
+		.map((item) => ({ possibility: item.possibility, effect: projectEffects(item.effect) }))
+		.filter((item) => item.effect.length > 0);
+	return items.length === 0 ? [] : [{ kind: "choice", items }];
 }
 
 function extractEffectByCondition(

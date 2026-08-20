@@ -1,11 +1,11 @@
-import { GuiFile, guiFileSchema, ContainerWindowType } from "../../hoiformat/gui";
 import { extractConditionValue, extractConditionalExprs, ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
 import { Node } from "../../hoiformat/hoiparser";
 import { countryScope } from "../../hoiformat/scope";
-import { convertNodeToJson, positionSchema, Position, HOIPartial } from "../../hoiformat/schema";
+import { convertNodeToJson, positionSchema, Position } from "../../hoiformat/schema";
 import { localize } from "../../util/i18n";
 import type { FocusInlayGfxOption, FocusInlayImageSlot, FocusTreeInlay, FocusTreeInlayButtonMeta, FocusTreeInlayRef, FocusWarning } from "./schema";
-import { listFilesFromModOrHOI4, parseAndResolveHoi4FileCached, parseHoi4FileCached } from "../../util/fileloader";
+import { listFilesFromModOrHOI4, parseHoi4FileCached } from "../../util/fileloader";
+import { findContainerWindows, listGuiFiles, listGuiGfxFiles } from "../../util/guiwindowindex";
 import { getConfiguration } from "../../util/vsccommon";
 import { getSpriteTypes } from "../../hoiformat/spritetype";
 import { getGfxContainerFile } from "../../util/gfxindex";
@@ -17,10 +17,10 @@ interface ParsedInlayFile {
 }
 
 const focusInlayWindowsFolder = "common/focus_inlay_windows";
-// Inlay-referenced scripted GUI windows and their sprites can live anywhere under interface/
-// (e.g. interface/GER_inner_circle_scripted_gui.gui, interface/inner_circle.gfx), not just
-// interface/scripted_gui (which doesn't even exist in vanilla). Scan the whole interface tree.
-const guiInterfaceFolder = "interface";
+
+// The interface-tree scan these used to do here is shared with the decision preview and now lives in
+// util/guiwindowindex.ts. Re-exported because the focus tree loader and its tests reach them here.
+export { listGuiGfxFiles };
 
 export async function loadFocusInlayWindows(): Promise<ParsedInlayFile> {
     const files = await listFilesFromModOrHOI4(focusInlayWindowsFolder);
@@ -216,30 +216,9 @@ export async function resolveInlayGuiWindows(inlays: FocusTreeInlay[]): Promise<
 
     // Only the window names actually referenced by inlays. We parse gui files until all of them
     // are found, so we don't parse the whole interface tree when a few windows are needed.
-    const unresolved = new Set(inlays.map(i => i.windowName).filter((n): n is string => !!n));
-    const windowByName: Record<string, { file: string; window: HOIPartial<ContainerWindowType> }> = {};
-
-    for (const guiFile of guiFiles) {
-        if (unresolved.size === 0) {
-            break;
-        }
-        try {
-            const guiNode = await parseAndResolveHoi4FileCached(guiFile);
-            const guiFileData = convertNodeToJson<GuiFile>(guiNode, guiFileSchema);
-            const windows = collectContainerWindows(guiFileData);
-            for (const name of Object.keys(windows)) {
-                if (unresolved.has(name) && !(name in windowByName)) {
-                    const window = windows[name];
-                    if (window !== undefined) {
-                        windowByName[name] = { file: guiFile, window };
-                    }
-                    unresolved.delete(name);
-                }
-            }
-        } catch {
-            continue;
-        }
-    }
+    const windowByName = await findContainerWindows(
+        inlays.map(i => i.windowName).filter((n): n is string => !!n),
+        guiFiles);
 
     for (const inlay of inlays) {
         if (!inlay.windowName) {
@@ -261,47 +240,6 @@ export async function resolveInlayGuiWindows(inlays: FocusTreeInlay[]): Promise<
     }
 
     return { guiFiles, gfxFiles, warnings };
-}
-
-async function listGuiFiles(): Promise<string[]> {
-    try {
-        const files = await listFilesFromModOrHOI4(guiInterfaceFolder, { recursively: true });
-        return files
-            .filter(file => file.toLowerCase().endsWith(".gui"))
-            .map(file => `${guiInterfaceFolder}/${file}`.replace(/\/+/g, "/"));
-    } catch (e) {
-        return [];
-    }
-}
-
-export async function listGuiGfxFiles(): Promise<string[]> {
-    try {
-        const files = await listFilesFromModOrHOI4(guiInterfaceFolder, { recursively: true });
-        return files
-            .filter(file => file.toLowerCase().endsWith(".gfx"))
-            .map(file => `${guiInterfaceFolder}/${file}`.replace(/\/+/g, "/"));
-    } catch (e) {
-        return [];
-    }
-}
-
-function collectContainerWindows(guiFile: HOIPartial<GuiFile>): Record<string, HOIPartial<ContainerWindowType>> {
-    const result: Record<string, HOIPartial<ContainerWindowType>> = {};
-    for (const guiTypes of guiFile.guitypes) {
-        for (const containerWindow of [...guiTypes.containerwindowtype, ...guiTypes.windowtype]) {
-            collectContainerWindowRecursive(containerWindow, result);
-        }
-    }
-    return result;
-}
-
-function collectContainerWindowRecursive(containerWindow: HOIPartial<ContainerWindowType>, result: Record<string, HOIPartial<ContainerWindowType>>) {
-    if (containerWindow.name && !(containerWindow.name in result)) {
-        result[containerWindow.name] = containerWindow;
-    }
-    for (const child of [...containerWindow.containerwindowtype, ...containerWindow.windowtype]) {
-        collectContainerWindowRecursive(child, result);
-    }
 }
 
 export async function resolveInlayGfxFiles(inlays: FocusTreeInlay[]): Promise<InlayGfxResolution> {
