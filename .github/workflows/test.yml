@@ -5,6 +5,12 @@ on:
 
 name: Test
 
+# The release pull request is pushed to again on every merge into main, so without this a run would
+# be left going while its own commit is already outdated.
+concurrency:
+  group: test-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest

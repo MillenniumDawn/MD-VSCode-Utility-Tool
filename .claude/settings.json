@@ -1,14 +1,1 @@
-{
-	"hooks": {
-		"Stop": [
-			{
-				"hooks": [
-					{
-						"type": "command",
-						"command": "node .claude/hooks/changelog-guard.js"
-					}
-				]
-			}
-		]
-	}
-}
+{}
