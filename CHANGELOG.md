@@ -6,6 +6,7 @@ v1.1.23
 - [ CI ] Merging several pull requests in a row now publishes once instead of once each. The release pull request stays open and collects every merge that lands after it, and nothing reaches the marketplace until you merge it. A branch that bumped the version itself is collected the same way rather than publishing on its own.
 - [ CI ] A pull request that leaves the version alone now passes the version check without a comment, because that is the normal way to work. It only gets a note when a branch touched the version and got it wrong.
 - [ CI ] A push to `main` that only touched documentation or CI files no longer fails the release workflow for having nothing to publish.
+- Always log focus parse failures, including non-Error throws. Issue #99.
 
 v1.1.22
 
