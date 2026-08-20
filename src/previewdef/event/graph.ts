@@ -5,7 +5,7 @@ import { localisationIndex } from "../../util/featureflags";
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { getSpriteByGfxName } from "../../util/image/imagecache";
 import { StyleTable, normalizeForStyle } from "../../util/styletable";
-import { HOIEvent } from "./schema";
+import { HOIEvent, HOIEventOption } from "./schema";
 import {
 	EventGraphEdge,
 	EventGraphEventNode,
@@ -13,6 +13,7 @@ import {
 	EventGraphOptionNode,
 	EventGraphPayload,
 	EventGraphUnresolvedNode,
+	EventCallSource,
 	EventToolbarFlags,
 	EffectTreeNode,
 	LocText,
@@ -48,7 +49,7 @@ export interface EventEdge {
 	randomHours: number;
 	condition: ConditionComplexExpr;
 	possibility: number | undefined;
-	immediate: boolean;
+	source: EventCallSource;
 }
 
 export function eventsToGraph(
@@ -141,17 +142,34 @@ function eventToNode(
 	};
 	eventIdToNode[event.id] = eventNode;
 
-	for (const option of [event.immediate, ...event.options]) {
-		const isImmediate = !option.name;
+	// The event's own two effect blocks first, then the options. Which block a call came from has to
+	// be carried rather than guessed: `immediate` and `after` are both nameless, so the two would be
+	// indistinguishable to anything reading the name.
+	const blocks: { block: HOIEventOption; source: EventCallSource }[] = [
+		{ block: event.immediate, source: "immediate" },
+		{ block: event.after, source: "after" },
+		...event.options.map((option) => ({ block: option, source: "option" as const })),
+	];
+
+	for (const { block: option, source } of blocks) {
+		// A block gets a card of its own only when it has a name. That is the two event-level blocks,
+		// and also an option whose name is a dynamic `name = { text = ... }` block the schema cannot
+		// read as a string -- such an option has always hung its calls off the event, and still does.
+		const hasCard = option.name !== undefined;
+		const callSource: EventCallSource = hasCard
+			? "option"
+			: source === "option"
+				? "immediate"
+				: source;
 		const optionNode: OptionNode = {
-			optionName: option.name ?? ":immediate",
+			optionName: option.name ?? ":" + source,
 			trigger: option.trigger,
 			children: [],
 			file: event.file,
 			token: option.token,
 			effects: option.effects,
 		};
-		if (!isImmediate) {
+		if (hasCard) {
 			eventNode.children.push(optionNode);
 		}
 
@@ -187,13 +205,13 @@ function eventToNode(
 				randomHours: childEvent.randomHours,
 				condition: childEvent.condition,
 				possibility: childEvent.possibility,
-				immediate: isImmediate,
+				source: callSource,
 			};
 
-			if (isImmediate) {
-				eventNode.children.push(eventEdge);
-			} else {
+			if (hasCard) {
 				optionNode.children.push(eventEdge);
+			} else {
+				eventNode.children.push(eventEdge);
 			}
 		}
 	}
@@ -356,8 +374,8 @@ export function toolbarFlagsOf(
 	effectBlocks: EffectTreeNode[][],
 ): EventToolbarFlags {
 	return {
-		// Every non-structural edge is one option (or immediate block) calling an event, which is
-		// exactly one chain link.
+		// Every non-structural edge is one option (or immediate or after block) calling an event,
+		// which is exactly one chain link.
 		hasChains: edges.some((e) => !e.structural),
 		// The blocks are interned per referencing node, so a non-empty table means at least one card
 		// carries a dot and a hover panel.
@@ -422,7 +440,7 @@ async function visitNode(
 				from: id,
 				to: childId,
 				structural: false,
-				immediate: child.immediate,
+				source: child.source,
 				scope: child.toScope,
 				days: child.days,
 				hours: child.hours,
@@ -437,7 +455,7 @@ async function visitNode(
 				from: id,
 				to: childId,
 				structural: true,
-				immediate: false,
+				source: "option",
 				scope: "",
 				days: 0,
 				hours: 0,
@@ -483,9 +501,10 @@ async function makeEventGraphNode(
 		loop: node.loop,
 		meanTimeToHappenBase: event.meanTimeToHappenBase,
 		trigger: event.trigger,
-		// The immediate block gets no card of its own -- its calls hang off the event -- so this is
-		// the only place its effects can surface.
+		// Neither the immediate nor the after block gets a card of its own -- their calls hang off the
+		// event -- so this is the only place their effects can surface.
 		effectsRef: internEffects(event.immediate.effects, context),
+		afterEffectsRef: internEffects(event.after.effects, context),
 		nav: event.token
 			? { start: event.token.start, end: event.token.end, file: event.file }
 			: undefined,

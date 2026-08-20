@@ -29,6 +29,10 @@ export interface HOIEvent {
     namespace: string;
     picture?: string;
     immediate: HOIEventOption;
+    // The `after = { ... }` block: what the event does once it is dismissed, whichever option was
+    // taken -- and for a hidden event with no options at all. Read exactly like the immediate block,
+    // because a call it makes continues the chain just as much.
+    after: HOIEventOption;
     options: HOIEventOption[];
     token: Token | undefined;
     major: boolean;
@@ -87,6 +91,7 @@ interface EventDef {
     fire_only_once: boolean;
     option: Raw[];
     immediate: Raw;
+    after: Raw;
     trigger: Raw;
     _token: Token;
 }
@@ -143,6 +148,7 @@ const eventDefSchema: SchemaDef<EventDef> = {
         _type: "array",
     },
     immediate: "raw",
+    after: "raw",
     trigger: "raw",
 };
 
@@ -261,6 +267,7 @@ function convertEvent<T extends HOIEventType>(
         true;
 
     const immediate = convertOption(eventDef.immediate, scope, conditionExprs);
+    const after = convertOption(eventDef.after, scope, conditionExprs);
     const options = eventDef.option.map(o => convertOption(o, scope, conditionExprs));
 
     const meanTimeToHappenBase = eventDef.mean_time_to_happen ?
@@ -280,6 +287,7 @@ function convertEvent<T extends HOIEventType>(
         picture,
         file,
         immediate,
+        after,
         options,
         token: eventDef._token,
         major: !!eventDef.major,

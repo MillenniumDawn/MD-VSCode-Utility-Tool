@@ -7,6 +7,8 @@ const table: Partial<typeof __table> = {
     "common.topbar.refresh.title": "Refresh",
     "days": "day(s)",
     "error": "Error",
+    "eventtree.after": "after",
+    "eventtree.aftereffects": "After effects",
     "eventtree.delay": "Delay: ",
     "eventtree.effects": "Effects",
     "eventtree.eventid": "Event ID: ",
