@@ -865,6 +865,72 @@ describe('webview/eventtree rendering', () => {
         assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
     });
 
+    // Dragging the canvas moves the cards under a stationary cursor, so every card the graph slides
+    // past would otherwise announce itself. The drag layer publishes the press; these check the
+    // preview acts on it, and that letting go puts hovering back exactly as it was.
+    describe('while the canvas is being dragged', () => {
+        const press = () => document.getElementById('dragger')!
+            .dispatchEvent(new (window as any).MouseEvent('mousedown', { bubbles: true }));
+        const release = () => document.body
+            .dispatchEvent(new (window as any).MouseEvent('mouseup', { bubbles: true }));
+        const hover = (type: string) => content()
+            .querySelector('.ev-card-option')!
+            .parentElement!
+            .dispatchEvent(new (window as any).MouseEvent(type));
+
+        // A nested suite runs after every test of its parent, so the chain and the toggles are put
+        // back rather than assumed: whichever payload the last of those left behind is not this
+        // suite's concern.
+        before(() => {
+            window.dispatchEvent(new (window as any).MessageEvent('message', {
+                data: { type: 'updateBody', styleCss: '', data: { eventGraph: integrationPayload } },
+            }));
+            setToggle('show-effects', true);
+        });
+
+        afterEach(() => {
+            release();
+            hover('mouseleave');
+        });
+
+        it('marks the body so the cursor can show the drag, and clears it on release', () => {
+            press();
+            assert.ok(document.body.classList.contains('panning'));
+            release();
+            assert.ok(!document.body.classList.contains('panning'));
+        });
+
+        it('opens no effects panel for a card the drag passes under', async () => {
+            press();
+            hover('mouseenter');
+            await wait(250);
+            assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
+        });
+
+        it('does not dim the chain for a card the drag passes under', () => {
+            press();
+            hover('mouseenter');
+            assert.strictEqual(content().querySelectorAll('.ev-node.ev-dim').length, 0);
+        });
+
+        it('closes a panel that was already open when the drag starts', async () => {
+            hover('mouseenter');
+            await wait(250);
+            assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
+
+            press();
+            assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
+        });
+
+        it('hovers normally again once the button is released', async () => {
+            press();
+            release();
+            hover('mouseenter');
+            await wait(250);
+            assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
+        });
+    });
+
     it('shows the event picture on hover only while the toggle is on', () => {
         const pictured: EventGraphPayload = payload(
             [eventNode('pictured:0', {

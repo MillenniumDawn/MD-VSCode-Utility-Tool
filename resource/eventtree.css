@@ -30,9 +30,26 @@
 	--ev-radius: 6px;
 }
 
+/*
+ * The canvas is sized to the whole graph and paints over the fixed #dragger behind it, so without
+ * this it would swallow every mousedown and drag-to-pan could never start. Only the nodes take the
+ * mouse back; arrows, rails and chips carry no listeners, so a drag can begin on those too.
+ */
 #eventtreecontent {
 	position: relative;
 	transform-origin: 0 0;
+	pointer-events: none;
+}
+
+#dragger {
+	cursor: grab;
+}
+
+/* initCommon puts this class on <body> for as long as the mouse is held down on the drag layer. */
+body.panning #dragger,
+body.panning .ev-card,
+body.panning .ev-chip {
+	cursor: grabbing;
 }
 
 .ev-edges {
@@ -68,6 +85,9 @@
 
 .ev-node {
 	position: absolute;
+	/* Takes the mouse back from the transparent canvas: hovering, clicking and the popups all
+	   hang off the node, everything around it belongs to the drag layer. */
+	pointer-events: auto;
 }
 
 .ev-node.ev-dim,

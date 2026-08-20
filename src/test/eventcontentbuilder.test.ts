@@ -129,6 +129,17 @@ describe('previewdef/event renderEventFile in-place update', () => {
         assert.ok(styleCss.includes(`.${contentOne} {`));
     });
 
+    it('puts the drag layer before the toolbar, which is what keeps the toolbar clickable', async () => {
+        // Both are position:fixed with no z-index, so the one later in the document is the one that
+        // takes a click in the strip they share. With the drag layer last, every toggle would be
+        // covered by it and pressing one would start a pan instead.
+        const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+        const dragger = html.indexOf('id="dragger"');
+        const toolbar = html.indexOf('class="toolbar-outer');
+        assert.ok(dragger > 0 && toolbar > 0, 'both must be rendered');
+        assert.ok(dragger < toolbar, 'the drag layer must come first');
+    });
+
     it('renders the six toggles into the toolbar', async () => {
         const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         for (const id of ['show-localisation', 'show-triggers', 'show-event-conditions', 'show-hidden',

@@ -1,9 +1,15 @@
+import { BehaviorSubject } from "rxjs";
 import { enableDropdowns, numDropDownOpened$ } from "./dropdown";
 import { enableCheckboxes } from "./checkbox";
 import { vscode } from "./vscode";
 import { sendException } from "./telemetry";
 import { forceError } from "../../src/util/common";
 export { arrayToMap } from "../../src/util/common";
+
+// True while the mouse is held down on the drag layer, i.e. while the view is being panned. A
+// preview subscribes to it to keep hover popups out of the way of a drag; the `panning` class on
+// <body> is the same signal for stylesheets.
+export const panning$ = new BehaviorSubject<boolean>(false);
 
 export function setState(obj: Record<string, any>): void {
 	const state = getState();
@@ -178,10 +184,21 @@ export function initCommon(): void {
 			let mdx = -1;
 			let mdy = -1;
 			let pressed = false;
+			// Every path that starts or ends a drag goes through here, so the published signal can
+			// never be left stuck on -- including the recovery below, where the button was released
+			// outside the webview and no mouseup ever arrived.
+			const setPressed = function (value: boolean) {
+				pressed = value;
+				document.body.classList.toggle("panning", value);
+				if (panning$.value !== value) {
+					panning$.next(value);
+				}
+			};
+
 			dragger.addEventListener("mousedown", function (e) {
 				mdx = e.pageX;
 				mdy = e.pageY;
-				pressed = true;
+				setPressed(true);
 			});
 
 			document.body.addEventListener("mousemove", function (e) {
@@ -194,12 +211,12 @@ export function initCommon(): void {
 			});
 
 			document.body.addEventListener("mouseup", function () {
-				pressed = false;
+				setPressed(false);
 			});
 
 			document.body.addEventListener("mouseenter", function (e) {
 				if (pressed && (e.buttons & 1) !== 1) {
-					pressed = false;
+					setPressed(false);
 				}
 			});
 		})();

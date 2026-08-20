@@ -82,9 +82,12 @@ async function renderEvents(
 	return buildEventGraphPayload(graph, eventsLoaderResult, styleTable);
 }
 
+// The drag layer is a fixed, viewport-sized, transparent div: pressing anywhere the graph does not
+// cover starts a pan (see initCommon in webviewsrc/util/common.ts). It has no z-index, so it comes
+// first and the toolbar last -- both are fixed, and the one later in the document is the one that
+// takes the click. The focus tree's shell is ordered the same way for the same reason.
 function renderShell(styleTable: StyleTable): string {
 	return `
-        ${renderToolBar(styleTable)}
         <div id="dragger" class="${styleTable.style(
 					"dragger",
 					() => `
@@ -102,6 +105,7 @@ function renderShell(styleTable: StyleTable): string {
             top: ${toolbarHeight}px;
         `,
 				)}"></div>
+        ${renderToolBar(styleTable)}
     `;
 }
 

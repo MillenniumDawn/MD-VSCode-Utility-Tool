@@ -1,4 +1,4 @@
-import { tryRun, subscribeNavigators, enableZoom, initCommon, getState, setState } from "./util/common";
+import { tryRun, subscribeNavigators, enableZoom, initCommon, getState, setState, panning$ } from "./util/common";
 import { syncCheckbox } from "./util/checkbox";
 import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
@@ -1145,7 +1145,14 @@ function setIsolation(reached: Set<string> | undefined): void {
 
 function wireIsolation(): void {
 	for (const item of rendered) {
-		const enter = () => setIsolation(downstreamOf(item.node.id));
+		const enter = () => {
+			// Cards slide under a stationary cursor while the canvas is dragged, so without this the
+			// chain would light up card by card for the length of the drag.
+			if (panning$.value) {
+				return;
+			}
+			setIsolation(downstreamOf(item.node.id));
+		};
 		const leave = () => setIsolation(undefined);
 		item.element.addEventListener("mouseenter", enter);
 		item.element.addEventListener("mouseleave", leave);
@@ -1182,6 +1189,9 @@ function showPictureWhenHoverElement(eventNode: HTMLDivElement) {
 	let hoverElement: HTMLDivElement | undefined = undefined;
 
 	eventNode.addEventListener("mouseenter", () => {
+		if (panning$.value) {
+			return;
+		}
 		// getBoundingClientRect is already in zoomed pixels, but the sprite style is not, so the
 		// popup is scaled to match the card it belongs to rather than dwarfing it when zoomed out.
 		const scale = currentScale();
@@ -1229,6 +1239,9 @@ function wireEffectTooltip(host: HTMLDivElement, node: EventGraphNode, effects: 
 	let timer: number | undefined = undefined;
 
 	host.addEventListener("mouseenter", () => {
+		if (panning$.value) {
+			return;
+		}
 		timer = window.setTimeout(() => {
 			timer = undefined;
 			panel = buildEffectTooltip(node, effects);
@@ -1294,6 +1307,20 @@ function placeEffectTooltip(panel: HTMLDivElement, host: DOMRect): void {
 }
 
 //#endregion
+
+// A drag starts on the empty canvas, so a popup is rarely open at that moment -- but a card the
+// pointer left on its way to the background can still be finishing its fade, and the dragger keeps
+// the press even when the pointer runs back over the graph. Sweeping once, the way a re-render
+// does, guarantees nothing is left hanging over the canvas while it is being moved.
+panning$.subscribe((panning) => {
+	if (!panning) {
+		return;
+	}
+	document
+		.querySelectorAll("." + hoverPictureClass + ", ." + effectTooltipClass)
+		.forEach((el) => el.remove());
+	setIsolation(undefined);
+});
 
 // In-place update pushed by LoaderPreview when the previewed file changed: re-render from the fresh
 // graph without a full reload, so scroll and zoom survive. Falls back to a full reload if the DOM
