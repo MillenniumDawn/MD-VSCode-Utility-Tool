@@ -1,3 +1,12 @@
+v1.1.24
+
+  Bugfixes:
+
+- [ Event Tree ] Events in the preview no longer land on top of each other. An event whose trigger panel is open is taller than the events it leads to, and the extra height was not reserved, so it covered whatever was beside it — which is why the preview looked worst with `Show triggers` and `Show event conditions` on. Overlapping is now impossible whatever the toggles do.
+- [ Event Tree ] An event can no longer be drawn above the top of the preview, where the toolbar hid it.
+- [ Event Tree ] The labels on the arrows now sit in a lane of their own, which widens to fit the longest condition, so a label never covers an event box. Two labels between the same pair of columns are spread apart instead of printed on top of each other.
+- [ Event Tree ] An arrow leaving an event with many calls now starts on the event box instead of below it.
+
 v1.1.22
 
   Functionality:

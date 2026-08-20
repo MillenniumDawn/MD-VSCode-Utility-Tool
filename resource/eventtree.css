@@ -271,6 +271,10 @@
 
 .ev-chip {
 	position: absolute;
+	/* A chip is built before the layout runs, so that its measured width can size the gap it sits
+	   in, which puts it in the page before the column rails. The rail is a dashed line down the
+	   middle of that same gap, so without this it would be drawn across the chip. */
+	z-index: 1;
 	transform: translate(-50%, -50%);
 	max-width: 220px;
 	padding: 0 6px;
