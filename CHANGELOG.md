@@ -1,3 +1,10 @@
+v1.1.26
+
+  Functionality:
+
+- Opening a `common/ideas` file now previews every idea as a card, grouped by category, showing the idea's icon, cost, traits, modifiers and `allowed`/`available` conditions. Ideas that swap into one another are drawn as a chain of cards joined by arrows, and clicking an arrow opens the file that performs the swap. Issue #5.
+- [ Event Tree ] Show what an event's after block does in the event preview.
+
 v1.1.25
 
   Functionality:
