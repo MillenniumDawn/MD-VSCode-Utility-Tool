@@ -1,11 +1,16 @@
 v1.1.23
 
   Functionality:
-
+  
 - [ CI ] Releasing no longer depends on remembering the version bump. A merge to `main` that changed anything outside documentation and CI now opens a release pull request by itself, carrying the version bump and a `CHANGELOG.md` section with one bullet per pull request released since the last version. Reword those bullets, merge, and the extension is published.
 - [ CI ] Merging several pull requests in a row now publishes once instead of once each. The release pull request stays open and collects every merge that lands after it, and nothing reaches the marketplace until you merge it. A branch that bumped the version itself is collected the same way rather than publishing on its own.
 - [ CI ] A pull request that leaves the version alone now passes the version check without a comment, because that is the normal way to work. It only gets a note when a branch touched the version and got it wrong.
 - [ CI ] A push to `main` that only touched documentation or CI files no longer fails the release workflow for having nothing to publish.
+- [ MIO ] Two mutually exclusive traits on the same row are now linked with the game's own arrows and line, the way the focus tree already draws them, instead of a red line. A pair that is not on the same row keeps the plain line.
+
+  Bugfixes:
+
+- [ Focus Tree ] The red line between two mutually exclusive focuses is gone. It was still being drawn over the arrows and line that replaced it, which is why the link looked like it sat below a stray red line.
 
 v1.1.22
 

@@ -1,10 +1,15 @@
 import { convertNodeToJson, SchemaDef } from "../../hoiformat/schema";
 import { getSpriteByGfxName, Image } from "../../util/image/imagecache";
 import { parseHoi4FileCached } from "../../util/fileloader";
+import { nationalFocusViewGfxFile } from "../../util/hoi4gui/exclusivelinkimages";
 
 export const focusTitlebarStylesFile = 'common/national_focus/00_titlebar_styles.txt';
-export const nationalFocusViewGfxFile = 'interface/nationalfocusview.gfx';
 export const goalsOverlaysGfxFile = 'interface/goals_overlays.gfx';
+
+// Declared with the exclusive link sprites, which the MIO preview also reads, so both previews name
+// the file once. Re-exported here because the focus tree's loader and content builder have always
+// taken it from this module.
+export { nationalFocusViewGfxFile };
 
 interface TitlebarStyleDef {
     name: string;
