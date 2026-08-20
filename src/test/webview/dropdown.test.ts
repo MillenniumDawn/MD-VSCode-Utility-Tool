@@ -8,7 +8,7 @@ describe('webview/util/dropdown', function () {
         numDropDownOpened$.next(0);
     });
 
-    function buildDivDropdown(values: string[], multi = false, initial?: string[]) {
+    function buildDivDropdown(values: string[], multi = false, initial?: string[], empty?: string) {
         const div = document.createElement('div');
         div.classList.add('select-container');
 
@@ -26,7 +26,7 @@ describe('webview/util/dropdown', function () {
 
         document.body.appendChild(div);
 
-        const dd = new DivDropdown(div, multi);
+        const dd = new DivDropdown(div, multi, empty === undefined ? undefined : { empty });
         if (initial) {
             dd.selectedValues$.next(initial);
         }
@@ -51,6 +51,23 @@ describe('webview/util/dropdown', function () {
 
         dd.selectedValues$.next(['second']);
         assert.ok(span.textContent?.includes('second'));
+    });
+
+    it('announces an empty multi-selection as no selection', function () {
+        const dd = buildDivDropdown(['x', 'y'], true);
+        const span = dd.select.querySelector('span.value') as HTMLSpanElement;
+        assert.strictEqual(span.textContent, '(No selection)');
+    });
+
+    // A list of filters means the opposite of a list of things picked out: selecting none of them
+    // hides nothing, so the caller says what an empty selection means for it.
+    it('lets the caller say what an empty selection means', function () {
+        const dd = buildDivDropdown(['x', 'y'], true, undefined, '(All events)');
+        const span = dd.select.querySelector('span.value') as HTMLSpanElement;
+        assert.strictEqual(span.textContent, '(All events)');
+
+        dd.selectedValues$.next(['x']);
+        assert.strictEqual(span.textContent, 'x', 'the override is only for the empty selection');
     });
 
     it('does not throw on mousedown', function () {

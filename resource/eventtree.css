@@ -5,9 +5,10 @@
  * theme the editor is running rather than shipping its own palette. The fallbacks after each
  * var() only matter when a theme omits the variable.
  *
- * Colour carries meaning and nothing else: a scope dot identifies the event type, the accent
- * marks a gated option and the condition that gates it, and the "immediate" hue marks a call
- * fired outside player choice.
+ * Colour carries meaning and nothing else: each glyph shape has one hue and keeps it on every
+ * card, so a card carrying three glyphs shows three colours rather than one; the accent marks a
+ * gated option and the condition that gates it; and the "immediate" hue marks a call fired
+ * outside player choice.
  */
 
 :root {
@@ -20,12 +21,18 @@
 	--ev-accent: var(--vscode-textLink-foreground);
 	--ev-accent-bg: var(--vscode-textBlockQuote-background);
 
-	/* Event scope hues. charts.* is the one theme-provided categorical ramp. */
-	--ev-country: var(--vscode-charts-blue);
+	/*
+	 * One hue per glyph shape, fixed, so a shape is the same colour on every card and two glyphs
+	 * on one card are never the same colour. charts.* is the one theme-provided categorical ramp.
+	 */
+	--ev-mtth: var(--vscode-charts-green);
+	--ev-triggered: var(--vscode-charts-blue);
 	--ev-news: var(--vscode-charts-yellow);
-	--ev-state: var(--vscode-charts-green);
-	--ev-leader: var(--vscode-charts-purple);
-	--ev-operative: var(--vscode-charts-orange);
+	--ev-major: var(--vscode-charts-red);
+	--ev-hidden: var(--vscode-charts-purple);
+
+	/* Not a glyph: a call fired outside player choice, and the loop badge that goes with it. */
+	--ev-immediate: var(--vscode-charts-orange);
 
 	--ev-radius: 6px;
 
@@ -42,6 +49,29 @@
 	--ev-layer-canvas: 1;
 	--ev-layer-popup: 2;
 	--ev-layer-toolbar: 3;
+}
+
+/*
+ * A card is painted on the surface the theme gives widgets, and in several themes -- Dark Modern
+ * among them -- that surface is one step off the editor background it sits on, which on a canvas
+ * this size reads as no card at all. Rather than pick a colour, which would stop following the
+ * theme, the card lifts whatever surface it was given by a fixed amount and casts a shadow: the
+ * lift is relative, so it separates the card in any theme without deciding what either is.
+ *
+ * The direction is the one thing that cannot be relative -- light lifts towards white, dark towards
+ * black -- so it is keyed off the theme class VS Code puts on <body>.
+ */
+body,
+body.vscode-dark,
+body.vscode-high-contrast {
+	--ev-card-raise: rgb(255 255 255 / 6.5%);
+	--ev-card-shadow: 0 1px 4px rgb(0 0 0 / 45%);
+}
+
+body.vscode-light,
+body.vscode-high-contrast-light {
+	--ev-card-raise: rgb(0 0 0 / 4.5%);
+	--ev-card-shadow: 0 1px 4px rgb(0 0 0 / 12%);
 }
 
 /*
@@ -171,11 +201,16 @@ body.panning .ev-chip {
 	}
 }
 
+/* The lift is a flat gradient rather than a second element, so it stays part of the card's own
+   background and adds nothing to the measured height the layout reserves space from. A box-shadow
+   is outside the border box for the same reason. */
 .ev-card {
 	position: relative;
-	background: var(--ev-surface);
+	background-color: var(--ev-surface);
+	background-image: linear-gradient(var(--ev-card-raise), var(--ev-card-raise));
 	border: 1px solid var(--ev-border);
 	border-radius: var(--ev-radius);
+	box-shadow: var(--ev-card-shadow);
 	cursor: pointer;
 	transition: border-color 0.1s;
 }
@@ -197,10 +232,11 @@ body.panning .ev-chip {
 	width: 228px;
 }
 
+/* background-color, not the shorthand: the shorthand would drop the lift painted by .ev-card. */
 .ev-card-hidden,
 .ev-card-unresolved {
 	border-style: dashed;
-	background: var(--ev-surface-alt);
+	background-color: var(--ev-surface-alt);
 }
 
 .ev-card-gated {
@@ -243,7 +279,8 @@ body.panning .ev-chip {
 	flex: none;
 	margin-top: 5px;
 	border-radius: 50%;
-	background: var(--ev-dot, var(--ev-country));
+	/* Only the two bare dots -- an ungated option, an unresolved card -- still set --ev-dot. */
+	background: var(--ev-dot, var(--ev-border));
 }
 
 /* The one non-round glyph on the canvas, so a gated option is findable at a glance. */
@@ -251,6 +288,63 @@ body.panning .ev-chip {
 	border-radius: 1px;
 	background: var(--ev-accent);
 	transform: rotate(45deg);
+}
+
+/*
+ * An event card carries one glyph per kind it is, rather than one dot for all of them: the kinds
+ * are not exclusive -- a news event is often major and still fires on a mean time -- and picking a
+ * winner would hide the rest. The row is never empty, because every event either waits on its own
+ * clock or waits to be called.
+ *
+ * Shape and colour say the same thing and are hard-coded together, so a card carrying three glyphs
+ * shows three colours and the reader can tell them apart without counting corners. The diamond is
+ * not among the shapes below: it belongs to a gated option.
+ */
+.ev-markers {
+	display: flex;
+	flex: none;
+	gap: 3px;
+	/* Aligns the row with the first line of the id next to it, as the single dot did. */
+	margin-top: 4px;
+}
+
+.ev-markers > .ev-marker {
+	width: 8px;
+	height: 8px;
+	margin-top: 0;
+}
+
+.ev-marker-mtth {
+	background: var(--ev-mtth);
+}
+
+.ev-marker-triggered {
+	border-radius: 1px;
+	background: var(--ev-triggered);
+}
+
+.ev-marker-news {
+	border-radius: 0;
+	clip-path: polygon(50% 0, 100% 100%, 0 100%);
+	background: var(--ev-news);
+}
+
+.ev-marker-major {
+	border-radius: 0;
+	clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+	background: var(--ev-major);
+}
+
+/* Hollow, which is the one thing a hidden event should look like. */
+.ev-marker-hidden {
+	background: transparent;
+	border: 1.5px solid var(--ev-hidden);
+	box-sizing: border-box;
+}
+
+/* The same glyphs stand in front of the filter names, where the row's card spacing does not apply. */
+.ev-marker.checkbox-glyph {
+	margin-top: 0;
 }
 
 .ev-text {
@@ -284,19 +378,23 @@ body.panning .ev-chip {
 	padding: 0 11px 9px;
 }
 
+/* The same lift the card takes, so a badge reads as a chip on the card rather than as an outline
+   drawn on it. It is painted over a surface that is already lifted, so the two compound. */
 .ev-badge {
 	padding: 0 6px;
 	border: 1px solid var(--ev-border);
 	border-radius: 2em;
+	background: var(--ev-card-raise);
 	font-size: 11px;
 	line-height: 17px;
 	white-space: nowrap;
 	color: var(--ev-fg-muted);
 }
 
+/* The hue the hexagon carries, so the badge and the glyph on the same card agree. */
 .ev-badge-major {
-	color: var(--ev-news);
-	border-color: var(--ev-news);
+	color: var(--ev-major);
+	border-color: var(--ev-major);
 }
 
 .ev-badge-hidden {
@@ -304,8 +402,16 @@ body.panning .ev-chip {
 }
 
 .ev-badge-loop {
-	color: var(--ev-operative);
-	border-color: var(--ev-operative);
+	color: var(--ev-immediate);
+	border-color: var(--ev-immediate);
+}
+
+/* Says how many events a filter took out from under this card. Dashed, like everything else on the
+   canvas that stands for something not on it. */
+.ev-badge-skipped {
+	border-style: dashed;
+	border-color: var(--ev-accent);
+	color: var(--ev-accent);
 }
 
 /* ---------- Condition panels ---------- */
@@ -407,7 +513,7 @@ body.panning .ev-chip {
 }
 
 .ev-edge-immediate {
-	stroke: var(--ev-operative);
+	stroke: var(--ev-immediate);
 	stroke-dasharray: 1 3;
 	stroke-width: 2;
 	stroke-linecap: round;
@@ -415,6 +521,16 @@ body.panning .ev-chip {
 
 .ev-edge-dim {
 	opacity: 0.15;
+}
+
+/* An arrow that steps over events a filter removed. The long dash says the two cards it joins were
+   not neighbours in the file, and the chip on it says how many are missing. Last, so it wins over
+   the guarded and immediate dash patterns above -- what the arrow skips matters more to a reader
+   than how it was called. */
+.ev-edge-bridged {
+	stroke-dasharray: 8 4;
+	stroke-width: 1.5;
+	stroke-linecap: butt;
 }
 
 .ev-chip {
@@ -442,6 +558,11 @@ body.panning .ev-chip {
 	border-color: var(--ev-accent);
 	color: var(--ev-accent);
 	font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.ev-chip-bridged {
+	border-style: dashed;
+	border-color: var(--ev-accent);
 }
 
 /* ---------- Empty state ---------- */

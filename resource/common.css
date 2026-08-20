@@ -159,6 +159,17 @@ div.checkbox {
     border-radius: 3px;
 }
 
+/* The shape a list entry stands for, drawn between the box and the label. The size is fixed so the
+   labels line up whether or not a given entry has one to draw. */
+div.checkbox-glyph {
+    box-sizing: border-box;
+    flex: none;
+    width: 8px;
+    height: 8px;
+    align-self: center;
+    margin-right: 6px;
+}
+
 ul.select-dropdown div.checkbox {
     margin-top: 1px;
 }

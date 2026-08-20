@@ -28,6 +28,9 @@ interface StubEvent {
     immediate?: StubOption;
     trigger?: unknown;
     hidden?: boolean;
+    major?: boolean;
+    isTriggeredOnly?: boolean;
+    type?: string;
 }
 
 function makeOption(option: StubOption | undefined): any {
@@ -44,16 +47,16 @@ function loaderFor(events: (string | StubEvent)[]): any {
     const items = events.map(entry => {
         const event: StubEvent = typeof entry === 'string' ? { id: entry } : entry;
         return {
-            type: 'country',
+            type: event.type ?? 'country',
             id: event.id,
             title: `${event.id}.t`,
             namespace: 'test',
             immediate: makeOption(event.immediate),
             options: (event.options ?? []).map(makeOption),
             token: undefined,
-            major: false,
+            major: !!event.major,
             hidden: !!event.hidden,
-            isTriggeredOnly: false,
+            isTriggeredOnly: !!event.isTriggeredOnly,
             meanTimeToHappenBase: 0,
             fire_only_once: false,
             file: 'test.txt',
@@ -142,15 +145,40 @@ describe('previewdef/event renderEventFile in-place update', () => {
     // Every control is rendered for every file. Which of them are actually shown is decided in the
     // webview from payload.toolbarFlags, so the markup does not depend on the file and an in-place
     // update never has to reassign the shell to change the toolbar.
-    it('renders the search box and all eight toggles into the toolbar', async () => {
+    it('renders the search box, every toggle and the filter list into the toolbar', async () => {
         const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         for (const id of ['show-localisation', 'show-option-triggers', 'show-edge-conditions',
-            'show-event-conditions', 'show-hidden', 'show-picture', 'show-effects', 'show-chains-only']) {
+            'show-event-conditions', 'show-picture', 'show-effects']) {
             assert.ok(rendered.html.includes(`id="${id}"`), `expected a toggle with id="${id}"`);
         }
         assert.ok(rendered.html.includes('id="ev-searchbox"'), 'the search box must be rendered');
         assert.ok(rendered.html.includes('id="ev-search-count"'), 'the match counter must be rendered');
         assert.ok(rendered.html.includes('class="toolbar-outer'));
+    });
+
+    it('writes out every filter entry, for the webview to gate', async () => {
+        const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+        assert.ok(rendered.html.includes('id="ev-filters"'), 'the filter list must be rendered');
+        for (const value of ['mtth', 'triggered', 'news', 'hidden', 'major', 'chains']) {
+            assert.ok(
+                rendered.html.includes(`class="option" value="${value}"`),
+                `expected a filter entry for ${value}`,
+            );
+        }
+    });
+
+    // The glyph rides on an attribute because the dropdown flattens an option with textContent, and
+    // markup inside the div would be dropped from the item and left as class names in the caption.
+    it('carries each filter glyph on the entry, so the list shows what the cards show', async () => {
+        const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+        for (const kind of ['mtth', 'triggered', 'news', 'hidden', 'major']) {
+            assert.ok(
+                html.includes(`data-glyph="ev-marker ev-marker-${kind}"`),
+                `expected the ${kind} filter to carry its glyph`,
+            );
+        }
+        // Nothing on a card stands for a chain, so that entry keeps the column open and draws nothing.
+        assert.ok(html.includes('value="chains" data-glyph=""'), 'event chains must reserve a blank cell');
     });
 
     it('puts the search box before the toggles, where a narrow pane cannot scroll it away', async () => {
@@ -305,15 +333,39 @@ describe('previewdef/event renderEventFile in-place update', () => {
         const flagsFor = async (events: (string | StubEvent)[]) =>
             payloadOf(await renderEventFile(loaderFor(events), uri, webview) as LoaderRenderResult).toolbarFlags;
 
-        it('reports nothing to offer for a file of unconnected events', async () => {
+        it('offers nothing but the mean time for a file of plain unconnected events', async () => {
             assert.deepStrictEqual(await flagsFor(['test.1', 'test.2']), {
                 hasChains: false,
                 hasEffects: false,
                 hasHidden: false,
+                hasMajor: false,
+                hasNews: false,
+                // Neither event is triggered only, so they all wait on their own clock.
+                hasMtth: true,
+                hasTriggered: false,
                 // The localisation index is off in the test environment.
                 hasLocalisation: false,
                 hasPicture: false,
             });
+        });
+
+        it('reports major, news and triggered only from the events that are one', async () => {
+            assert.strictEqual((await flagsFor([{ id: 'test.1', major: true }])).hasMajor, true);
+            assert.strictEqual((await flagsFor([{ id: 'test.1', type: 'news' }])).hasNews, true);
+            assert.strictEqual(
+                (await flagsFor([{ id: 'test.1', isTriggeredOnly: true }])).hasTriggered, true);
+        });
+
+        it('splits a file between the two ways an event can fire', async () => {
+            const flags = await flagsFor([
+                { id: 'test.1', isTriggeredOnly: true },
+                { id: 'test.2' },
+            ]);
+            assert.strictEqual(flags.hasMtth, true);
+            assert.strictEqual(flags.hasTriggered, true);
+
+            const triggeredOnly = await flagsFor([{ id: 'test.1', isTriggeredOnly: true }]);
+            assert.strictEqual(triggeredOnly.hasMtth, false);
         });
 
         it('reports a chain as soon as one option calls another event', async () => {
@@ -332,12 +384,14 @@ describe('previewdef/event renderEventFile in-place update', () => {
             assert.strictEqual(flags.hasChains, true);
         });
 
-        it('reports hidden for a hidden event, and for an immediate call', async () => {
+        // An immediate call no longer counts: with the filter list expressing "show only", nothing
+        // suppresses immediate arrows any more, and only a hidden event can be filtered down to.
+        it('reports hidden for a hidden event, and for nothing else', async () => {
             assert.strictEqual((await flagsFor([{ id: 'test.1', hidden: true }])).hasHidden, true);
             assert.strictEqual((await flagsFor([
                 { id: 'test.1', immediate: { childEvents: [call('test.2')] } },
                 'test.2',
-            ])).hasHidden, true);
+            ])).hasHidden, false);
         });
 
         it('reports effects only when something actually has any', async () => {

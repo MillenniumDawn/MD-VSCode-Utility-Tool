@@ -111,11 +111,17 @@ export interface EventGraphEdge {
 	randomHours: number;
 	condition: ConditionComplexExpr;
 	possibility?: number;
+	// The events a filter removed from between `from` and `to`. Synthesized by the webview when it
+	// contracts the graph around a filtered-out event, so the chain keeps its arrow rather than
+	// falling into two halves -- the host never sets this.
+	skipped?: string[];
 }
 
-// Which toolbar toggles this file can actually use. A toggle whose flag is false produces
+// Which toolbar controls this file can actually use. A toggle whose flag is false produces
 // byte-identical output in either position, so the webview hides it rather than offering a control
-// that promises something the preview cannot deliver.
+// that promises something the preview cannot deliver. The filter flags work the same way: a filter
+// no event in the file matches would only ever empty the canvas, so its entry is dropped from the
+// filter list.
 //
 // These ride in the payload rather than deciding the toolbar markup on the host, because the
 // toolbar is part of the baked-in shell: markup that changed with the file would need a full html
@@ -126,8 +132,14 @@ export interface EventToolbarFlags {
 	// Some option (or immediate block) calls another event, so there is a chain to filter down to.
 	hasChains: boolean;
 	hasEffects: boolean;
-	// Some event is hidden, or some call is immediate.
+	// Some event is hidden.
 	hasHidden: boolean;
+	hasMajor: boolean;
+	hasNews: boolean;
+	// Some event fires on its own clock, and some event fires only when another effect calls it.
+	// The two are complements, so a file of nothing but triggered events offers only the second.
+	hasMtth: boolean;
+	hasTriggered: boolean;
 	// The localisation index is on. With it off every LocText has text === key, so the toggle
 	// swaps a string for itself.
 	hasLocalisation: boolean;

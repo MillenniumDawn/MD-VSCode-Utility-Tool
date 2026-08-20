@@ -137,15 +137,44 @@ function renderToolBar(styleTable: StyleTable): string {
         <input id="ev-searchbox" type="text" />
         <span id="ev-search-count" class="ev-search-count"></span>`;
 
+	// One multi-select rather than one checkbox per idea: every entry answers the same question --
+	// which events belong on the canvas -- and two separate controls narrowing the same graph left
+	// the reader with no single place to read the answer off. Selecting nothing shows everything;
+	// selecting several is an OR. Which entries are offered is decided in the webview from
+	// EventGraphPayload.toolbarFlags, so the list itself is written out in full here.
+	//
+	// Each entry carries the glyph the matching events wear on the canvas, so the shape vocabulary is
+	// learned from the control that uses it. It travels as an attribute rather than as markup inside
+	// the div because the dropdown flattens an option with textContent, which would drop the element
+	// and leave its classes in the closed combobox caption. Event chains has no glyph -- nothing on a
+	// card stands for it -- so it passes the empty string, which still reserves the column and keeps
+	// the six labels aligned.
+	const filterOption = (value: string, text: string, glyph: string) =>
+		`<div class="option" value="${value}" data-glyph="${glyph}">${text}</div>`;
+	const marker = (kind: string) => `ev-marker ev-marker-${kind}`;
+	const filters = `
+        <div id="ev-filter-container">
+            <label for="ev-filters" class="${labelStyle}">${localize("eventtree.filters", "Filters: ")}</label>
+            <div class="select-container ${styleTable.style("marginRight10", () => `margin-right:10px`)}">
+                <div id="ev-filters" class="select multiple-select" tabindex="0" role="combobox">
+                    <span class="value"></span>
+                    ${filterOption("mtth", localize("eventtree.filtermtth", "MTTH events"), marker("mtth"))}
+                    ${filterOption("triggered", localize("eventtree.filtertriggered", "Triggered only"), marker("triggered"))}
+                    ${filterOption("news", localize("eventtree.filternews", "News events"), marker("news"))}
+                    ${filterOption("hidden", localize("eventtree.filterhidden", "Hidden"), marker("hidden"))}
+                    ${filterOption("major", localize("eventtree.filtermajor", "Major"), marker("major"))}
+                    ${filterOption("chains", localize("eventtree.filterchains", "Event chains"), "")}
+                </div>
+            </div>
+        </div>`;
+
 	const toggles = [
 		toggle("show-localisation", localize("eventtree.showlocalisation", "Show localisation")),
 		toggle("show-option-triggers", localize("eventtree.showoptiontriggers", "Show option triggers")),
 		toggle("show-edge-conditions", localize("eventtree.showedgeconditions", "Show arrow conditions")),
 		toggle("show-event-conditions", localize("eventtree.showeventconditions", "Show event conditions")),
-		toggle("show-hidden", localize("eventtree.showhidden", "Show hidden & immediate")),
 		toggle("show-picture", localize("eventtree.showpicture", "Show event picture")),
 		toggle("show-effects", localize("eventtree.showeffects", "Show effects")),
-		toggle("show-chains-only", localize("eventtree.showchainsonly", "Only event chains")),
 	].join("");
 
 	return `<div class="toolbar-outer ${styleTable.style(
@@ -153,7 +182,7 @@ function renderToolBar(styleTable: StyleTable): string {
 		() => `box-sizing: border-box; height: ${toolbarHeight}px;`,
 	)}">
         <div class="toolbar">
-            ${search}${toggles}
+            ${search}${filters}${toggles}
         </div>
     </div>`;
 }

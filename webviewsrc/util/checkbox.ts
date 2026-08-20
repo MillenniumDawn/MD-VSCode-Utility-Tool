@@ -24,7 +24,10 @@ export function syncCheckbox(input: HTMLInputElement): void {
 export class Checkbox extends Subscriber {
     private checkboxContainer: HTMLDivElement | undefined;
 
-    constructor(readonly input: HTMLInputElement, private text?: string) {
+    // glyphClassName draws a small shape between the box and the label, for a list whose entries
+    // stand for something the reader also sees elsewhere. Left out, the checkbox is exactly what it
+    // was, so nothing that does not ask for a glyph shifts.
+    constructor(readonly input: HTMLInputElement, private text?: string, private glyphClassName?: string) {
         super();
         this.init();
     }
@@ -61,6 +64,14 @@ export class Checkbox extends Subscriber {
         checkbox.classList.add('codicon');
         checkbox.classList.add('codicon-check');
         checkboxContainer.appendChild(checkbox);
+
+        // An empty class list still gets the span: the cell keeps its width, so an entry with no
+        // glyph does not pull its label out of line with the rest.
+        if (this.glyphClassName !== undefined) {
+            const glyph = document.createElement('div');
+            glyph.className = ('checkbox-glyph ' + this.glyphClassName).trim();
+            checkboxContainer.appendChild(glyph);
+        }
 
         const label = document.createElement('div');
         label.append(text);
