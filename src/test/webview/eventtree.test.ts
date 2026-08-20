@@ -2,6 +2,7 @@ import './setup';
 import * as assert from 'assert';
 import { ConditionComplexExpr } from '../../hoiformat/condition';
 import {
+    EffectTreeNode,
     EventGraphEdge,
     EventGraphEventNode,
     EventGraphNode,
@@ -15,6 +16,9 @@ import {
 const integrationPayload: EventGraphPayload = {
     roots: ['arab_spring.0:0'],
     conditionExprs: [],
+    effectBlocks: [
+        [{ kind: 'line', scopeName: '', content: 'add_political_power = 50' }],
+    ],
     nodes: [
         {
             id: 'arab_spring.0:0', kind: 'event', eventId: 'arab_spring.0', eventType: 'country',
@@ -31,6 +35,7 @@ const integrationPayload: EventGraphPayload = {
             id: 'arab_spring.0.a:1', kind: 'option',
             name: { key: 'arab_spring.0.a', text: 'We must mitigate this crisis!' },
             trigger: { scopeName: '', nodeContent: 'tag = FROM' },
+            effectsRef: 0,
         },
         {
             id: 'arab_spring.1:2', kind: 'event', eventId: 'arab_spring.1', eventType: 'news',
@@ -68,12 +73,13 @@ const shellHtml = `
         <input type="checkbox" id="show-event-conditions">
         <input type="checkbox" id="show-hidden">
         <input type="checkbox" id="show-picture">
+        <input type="checkbox" id="show-effects">
     </div></div>
     <div id="dragger"></div>
     <div id="eventtreecontent"></div>`;
 
 const eventtree = require('../../../webviewsrc/eventtree') as typeof import('../../../webviewsrc/eventtree');
-const { conditionToDom, conditionToLabel, visibleGraph, layoutGraph, separateChips } = eventtree;
+const { conditionToDom, conditionToLabel, effectsToDom, visibleGraph, layoutGraph, separateChips } = eventtree;
 
 function leaf(nodeContent: string, scopeName = ''): ConditionComplexExpr {
     return { scopeName, nodeContent };
@@ -125,7 +131,7 @@ function edge(from: string, to: string, extra: Partial<EventGraphEdge> = {}): Ev
 }
 
 function payload(nodes: EventGraphNode[], edges: EventGraphEdge[], roots: string[]): EventGraphPayload {
-    return { nodes, edges, roots, conditionExprs: [] };
+    return { nodes, edges, roots, conditionExprs: [], effectBlocks: [] };
 }
 
 describe('webview/eventtree conditionToDom', () => {
@@ -232,6 +238,74 @@ describe('webview/eventtree conditionToLabel', () => {
 
     it('leaves no empty slot behind an item that is always true', () => {
         assert.strictEqual(conditionToLabel({ type: 'and', items: [leaf('a'), true, leaf('b')] }), 'a, b');
+    });
+});
+
+describe('webview/eventtree effectsToDom', () => {
+    function line(content: string, scopeName = ''): EffectTreeNode {
+        return { kind: 'line', scopeName, content };
+    }
+
+    it('renders a plain effect as one item', () => {
+        const list = effectsToDom([line('add_political_power = 50')]);
+        assert.strictEqual(list.children.length, 1);
+        assert.strictEqual(list.textContent, 'add_political_power = 50');
+    });
+
+    it('prefixes an effect that runs in another scope', () => {
+        const list = effectsToDom([line('add_stability = 0.05', 'FROM')]);
+        assert.ok(list.textContent!.includes('[FROM]'), list.textContent!);
+    });
+
+    it('nests a guarded group under the condition that guards it', () => {
+        const list = effectsToDom([
+            { kind: 'group', condition: leaf('is_subject = yes'), items: [line('set_country_flag = paid')] },
+        ]);
+
+        const fold = list.querySelector('.ev-fold')!;
+        assert.strictEqual(fold.textContent, 'if is_subject = yes');
+        assert.strictEqual(list.querySelector('li ul')!.children.length, 1, 'the effect hangs under the fold');
+        assert.ok(list.textContent!.includes('set_country_flag = paid'));
+    });
+
+    it('shows a random_list as one branch per weight, as written', () => {
+        const list = effectsToDom([
+            {
+                kind: 'choice',
+                items: [
+                    { possibility: 30, effect: [line('add_stability = 0.05')] },
+                    { possibility: 70, effect: [line('add_war_support = 0.05')] },
+                ],
+            },
+        ]);
+
+        const folds = Array.from(list.querySelectorAll('.ev-fold')).map(f => f.textContent);
+        assert.deepStrictEqual(folds, ['weight 30', 'weight 70']);
+        assert.ok(list.textContent!.includes('add_stability = 0.05'));
+        assert.ok(list.textContent!.includes('add_war_support = 0.05'));
+    });
+
+    it('renders nothing for an empty block', () => {
+        assert.strictEqual(effectsToDom([]).children.length, 0);
+    });
+
+    it('summarises the tail rather than filling the screen', () => {
+        const many = Array.from({ length: 50 }, (_, i) => line(`add_political_power = ${i}`));
+        const list = effectsToDom(many);
+
+        assert.strictEqual(list.children.length, 41, 'forty lines and one summary');
+        assert.strictEqual(list.lastElementChild!.textContent, '+10 more');
+    });
+
+    it('counts what it skipped inside a group it did not render', () => {
+        const many = Array.from({ length: 40 }, (_, i) => line(`add_political_power = ${i}`));
+        const list = effectsToDom([
+            ...many,
+            { kind: 'group', condition: leaf('is_subject = yes'), items: [line('a'), line('b')] },
+        ]);
+
+        assert.strictEqual(list.querySelectorAll('.ev-fold').length, 1, 'the group is summarised, not half drawn');
+        assert.strictEqual(list.lastElementChild!.textContent, '+2 more');
     });
 });
 
@@ -627,6 +701,9 @@ describe('webview/eventtree layout over a realistic chain', () => {
 describe('webview/eventtree rendering', () => {
     const content = () => document.getElementById('eventtreecontent')!;
     const toggle = (id: string) => document.getElementById(id) as HTMLInputElement;
+    // The effects panel waits out a hover delay before it appears, so the tests that drive it have
+    // to wait too.
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     function setToggle(id: string, value: boolean): void {
         const input = toggle(id);
@@ -742,6 +819,52 @@ describe('webview/eventtree rendering', () => {
         assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
     });
 
+    it('marks a card that has effects and shows them on hover', async () => {
+        const tips = () => document.querySelectorAll('.ev-effects-tip').length;
+        const hover = (type: string) => content()
+            .querySelector('.ev-card-option')!
+            .parentElement!
+            .dispatchEvent(new (window as any).MouseEvent(type));
+
+        assert.ok(content().querySelector('.ev-card-option .ev-effects-dot'), 'the option must be marked');
+
+        hover('mouseenter');
+        assert.strictEqual(tips(), 0, 'nothing may appear before the hover delay');
+        await wait(250);
+        assert.strictEqual(tips(), 1, 'the panel must appear once the delay is up');
+        const panel = document.querySelector('.ev-effects-tip')!;
+        assert.ok(panel.textContent!.includes('Effects'));
+        assert.ok(panel.textContent!.includes('add_political_power = 50'), panel.textContent!);
+
+        hover('mouseleave');
+        assert.strictEqual(tips(), 0, 'the panel must go away again');
+    });
+
+    it('drops the dot and the panel when effects are off', async () => {
+        setToggle('show-effects', false);
+        assert.strictEqual(content().querySelectorAll('.ev-effects-dot').length, 0);
+
+        content().querySelector('.ev-card-option')!.parentElement!
+            .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
+        await wait(250);
+        assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
+
+        setToggle('show-effects', true);
+        assert.strictEqual(content().querySelectorAll('.ev-effects-dot').length, 1);
+    });
+
+    it('leaves no panel behind when the file is re-rendered mid-hover', async () => {
+        content().querySelector('.ev-card-option')!.parentElement!
+            .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
+        await wait(250);
+        assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
+
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'updateBody', styleCss: '', data: { eventGraph: integrationPayload } },
+        }));
+        assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
+    });
+
     it('shows the event picture on hover only while the toggle is on', () => {
         const pictured: EventGraphPayload = payload(
             [eventNode('pictured:0', {
@@ -781,6 +904,7 @@ describe('webview/eventtree rendering', () => {
         const next: EventGraphPayload = {
             roots: ['only:0'],
             conditionExprs: [],
+            effectBlocks: [],
             edges: [],
             nodes: [eventNode('only:0', { eventId: 'replaced.1' })],
         };

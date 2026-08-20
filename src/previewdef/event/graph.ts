@@ -13,6 +13,7 @@ import {
 	EventGraphOptionNode,
 	EventGraphPayload,
 	EventGraphUnresolvedNode,
+	EffectTreeNode,
 	LocText,
 } from "./payload";
 import { EventsLoaderResult } from "./loader";
@@ -34,6 +35,7 @@ export interface OptionNode {
 	children: EventEdge[];
 	file: string;
 	token: Token | undefined;
+	effects: EffectTreeNode[];
 }
 
 export interface EventEdge {
@@ -146,6 +148,7 @@ function eventToNode(
 			children: [],
 			file: event.file,
 			token: option.token,
+			effects: option.effects,
 		};
 		if (!isImmediate) {
 			eventNode.children.push(optionNode);
@@ -288,6 +291,27 @@ interface BuildContext {
 	// cannot merge two boxes that would go on to differ -- and keeps the collapsing effective,
 	// which keying on the whole stack would not.
 	visited: Map<EventNode | OptionNode, Map<string, string>>;
+	// Interned effect blocks, keyed on the array the schema built once per option. The same option
+	// is emitted as a node once per scope situation it is reached in, so the nodes reference a
+	// block by index instead of each carrying a copy.
+	effectBlocks: EffectTreeNode[][];
+	effectRefs: Map<EffectTreeNode[], number>;
+}
+
+function internEffects(effects: EffectTreeNode[], context: BuildContext): number | undefined {
+	if (effects.length === 0) {
+		return undefined;
+	}
+
+	const existing = context.effectRefs.get(effects);
+	if (existing !== undefined) {
+		return existing;
+	}
+
+	const index = context.effectBlocks.length;
+	context.effectBlocks.push(effects);
+	context.effectRefs.set(effects, index);
+	return index;
 }
 
 export async function buildEventGraphPayload(
@@ -303,6 +327,8 @@ export async function buildEventGraphPayload(
 		nextId: { value: 0 },
 		maxFromDepth: maxFromDepthOf(graph),
 		visited: new Map(),
+		effectBlocks: [],
+		effectRefs: new Map(),
 	};
 
 	const roots: string[] = [];
@@ -316,6 +342,7 @@ export async function buildEventGraphPayload(
 		nodes: context.nodes,
 		edges: context.edges,
 		conditionExprs: loaderResult.events.conditionExprs,
+		effectBlocks: context.effectBlocks,
 	};
 }
 
@@ -424,6 +451,9 @@ async function makeEventGraphNode(
 		loop: node.loop,
 		meanTimeToHappenBase: event.meanTimeToHappenBase,
 		trigger: event.trigger,
+		// The immediate block gets no card of its own -- its calls hang off the event -- so this is
+		// the only place its effects can surface.
+		effectsRef: internEffects(event.immediate.effects, context),
 		nav: event.token
 			? { start: event.token.start, end: event.token.end, file: event.file }
 			: undefined,
@@ -447,13 +477,14 @@ async function makeEventGraphNode(
 async function makeOptionGraphNode(
 	id: string,
 	node: OptionNode,
-	_context: BuildContext,
+	context: BuildContext,
 ): Promise<EventGraphOptionNode> {
 	return {
 		id,
 		kind: "option",
 		name: await localise(node.optionName),
 		trigger: node.trigger,
+		effectsRef: internEffects(node.effects, context),
 		nav: node.token
 			? { start: node.token.start, end: node.token.end, file: node.file }
 			: undefined,

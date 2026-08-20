@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { renderEventFile } from '../previewdef/event/contentbuilder';
 import { serializeUpdate, LoaderRenderResult } from '../previewdef/loaderpreview';
-import { EventGraphEventNode, EventGraphOptionNode, EventGraphPayload } from '../previewdef/event/payload';
+import { EffectTreeNode, EventGraphEventNode, EventGraphOptionNode, EventGraphPayload } from '../previewdef/event/payload';
 import { conditionToString } from '../hoiformat/condition';
 import { contextContainer } from '../context';
 
@@ -19,6 +19,7 @@ interface StubOption {
     name?: string;
     trigger?: unknown;
     childEvents?: unknown[];
+    effects?: EffectTreeNode[];
 }
 
 interface StubEvent {
@@ -35,6 +36,7 @@ function makeOption(option: StubOption | undefined): any {
         trigger: option?.trigger ?? true,
         childEvents: option?.childEvents ?? [],
         token: undefined,
+        effects: option?.effects ?? [],
     };
 }
 
@@ -127,10 +129,10 @@ describe('previewdef/event renderEventFile in-place update', () => {
         assert.ok(styleCss.includes(`.${contentOne} {`));
     });
 
-    it('renders the five toggles into the toolbar', async () => {
+    it('renders the six toggles into the toolbar', async () => {
         const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         for (const id of ['show-localisation', 'show-triggers', 'show-event-conditions', 'show-hidden',
-            'show-picture']) {
+            'show-picture', 'show-effects']) {
             assert.ok(rendered.html.includes(`id="${id}"`), `expected a toggle with id="${id}"`);
         }
         assert.ok(rendered.html.includes('class="toolbar-outer'));

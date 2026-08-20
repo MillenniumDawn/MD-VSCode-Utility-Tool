@@ -4,6 +4,7 @@ import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
 import { ConditionComplexExpr } from "../src/hoiformat/condition";
 import {
+	EffectTreeNode,
 	EventGraphEdge,
 	EventGraphEventNode,
 	EventGraphNode,
@@ -17,10 +18,18 @@ initCommon();
 // Marker on every hover-picture popup (appended to body, outside #eventtreecontent) so a re-render
 // can sweep any that were stranded by replacing their host node mid-hover.
 const hoverPictureClass = "event-hover-picture";
+// The same, for the effects panel.
+const effectTooltipClass = "ev-effects-tip";
 
 const toolbarHeight = 40;
 
-const emptyPayload: EventGraphPayload = { roots: [], nodes: [], edges: [], conditionExprs: [] };
+const emptyPayload: EventGraphPayload = {
+	roots: [],
+	nodes: [],
+	edges: [],
+	conditionExprs: [],
+	effectBlocks: [],
+};
 
 let payload: EventGraphPayload = (window as any).eventGraph ?? emptyPayload;
 
@@ -29,6 +38,7 @@ let showTriggers: boolean = getState().showTriggers ?? true;
 let showEventConditions: boolean = getState().showEventConditions ?? true;
 let showHidden: boolean = getState().showHidden ?? true;
 let showPicture: boolean = getState().showPicture ?? true;
+let showEffects: boolean = getState().showEffects ?? true;
 
 const scopeClassByType: Record<string, string> = {
 	country: "--ev-country",
@@ -158,6 +168,91 @@ function conditionPanel(condition: ConditionComplexExpr, label: string): HTMLDiv
 	box.appendChild(head);
 	box.appendChild(conditionToDom(condition));
 	return box;
+}
+
+//#endregion
+
+//#region Effect rendering
+
+// A panel is a hover popup, so it has to stay something you can read at a glance rather than a
+// second copy of the file. Anything past this many lines is counted and summarised instead.
+const maxEffectLines = 40;
+
+interface EffectBudget {
+	left: number;
+	skipped: number;
+}
+
+// The effects of one option, or of an event's immediate block, as a nested list. Structure is the
+// point: which effects only run under an `if`, and which are one branch of a `random_list`.
+export function effectsToDom(nodes: EffectTreeNode[]): HTMLUListElement {
+	const budget: EffectBudget = { left: maxEffectLines, skipped: 0 };
+	const list = document.createElement("ul");
+	appendEffects(list, nodes, budget);
+
+	if (budget.skipped > 0) {
+		const more = document.createElement("li");
+		more.className = "ev-fold";
+		more.textContent = feLocalize("eventtree.moreeffects", "+{0} more", budget.skipped);
+		list.appendChild(more);
+	}
+
+	return list;
+}
+
+function appendEffects(list: HTMLUListElement, nodes: EffectTreeNode[], budget: EffectBudget): void {
+	for (const node of nodes) {
+		// Counting what is left rather than rendering it keeps a half-filled `if` off the panel:
+		// a group is either shown with its effects or reported as part of the tail.
+		if (budget.left <= 0) {
+			budget.skipped += countEffectLines([node]);
+			continue;
+		}
+
+		if (node.kind === "line") {
+			budget.left--;
+			list.appendChild(leafItem(node.content, node.scopeName));
+		} else if (node.kind === "group") {
+			list.appendChild(foldItem("if " + conditionToLabel(node.condition), node.items, budget));
+		} else {
+			for (const branch of node.items) {
+				// The weight is shown as written, for the reason chipTextFor gives: a random_list key
+				// is relative to its siblings, and a modifier can change the totals at runtime.
+				list.appendChild(
+					foldItem(feLocalize("eventtree.weight", "weight {0}", branch.possibility), branch.effect, budget),
+				);
+			}
+		}
+	}
+}
+
+function foldItem(label: string, items: EffectTreeNode[], budget: EffectBudget): HTMLLIElement {
+	const item = document.createElement("li");
+	const head = document.createElement("span");
+	head.className = "ev-fold";
+	head.textContent = label;
+	item.appendChild(head);
+
+	const inner = document.createElement("ul");
+	appendEffects(inner, items, budget);
+	item.appendChild(inner);
+	return item;
+}
+
+function countEffectLines(nodes: EffectTreeNode[]): number {
+	let total = 0;
+	for (const node of nodes) {
+		if (node.kind === "line") {
+			total++;
+		} else if (node.kind === "group") {
+			total += countEffectLines(node.items);
+		} else {
+			for (const branch of node.items) {
+				total += countEffectLines(branch.effect);
+			}
+		}
+	}
+	return total;
 }
 
 //#endregion
@@ -565,6 +660,18 @@ function textFor(loc: { key: string; text: string }): string {
 	return showLocalisation ? loc.text : loc.key;
 }
 
+// The only hint that a card has an effects panel behind it. It is positioned absolutely, so a card
+// that has one is exactly as tall as a card that has not -- which the layout depends on, since it
+// reserves space from measured heights.
+function applyEffectsDot(card: HTMLDivElement, effectsRef: number | undefined): void {
+	if (!showEffects || effectsRef === undefined) {
+		return;
+	}
+	const dot = document.createElement("span");
+	dot.className = "ev-effects-dot";
+	card.appendChild(dot);
+}
+
 function buildEventCard(node: EventGraphEventNode): HTMLDivElement {
 	const card = document.createElement("div");
 	card.className = "ev-card ev-card-event" + (node.hidden ? " ev-card-hidden" : "");
@@ -627,6 +734,7 @@ function buildEventCard(node: EventGraphEventNode): HTMLDivElement {
 		card.appendChild(conditionPanel(node.trigger, feLocalize("eventtree.eventtrigger", "Event trigger")));
 	}
 
+	applyEffectsDot(card, node.effectsRef);
 	return card;
 }
 
@@ -666,6 +774,7 @@ function buildOptionCard(node: EventGraphOptionNode): HTMLDivElement {
 		card.appendChild(conditionPanel(node.trigger, feLocalize("eventtree.optiontrigger", "Option trigger")));
 	}
 
+	applyEffectsDot(card, node.effectsRef);
 	return card;
 }
 
@@ -741,7 +850,9 @@ function buildContent(): void {
 		return;
 	}
 
-	document.querySelectorAll("." + hoverPictureClass).forEach((el) => el.remove());
+	document
+		.querySelectorAll("." + hoverPictureClass + ", ." + effectTooltipClass)
+		.forEach((el) => el.remove());
 	content.textContent = "";
 	rendered = [];
 	renderedEdges = [];
@@ -822,6 +933,9 @@ function buildContent(): void {
 	wireIsolation();
 	if (showPicture) {
 		showPictureWhenHover();
+	}
+	if (showEffects) {
+		wireEffectTooltips();
 	}
 	subscribeNavigators();
 }
@@ -1090,6 +1204,97 @@ function showPictureWhenHoverElement(eventNode: HTMLDivElement) {
 
 //#endregion
 
+//#region Hover effects
+
+// Long enough that panning the pointer across a column does not flash a panel per card.
+const effectHoverDelay = 150;
+// Between the card and the panel, and from the edge of the window.
+const effectTipGap = 8;
+const effectTipMargin = 4;
+
+function wireEffectTooltips(): void {
+	for (const item of rendered) {
+		if (item.node.kind === "unresolved" || item.node.effectsRef === undefined) {
+			continue;
+		}
+		const effects = payload.effectBlocks[item.node.effectsRef];
+		if (effects && effects.length > 0) {
+			wireEffectTooltip(item.element, item.node, effects);
+		}
+	}
+}
+
+function wireEffectTooltip(host: HTMLDivElement, node: EventGraphNode, effects: EffectTreeNode[]): void {
+	let panel: HTMLDivElement | undefined = undefined;
+	let timer: number | undefined = undefined;
+
+	host.addEventListener("mouseenter", () => {
+		timer = window.setTimeout(() => {
+			timer = undefined;
+			panel = buildEffectTooltip(node, effects);
+			document.body.append(panel);
+			placeEffectTooltip(panel, host.getBoundingClientRect());
+		}, effectHoverDelay);
+	});
+
+	host.addEventListener("mouseleave", () => {
+		if (timer !== undefined) {
+			clearTimeout(timer);
+			timer = undefined;
+		}
+		panel?.remove();
+		panel = undefined;
+	});
+}
+
+function buildEffectTooltip(node: EventGraphNode, effects: EffectTreeNode[]): HTMLDivElement {
+	const panel = document.createElement("div");
+	// .ev-cond as well, so the panel is typeset exactly like the condition panels on the cards.
+	panel.className = "ev-cond " + effectTooltipClass;
+
+	const head = document.createElement("div");
+	head.className = "ev-cond-head";
+	head.textContent =
+		node.kind === "event"
+			? feLocalize("eventtree.immediateeffects", "Immediate effects")
+			: feLocalize("eventtree.effects", "Effects");
+	panel.appendChild(head);
+	panel.appendChild(effectsToDom(effects));
+
+	// The panel sits outside #eventtreecontent, so it does not inherit the canvas zoom; scaling it
+	// by hand keeps it the size of the card it belongs to, the way the hover picture is scaled.
+	panel.style.transform = `scale(${currentScale()})`;
+	panel.style.transformOrigin = "top left";
+	panel.style.visibility = "hidden";
+	return panel;
+}
+
+// To the right of the card, top aligned, flipping to the left when the window has no room. Measured
+// after the transform is set, because getBoundingClientRect already reports the scaled size.
+function placeEffectTooltip(panel: HTMLDivElement, host: DOMRect): void {
+	const size = panel.getBoundingClientRect();
+	const viewWidth = document.documentElement.clientWidth;
+	const viewHeight = document.documentElement.clientHeight;
+
+	let left = host.right + effectTipGap;
+	if (left + size.width > viewWidth) {
+		left = host.left - effectTipGap - size.width;
+	}
+	left = Math.max(effectTipMargin, Math.min(left, viewWidth - size.width - effectTipMargin));
+
+	let top = host.top;
+	if (top + size.height > viewHeight) {
+		top = viewHeight - size.height - effectTipMargin;
+	}
+	top = Math.max(effectTipMargin, top);
+
+	panel.style.left = left + window.scrollX + "px";
+	panel.style.top = top + window.scrollY + "px";
+	panel.style.visibility = "";
+}
+
+//#endregion
+
 // In-place update pushed by LoaderPreview when the previewed file changed: re-render from the fresh
 // graph without a full reload, so scroll and zoom survive. Falls back to a full reload if the DOM
 // the re-render needs is gone (e.g. the webview shows the error page, which has no listener).
@@ -1150,6 +1355,10 @@ window.addEventListener(
 		bindToggle("show-picture", showPicture, (value) => {
 			showPicture = value;
 			setState({ showPicture: value });
+		});
+		bindToggle("show-effects", showEffects, (value) => {
+			showEffects = value;
+			setState({ showEffects: value });
 		});
 
 		buildContent();

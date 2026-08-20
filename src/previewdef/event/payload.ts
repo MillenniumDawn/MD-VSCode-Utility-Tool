@@ -22,6 +22,34 @@ export interface NavTarget {
 	file: string;
 }
 
+// The effects of one option (or of an event's `immediate` block), projected out of
+// EffectComplexExpr. The shapes are the same three, minus EffectItem.node -- that field is the raw
+// parse tree of the whole statement, which must never travel to the webview.
+//
+// Unlike EffectComplexExpr, which is sniffed structurally, each variant names itself: the renderer
+// walks this tree in the webview, where a `kind` reads better than probing for a property.
+export interface EffectLine {
+	kind: "line";
+	scopeName: string;
+	content: string;
+}
+
+// Effects that only run when a condition holds -- an `if` / `else_if` / `else` in the file, with
+// every enclosing guard already folded into `condition` by extractEffectValue.
+export interface EffectGroup {
+	kind: "group";
+	condition: ConditionComplexExpr;
+	items: EffectTreeNode[];
+}
+
+// One `random_list`: exactly one of the branches runs, with the weight it was written with.
+export interface EffectChoice {
+	kind: "choice";
+	items: { possibility: number; effect: EffectTreeNode[] }[];
+}
+
+export type EffectTreeNode = EffectLine | EffectGroup | EffectChoice;
+
 interface GraphNodeBase {
 	id: string;
 	nav?: NavTarget;
@@ -41,12 +69,18 @@ export interface EventGraphEventNode extends GraphNodeBase {
 	meanTimeToHappenBase: number;
 	trigger: ConditionComplexExpr;
 	picture?: { styleKey: string; width: number };
+	// The event's `immediate` block, as an index into EventGraphPayload.effectBlocks. Absent when
+	// the event has no immediate effects.
+	effectsRef?: number;
 }
 
 export interface EventGraphOptionNode extends GraphNodeBase {
 	kind: "option";
 	name: LocText;
 	trigger: ConditionComplexExpr;
+	// What the option does, as an index into EventGraphPayload.effectBlocks. Absent when the option
+	// body holds nothing but its own name and trigger.
+	effectsRef?: number;
 }
 
 // A call to an event id that no loaded file defines.
@@ -84,4 +118,9 @@ export interface EventGraphPayload {
 	nodes: EventGraphNode[];
 	edges: EventGraphEdge[];
 	conditionExprs: ConditionItem[];
+	// Every distinct effect block in the file, referenced by index from the nodes rather than
+	// carried on them. One option is emitted as a node once per scope situation it is reached in,
+	// so inlining its effects would multiply them by the walk instead of by the file -- the same
+	// blow-up the `visited` memo in graph.ts exists to prevent.
+	effectBlocks: EffectTreeNode[][];
 }

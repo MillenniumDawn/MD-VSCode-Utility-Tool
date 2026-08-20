@@ -2,7 +2,8 @@ v1.1.24
 
   Functionality:
 
-- [ Event Tree ] A fifth toggle, `Show event picture`, turns the picture that appears when you hover an event on and off. It starts on, and your choice is remembered like the other toggles.
+- [ Event Tree ] Hovering an option now shows what it does, and hovering an event shows the effects it runs immediately. Effects under an `if` or inside a `random_list` are listed under the condition or the weight that decides them. A small dot in the corner of a box marks the boxes that have any.
+- [ Event Tree ] Two more toggles: `Show event picture` turns the picture that appears when you hover an event on and off, and `Show effects` does the same for the effect panel. Both start on, and your choices are remembered like the other toggles.
 
   Bugfixes:
 

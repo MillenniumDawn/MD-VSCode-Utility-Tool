@@ -88,6 +88,7 @@
 }
 
 .ev-card {
+	position: relative;
 	background: var(--ev-surface);
 	border: 1px solid var(--ev-border);
 	border-radius: var(--ev-radius);
@@ -243,6 +244,38 @@
 
 .ev-cond li {
 	overflow-wrap: anywhere;
+}
+
+/* ---------- Effects ---------- */
+
+/* Absolute, so a card that has effects is exactly as tall as one that has not -- the layout
+   reserves space from measured heights, and a dot must not be able to move a box. */
+.ev-effects-dot {
+	position: absolute;
+	top: 7px;
+	right: 8px;
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background: var(--ev-fg-muted);
+	opacity: 0.45;
+}
+
+/* The hover panel lives on <body>, outside the zoomed canvas, and scales itself to match the card
+   it belongs to. It never takes the pointer: it may not come between the pointer and the card it
+   is describing, or hovering would flicker. */
+.ev-effects-tip {
+	position: absolute;
+	z-index: 2;
+	max-width: 420px;
+	max-height: 60vh;
+	overflow: hidden;
+	padding: 8px 11px 9px;
+	border: 1px solid var(--ev-border);
+	border-radius: var(--ev-radius);
+	background: var(--ev-surface-alt);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+	pointer-events: none;
 }
 
 /* ---------- Edges ---------- */

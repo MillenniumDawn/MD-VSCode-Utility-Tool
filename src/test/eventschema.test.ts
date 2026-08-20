@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import { parseHoi4File } from '../hoiformat/hoiparser';
 import { getEvents, ChildEvent, HOIEvent } from '../previewdef/event/schema';
-import { conditionToString } from '../hoiformat/condition';
+import { ConditionComplexExpr, conditionToString } from '../hoiformat/condition';
 
 // The structures below are transcribed from Millennium Dawn's events/00_arab_spring.txt and
 // events/05_united_kingdom.txt. They cover what the workflow view needs the schema to keep:
@@ -307,6 +307,113 @@ describe('previewdef/event/schema child event conditions', () => {
 
         const children = childrenOf(byId(events, 'test.1'), 'test.1.a');
         assert.deepStrictEqual(children.map(c => c.days).sort((a, b) => a - b), [1, 30]);
+    });
+});
+
+describe('previewdef/event/schema option effects', () => {
+    it('keeps what the option does, with the structure that decides when it happens', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                option = {
+                    name = test.1.a
+                    trigger = { tag = FROM }
+                    ai_chance = { factor = 10 }
+                    add_political_power = 50
+                    if = {
+                        limit = { is_subject = yes }
+                        set_country_flag = vassal_paid
+                    }
+                    random_list = {
+                        30 = { add_stability = 0.05 }
+                        70 = { add_war_support = 0.05 }
+                    }
+                    country_event = { id = test.2 days = 3 }
+                }
+            }
+        `);
+
+        const option = byId(events, 'test.1').options[0]!;
+        const lines = option.effects.filter(e => e.kind === 'line');
+        assert.deepStrictEqual(
+            lines.map(l => (l as { content: string }).content),
+            ['add_political_power = 50', 'country_event = { id = test.2 days = 3 }'],
+        );
+
+        const group = option.effects.find(e => e.kind === 'group');
+        assert.ok(group, 'expected the if to survive as a group');
+        assert.strictEqual(
+            conditionToString((group as { condition: ConditionComplexExpr }).condition),
+            '[{event_target}]is_subject = yes',
+        );
+
+        const choice = option.effects.find(e => e.kind === 'choice');
+        assert.ok(choice, 'expected the random_list to survive as a choice');
+        assert.deepStrictEqual(
+            (choice as { items: { possibility: number }[] }).items.map(i => i.possibility),
+            [30, 70],
+        );
+    });
+
+    it('leaves the option own keys out of its effects', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                option = {
+                    name = test.1.a
+                    trigger = { tag = FROM }
+                    ai_chance = { factor = 10 }
+                    original_recipient_only = yes
+                    add_political_power = 50
+                }
+            }
+        `);
+
+        const contents = byId(events, 'test.1').options[0]!.effects.map(e => JSON.stringify(e));
+        assert.deepStrictEqual(contents.length, 1);
+        for (const key of ['name', 'trigger', 'ai_chance', 'original_recipient_only']) {
+            assert.ok(!contents[0]!.includes(key), `${key} must not be listed as an effect`);
+        }
+    });
+
+    it('reads the immediate block the same way, since it has no card of its own', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                immediate = {
+                    hidden_effect = { set_country_flag = seen }
+                }
+            }
+        `);
+
+        const effects = byId(events, 'test.1').immediate.effects;
+        assert.deepStrictEqual(
+            effects.map(e => (e as { content?: string }).content),
+            ['set_country_flag = seen'],
+        );
+    });
+
+    it('reports an empty option as having no effects', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                option = { name = test.1.a }
+            }
+        `);
+
+        assert.deepStrictEqual(byId(events, 'test.1').options[0]!.effects, []);
     });
 });
 
