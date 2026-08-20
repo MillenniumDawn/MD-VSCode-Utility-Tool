@@ -1,15 +1,12 @@
 import { chain } from 'lodash';
 import * as vscode from 'vscode';
 import { ContainerWindowType } from '../../hoiformat/gui';
-import { HOIPartial, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
+import { HOIPartial } from '../../hoiformat/schema';
 import { arrayToMap, forceError } from '../../util/common';
 import { debug } from '../../util/debug';
-import { getHeight, getWidth } from '../../util/hoi4gui/common';
-import { RenderContainerWindowOptions, renderContainerWindow } from '../../util/hoi4gui/containerwindow';
-import { RenderNodeCommonOptions } from '../../util/hoi4gui/nodecommon';
+import { renderStandaloneWindow } from '../../util/hoi4gui/window';
 import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { localize } from '../../util/i18n';
-import { getSpriteByGfxName } from '../../util/image/imagecache';
 import { LoaderSession } from '../../util/loader/loader';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { GuiFileLoader, GuiFileLoaderResult } from "./loader";
@@ -143,60 +140,9 @@ async function renderSingleContainerWindow(
     styleTable: StyleTable,
     gfxFiles: string[],
 ): Promise<string> {
-    let children: string;
-    const commonOptions: RenderNodeCommonOptions = {
-        getSprite: defaultGetSprite(gfxFiles),
-        styleTable,
-    };
-
-    const size = { width: 1920, height: 1080 };
-    const width = getWidth(containerWindow.size);
-    const height = getHeight(containerWindow.size);
-    if (!width?._unit && width?._value !== undefined) {
-        size.width = width._value;
-    }
-    if (!height?._unit && height?._value !== undefined) {
-        size.height = height._value;
-    }
-
-    const position = containerWindow.position ? { ...containerWindow.position } : { x: undefined, y: undefined };
-    if (position.x?._value !== undefined && position.x?._value < 0) {
-        position.x = { ...position.x, _value: 0 };
-    }
-    if (position.y?._value !== undefined && position.y?._value < 0) {
-        position.y = { ...position.y, _value: 0 };
-    }
-
-    const onRenderChild: RenderContainerWindowOptions['onRenderChild'] = async (type, child, parentInfo) => {
-        if (type === 'containerwindow') {
-            const childContainerWindow = child as HOIPartial<ContainerWindowType>;
-            return await renderContainerWindow(childContainerWindow, parentInfo, {
-                ...commonOptions,
-                classNames: 'childcontainerwindow_' + normalizeForStyle(childContainerWindow.name ?? ''),
-                enableNavigator: true,
-                onRenderChild,
-            });
-        }
-    };
-
-    children = await renderContainerWindow(
-        {
-            ...containerWindow,
-            position: position,
-            orientation: toStringAsSymbolIgnoreCase('upper_left'),
-            origo: toStringAsSymbolIgnoreCase('upper_left'),
-        },
-        {
-            size,
-            orientation: 'upper_left',
-        },
-        {
-            ...commonOptions,
-            ignorePosition: false,
-            enableNavigator: true,
-            onRenderChild,
-        },
-    );
+    // The drawing itself is shared with the decision preview, which renders the window a
+    // `scripted_gui` category is replaced by; only the wrapper below is this preview's own.
+    const { html } = await renderStandaloneWindow(containerWindow, styleTable, gfxFiles);
 
     return `<div
         id="containerwindow_${containerWindow.name}"
@@ -205,7 +151,7 @@ async function renderSingleContainerWindow(
             containerwindow_${normalizeForStyle(containerWindow.name ?? '')}
             ${styleTable.style('displayNone', () => `display:none;`)}"
     >
-        ${children}
+        ${html}
     </div>`;
 }
 
@@ -230,10 +176,4 @@ function makeToggleContainerWindowCheckboxesRecursively(containerWindow: HOIPart
             />
         </div>` + makeToggleContainerWindowCheckboxesRecursively(cw, styleTable, prefix + normalizedName + '_', level + 1);
     }).join('');
-}
-
-function defaultGetSprite(gfxFiles: string[]) {
-    return (sprite: string) => {
-        return getSpriteByGfxName(sprite, gfxFiles);
-    };
 }

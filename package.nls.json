@@ -8,6 +8,8 @@
     "hoi4modutilities.useConditionInFocus.desc": "Show conditions in the focus tree preview. Reloading is required after changing this.",
     "hoi4modutilities.eventTreePreview.title": "Event Tree Preview",
     "hoi4modutilities.eventTreePreview.desc": "Enable the event tree preview feature. Reloading is required after changing this.",
+    "hoi4modutilities.decisionPreview.title": "Decision Preview",
+    "hoi4modutilities.decisionPreview.desc": "Enable the decision preview feature. Reloading is required after changing this.",
     "hoi4modutilities.ideaPreview.title": "Idea Preview",
     "hoi4modutilities.ideaPreview.desc": "Enable the idea preview feature. Reloading is required after changing this.",
     "hoi4modutilities.ideaSwapIndex.title": "Idea Swap Index",

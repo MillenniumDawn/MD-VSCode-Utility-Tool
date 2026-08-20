@@ -1,9 +1,8 @@
 import { Node, Token } from "../../hoiformat/hoiparser";
 import { Raw, SchemaDef, convertNodeToJson, HOIPartial, isSymbolNode } from "../../hoiformat/schema";
-import { extractEffectValue, EffectItem, EffectComplexExpr } from "../../hoiformat/effect";
+import { extractEffectValue, GuardedEffectItem, findGuardedEffectItems, projectEffects } from "../../hoiformat/effect";
 import { EffectTreeNode } from "./payload";
 import {
-    andCondition,
     ConditionComplexExpr,
     ConditionItem,
     conditionToString,
@@ -316,7 +315,7 @@ function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs:
     // excluded at the top level of the block, which is where they can appear -- a `trigger` nested
     // inside an effect is a different key and stays.
     const effect = extractEffectValue(optionRaw._raw.value, scope, optionOwnKeys);
-    const childEventItems = findChildEventItems(effect.effect);
+    const childEventItems = findGuardedEffectItems(effect.effect, eventTypes);
     const childEvents = childEventItems
         .map(effectItemToChildEvent)
         .filter((e): e is ChildEvent => e !== undefined);
@@ -354,70 +353,7 @@ function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs:
 
 const optionOwnKeys = ['name', 'trigger', 'ai_chance', 'original_recipient_only'];
 
-// The serializable projection of an effect tree. It keeps the structure -- what is guarded by what,
-// which branches a random_list has -- and drops EffectItem.node, the parse tree of the statement,
-// which is both large and full of cycles. A top-level unconditional group is unwrapped rather than
-// shown as an `if` over everything.
-function projectEffects(effect: EffectComplexExpr): EffectTreeNode[] {
-    if (effect === null) {
-        return [];
-    }
-
-    if ('nodeContent' in effect) {
-        return [{ kind: 'line', scopeName: effect.scopeName, content: effect.nodeContent }];
-    }
-
-    if ('condition' in effect) {
-        const items = effect.items.flatMap(projectEffects);
-        if (items.length === 0) {
-            return [];
-        }
-        return effect.condition === true ? items : [{ kind: 'group', condition: effect.condition, items }];
-    }
-
-    const items = effect.items
-        .map(item => ({ possibility: item.possibility, effect: projectEffects(item.effect) }))
-        .filter(item => item.effect.length > 0);
-    return items.length === 0 ? [] : [{ kind: 'choice', items }];
-}
-
 const eventTypes = ['country_event', 'news_event', 'state_event', 'unit_leader_event', 'operative_leader_event'];
-
-// An event call together with the condition that has to hold for it to be reached. The condition
-// is accumulated on the way down, so a call nested in `if { limit = A } { if { limit = B } ... } }`
-// arrives carrying `and(A, B)`.
-interface GuardedEffectItem {
-    item: EffectItem;
-    condition: ConditionComplexExpr;
-    possibility?: number;
-}
-
-function findChildEventItems(
-    effect: EffectComplexExpr,
-    condition: ConditionComplexExpr = true,
-    possibility: number | undefined = undefined,
-    result: GuardedEffectItem[] = [],
-): GuardedEffectItem[] {
-    if (effect === null) {
-        return result;
-    }
-
-    if ('nodeContent' in effect) {
-        if (effect.node.name && eventTypes.includes(effect.node.name?.toLowerCase())) {
-            result.push({ item: effect, condition, possibility });
-        }
-    } else if ('condition' in effect) {
-        // `extractEffectByCondition` has already folded any enclosing `if` into this node's own
-        // condition, so the two usually overlap; `andCondition` drops the duplicate rather than
-        // stating the same guard twice.
-        const inner = andCondition(condition, effect.condition);
-        effect.items.forEach(item => findChildEventItems(item, inner, possibility, result));
-    } else {
-        effect.items.forEach(item => findChildEventItems(item.effect, condition, item.possibility, result));
-    }
-
-    return result;
-}
 
 function effectItemToChildEvent(guarded: GuardedEffectItem): ChildEvent | undefined {
     const { item, condition, possibility } = guarded;

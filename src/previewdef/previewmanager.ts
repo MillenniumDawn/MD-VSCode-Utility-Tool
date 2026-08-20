@@ -17,6 +17,7 @@ import { sendEvent } from '../util/telemetry';
 import { guiPreviewDef } from './gui';
 import { mioPreviewDef } from './mio';
 import { ideaPreviewDef } from './idea';
+import { decisionPreviewDef } from './decision';
 
 export type PreviewProviderDef = PreviewProviderDefNormal | PreviewProviderDefAlternative;
 
@@ -44,6 +45,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         guiPreviewDef,
         mioPreviewDef,
         ideaPreviewDef,
+        decisionPreviewDef,
     ];
     private _previewProvidersMap: Record<string, PreviewProviderDef> = arrayToMap(this._previewProviders, 'type');
 

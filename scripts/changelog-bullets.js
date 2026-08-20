@@ -44,6 +44,7 @@ const componentTokens = new Map([
 	['World Map', ['worldmap']],
 	['GFX', ['gfx']],
 	['GUI', ['gui', 'guipreview']],
+	['Decision', ['decision', 'decisiontree']],
 ]);
 
 function segments(file) {
