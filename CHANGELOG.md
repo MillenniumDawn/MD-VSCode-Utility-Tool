@@ -1,3 +1,13 @@
+v1.1.23
+
+  Functionality:
+
+- [ MIO ] Two mutually exclusive traits on the same row are now linked with the game's own arrows and line, the way the focus tree already draws them, instead of a red line. A pair that is not on the same row keeps the plain line.
+
+  Bugfixes:
+
+- [ Focus Tree ] The red line between two mutually exclusive focuses is gone. It was still being drawn over the arrows and line that replaced it, which is why the link looked like it sat below a stray red line.
+
 v1.1.22
 
   Functionality:
