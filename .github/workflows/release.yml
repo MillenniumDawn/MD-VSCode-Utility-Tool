@@ -7,7 +7,48 @@ on:
 name: Release
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+      release: ${{ steps.check.outputs.release }}
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      with:
+        fetch-depth: 0
+    - name: Check version
+      id: check
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        BEFORE: ${{ github.event.before }}
+      run: |
+        version=$(node -p "require('./package.json').version")
+        tag="v${version}"
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        if ! git rev-parse "refs/tags/$tag" >/dev/null 2>&1; then
+          echo "Tag $tag does not exist; will release."
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        # The tag is taken, so this push cannot be released. For a source change that is the mistake
+        # this check exists to catch. For a push that only touched documentation or CI it is
+        # expected -- the same paths version-check.yml exempts from needing a bump on a pull
+        # request, so exempting them here too keeps the two consistent. A manual run is always
+        # meant to release, so it never takes the exemption.
+        if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE" ]; then
+          changed=$(git diff --name-only "$BEFORE" "$GITHUB_SHA" 2>/dev/null || true)
+          if [ -n "$changed" ] && ! echo "$changed" | grep -qvE '(\.md$|^\.github/|^\.claude/|^LICENSE$|^\.gitignore$|^\.vscodeignore$)'; then
+            echo "::notice::Tag $tag already exists, but this push only touched documentation and CI files, so there is nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+        fi
+        echo "::error::Tag $tag already exists, so nothing can be built or published. Bump the version in package.json to release these changes."
+        exit 1
+
   publish:
+    needs: check
+    if: ${{ needs.check.outputs.release == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -19,17 +60,6 @@ jobs:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         fetch-depth: 0
-    - name: Check version
-      id: check
-      run: |
-        version=$(node -p "require('./package.json').version")
-        tag="v${version}"
-        echo "tag=$tag" >> "$GITHUB_OUTPUT"
-        if git rev-parse "refs/tags/$tag" >/dev/null 2>&1; then
-          echo "::error::Tag $tag already exists, so nothing can be built or published. Bump the version in package.json to release these changes."
-          exit 1
-        fi
-        echo "Tag $tag does not exist; will release."
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
         node-version: 20
@@ -72,7 +102,7 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
       with:
-        tag_name: ${{ steps.check.outputs.tag }}
-        name: ${{ steps.check.outputs.tag }}
+        tag_name: ${{ needs.check.outputs.tag }}
+        name: ${{ needs.check.outputs.tag }}
         generate_release_notes: true
         files: ${{ steps.find_vsix.outputs.vsix }}

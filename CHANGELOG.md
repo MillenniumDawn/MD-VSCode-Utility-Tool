@@ -1,3 +1,11 @@
+v1.1.23
+
+  Functionality:
+
+- [ CI ] A pull request that forgets the version bump now fails a check while it is still open, instead of merging green and then releasing nothing. The check also catches a version that was already released and a `CHANGELOG.md` heading that does not match `package.json`.
+- [ CI ] Commenting `/bump` on a pull request pushes the version bump and a starting `CHANGELOG.md` section to the branch for you. `/bump minor` and `/bump major` take a bigger step.
+- [ CI ] A push to `main` that only touched documentation or CI files no longer fails the release workflow for having nothing to publish. Any push that changes the extension itself still fails without a bump.
+
 v1.1.22
 
   Functionality:

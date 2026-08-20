@@ -87,3 +87,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Scratch files written by the version workflows
+version-check-message.md
+bump-comment.md
+comment.md

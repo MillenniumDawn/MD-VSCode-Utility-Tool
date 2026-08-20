@@ -1,0 +1,105 @@
+on:
+  issue_comment:
+    types:
+      - created
+
+name: Bump version
+
+jobs:
+  bump:
+    # Only a /bump comment on a pull request, and only from someone who can write to the repository.
+    if: >-
+      github.event.issue.pull_request != null &&
+      startsWith(github.event.comment.body, '/bump') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    env:
+      # A personal access token makes the push retrigger the version check. Without it the push is
+      # made by GITHUB_TOKEN, which by design triggers no workflow, and the check has to be rerun by
+      # hand -- the comment posted at the end says so.
+      GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+      HAS_BUMP_TOKEN: ${{ secrets.BUMP_TOKEN != '' }}
+      PR: ${{ github.event.issue.number }}
+      COMMENT_ID: ${{ github.event.comment.id }}
+      COMMENT_BODY: ${{ github.event.comment.body }}
+
+    steps:
+      - name: Acknowledge the comment
+        run: |
+          gh api -X POST \
+            "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -f content=eyes >/dev/null
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Check out the pull request branch
+        id: pr
+        run: |
+          gh pr checkout "$PR"
+          {
+            echo "base=$(gh pr view "$PR" --json baseRefName --jq .baseRefName)"
+            echo "head=$(gh pr view "$PR" --json headRefName --jq .headRefName)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Skip when the bump is already there
+        id: needed
+        run: |
+          if node scripts/check-version.js --base-ref "origin/${{ steps.pr.outputs.base }}" >/dev/null 2>&1; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Read the release type
+        id: type
+        if: ${{ steps.needed.outputs.needed == 'true' }}
+        run: |
+          # "/bump", "/bump patch", "/bump minor", "/bump major"
+          requested=$(printf '%s' "$COMMENT_BODY" | head -1 | awk '{print $2}')
+          case "$requested" in
+            minor|major|patch) ;;
+            *) requested=patch ;;
+          esac
+          echo "type=$requested" >> "$GITHUB_OUTPUT"
+      - name: Bump the version and seed the changelog
+        id: bump
+        if: ${{ steps.needed.outputs.needed == 'true' }}
+        run: |
+          gh pr view "$PR" --json title --jq .title > pr-title.txt
+          gh pr view "$PR" --json body --jq .body > pr-body.txt
+          node scripts/bump-version.js \
+            --type "${{ steps.type.outputs.type }}" \
+            --title "$(cat pr-title.txt)" \
+            --number "$PR" \
+            --body-file pr-body.txt >> "$GITHUB_OUTPUT"
+          rm -f pr-title.txt pr-body.txt
+      - name: Commit and push
+        if: ${{ steps.needed.outputs.needed == 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json CHANGELOG.md
+          git commit -m "Bump version to ${{ steps.bump.outputs.next }}"
+          git push origin "HEAD:${{ steps.pr.outputs.head }}"
+      - name: Report back
+        if: ${{ steps.needed.outputs.needed == 'true' }}
+        run: |
+          {
+            printf 'Bumped `%s` to `%s` and added a `v%s` section to CHANGELOG.md.\n\n' \
+              "${{ steps.bump.outputs.previous }}" "${{ steps.bump.outputs.next }}" "${{ steps.bump.outputs.next }}"
+            printf 'The changelog entry was seeded from the pull request title -- please reword it to say what is different for someone using the extension, and give it a `[ Component ]` prefix.\n'
+            if [ "$HAS_BUMP_TOKEN" != "true" ]; then
+              printf '\nThe version check does not rerun by itself after a push made with the built-in token -- rerun it from the Checks tab, or push any commit.\n'
+            fi
+          } > bump-comment.md
+          gh pr comment "$PR" --body-file bump-comment.md
+          gh api -X POST \
+            "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -f content=rocket >/dev/null
+      - name: Report that nothing needed bumping
+        if: ${{ steps.needed.outputs.needed == 'false' }}
+        run: gh pr comment "$PR" --body "Nothing to bump — this pull request already carries a version bump and a matching CHANGELOG section."

@@ -1,0 +1,56 @@
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - "*"
+
+name: Version
+
+# A rerun on the same pull request replaces the previous one; a red check from an outdated commit is
+# only noise.
+concurrency:
+  group: version-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # The base branch and the release tags both have to be readable.
+          fetch-depth: 0
+      - name: Check version bump
+        id: check
+        # The failure is reported on the pull request first, so the job is failed at the end instead
+        # of here.
+        continue-on-error: true
+        run: node scripts/check-version.js --base-ref "origin/${{ github.base_ref }}"
+      # A pull request from a fork gets a read-only token, so the comment is skipped there and the
+      # step summary carries the message instead.
+      - name: Comment on the pull request
+        if: ${{ steps.check.outputs.failed == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          body=$(cat version-check-message.md)
+          marker="<!-- version-check -->"
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --jq \
+            ".[] | select(.body | contains(\"$marker\")) | .id" | head -1)
+          printf '%s\n\n%s\n' "$marker" "$body" > comment.md
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@comment.md
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@comment.md
+          fi
+      - name: Resolve the check
+        if: ${{ steps.check.outputs.failed == 'true' }}
+        run: exit 1
