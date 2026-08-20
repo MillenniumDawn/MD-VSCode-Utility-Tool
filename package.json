@@ -257,6 +257,10 @@
 		"clean": "rimraf dist out static",
 		"geni18n": "npm run compile-ts && node scripts/genzhi18n.js",
 		"package": "vsce package",
+		"check-version": "node scripts/check-version.js",
+		"release-check": "node scripts/release-check.js",
+		"pr-bullets": "node scripts/pr-bullets.js",
+		"bump": "node scripts/bump-version.js",
 		"package:patch": "npm version patch --no-git-tag-version && vsce package",
 		"package:minor": "npm version minor --no-git-tag-version && vsce package",
 		"package:major": "npm version major --no-git-tag-version && vsce package"

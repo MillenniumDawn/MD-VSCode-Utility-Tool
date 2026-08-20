@@ -164,25 +164,16 @@ git commit -m "Fix <short description> (#<issue number>)
 <one or two sentences explaining root cause and fix>"
 ```
 
-### 8. Version bump + changelog
+### 8. Version bump + changelog — leave both alone
 
-This repo's `changelog-guard.js` Stop hook blocks any code-changing turn that lacks a patch bump
-and a matching changelog entry, so do both as part of the fix:
+**Do not touch [package.json](../../../package.json) or
+[CHANGELOG.md](../../../CHANGELOG.md).** Releasing is handled after the merge: a push to `main`
+that changed anything outside documentation and CI opens a release pull request carrying the
+version bump and a changelog section seeded from the merged pull request titles. Bumping here
+only creates a conflict with it.
 
-1. Bump the `version` field in [package.json](../../../package.json) by **+1 patch**
-   (e.g. `1.1.10` -> `1.1.11`).
-2. Add a new `vX.Y.Z` section at the top of [CHANGELOG.md](../../../CHANGELOG.md) with that same
-   version, in the existing style:
-   - `  Bugfixes:` (or `  Functionality:`) subsection header, two-space indent.
-   - Bullets `  - [ Component ] ...` with a component prefix (`[ Focus Tree ]`,
-     `[ Technology ]`, `[ MIO ]`, `[ Previewer ]`, `[ Build ]`, `[ CI ]`, `[ HTML ]`,
-     `[ Testing ]`, ...).
-   - Substantive and encyclopedic: describe what was wrong and how it is fixed.
-3. Keep the `package.json` version and the CHANGELOG heading identical.
-
-If a section for the current unreleased version already exists at the top of the branch's
-`CHANGELOG.md`, append a bullet under it instead of adding a duplicate heading (and leave the
-version as-is). Commit the version + changelog change separately from the code fix.
+Write the explanation of the fix in the pull request description instead (step 10). That is what
+the changelog entry is later reworded from.
 
 ### 9. Ensure the branch is up to date
 

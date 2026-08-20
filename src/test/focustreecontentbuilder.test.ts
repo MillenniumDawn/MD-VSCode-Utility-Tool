@@ -20,8 +20,9 @@ import {
 } from "../previewdef/focustree/warningstyles";
 import {
 	exclusiveLinkClass,
+	exclusiveLinkInsets,
 	registerExclusiveLinkStyles,
-} from "../previewdef/focustree/exclusivelinkstyles";
+} from "../util/hoi4gui/exclusivelink";
 import {
 	_setImageWorkerPathForTest,
 	_terminateImageWorkerForTest,
@@ -255,24 +256,28 @@ describe("previewdef/focustree contentbuilder", () => {
 
 	it("registerExclusiveLinkStyles falls back to the plain line without textures", () => {
 		const styleTable = new StyleTable();
-		registerExclusiveLinkStyles(styleTable, undefined);
+		registerExclusiveLinkStyles(styleTable, undefined, 96);
 		const css = styleTable.toRawCss();
 		assert.ok(css.includes(`.${exclusiveLinkClass} {`));
 		assert.ok(css.includes(`.${exclusiveLinkClass}::before {`));
 		assert.ok(css.includes("border-top: 1px solid red"));
-		assert.ok(!css.includes("background-image"));
+		assert.ok(!css.includes("background-image: url("));
 	});
 
 	it("registerExclusiveLinkStyles paints the game textures when they resolve", () => {
 		const image = (name: string) =>
 			({ uri: `data:image/png;base64,${name}`, width: 16, height: 16 }) as any;
 		const styleTable = new StyleTable();
-		registerExclusiveLinkStyles(styleTable, {
-			line: image("line"),
-			left: image("left"),
-			mid: image("mid"),
-			right: image("right"),
-		});
+		registerExclusiveLinkStyles(
+			styleTable,
+			{
+				line: image("line"),
+				left: image("left"),
+				mid: image("mid"),
+				right: image("right"),
+			},
+			96,
+		);
 		const css = styleTable.toRawCss();
 		assert.ok(css.includes("background-image: url(data:image/png;base64,line)"));
 		assert.ok(
@@ -281,6 +286,45 @@ describe("previewdef/focustree contentbuilder", () => {
 			),
 		);
 		assert.ok(!css.includes("border-top: 1px solid red"));
+	});
+
+	// The two focus tree render passes each build their own StyleTable and both land in the same
+	// page, so the textured rule has to neutralize every property the fallback rule sets. Without
+	// this the fallback's red border kept painting on top of the textures that replaced it.
+	it("registerExclusiveLinkStyles cancels the fallback border when textures resolve", () => {
+		const image = (name: string) =>
+			({ uri: `data:image/png;base64,${name}`, width: 32, height: 32 }) as any;
+		const styleTable = new StyleTable();
+		registerExclusiveLinkStyles(
+			styleTable,
+			{
+				line: image("line"),
+				left: image("left"),
+				mid: image("mid"),
+				right: image("right"),
+			},
+			96,
+		);
+		const css = styleTable.toRawCss();
+		assert.ok(css.includes("border-top: none"));
+
+		// ...and the other way round, so the order the two stylesheets land in cannot matter.
+		const fallback = new StyleTable();
+		registerExclusiveLinkStyles(fallback, undefined, 96);
+		assert.ok(fallback.toRawCss().includes("background-image: none"));
+	});
+
+	it("exclusiveLinkInsets keeps the marker between the boxes on both grid sizes", () => {
+		// Focus tree: 96px slot, 32px icons -- the numbers the link was hand-tuned to.
+		assert.deepStrictEqual(exclusiveLinkInsets(96, 32), {
+			iconInset: 32,
+			lineInset: 48,
+		});
+		// MIO tree: 87px slot, same icons.
+		assert.deepStrictEqual(exclusiveLinkInsets(87, 32), {
+			iconInset: 27.5,
+			lineInset: 43.5,
+		});
 	});
 
 	it("buildNoFocusTreeHtml contains localized placeholder", () => {
