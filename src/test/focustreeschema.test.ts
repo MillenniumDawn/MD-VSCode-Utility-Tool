@@ -504,6 +504,15 @@ shared_focus = {
 		]);
 	});
 
+	it("flags the synthetic joint_focus tree as isSharedFocues, same as a shared_focus tree", () => {
+		const content = `joint_focus = {
+    focus = { id = j_a x = 0 y = 0 }
+}`;
+		const trees = treesOf(content);
+		assert.strictEqual(trees.length, 1);
+		assert.strictEqual(trees[0].isSharedFocues, true);
+	});
+
 	it("accepts a relative_position_id pointing outside a shared focus file", () => {
 		// A shared file is a fragment: the game resolves the anchor once the focus is merged into
 		// a country tree, so a target defined in another file is legal here.
