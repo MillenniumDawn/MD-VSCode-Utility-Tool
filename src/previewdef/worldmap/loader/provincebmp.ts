@@ -503,13 +503,19 @@ export function concatEdges(edges: [Point, Point][]): Point[][] {
 		if (edge === undefined) {
 			continue;
 		}
-		const edgePoints: Point[] = [...edge];
+		// A path grows at both ends. Collecting the head side in its own array and reversing it
+		// once keeps that linear: unshifting each new point into a single array moved every point
+		// already found, so assembling one border of k segments cost k^2 element moves, and a
+		// coastline or the ocean/land boundary runs to thousands of segments. headPoints holds
+		// them in the order they were found, which is the reverse of their order in the path.
+		const headPoints: Point[] = [];
+		const tailPoints: Point[] = [...edge];
 		accessedEdges[i] = true;
 
 		let foundNew = true;
 		while (foundNew) {
 			foundNew = false;
-			const head = edgePoints[0];
+			const head = headPoints[headPoints.length - 1] ?? tailPoints[0];
 			if (head === undefined) {
 				break;
 			}
@@ -518,11 +524,11 @@ export function concatEdges(edges: [Point, Point][]): Point[][] {
 				accessedEdges[headTail] = foundNew = true;
 				const previousEdge = edges[headTail];
 				if (previousEdge) {
-					edgePoints.unshift(previousEdge[0]);
+					headPoints.push(previousEdge[0]);
 				}
 			}
 
-			const tail = edgePoints[edgePoints.length - 1];
+			const tail = tailPoints[tailPoints.length - 1];
 			if (tail === undefined) {
 				break;
 			}
@@ -531,10 +537,13 @@ export function concatEdges(edges: [Point, Point][]): Point[][] {
 				accessedEdges[tailHead] = foundNew = true;
 				const nextEdge = edges[tailHead];
 				if (nextEdge) {
-					edgePoints.push(nextEdge[1]);
+					tailPoints.push(nextEdge[1]);
 				}
 			}
 		}
+
+		headPoints.reverse();
+		const edgePoints: Point[] = headPoints.concat(tailPoints);
 
 		const newEdge: Point[] = [];
 		const firstPoint = edgePoints[0];
