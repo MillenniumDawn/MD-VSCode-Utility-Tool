@@ -68,6 +68,10 @@ export interface FocusWarning extends Warning<string> {
 	// Other focuses involved in this warning (e.g. the other focus of a pair), so the webview
 	// can highlight every offender instead of only the warning's source.
 	relatedSources?: string[];
+	// Set on the layout validators' output. Such a warning describes one tree's own grid, so
+	// addSharedFocus does not replay it into a tree that merges the focus in: that tree lays the
+	// focus out on a different grid, and usually only part of the offending group comes across.
+	layout?: boolean;
 }
 
 export interface FocusTreeInlayRef {
@@ -288,6 +292,9 @@ export function getFocusTreeWithFocusFile(
 			warnings,
 			constants,
 		);
+
+		runLayoutValidation(focuses, warnings, filePath, false);
+
 		const sharedFocusTree = {
 			id: localize("focustree.sharedfocuses", "<Shared focuses>"),
 			focuses,
@@ -313,6 +320,8 @@ export function getFocusTreeWithFocusFile(
 			warnings,
 			constants,
 		);
+
+		runLayoutValidation(focuses, warnings, filePath, false);
 
 		focusTrees.push({
 			id: getJointFocusTreeId(filePath),
@@ -351,8 +360,7 @@ export function getFocusTreeWithFocusFile(
 			}
 		}
 
-		validateRelativePositionId(focuses, warnings);
-		validateFocusLayout(focuses, warnings, filePath);
+		runLayoutValidation(focuses, warnings, filePath, true);
 
 		focusTrees.push({
 			id:
@@ -751,8 +759,12 @@ function addSharedFocus(
 		}
 	}
 
+	// Warnings about a focus itself (a missing id, an id defined twice) follow it into this tree,
+	// but layout warnings describe the donor's grid. This tree lays the focus out on its own grid,
+	// which its own validateFocusLayout already checked, and only part of an offending group may
+	// have been merged, so replaying those would duplicate a line or name a focus that isn't here.
 	for (const warning of sharedFocusTree.warnings) {
-		if (warning.source in focuses) {
+		if (!warning.layout && warning.source in focuses) {
 			warnings.push(warning);
 		}
 	}
@@ -809,6 +821,34 @@ function resolveFocusPosition(
 				: undefined;
 	}
 	return { x, y };
+}
+
+/**
+ * Runs both layout validators over one tree and tags what they produce, so addSharedFocus can
+ * tell a tree-local layout problem from a warning about the focus itself.
+ *
+ * A shared or joint focus file is a fragment: the game resolves it only once it is merged into a
+ * country tree, so a focus there may legitimately be positioned relative to a focus defined in
+ * another file. Such a fragment passes reportMissingRelativePositionTarget = false so the missing
+ * anchor is not reported. Those focuses stay in the layout checks: a fragment normally hangs off
+ * one external anchor, so its focuses are still positioned consistently against each other.
+ */
+function runLayoutValidation(
+	focuses: Record<string, Focus>,
+	warnings: FocusWarning[],
+	filePath: string,
+	reportMissingRelativePositionTarget: boolean,
+) {
+	const layoutWarnings: FocusWarning[] = [];
+	validateRelativePositionId(
+		focuses,
+		layoutWarnings,
+		reportMissingRelativePositionTarget,
+	);
+	validateFocusLayout(focuses, layoutWarnings, filePath);
+	for (const warning of layoutWarnings) {
+		warnings.push({ ...warning, layout: true });
+	}
 }
 
 /**
@@ -1013,6 +1053,7 @@ function validateFocusLayout(
 function validateRelativePositionId(
 	focuses: Record<string, Focus>,
 	warnings: FocusWarning[],
+	reportMissingTarget: boolean,
 ) {
 	const relativePositionId: Record<string, Focus | undefined> = {};
 	const relativePositionIdChain: string[] = [];
@@ -1024,15 +1065,17 @@ function validateRelativePositionId(
 		}
 
 		if (!(focus.relativePositionId in focuses)) {
-			warnings.push({
-				text: localize(
-					"focustree.warnings.relativepositionidnotexist",
-					"Relative position ID of focus {0} not exist: {1}.",
-					focus.id,
-					focus.relativePositionId,
-				),
-				source: focus.id,
-			});
+			if (reportMissingTarget) {
+				warnings.push({
+					text: localize(
+						"focustree.warnings.relativepositionidnotexist",
+						"Relative position ID of focus {0} not exist: {1}.",
+						focus.id,
+						focus.relativePositionId,
+					),
+					source: focus.id,
+				});
+			}
 			continue;
 		}
 
