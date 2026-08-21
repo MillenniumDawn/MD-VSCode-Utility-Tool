@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { PreviewBase } from "./previewbase";
+import { fnv1a32 } from "../util/hash";
 
 // Shared base for previews that re-render in place instead of tearing the webview down on every
 // change. LoaderPreview (event/gui/mio/technology) and GfxPreview both extend it; they only differ
@@ -205,14 +206,9 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 	}
 }
 
-// fnv1a, mirrored from ContentLoader in src/util/loader/loader.ts (private there).
+/** Identifies a render, so an unchanged one can be skipped rather than reassigned. */
 export function hashHtml(s: string): number {
-	let h = 2166136261;
-	for (let i = 0; i < s.length; i++) {
-		h ^= s.charCodeAt(i);
-		h = (h * 16777619) >>> 0;
-	}
-	return h;
+	return fnv1a32(s);
 }
 
 // Replace the webview HTML only when there is no prior render or the hash changed.

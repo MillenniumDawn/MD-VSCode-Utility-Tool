@@ -44,7 +44,10 @@ function tryLoadTable(locale: string): Record<string, string> | undefined {
 }
 
 export function localize(
-	key: keyof typeof __table | "TODO",
+	// No "TODO" escape hatch: it widened the key type so a message could be written without adding
+	// it to the tables, and six of them were. `key in table` was then always false for those, so
+	// they could never be translated and no tooling noticed.
+	key: keyof typeof __table,
 	message: string,
 	...args: any[]
 ): string {

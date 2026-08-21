@@ -4,6 +4,7 @@ import { localize } from './i18n';
 import { UserError } from './common';
 import { isSamePath } from './nodecommon';
 import { ConfigurationKey } from '../constants';
+import { defaultYmlSuffix, ymlSuffixBySettingName } from './locales';
 
 export function getConfiguration() {
     return vscode.workspace.getConfiguration(ConfigurationKey);
@@ -146,18 +147,9 @@ export function uriToFilePathWhenPossible(uri: vscode.Uri): string {
     return uri.toString();
 }
 
-const languageYmlDict = {
-    ['Brazilian Portuguese']: 'l_braz_por',
-    English: 'l_english',
-    French: 'l_french',
-    German: 'l_german',
-    Japanese: 'l_japanese',
-    Polish: 'l_polish',
-    Russian: 'l_russian',
-    ['Simplified Chinese']: 'l_simp_chinese',
-    Spanish: 'l_spanish',
-};
-
 export function getLanguageIdInYml(): string {
-    return languageYmlDict[vscode.workspace.getConfiguration(ConfigurationKey).previewLocalisation ?? 'English'] ?? languageYmlDict['English'];
+    // The table this used to carry was the composition of the two in localisationIndex.ts, kept in
+    // step by hand. It lives in locales.ts now, with the rest.
+    const setting = getConfiguration().previewLocalisation;
+    return (setting !== undefined ? ymlSuffixBySettingName[setting] : undefined) ?? defaultYmlSuffix;
 }

@@ -28,6 +28,25 @@ export interface ScopeDef {
 	effect: boolean;
 }
 
+/*
+ * Hoisted, and tested rather than matched. These were regex literals inside tryMoveScope, which
+ * runs once per child node of every condition and effect block: a literal is a fresh RegExp
+ * object each time the expression is evaluated, and `.match` allocates a result array on top of
+ * that, for answers that are only ever read as booleans.
+ *
+ * The order they are applied in is deliberate and must not change -- an uppercase three-letter
+ * tag has to be recognised as a country before the name reaches the scope table.
+ */
+const countryTagPattern = /^[A-Z][A-Z0-9]{2}$/;
+const characterPattern = /^[A-Z][A-Z0-9]{2}_/;
+const mioPattern = /^mio:/;
+const stateIdPattern = /^[0-9]+$/;
+const prevChainPattern = /^prev(?:\.prev)*$/;
+const fromPattern = /^from$/;
+const fromChainPattern = /^from(?:\.from)*$/;
+const globalScopePrefixPattern = /^(?:[A-Z][A-Z0-9]{2}|\d+)(?:$|\.)/;
+const globalKeywordPattern = /^(?:global)(?:$|\.)/;
+
 export function tryMoveScope(
 	node: Node,
 	scopeStack: Scope[],
@@ -42,7 +61,7 @@ export function tryMoveScope(
 	}
 
 	let nodeName = node.name.trim();
-	if (nodeName.match(/^[A-Z][A-Z0-9]{2}$/)) {
+	if (countryTagPattern.test(nodeName)) {
 		scopeStack.push({
 			scopeName: nodeName,
 			scopeType: "country",
@@ -50,7 +69,7 @@ export function tryMoveScope(
 		return true;
 	}
 
-	if (nodeName.match(/^[A-Z][A-Z0-9]{2}_/)) {
+	if (characterPattern.test(nodeName)) {
 		scopeStack.push({
 			scopeName: nodeName,
 			scopeType: "character",
@@ -58,7 +77,7 @@ export function tryMoveScope(
 		return true;
 	}
 
-	if (nodeName.match(/^mio:/)) {
+	if (mioPattern.test(nodeName)) {
 		scopeStack.push({
 			scopeName: nodeName.substring(4),
 			scopeType: "mio",
@@ -66,7 +85,7 @@ export function tryMoveScope(
 		return true;
 	}
 
-	if (nodeName.match(/^[0-9]+$/)) {
+	if (stateIdPattern.test(nodeName)) {
 		scopeStack.push({
 			scopeName: nodeName,
 			scopeType: "state",
@@ -87,7 +106,7 @@ export function tryMoveScope(
 		return true;
 	}
 
-	if (nodeName.match(/^prev(?:\.prev)*$/)) {
+	if (prevChainPattern.test(nodeName)) {
 		const count = nodeName.split(".").length;
 		const scope =
 			scopeStack[Math.max(0, scopeStack.length - 1 - count)] ?? countryScope;
@@ -95,7 +114,7 @@ export function tryMoveScope(
 		return true;
 	}
 
-	if (nodeName.match(/^from$/) && currentScope?.scopeType === "mio") {
+	if (fromPattern.test(nodeName) && currentScope?.scopeType === "mio") {
 		scopeStack.push({
 			scopeName: originalNodeName,
 			scopeType: "country",
@@ -103,7 +122,7 @@ export function tryMoveScope(
 		return true;
 	}
 
-	if (nodeName.match(/^from(?:\.from)*$/)) {
+	if (fromChainPattern.test(nodeName)) {
 		scopeStack.push({
 			scopeName: originalNodeName,
 			scopeType: "unknown",
@@ -121,10 +140,9 @@ export function tryMoveScope(
 			const scope = variableMatch.groups?.scope;
 			if (scope) {
 				const scopeLowerCase = scope.toLowerCase();
-				global = !!(
-					scope.match(/^(?:[A-Z][A-Z0-9]{2}|\d+)(?:$|\.)/) ||
-					scopeLowerCase.match(/^(?:global)(?:$|\.)/)
-				);
+				global =
+					globalScopePrefixPattern.test(scope) ||
+					globalKeywordPattern.test(scopeLowerCase);
 			}
 		}
 
@@ -191,7 +209,6 @@ export const scopeDefs = arrayToMap(
 		scopeDef("global_every_army_leader", false, true, "*", "leader"),
 		scopeDef("overlord", true, true, "country", "country"),
 		scopeDef("faction_leader", true, true, "country", "country"),
-		// scoepDef("TAG"),
 		scopeDef("any_country", true, false, "*", "country"),
 		scopeDef("any_country_with_original_tag", true, false, "*", "country"),
 		scopeDef("any_neighbor_country", true, false, "country", "country"),
@@ -214,7 +231,6 @@ export const scopeDefs = arrayToMap(
 		scopeDef("all_guaranteed_country", true, false, "country", "country"),
 		scopeDef("all_enemy_country", true, false, "country", "country"),
 		scopeDef("all_occupied_country", true, false, "country", "country"),
-		// scopeDef("state_id"),
 		scopeDef("any_state", true, false, "*", "state"),
 		scopeDef("any_controlled_state", true, false, "country", "state"),
 		scopeDef("any_owned_state", true, false, "country", "state"),

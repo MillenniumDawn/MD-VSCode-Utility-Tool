@@ -1,7 +1,6 @@
 import { Node, NodeValue } from "./hoiparser";
 import { nodeToString } from "./tostring";
 import { countryScope, Scope, tryMoveScope } from "./scope";
-import { isEqual } from "lodash";
 
 export type ConditionFolderType = "and" | "or" | "ornot" | "andnot";
 export type ConditionComplexExpr =
@@ -29,6 +28,39 @@ export interface ConditionAmountFolder {
 export interface ConditionValue {
 	condition: ConditionComplexExpr;
 	exprs: ConditionItem[];
+}
+
+/**
+ * Identity of a condition leaf. A ConditionItem is two strings and nothing else, so comparing
+ * them as strings is exactly as strict as a deep compare and does not walk anything. The same
+ * `scopeName`/`nodeContent` pairing is what event/schema.ts already dedupes on.
+ */
+function conditionItemKey(item: ConditionItem): string {
+	return item.scopeName + "\u0000" + item.nodeContent;
+}
+
+/*
+ * The expression accumulator is threaded through a whole file -- every focus, decision or event
+ * in it pushes into one array -- and membership used to be a lodash `isEqual` scan of everything
+ * accumulated so far. That made building the list quadratic in the number of distinct conditions
+ * a file holds: on a 600-focus tree with per-focus triggers it ran for well over a second, and
+ * doubling the focus count quadrupled it.
+ *
+ * The keys are cached against the array itself rather than passed around, so the exported
+ * signatures do not change. `size !== length` catches an array that was modified by someone
+ * else and falls back to rebuilding, which is the linear scan this replaced -- never worse.
+ */
+const seenKeyCache = new WeakMap<ConditionItem[], Set<string>>();
+
+function seenKeysFor(result: ConditionItem[]): Set<string> {
+	const cached = seenKeyCache.get(result);
+	if (cached !== undefined && cached.size === result.length) {
+		return cached;
+	}
+
+	const keys = new Set(result.map(conditionItemKey));
+	seenKeyCache.set(result, keys);
+	return keys;
 }
 
 export function extractConditionValue(
@@ -198,7 +230,10 @@ export function applyCondition(
 	}
 
 	if (!("items" in condition)) {
-		return trueExprs.some((e) => isEqual(condition, e));
+		// Membership, not structural equality: a leaf is true when the same scope/content pair is
+		// in the true list. Scanning that list per leaf made toggling one condition in a preview
+		// cost (leaves x true exprs) deep compares.
+		return seenKeysFor(trueExprs).has(conditionItemKey(condition));
 	}
 
 	if (condition.type === "count") {
@@ -435,6 +470,9 @@ export function andCondition(
 	}
 
 	const items: ConditionComplexExpr[] = [];
+	// An item can be a whole folder here, not just a leaf, so identity comes from the serialiser
+	// this module already has rather than from the two-string leaf key.
+	const seen = new Set<string>();
 	const push = (condition: ConditionComplexExpr): void => {
 		if (condition === true) {
 			return;
@@ -443,7 +481,9 @@ export function andCondition(
 			condition.items.forEach(push);
 			return;
 		}
-		if (items.every((item) => !isEqual(item, condition))) {
+		const key = conditionToString(condition);
+		if (!seen.has(key)) {
+			seen.add(key);
 			items.push(condition);
 		}
 	};
@@ -457,19 +497,29 @@ export function extractConditionalExprs(
 	condition: ConditionComplexExpr,
 	result: ConditionItem[] = [],
 ): ConditionItem[] {
+	return extractConditionalExprsInto(condition, result, seenKeysFor(result));
+}
+
+function extractConditionalExprsInto(
+	condition: ConditionComplexExpr,
+	result: ConditionItem[],
+	seen: Set<string>,
+): ConditionItem[] {
 	if (typeof condition === "boolean") {
 		return result;
 	}
 
 	if (!("items" in condition)) {
-		if (result.every((e) => !isEqual(e, condition))) {
+		const key = conditionItemKey(condition);
+		if (!seen.has(key)) {
+			seen.add(key);
 			result.push(condition);
 		}
 		return result;
 	}
 
 	for (const item of condition.items) {
-		extractConditionalExprs(item, result);
+		extractConditionalExprsInto(item, result, seen);
 	}
 
 	return result;

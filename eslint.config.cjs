@@ -6,7 +6,7 @@ module.exports = [
 		ignores: ["dist/**", "out/**", "out-test/**", "out-test-webview/**", "node_modules/**"],
 	},
 	{
-		files: ["src/**/*.ts"],
+		files: ["src/**/*.ts", "webviewsrc/**/*.ts"],
 		plugins: {
 			"@typescript-eslint": tsPlugin,
 		},

@@ -90,7 +90,7 @@ export class Checkbox extends Subscriber {
         this.addEventHandlersForCheckBox(checkboxContainer, checkbox);
     }
 
-    private addEventHandlersForCheckBox(checkboxContainer: HTMLDivElement, checkbox: HTMLDivElement) {
+    private addEventHandlersForCheckBox(checkboxContainer: HTMLDivElement, _checkbox: HTMLDivElement) {
         const toggleValue = () => {
             this.input.checked = !this.input.checked;
             checkboxContainer.setAttribute('aria-checked', this.input.checked.toString());

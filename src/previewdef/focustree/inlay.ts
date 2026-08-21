@@ -36,7 +36,7 @@ export async function loadFocusInlayWindows(): Promise<ParsedInlayFile> {
             warnings.push(...parsed.warnings);
         } catch (e) {
             warnings.push({
-                text: localize("TODO", "Failed to parse inlay window file {0}: {1}", relativePath, e instanceof Error ? e.message : String(e)),
+                text: localize("inlay.parseFailed", "Failed to parse inlay window file {0}: {1}", relativePath, e instanceof Error ? e.message : String(e)),
                 source: relativePath,
             });
         }
@@ -63,7 +63,7 @@ function parseInlayNode(node: Node, file: string): ParsedInlayFile {
         if (duplicateIds[inlay.id]) {
             const other = duplicateIds[inlay.id]!;
             warnings.push({
-                text: localize("TODO", "There're more than one inlay windows with ID {0} in files: {1}, {2}.", inlay.id, other.file, inlay.file),
+                text: localize("inlay.duplicateId", "There're more than one inlay windows with ID {0} in files: {1}, {2}.", inlay.id, other.file, inlay.file),
                 source: inlay.id,
                 navigations: [
                     { file: other.file, start: other.token?.start ?? 0, end: other.token?.end ?? 0 },
@@ -81,7 +81,7 @@ function parseInlayNode(node: Node, file: string): ParsedInlayFile {
 }
 
 function parseSingleInlayNode(node: Node, file: string): FocusTreeInlay {
-    const id = node.name ?? localize("TODO", "<anonymous inlay>");
+    const id = node.name ?? localize("inlay.anonymous", "<anonymous inlay>");
     const children = Array.isArray(node.value) ? node.value : [];
     const conditionExprs: ConditionItem[] = [];
     const scriptedImages: FocusInlayImageSlot[] = [];
@@ -183,7 +183,7 @@ export function resolveInlaysForTree(
         const matched = inlayById.get(ref.id);
         if (!matched) {
             warnings.push({
-                text: localize("TODO", "Focus tree references missing inlay window: {0}.", ref.id),
+                text: localize("inlay.missingWindow", "Focus tree references missing inlay window: {0}.", ref.id),
                 source: ref.id,
                 navigations: ref.token ? [{ file: ref.file, start: ref.token.start, end: ref.token.end }] : undefined,
             });
@@ -228,7 +228,7 @@ export async function resolveInlayGuiWindows(inlays: FocusTreeInlay[]): Promise<
         const matched = windowByName[inlay.windowName];
         if (!matched) {
             warnings.push({
-                text: localize("TODO", "Can't resolve scripted GUI window {0} for inlay {1}.", inlay.windowName, inlay.id),
+                text: localize("inlay.unresolvedGuiWindow", "Can't resolve scripted GUI window {0} for inlay {1}.", inlay.windowName, inlay.id),
                 source: inlay.id,
                 navigations: inlay.token ? [{ file: inlay.file, start: inlay.token.start, end: inlay.token.end }] : undefined,
             });
@@ -323,7 +323,7 @@ export function addInlayGfxWarnings(inlays: FocusTreeInlay[], warnings: FocusWar
             for (const option of slot.gfxOptions) {
                 if (!option.gfxFile) {
                     warnings.push({
-                        text: localize("TODO", "Can't resolve inlay GFX {0} for slot {1} in inlay {2}.", option.gfxName, slot.id, inlay.id),
+                        text: localize("inlay.unresolvedGfx", "Can't resolve inlay GFX {0} for slot {1} in inlay {2}.", option.gfxName, slot.id, inlay.id),
                         source: inlay.id,
                         navigations: option.token ? [{ file: option.file, start: option.token.start, end: option.token.end }] : undefined,
                     });
