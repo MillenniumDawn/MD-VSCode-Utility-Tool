@@ -2,11 +2,13 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { debounceByInput, mapLimit } from "./common";
 import { localisationIndex } from "./featureflags";
+import { readFileFromModOrHOI4 } from "./fileloader";
 import {
-	getFilePathFromModOrHOI4,
-	listFilesFromModOrHOI4,
-	readFileFromModOrHOI4,
-} from "./fileloader";
+	IndexFile,
+	IndexListing,
+	listIndexFiles,
+	toIndexFiles,
+} from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { attachTaskWithErrorLogging } from "./promiseUtils";
@@ -18,7 +20,6 @@ import {
 	loadCacheData,
 	saveCacheManifest,
 	saveCacheData,
-	getFileMtimes,
 	computeStaleFiles,
 	IndexTimer,
 } from "./indexCache";
@@ -167,18 +168,22 @@ interface LocCacheData {
 	fileMap: Record<string, Record<string, string[]>>; // langKey -> filePath -> keys[]
 }
 
+const localisationRoot = "localisation";
+const isLocalisationFile = (relativePath: string) =>
+	localisationFileFilter.test(relativePath);
+
 async function buildGlobalLocalisationIndex(
 	estimatedSize: [number],
 ): Promise<void> {
 	const options = { mod: false, hoi4: true, recursively: true };
-	const localisationFiles = (
-		await listFilesFromModOrHOI4("localisation", options)
-	)
-		.filter((f) => localisationFileFilter.test(f))
-		.map((f) => "localisation/" + f);
 	await buildLocalisationIndexWithCache(
 		"localisationIndex.global",
-		localisationFiles,
+		() =>
+			listIndexFiles({
+				roots: [localisationRoot],
+				filter: isLocalisationFile,
+				options,
+			}),
 		globalLocalisationIndex,
 		null,
 		options,
@@ -190,14 +195,14 @@ async function buildWorkspaceLocalisationIndex(
 	estimatedSize: [number],
 ): Promise<void> {
 	const options = { mod: true, hoi4: false, recursively: true };
-	const localisationFiles = (
-		await listFilesFromModOrHOI4("localisation", options)
-	)
-		.filter((f) => localisationFileFilter.test(f))
-		.map((f) => "localisation/" + f);
 	await buildLocalisationIndexWithCache(
 		"localisationIndex.workspace",
-		localisationFiles,
+		() =>
+			listIndexFiles({
+				roots: [localisationRoot],
+				filter: isLocalisationFile,
+				options,
+			}),
 		workspaceLocalisationIndex,
 		workspaceLocalisationFileMap,
 		options,
@@ -207,7 +212,7 @@ async function buildWorkspaceLocalisationIndex(
 
 async function buildLocalisationIndexWithCache(
 	cacheName: string,
-	locFiles: string[],
+	listFiles: () => Promise<IndexListing>,
 	targetIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
 	options: { mod?: boolean; hoi4?: boolean },
@@ -218,7 +223,7 @@ async function buildLocalisationIndexWithCache(
 		await buildLocalisationIndexWithTimer(
 			timer,
 			cacheName,
-			locFiles,
+			listFiles,
 			targetIndex,
 			fileMap,
 			options,
@@ -233,16 +238,21 @@ async function buildLocalisationIndexWithCache(
 async function buildLocalisationIndexWithTimer(
 	timer: IndexTimer,
 	cacheName: string,
-	locFiles: string[],
+	listFiles: () => Promise<IndexListing>,
 	targetIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
 ): Promise<void> {
-	timer.begin("mtime");
-	const resolveUri = (relativePath: string) =>
-		getFilePathFromModOrHOI4(relativePath, options);
-	const currentMtimes = await getFileMtimes(locFiles, resolveUri);
+	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
+	// install it is now the directory walk and the mtimes together, which is where a slow cold build
+	// spends its time, and it used to happen before the timer existed.
+	timer.begin("list");
+	const {
+		filePaths: locFiles,
+		uris,
+		mtimes: currentMtimes,
+	} = await listFiles();
 
 	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, LOC_CACHE_VERSION);
@@ -296,9 +306,10 @@ async function buildLocalisationIndexWithTimer(
 
 	timer.begin("parse");
 	let parsed = 0;
-	await mapLimit(filesToParse, 8, async (f) => {
+	const toParse = toIndexFiles(filesToParse, uris);
+	await mapLimit(toParse, 8, async (f) => {
 		await fillLocalisationItems(f, targetIndex, fileMap, options, estimatedSize);
-		timer.progress(++parsed, filesToParse.length);
+		timer.progress(++parsed, toParse.length);
 	});
 	timer.end(locFiles.length, filesToParse.length);
 
@@ -326,7 +337,7 @@ async function buildLocalisationIndexWithTimer(
 }
 
 async function fillLocalisationItems(
-	localisationFile: string,
+	localisationFile: IndexFile,
 	localisationIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
 	options: {
@@ -335,15 +346,20 @@ async function fillLocalisationItems(
 	},
 	estimatedSize?: [number],
 ): Promise<void> {
+	const filePath = localisationFile.path;
 	let content: string;
 	try {
-		const [fileBuffer] = await readFileFromModOrHOI4(localisationFile, options);
+		const [fileBuffer] = await readFileFromModOrHOI4(
+			filePath,
+			options,
+			localisationFile.uri,
+		);
 		content = fileBuffer.toString();
 	} catch (e) {
 		// A file listed but unreadable -- deleted between the listing and the read, or locked --
 		// costs this one file and nothing else. Reading used to sit outside the try, so one such
 		// file rejected the whole build and left the index half-populated for the session.
-		Logger.warn(`Localisation index: can't read ${localisationFile}: ${e}`);
+		Logger.warn(`Localisation index: can't read ${filePath}: ${e}`);
 		return;
 	}
 
@@ -361,7 +377,7 @@ async function fillLocalisationItems(
 				if (!fileMap[langKey]) {
 					fileMap[langKey] = {};
 				}
-				fileMap[langKey][localisationFile] = new Set(
+				fileMap[langKey][filePath] = new Set(
 					Object.keys(languageLocalisations),
 				);
 			}
@@ -385,7 +401,7 @@ async function fillLocalisationItems(
 		);
 
 		Logger.error(
-			`${baseMessage} ${localisationFile} ${failureMessage}\n${e instanceof Error ? e.message : String(e)}`,
+			`${baseMessage} ${filePath} ${failureMessage}\n${e instanceof Error ? e.message : String(e)}`,
 		);
 	}
 }
@@ -569,8 +585,9 @@ function addWorkspaceLocalisationIndex(file: vscode.Uri) {
 			.relative(wsFolder.uri.path, file.path)
 			.replace(/\\+/g, "/");
 		if (relative && relative.startsWith("localisation/")) {
+			// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
 			void fillLocalisationItems(
-				relative,
+				{ path: relative },
 				workspaceLocalisationIndex,
 				workspaceLocalisationFileMap,
 				{ hoi4: false },

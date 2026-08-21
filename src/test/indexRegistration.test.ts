@@ -18,14 +18,17 @@ import {
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
 type FileloaderModule = {
-	listFilesFromModOrHOI4: (
+	listFileEntriesFromModOrHOI4: (
 		relativePath: string,
 		options?: {
 			mod?: boolean;
 			hoi4?: boolean;
 			recursively?: boolean;
+			token?: unknown;
 		},
-	) => Promise<string[]>;
+	) => Promise<
+		{ relativePath: string; uri: unknown; mtime: number | undefined }[]
+	>;
 };
 
 const fileloader = require("../util/fileloader") as FileloaderModule;
@@ -37,7 +40,7 @@ function waitForAsyncTasks(): Promise<void> {
 describe("util index registration failure path", function () {
 	let logs: string[];
 	let originalLoggerError: (message: string) => void;
-	let originalListFiles: FileloaderModule["listFilesFromModOrHOI4"];
+	let originalListFiles: FileloaderModule["listFileEntriesFromModOrHOI4"];
 	beforeEach(function () {
 		logs = [];
 		stubVscode({
@@ -57,12 +60,12 @@ describe("util index registration failure path", function () {
 			logs.push(message);
 		};
 
-		originalListFiles = fileloader.listFilesFromModOrHOI4;
+		originalListFiles = fileloader.listFileEntriesFromModOrHOI4;
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = async () => {
+		).listFileEntriesFromModOrHOI4 = async () => {
 			throw new Error("listing failed intentionally");
 		};
 	});
@@ -70,9 +73,9 @@ describe("util index registration failure path", function () {
 	afterEach(function () {
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = originalListFiles;
+		).listFileEntriesFromModOrHOI4 = originalListFiles;
 		Logger.error = originalLoggerError;
 		restoreVscodeStubs();
 		featureflags.refreshFeatureFlags();
