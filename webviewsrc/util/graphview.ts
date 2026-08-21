@@ -8,9 +8,11 @@
 
 import { getState, panning$ } from "./common";
 import {
+	ChipInput,
 	LayoutInput,
 	LayoutResult,
 	columnGap,
+	layoutGraph,
 	padY,
 	separateChips,
 } from "./graphlayout";
@@ -53,7 +55,7 @@ export function currentScale(): number {
 
 // One rail down the middle of every gap between two columns. `railLabel` is optional because only
 // the event preview numbers them.
-export function renderRails(
+function renderRails(
 	content: HTMLDivElement,
 	layout: LayoutResult,
 	railLabel?: (step: number) => string,
@@ -75,7 +77,7 @@ export function renderRails(
 
 // Chips are created before the layout runs, because their measured width is what decides how wide
 // the gap they sit in has to be. They are hidden until the layout says where they go.
-export function buildChips<E extends GraphEdgeLike>(
+function buildChips<E extends GraphEdgeLike>(
 	content: HTMLDivElement,
 	edges: readonly E[],
 	guardedOf: (edge: E) => boolean,
@@ -130,7 +132,7 @@ function parameterAtX(x1: number, c1: number, c2: number, x2: number, target: nu
 
 // Draws one curve per edge and drops each chip into the gap the layout widened for it. Grows the
 // canvas when the chip separation pushed one below what the layout reserved.
-export function renderEdges<E extends GraphEdgeLike>(
+function renderEdges<E extends GraphEdgeLike>(
 	content: HTMLDivElement,
 	svg: SVGSVGElement,
 	layout: LayoutResult,
@@ -209,7 +211,106 @@ export function renderEdges<E extends GraphEdgeLike>(
 	return renderedEdges;
 }
 
-export function downstreamOf(id: string, childrenById: Map<string, string[]>): Set<string> {
+// Everything between a filtered graph and a canvas the reader can look at: build every card hidden,
+// build the arrow labels beside them, measure both, lay the whole thing out, then draw the rails and
+// the arrows over it. Both previews did all of this inline, identically but for the callbacks.
+export interface RenderGraphOptions<N extends GraphNodeLike, E extends GraphEdgeLike> {
+	content: HTMLDivElement;
+	nodes: N[];
+	edges: E[];
+	roots: string[];
+	buildCard: (node: N) => HTMLDivElement;
+	// Whether a condition on this edge is being drawn, which decides both the label and the classes.
+	chipGuarded: (edge: E) => boolean;
+	chipText: (edge: E, guarded: boolean) => string;
+	edgeClass: (edge: E, guarded: boolean) => string;
+	// Only the event preview numbers its rails.
+	railLabel?: (step: number) => string;
+}
+
+export interface RenderGraphResult<N extends GraphNodeLike, E extends GraphEdgeLike> {
+	rendered: RenderedNode<N>[];
+	renderedEdges: RenderedEdge<E>[];
+	// Where each node's arrows lead, which is what a hover walks to isolate a chain.
+	childrenById: Map<string, string[]>;
+}
+
+export function renderGraph<N extends GraphNodeLike, E extends GraphEdgeLike>(
+	options: RenderGraphOptions<N, E>,
+): RenderGraphResult<N, E> {
+	const { content, nodes, edges, roots } = options;
+
+	const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+	svg.setAttribute("class", "ev-edges");
+	content.appendChild(svg);
+
+	// Build and measure before laying out: a card's height depends on the toggles.
+	const scale = currentScale();
+	const rendered: RenderedNode<N>[] = [];
+	for (const node of nodes) {
+		const box = document.createElement("div");
+		box.className = "ev-node";
+		box.dataset.id = node.id;
+		box.style.left = "0px";
+		box.style.top = "0px";
+		box.style.visibility = "hidden";
+		const card = options.buildCard(node);
+		box.appendChild(card);
+		content.appendChild(box);
+		rendered.push({ node, element: box, card });
+	}
+
+	// The arrow labels are measured alongside the cards, because a gap is only wide enough to keep a
+	// label clear of the cards if the layout knows how wide the label is.
+	const built = buildChips(content, edges, options.chipGuarded, options.chipText);
+	const measured: LayoutInput[] = [];
+	for (const item of rendered) {
+		const rect = item.element.getBoundingClientRect();
+		measured.push({ id: item.node.id, width: rect.width / scale, height: rect.height / scale });
+	}
+	const chipSizes: ChipInput[] = [];
+	for (const { edge, chip } of built) {
+		if (chip) {
+			chipSizes.push({
+				from: edge.from,
+				to: edge.to,
+				width: chip.getBoundingClientRect().width / scale,
+			});
+		}
+	}
+
+	const layout = layoutGraph(measured, edges, roots, chipSizes);
+
+	for (const item of rendered) {
+		const position = layout.positions[item.node.id];
+		item.element.style.left = Math.round(position?.x ?? 0) + "px";
+		item.element.style.top = Math.round(position?.y ?? 0) + "px";
+		item.element.style.visibility = "";
+	}
+
+	content.style.width = layout.width + "px";
+	content.style.height = layout.height + "px";
+	svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
+	svg.setAttribute("width", String(layout.width));
+	svg.setAttribute("height", String(layout.height));
+
+	renderRails(content, layout, options.railLabel);
+	const renderedEdges = renderEdges(content, svg, layout, measured, built, options.edgeClass);
+
+	const childrenById = new Map<string, string[]>();
+	for (const edge of edges) {
+		const list = childrenById.get(edge.from);
+		if (list) {
+			list.push(edge.to);
+		} else {
+			childrenById.set(edge.from, [edge.to]);
+		}
+	}
+
+	return { rendered, renderedEdges, childrenById };
+}
+
+function downstreamOf(id: string, childrenById: Map<string, string[]>): Set<string> {
 	const reached = new Set<string>([id]);
 	const stack = [id];
 	while (stack.length > 0) {

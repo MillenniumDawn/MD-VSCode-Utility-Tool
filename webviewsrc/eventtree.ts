@@ -15,15 +15,12 @@ import {
 	EventToolbarFlags,
 } from "../src/previewdef/event/payload";
 import { conditionToLabel, conditionPanel, effectsToDom } from "./util/conditiontree";
-import { ChipInput, LayoutInput, layoutGraph } from "./util/graphlayout";
 import {
 	IsolationHandle,
 	RenderedEdge,
 	RenderedNode,
-	buildChips,
 	currentScale,
-	renderEdges,
-	renderRails,
+	renderGraph,
 	wireIsolation,
 } from "./util/graphview";
 
@@ -644,70 +641,17 @@ function buildContent(): void {
 		return;
 	}
 
-	const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-	svg.setAttribute("class", "ev-edges");
-	content.appendChild(svg);
-
-	// Build and measure before laying out: a card's height depends on the toggles.
-	const scale = currentScale();
-	const measured: LayoutInput[] = [];
-	for (const node of graph.nodes) {
-		const box = document.createElement("div");
-		box.className = "ev-node";
-		box.dataset.id = node.id;
-		box.style.left = "0px";
-		box.style.top = "0px";
-		box.style.visibility = "hidden";
-		const card = buildCard(node);
-		box.appendChild(card);
-		content.appendChild(box);
-		rendered.push({ node, element: box, card });
-	}
-	// The arrow labels are measured alongside the cards, because a gap is only wide enough to keep a
-	// label clear of the cards if the layout knows how wide the label is.
-	const built = buildChips(content, graph.edges, chipGuarded, chipTextFor);
-	for (const item of rendered) {
-		const rect = item.element.getBoundingClientRect();
-		measured.push({ id: item.node.id, width: rect.width / scale, height: rect.height / scale });
-	}
-	const chipSizes: ChipInput[] = [];
-	for (const { edge, chip } of built) {
-		if (chip) {
-			chipSizes.push({
-				from: edge.from,
-				to: edge.to,
-				width: chip.getBoundingClientRect().width / scale,
-			});
-		}
-	}
-
-	const layout = layoutGraph(measured, graph.edges, graph.roots, chipSizes);
-
-	for (const item of rendered) {
-		const position = layout.positions[item.node.id];
-		item.element.style.left = Math.round(position?.x ?? 0) + "px";
-		item.element.style.top = Math.round(position?.y ?? 0) + "px";
-		item.element.style.visibility = "";
-	}
-
-	content.style.width = layout.width + "px";
-	content.style.height = layout.height + "px";
-	svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
-	svg.setAttribute("width", String(layout.width));
-	svg.setAttribute("height", String(layout.height));
-
-	renderRails(content, layout, (step) => feLocalize("eventtree.step", "step {0}", step));
-	renderedEdges = renderEdges(content, svg, layout, measured, built, edgeClass);
-
-	childrenById = new Map();
-	for (const edge of graph.edges) {
-		const list = childrenById.get(edge.from);
-		if (list) {
-			list.push(edge.to);
-		} else {
-			childrenById.set(edge.from, [edge.to]);
-		}
-	}
+	({ rendered, renderedEdges, childrenById } = renderGraph({
+		content,
+		nodes: graph.nodes,
+		edges: graph.edges,
+		roots: graph.roots,
+		buildCard,
+		chipGuarded,
+		chipText: chipTextFor,
+		edgeClass,
+		railLabel: (step: number) => feLocalize("eventtree.step", "step {0}", step),
+	}));
 
 	isolation = wireIsolation(rendered, renderedEdges, childrenById);
 	if (showPicture) {
