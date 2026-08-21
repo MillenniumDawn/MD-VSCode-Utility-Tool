@@ -1,8 +1,7 @@
 import { tryRun, subscribeNavigators, initCommon, getState, setState } from "./util/common";
-import { syncCheckbox } from "./util/checkbox";
 import { SearchBox } from "./util/searchbox";
 import { applyNav, badge } from "./util/card";
-import { DivDropdown } from "./util/dropdown";
+import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
 import { ConditionComplexExpr } from "../src/hoiformat/condition";
@@ -54,10 +53,6 @@ let showDescription: boolean = getState().ideaShowDescription ?? false;
 let showConditions: boolean = getState().ideaShowConditions ?? false;
 // Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
 let filters: IdeaFilter[] = readFilters(getState().ideaFilters);
-let filterDropdown: DivDropdown | undefined = undefined;
-// Set while a gated selection is being pushed into the widget, so its subscription can tell a value
-// this module computed from one the reader chose. Only the second is worth storing.
-let syncingFilters = false;
 
 //#region Filtering
 
@@ -88,11 +83,26 @@ const filterAvailability: Record<IdeaFilter, keyof IdeaToolbarFlags> = {
 	chains: "hasChains",
 };
 
+// Every toggle rebuilds the canvas, so the rebuild is bound once instead of at each call site.
+const bindToggle = toggleBinder(buildContent);
+
+// Owns the filter widget and the guard that tells a selection this module pushed into it from
+// one the reader chose.
+const filterControl = new FilterControl<IdeaFilter>({
+	selectId: "idea-filters",
+	containerId: "idea-filter-container",
+	all: ideaFilters,
+	emptyKey: "ideapreview.filterall",
+	emptyText: "(All ideas)",
+	onChange: (selection) => {
+		filters = selection;
+		setState({ ideaFilters: filters });
+		buildContent();
+	},
+});
+
 export function readFilters(stored: unknown): IdeaFilter[] {
-	if (!Array.isArray(stored)) {
-		return [];
-	}
-	return ideaFilters.filter((filter) => stored.includes(filter));
+	return readFilterList(ideaFilters, stored);
 }
 
 /**
@@ -687,112 +697,9 @@ function applyToolbarFlags(): void {
 	showModifiers = gateToggle("show-modifiers", flags.hasModifiers, state.ideaShowModifiers, true);
 	showDescription = gateToggle("show-description", flags.hasDescriptions, state.ideaShowDescription, false);
 	showConditions = gateToggle("show-conditions", flags.hasConditions, state.ideaShowConditions, false);
-	filters = gateFilters(flags, readFilters(state.ideaFilters));
-}
-
-// Returns the selection that should be in force, and puts the list on screen in step with it: an
-// entry this file cannot match is hidden, which is enough for DivDropdown to stop offering it, and
-// the whole control goes when every entry is gone.
-function gateFilters(flags: IdeaToolbarFlags, stored: IdeaFilter[]): IdeaFilter[] {
-	const available = ideaFilters.filter((filter) => flags[filterAvailability[filter]]);
-	const select = document.getElementById("idea-filters");
-	const container = document.getElementById("idea-filter-container");
-
-	if (container) {
-		container.style.display = available.length === 0 ? "none" : "";
-	}
-	select?.querySelectorAll(".option").forEach((option) => {
-		const value = option.getAttribute("value") as IdeaFilter | null;
-		if (value !== null && available.includes(value)) {
-			option.removeAttribute("hidden");
-		} else {
-			option.setAttribute("hidden", "");
-		}
-	});
-
-	const selection = stored.filter((filter) => available.includes(filter));
-	if (filterDropdown) {
-		// Pushing this back into the widget is what puts the closed combobox in step with a gating
-		// that just dropped an entry. The guard keeps that push out of the subscription below: it is
-		// this code's own value, not a click, and storing it would lose the reader's real preference.
-		syncingFilters = true;
-		try {
-			filterDropdown.selectedValues$.next(selection);
-		} finally {
-			syncingFilters = false;
-		}
-	}
-
-	return selection;
-}
-
-function gateToggle(
-	id: string,
-	available: boolean,
-	stored: boolean | undefined,
-	neutral: boolean,
-): boolean {
-	const input = document.getElementById(id) as HTMLInputElement | null;
-	const widget = input?.nextElementSibling as HTMLElement | null;
-	if (widget) {
-		widget.style.display = available ? "" : "none";
-	}
-	// `neutral` doubles as the default here.
-	const value = available ? (stored ?? neutral) : neutral;
-	if (input && input.checked !== value) {
-		input.checked = value;
-		syncCheckbox(input);
-	}
-	return value;
-}
-
-// The restored selection is pushed into the widget before the subscription is attached, so the
-// BehaviorSubject's immediate first emission -- which carries whatever the widget was built with,
-// not a choice anyone made -- cannot write an empty selection over the stored one.
-function wireFilters(): void {
-	const element = document.getElementById("idea-filters") as HTMLDivElement | null;
-	if (!element) {
-		return;
-	}
-
-	filterDropdown = new DivDropdown(element, true, {
-		// Selecting nothing is not "no selection" here: it is the whole file, unfiltered.
-		empty: feLocalize("ideapreview.filterall", "(All ideas)"),
-	});
-
-	syncingFilters = true;
-	try {
-		filterDropdown.selectedValues$.next(filters);
-		filterDropdown.selectedValues$.subscribe(
-			tryRun((selection: readonly string[]) => {
-				if (syncingFilters) {
-					return;
-				}
-				filters = readFilters(selection);
-				setState({ ideaFilters: filters });
-				buildContent();
-			}),
-		);
-	} finally {
-		syncingFilters = false;
-	}
-}
-
-function bindToggle(id: string, initial: boolean, apply: (value: boolean) => void): void {
-	const input = document.getElementById(id) as HTMLInputElement | null;
-	if (!input) {
-		return;
-	}
-	input.checked = initial;
-	// initCommon's load handler runs before this one, so the codicon checkbox over this input was
-	// already built from the unrestored value and would announce a toggle that is on as unchecked.
-	syncCheckbox(input);
-	input.addEventListener(
-		"change",
-		tryRun(() => {
-			apply(input.checked);
-			buildContent();
-		}),
+	filters = filterControl.gate(
+		(filter) => flags[filterAvailability[filter]],
+		readFilters(state.ideaFilters),
 	);
 }
 
@@ -856,7 +763,7 @@ window.addEventListener(
 			showConditions = value;
 			setState({ ideaShowConditions: value });
 		});
-		wireFilters();
+		filterControl.wire(filters);
 
 		// Before the first buildContent, so the restored query is applied by the first render rather
 		// than only by the next one.

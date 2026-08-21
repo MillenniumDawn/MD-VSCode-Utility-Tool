@@ -1,8 +1,7 @@
 import { tryRun, subscribeNavigators, enableZoom, initCommon, getState, setState, panning$ } from "./util/common";
-import { syncCheckbox } from "./util/checkbox";
 import { SearchBox } from "./util/searchbox";
 import { applyNav, badge } from "./util/card";
-import { DivDropdown } from "./util/dropdown";
+import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
 import {
@@ -96,10 +95,6 @@ let showPicture: boolean = getState().showPicture ?? true;
 let showEffects: boolean = getState().showEffects ?? true;
 // Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
 let filters: EventFilter[] = readFilters(getState().eventFilters);
-let filterDropdown: DivDropdown | undefined = undefined;
-// Set while a gated selection is being pushed into the widget, so its subscription can tell a value
-// this module computed from one the reader chose. Only the second is worth storing.
-let syncingFilters = false;
 
 //#region Filtering
 
@@ -127,10 +122,7 @@ export const eventFilters: readonly EventFilter[] = [
 // State written by an older version -- or by nothing at all -- reaches this as whatever it happens
 // to be, so anything that is not a filter name is dropped rather than carried into the predicates.
 export function readFilters(stored: unknown): EventFilter[] {
-	if (!Array.isArray(stored)) {
-		return [];
-	}
-	return eventFilters.filter((filter) => stored.includes(filter));
+	return readFilterList(eventFilters, stored);
 }
 
 // One option is emitted as a node once per scope situation it is reached in, so it can have several
@@ -770,6 +762,24 @@ const filterAvailability: Record<EventFilter, keyof EventToolbarFlags> = {
 	chains: "hasChains",
 };
 
+// Every toggle rebuilds the canvas, so the rebuild is bound once instead of at each call site.
+const bindToggle = toggleBinder(buildContent);
+
+// Owns the filter widget and the guard that tells a selection this module pushed into it from
+// one the reader chose.
+const filterControl = new FilterControl<EventFilter>({
+	selectId: "ev-filters",
+	containerId: "ev-filter-container",
+	all: eventFilters,
+	emptyKey: "eventtree.filterall",
+	emptyText: "(All events)",
+	onChange: (selection) => {
+		filters = selection;
+		setState({ eventFilters: filters });
+		buildContent();
+	},
+});
+
 function applyToolbarFlags(): void {
 	const flags = payload.toolbarFlags ?? allToolbarControls;
 	const state = getState();
@@ -778,70 +788,10 @@ function applyToolbarFlags(): void {
 	showLocalisation = gateToggle("show-localisation", flags.hasLocalisation, state.showLocalisation, true);
 	showPicture = gateToggle("show-picture", flags.hasPicture, state.showPicture, true);
 	showEffects = gateToggle("show-effects", flags.hasEffects, state.showEffects, true);
-	filters = gateFilters(flags, readFilters(state.eventFilters));
-}
-
-// Returns the selection that should be in force, and puts the list on screen in step with it: an
-// entry this file cannot match is hidden, which is enough for DivDropdown to stop offering it, and
-// the whole control goes when every entry is gone.
-function gateFilters(flags: EventToolbarFlags, stored: EventFilter[]): EventFilter[] {
-	const available = eventFilters.filter((filter) => flags[filterAvailability[filter]]);
-	const select = document.getElementById("ev-filters");
-	const container = document.getElementById("ev-filter-container");
-
-	if (container) {
-		container.style.display = available.length === 0 ? "none" : "";
-	}
-	select?.querySelectorAll(".option").forEach((option) => {
-		const value = option.getAttribute("value") as EventFilter | null;
-		if (value !== null && available.includes(value)) {
-			option.removeAttribute("hidden");
-		} else {
-			option.setAttribute("hidden", "");
-		}
-	});
-
-	const selection = stored.filter((filter) => available.includes(filter));
-	if (filterDropdown) {
-		// Pushing this back into the widget is what puts the closed combobox in step with a gating
-		// that just dropped an entry. The guard keeps that push out of the subscription below: it is
-		// this code's own value, not a click, and storing it would lose the reader's real preference.
-		syncingFilters = true;
-		try {
-			filterDropdown.selectedValues$.next(selection);
-		} finally {
-			syncingFilters = false;
-		}
-	}
-	return selection;
-}
-
-// Returns the value the toggle should hold, and puts the input and its widget in step with it.
-//
-// While the control is offered that is the reader's own choice, read from the stored state rather
-// than from the module variable: the variable may be holding a forced value from a moment ago, and
-// the stored one is only ever written by a deliberate click. So a file that gains pictures back --
-// through an ordinary in-place update, no reload -- gets the toggle back in the position its reader
-// last put it, not in the one the forcing left behind.
-function gateToggle(
-	id: string,
-	available: boolean,
-	stored: boolean | undefined,
-	neutral: boolean,
-): boolean {
-	const input = document.getElementById(id) as HTMLInputElement | null;
-	const widget = input?.nextElementSibling as HTMLElement | null;
-	if (widget) {
-		widget.style.display = available ? "" : "none";
-	}
-	// `neutral` doubles as the default here: a toggle that only shows things starts on, and the one
-	// that hides them starts off.
-	const value = available ? (stored ?? neutral) : neutral;
-	if (input && input.checked !== value) {
-		input.checked = value;
-		syncCheckbox(input);
-	}
-	return value;
+	filters = filterControl.gate(
+		(filter) => flags[filterAvailability[filter]],
+		readFilters(state.eventFilters),
+	);
 }
 
 //#endregion
@@ -1106,7 +1056,7 @@ window.addEventListener(
 			showEffects = value;
 			setState({ showEffects: value });
 		});
-		wireFilters();
+		filterControl.wire(filters);
 
 		// Before the first buildContent, so the restored query is applied by the first render rather
 		// than only by the next one.
@@ -1116,52 +1066,3 @@ window.addEventListener(
 	}),
 );
 
-// The restored selection is pushed into the widget before the subscription is attached, so the
-// BehaviorSubject's immediate first emission -- which carries whatever the widget was built with,
-// not a choice anyone made -- cannot write an empty selection over the stored one.
-function wireFilters(): void {
-	const element = document.getElementById("ev-filters") as HTMLDivElement | null;
-	if (!element) {
-		return;
-	}
-
-	filterDropdown = new DivDropdown(element, true, {
-		// Selecting nothing is not "no selection" here: it is the whole file, unfiltered.
-		empty: feLocalize("eventtree.filterall", "(All events)"),
-	});
-
-	syncingFilters = true;
-	try {
-		filterDropdown.selectedValues$.next(filters);
-		filterDropdown.selectedValues$.subscribe(
-			tryRun((selection: readonly string[]) => {
-				if (syncingFilters) {
-					return;
-				}
-				filters = readFilters(selection);
-				setState({ eventFilters: filters });
-				buildContent();
-			}),
-		);
-	} finally {
-		syncingFilters = false;
-	}
-}
-
-function bindToggle(id: string, initial: boolean, apply: (value: boolean) => void): void {
-	const input = document.getElementById(id) as HTMLInputElement | null;
-	if (!input) {
-		return;
-	}
-	input.checked = initial;
-	// initCommon's load handler runs before this one, so the codicon checkbox over this input was
-	// already built from the unrestored value and would announce a toggle that is on as unchecked.
-	syncCheckbox(input);
-	input.addEventListener(
-		"change",
-		tryRun(() => {
-			apply(input.checked);
-			buildContent();
-		}),
-	);
-}
