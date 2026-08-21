@@ -39,6 +39,29 @@ export interface Raw extends TokenObject {
 
 export type NumberUnit = "%" | "%%";
 
+/**
+ * Reads a node value that may be written as a quoted string or as a bare token.
+ * Returns `undefined` when the value is neither.
+ */
+export function readNodeAsString(node: Node): string | undefined {
+	const value = node.value;
+	if (typeof value === "string") {
+		return value;
+	}
+	if (value && typeof value === "object" && !Array.isArray(value) && "name" in value) {
+		return (value as { name: string }).name;
+	}
+	return undefined;
+}
+
+/**
+ * Reads a raw field that may be written as a quoted string or as a bare token.
+ * Returns `undefined` when the field is missing or its value is neither.
+ */
+export function readRawAsString(raw: Raw | undefined): string | undefined {
+	return raw ? readNodeAsString(raw._raw) : undefined;
+}
+
 export type HOIPartial<T> = T extends Enum
 	? T
 	: T extends

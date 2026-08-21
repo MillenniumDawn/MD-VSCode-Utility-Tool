@@ -1,7 +1,7 @@
 import { ConditionComplexExpr, ConditionItem, extractConditionValue } from "../../hoiformat/condition";
 import { Node, Token } from "../../hoiformat/hoiparser";
 import { Scope } from "../../hoiformat/scope";
-import { HOIPartial, Raw, SchemaDef, convertNodeToJson } from "../../hoiformat/schema";
+import { HOIPartial, Raw, SchemaDef, convertNodeToJson, readRawAsString } from "../../hoiformat/schema";
 import { error } from "../../util/debug";
 import { parseHoi4FileCached } from "../../util/fileloader";
 import {
@@ -108,14 +108,7 @@ function readCategory(node: Node, name: string, filePath: string): HOIDecisionCa
 }
 
 function readIconToken(def: HOIPartial<CategoryDef>): string | undefined {
-	const value = def.icon?._raw.value;
-	if (typeof value === "string") {
-		return value;
-	}
-	if (value && typeof value === "object" && !Array.isArray(value) && "name" in value) {
-		return (value as { name: string }).name;
-	}
-	return undefined;
+	return readRawAsString(def.icon);
 }
 
 class DecisionCategoryFileLoader extends FileLoader<HOIDecisionCategory[]> {
