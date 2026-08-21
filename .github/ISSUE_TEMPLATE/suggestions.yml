@@ -1,0 +1,67 @@
+name: Suggestion
+description: Suggest a feature or an improvement to the extension
+title: "[SUGGESTION] "
+labels: ["enhancement"]
+type: Suggestion
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository is the **VSCode extension**, not the mod. Ideas for Millennium Dawn
+        itself belong at
+        [MillenniumDawn/Millennium-Dawn](https://github.com/MillenniumDawn/Millennium-Dawn/issues).
+
+  - type: dropdown
+    id: utility
+    attributes:
+      label: Which utility
+      options:
+        - Focus tree preview
+        - Event tree preview
+        - Decision preview
+        - Idea preview
+        - Technology tree preview
+        - MIO preview
+        - GUI preview (.gui)
+        - GFX / sprite preview (.gfx)
+        - Image viewer (.dds / .tga)
+        - World map preview
+        - Indexing
+        - Install path / mod file selection
+        - A new preview or utility
+        - Something else, or not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is awkward today
+      description: >
+        The part of modding that is slow, fiddly or invisible right now. Describe the problem
+        rather than the fix — it often turns out there is a better answer than the one either
+        of us had in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like instead
+      description: What the extension would do differently.
+    validations:
+      required: true
+
+  - type: textarea
+    id: usage
+    attributes:
+      label: How you would use it
+      description: >
+        A concrete example helps a lot: the file you would have open, what you would click,
+        and what you would expect to see.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Alternatives, mockups, anything else
+      description: Other ways you have thought of solving it, how another tool does it, or a sketch of the result.

@@ -1,0 +1,51 @@
+name: Task
+description: A piece of work on the extension, for the backlog
+title: "[TASK] "
+labels: ["enhancement"]
+type: Task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For our own backlog. Fill in as much or as little as the task needs — nothing here is
+        required. If you are reporting something broken use the bug report, and if you are
+        asking for something new use the suggestion.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs doing
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: >
+        The same vocabulary the changelog uses, so the `[ Component ]` prefix on the release
+        bullet is predictable.
+      options:
+        - Focus Tree
+        - Event Tree
+        - Decision
+        - Idea
+        - Technology
+        - MIO
+        - GUI
+        - GFX
+        - World Map
+        - Previewer (shared machinery)
+        - Settings
+        - Localisation
+        - Build
+        - Testing
+        - CI
+        - Docs
+        - Several, or none of these
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: >
+        Anything worth not rediscovering later — where in the source this lives, what it
+        unblocks, prior attempts, related issues, or what has to be true before it can be closed.

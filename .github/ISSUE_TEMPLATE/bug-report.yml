@@ -1,0 +1,134 @@
+name: Bug report
+description: Something in the extension misbehaves
+title: "[BUG] "
+labels: ["bug"]
+type: Bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository is the **VSCode extension**, not the mod.
+
+        If the problem is with Millennium Dawn itself — a focus that does not fire, a wrong
+        modifier, a broken event — report it at
+        [MillenniumDawn/Millennium-Dawn](https://github.com/MillenniumDawn/Millennium-Dawn/issues)
+        instead. Report it here when the extension shows you something wrong, or refuses to
+        show you anything.
+
+  - type: dropdown
+    id: utility
+    attributes:
+      label: Which utility
+      description: The part of the extension that misbehaves.
+      options:
+        - Focus tree preview
+        - Event tree preview
+        - Decision preview
+        - Idea preview
+        - Technology tree preview
+        - MIO preview
+        - GUI preview (.gui)
+        - GFX / sprite preview (.gfx)
+        - Image viewer (.dds / .tga)
+        - World map preview
+        - Indexing (Show Index Status, progress notifications)
+        - Install path / mod file selection
+        - Something else, or not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1. Open
+        2. Run `Preview HOI4 file`
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: script
+    attributes:
+      label: The script that reproduces it
+      description: >
+        The smallest piece of game script that shows the problem, and the path it lives at
+        (for example `common/national_focus/MD_usa.txt`). Paste it as text rather than a
+        screenshot, so it can be copied into a test.
+      render: text
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot of the preview
+      description: Drag the image straight into this box. Most rendering bugs are quicker to read as a picture.
+
+  - type: input
+    id: ext-version
+    attributes:
+      label: Extension version
+      description: Extensions view, then "Hearts of Iron 4 Utilities 2026". Please check this is current before reporting.
+      placeholder: "1.1.29"
+    validations:
+      required: true
+
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VSCode version
+      description: Help, then About (Code, then About Visual Studio Code on macOS).
+      placeholder: "1.96.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where you run it
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - vscode.dev / github.dev (web)
+    validations:
+      required: true
+
+  - type: textarea
+    id: settings
+    attributes:
+      label: Your mdHoi4Utilities settings
+      description: >
+        Press `Ctrl+,` and search for `mdHoi4Utilities`, or paste the block from your
+        `settings.json`. An unset or malformed Install Path explains most reports where
+        nothing previews at all, and the index toggles explain most missing text or missing icons.
+      render: json
+      placeholder: |
+        "mdHoi4Utilities.installPath": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Hearts of Iron IV",
+        "mdHoi4Utilities.modFile": "",
+        "mdHoi4Utilities.gfxIndex": false,
+        "mdHoi4Utilities.localisationIndex": false
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Output log
+      description: >
+        View, then Output, then pick **HOI4 Modding** from the dropdown on the right.
+        Paste what is there. `Show Index Status` writes to the same place if the problem
+        is that indexing never finishes.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Which mod you were editing, whether it used to work in an earlier version, anything else that helps.
