@@ -80,6 +80,13 @@ export function tryRun<T extends (...args: any[]) => any>(
 	};
 }
 
+// The zoom the reader has the canvas at. Written by enableZoom below, and read by anything drawn
+// outside the canvas -- a hover popup appended to <body> -- which has to scale itself by hand to
+// stay the size of the card it belongs to.
+export function currentScale(): number {
+	return getState().scale || 1;
+}
+
 let shouldDisableZoom = false;
 export function enableZoom(
 	contentElement: HTMLDivElement | null,
