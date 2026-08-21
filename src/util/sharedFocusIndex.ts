@@ -183,13 +183,12 @@ async function buildFocusIndexWithTimer(
 		const staleness = computeStaleFiles(manifest, currentMtimes);
 		const cachedData = await loadCacheData(cacheName);
 
-		if (
-			cachedData &&
-			staleness.stale.length +
-				staleness.removed.length +
-				staleness.added.length <
-				focusFiles.length
-		) {
+		// Whatever is still fresh gets reused, however much of the listing changed. This used to be
+		// gated on stale + removed + added being fewer than the files listed, so a large pull -- or
+		// a manifest naming files that have since been deleted, which count towards that sum but
+		// not towards the listing -- threw away a cache that was still most of the way good. The
+		// stale files have to be parsed either way, so counting them only ever added work.
+		if (cachedData) {
 			try {
 				const cached: FocusIndex = JSON.parse(cachedData);
 				const skipFiles = new Set([...staleness.stale, ...staleness.removed]);

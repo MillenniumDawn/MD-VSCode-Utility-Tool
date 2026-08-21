@@ -217,13 +217,9 @@ async function buildGfxIndexWithTimer(
 		const staleness = computeStaleFiles(manifest, currentMtimes);
 		const cachedData = await loadCacheData(cacheName);
 
-		if (
-			cachedData &&
-			staleness.stale.length +
-				staleness.removed.length +
-				staleness.added.length <
-				gfxFiles.length
-		) {
+		// Whatever is still fresh gets reused, however much of the listing changed. See the same
+		// spot in sharedFocusIndex for why counting the changed files only ever added work.
+		if (cachedData) {
 			try {
 				const cached: GfxCacheData = JSON.parse(cachedData);
 				const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
