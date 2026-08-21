@@ -4,6 +4,7 @@ v1.1.29
 
 - Recover from an index build that fails or overruns instead of hanging on it.
 - Keep the editor responsive while indexing, and show progress you can cancel.
+- Keep a separate index cache per mod, and reuse the parts of it that are still current.
 
 v1.1.28
 
