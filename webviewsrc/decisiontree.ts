@@ -7,10 +7,11 @@ import {
 	setState,
 	panning$,
 } from "./util/common";
-import { syncCheckbox } from "./util/checkbox";
-import { DivDropdown } from "./util/dropdown";
+import { SearchBox } from "./util/searchbox";
+import { applyNav, badge } from "./util/card";
+import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
-import { vscode } from "./util/vscode";
+import { wireUpdateBody } from "./util/updatebody";
 import {
 	DecisionGraphCategoryNode,
 	DecisionGraphDecisionNode,
@@ -18,18 +19,20 @@ import {
 	DecisionGraphNode,
 	DecisionGraphPayload,
 	DecisionToolbarFlags,
-	EffectTreeNode,
 } from "../src/previewdef/decision/payload";
-import { conditionPanel, conditionToLabel, effectsToDom } from "./util/conditiontree";
+import { conditionPanel, conditionToLabel } from "./util/conditiontree";
 import {
-	ChipInput,
-	LayoutInput,
-	LayoutResult,
-	columnGap,
-	layoutGraph,
-	padY,
-	separateChips,
-} from "./util/graphlayout";
+	EffectTooltipOptions,
+	TooltipSection,
+	wireEffectTooltip,
+} from "./util/hovertooltip";
+import {
+	IsolationHandle,
+	RenderedEdge,
+	RenderedNode,
+	renderGraph,
+	wireIsolation,
+} from "./util/graphview";
 
 initCommon();
 
@@ -41,17 +44,18 @@ const effectTooltipClass = "dec-effects-tip";
 // the strip. Change one and the other has to follow.
 const toolbarHeight = 52;
 
-const effectHoverDelay = 150;
-const effectTipGap = 12;
-const effectTipMargin = 8;
-
 // The card is this wide, so a scripted GUI window drawn inside one is scaled down to fit it rather
 // than pushing the column out to the width of a 1920px game screen.
 const guiPreviewWidth = 300;
 
-function clampBelowToolbar(top: number): number {
-	return Math.max(toolbarHeight + effectTipMargin, top);
-}
+// Kept as they were: the decision preview has always sat its panel a little further from the card
+// than the event preview does.
+const effectTooltipOptions: EffectTooltipOptions = {
+	className: effectTooltipClass,
+	toolbarHeight,
+	gap: 12,
+	margin: 8,
+};
 
 const emptyPayload: DecisionGraphPayload = {
 	roots: [],
@@ -85,10 +89,6 @@ let showEffects: boolean = getState().decShowEffects ?? true;
 let showScriptedGui: boolean = getState().decShowScriptedGui ?? false;
 // Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
 let filters: DecisionFilter[] = readFilters(getState().decisionFilters);
-let filterDropdown: DivDropdown | undefined = undefined;
-// Set while a gated selection is being pushed into the widget, so its subscription can tell a value
-// this module computed from one the reader chose. Only the second is worth storing.
-let syncingFilters = false;
 
 //#region Filtering
 
@@ -113,10 +113,7 @@ export const decisionFilters: readonly DecisionFilter[] = [
 ];
 
 export function readFilters(stored: unknown): DecisionFilter[] {
-	if (!Array.isArray(stored)) {
-		return [];
-	}
-	return decisionFilters.filter((f) => stored.includes(f));
+	return readFilterList(decisionFilters, stored);
 }
 
 export interface VisibleGraph {
@@ -335,13 +332,6 @@ export function matchesQuery(node: DecisionGraphNode, query: string): boolean {
 
 //#region Node markup
 
-function badge(container: HTMLElement, className: string, text: string): void {
-	const element = document.createElement("span");
-	element.className = "ev-badge" + (className ? " " + className : "");
-	element.textContent = text;
-	container.appendChild(element);
-}
-
 function iconElement(icon: { styleKey: string; width: number; height: number }): HTMLDivElement {
 	const element = document.createElement("div");
 	element.className = "dec-icon " + icon.styleKey;
@@ -391,22 +381,11 @@ function identifierOf(node: DecisionGraphNode): string {
 	return node.kind === "category" ? node.categoryKey : node.decisionId;
 }
 
-function applyNav(card: HTMLDivElement, node: DecisionGraphNode): void {
-	if (!node.nav) {
-		return;
-	}
-	card.classList.add("navigator");
-	card.setAttribute("start", String(node.nav.start));
-	card.setAttribute("end", String(node.nav.end));
-	card.setAttribute("file", node.nav.file);
-	card.tabIndex = 0;
-}
-
 function buildCategoryCard(node: DecisionGraphCategoryNode): HTMLDivElement {
 	const card = document.createElement("div");
 	card.className = "ev-card dec-card-category";
 	head(card, node, node.scriptedGui ? ["gui"] : []);
-	applyNav(card, node);
+	applyNav(card, node.nav, true);
 
 	const meta = document.createElement("div");
 	meta.className = "ev-meta";
@@ -482,7 +461,7 @@ function buildDecisionCard(node: DecisionGraphDecisionNode): HTMLDivElement {
 	const card = document.createElement("div");
 	card.className = "ev-card " + (node.isMission ? "dec-card-mission" : "dec-card-decision");
 	head(card, node, [node.isMission ? "mission" : "decision"]);
-	applyNav(card, node);
+	applyNav(card, node.nav, true);
 
 	const meta = document.createElement("div");
 	meta.className = "ev-meta";
@@ -623,15 +602,11 @@ function buildCard(node: DecisionGraphNode): HTMLDivElement {
 
 //#region Render
 
-interface RenderedNode {
-	node: DecisionGraphNode;
-	element: HTMLDivElement;
-	card: HTMLDivElement;
-}
-
-let rendered: RenderedNode[] = [];
-let renderedEdges: { edge: DecisionGraphEdge; path: SVGPathElement; chip?: HTMLDivElement }[] = [];
+let rendered: RenderedNode<DecisionGraphNode>[] = [];
+let renderedEdges: RenderedEdge<DecisionGraphEdge>[] = [];
 let childrenById = new Map<string, string[]>();
+// Replaced by every rebuild, so a drag always puts back the graph that is actually on screen.
+let isolation: IsolationHandle | undefined = undefined;
 // Filled by buildContent before the cards are built, and read by buildDecisionCard. Empty whenever
 // no filter is selected, because nothing can have been left out.
 let skippedByDecision = new Map<string, string[]>();
@@ -656,10 +631,6 @@ function skippedByDecisionOf(graph: VisibleGraph): Map<string, string[]> {
 	return result;
 }
 
-function currentScale(): number {
-	return getState().scale || 1;
-}
-
 function buildContent(): void {
 	const content = document.getElementById("decisiontreecontent") as HTMLDivElement | null;
 	if (!content) {
@@ -670,6 +641,7 @@ function buildContent(): void {
 	content.textContent = "";
 	rendered = [];
 	renderedEdges = [];
+	isolation = undefined;
 
 	// Before the filters: a control this file cannot use is forced back to its neutral position
 	// here, and a filter entry it cannot use is one the stored selection must not keep.
@@ -686,90 +658,27 @@ function buildContent(): void {
 			"No decisions to show for this file.",
 		);
 		content.appendChild(empty);
-		applySearch(false);
+		search.refresh(rendered);
 		return;
 	}
 
-	const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-	svg.setAttribute("class", "ev-edges");
-	content.appendChild(svg);
+	({ rendered, renderedEdges, childrenById } = renderGraph({
+		content,
+		nodes: graph.nodes,
+		edges: graph.edges,
+		roots: graph.roots,
+		buildCard,
+		chipGuarded,
+		chipText: chipTextFor,
+		edgeClass,
+	}));
 
-	// Build and measure before laying out: a card's height depends on the toggles.
-	const scale = currentScale();
-	const measured: LayoutInput[] = [];
-	for (const node of graph.nodes) {
-		const box = document.createElement("div");
-		box.className = "ev-node";
-		box.dataset.id = node.id;
-		box.style.left = "0px";
-		box.style.top = "0px";
-		box.style.visibility = "hidden";
-		const card = buildCard(node);
-		box.appendChild(card);
-		content.appendChild(box);
-		rendered.push({ node, element: box, card });
-	}
-
-	const built = buildChips(content, graph);
-	for (const item of rendered) {
-		const rect = item.element.getBoundingClientRect();
-		measured.push({ id: item.node.id, width: rect.width / scale, height: rect.height / scale });
-	}
-	const chipSizes: ChipInput[] = [];
-	for (const { edge, chip } of built) {
-		if (chip) {
-			chipSizes.push({
-				from: edge.from,
-				to: edge.to,
-				width: chip.getBoundingClientRect().width / scale,
-			});
-		}
-	}
-
-	const layout = layoutGraph(measured, graph.edges, graph.roots, chipSizes);
-
-	for (const item of rendered) {
-		const position = layout.positions[item.node.id];
-		item.element.style.left = Math.round(position?.x ?? 0) + "px";
-		item.element.style.top = Math.round(position?.y ?? 0) + "px";
-		item.element.style.visibility = "";
-	}
-
-	content.style.width = layout.width + "px";
-	content.style.height = layout.height + "px";
-	svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
-	svg.setAttribute("width", String(layout.width));
-	svg.setAttribute("height", String(layout.height));
-
-	renderRails(content, layout);
-	renderEdges(content, svg, layout, measured, built);
-
-	childrenById = new Map();
-	for (const edge of graph.edges) {
-		const list = childrenById.get(edge.from);
-		if (list) {
-			list.push(edge.to);
-		} else {
-			childrenById.set(edge.from, [edge.to]);
-		}
-	}
-
-	wireIsolation();
+	isolation = wireIsolation(rendered, renderedEdges, childrenById);
 	if (showEffects) {
 		wireEffectTooltips();
 	}
 	subscribeNavigators();
-	applySearch(false);
-}
-
-function renderRails(content: HTMLDivElement, layout: LayoutResult): void {
-	for (let i = 1; i < layout.columnX.length; i++) {
-		const rail = document.createElement("div");
-		rail.className = "ev-rail";
-		rail.style.left = (layout.gapX[i - 1] ?? 0) + (layout.gapWidth[i - 1] ?? columnGap) / 2 + "px";
-		rail.style.height = layout.height + "px";
-		content.appendChild(rail);
-	}
+	search.refresh(rendered);
 }
 
 // Everything an arrow says next to itself: what one decision does to another, the random_list weight
@@ -801,297 +710,35 @@ export function chipTextFor(edge: DecisionGraphEdge, guarded: boolean): string {
 	return bits.join(" · ");
 }
 
-interface BuiltChip {
-	edge: DecisionGraphEdge;
-	guarded: boolean;
-	chip?: HTMLDivElement;
+// A structural edge is the line from a category to the decisions in it: it carries no condition of
+// its own, so nothing guards it.
+function chipGuarded(edge: DecisionGraphEdge): boolean {
+	return showConditions && !edge.structural && edge.condition !== true;
 }
 
-// Chips are created before the layout runs, because their measured width is what decides how wide
-// the gap they sit in has to be. They are hidden until the layout says where they go.
-function buildChips(content: HTMLDivElement, graph: VisibleGraph): BuiltChip[] {
-	return graph.edges.map((edge) => {
-		const guarded = showConditions && !edge.structural && edge.condition !== true;
-		const text = chipTextFor(edge, guarded);
-		if (!text) {
-			return { edge, guarded };
-		}
-		const chip = document.createElement("div");
-		chip.className =
-			"ev-chip" +
-			(guarded ? " ev-chip-guarded" : "") +
-			(edge.skipped?.length ? " ev-chip-bridged" : "");
-		chip.textContent = text;
-		chip.style.left = "0px";
-		chip.style.top = "0px";
-		chip.style.visibility = "hidden";
-		content.appendChild(chip);
-		return { edge, guarded, chip };
-	});
-}
-
-// x of the cubic used for the arrows, which is monotonic from x1 to x2, so a bisection finds the
-// parameter that puts a point at a given x.
-function cubicAt(a: number, b: number, c: number, d: number, t: number): number {
-	const s = 1 - t;
-	return s * s * s * a + 3 * s * s * t * b + 3 * s * t * t * c + t * t * t * d;
-}
-
-function parameterAtX(x1: number, c1: number, c2: number, x2: number, target: number): number {
-	let low = 0;
-	let high = 1;
-	for (let i = 0; i < 20; i++) {
-		const mid = (low + high) / 2;
-		if (cubicAt(x1, c1, c2, x2, mid) < target) {
-			low = mid;
-		} else {
-			high = mid;
-		}
-	}
-	return (low + high) / 2;
-}
-
-function renderEdges(
-	content: HTMLDivElement,
-	svg: SVGSVGElement,
-	layout: LayoutResult,
-	measured: LayoutInput[],
-	built: BuiltChip[],
-): void {
-	const sizeById = new Map(measured.map((m) => [m.id, m]));
-	const fanOut = new Map<string, number>();
-	const placements: { gap: number; x: number; y: number; height: number; chip: HTMLDivElement }[] =
-		[];
-
-	for (const { edge, guarded, chip } of built) {
-		const from = layout.positions[edge.from];
-		const to = layout.positions[edge.to];
-		const fromSize = sizeById.get(edge.from);
-		const toSize = sizeById.get(edge.to);
-		if (!from || !to || !fromSize || !toSize) {
-			chip?.remove();
-			continue;
-		}
-
-		const index = fanOut.get(edge.from) ?? 0;
-		fanOut.set(edge.from, index + 1);
-
-		const x1 = from.x + fromSize.width;
-		// Fanning the origins apart keeps parallel arrows readable, but the spread has to stay on
-		// the card it leaves from -- unclamped, a category with a dozen decisions put the last arrow
-		// below its box.
-		const spread = Math.min(7, Math.max(2, (fromSize.height - 8) / Math.max(1, index + 1)));
-		const y1 = from.y + fromSize.height / 2 + (index - 0.5) * spread;
-		const x2 = to.x;
-		const y2 = to.y + toSize.height / 2;
-		const dx = Math.max(28, (x2 - x1) * 0.5);
-
-		const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-		path.setAttribute("d", `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`);
-		path.setAttribute(
-			"class",
-			"ev-edge" +
-				(edge.structural ? " dec-edge-structural" : " dec-edge-call") +
-				(edge.kind === "remove" ? " dec-edge-remove" : "") +
-				(!edge.structural && guarded ? " ev-edge-guarded" : "") +
-				(edge.skipped?.length ? " ev-edge-bridged" : ""),
-		);
-		svg.appendChild(path);
-
-		if (chip) {
-			// The gap after the source column is the one the layout widened for this chip, and the
-			// only band on the canvas guaranteed to be free of cards.
-			const gap = layout.rank[edge.from] ?? 0;
-			const centre = (layout.gapX[gap] ?? x1) + (layout.gapWidth[gap] ?? 0) / 2;
-			const t = parameterAtX(x1, x1 + dx, x2 - dx, x2, centre);
-			const height = chip.getBoundingClientRect().height / currentScale();
-			placements.push({
-				gap,
-				x: centre,
-				y: cubicAt(y1, y1, y2, y2, t) - height / 2,
-				height,
-				chip,
-			});
-		}
-
-		renderedEdges.push({ edge, path, chip });
-	}
-
-	let bottom = 0;
-	for (const placement of separateChips(placements)) {
-		placement.chip.style.left = placement.x + "px";
-		// .ev-chip is translated by -50% on both axes, so the style position is its centre.
-		placement.chip.style.top = placement.y + placement.height / 2 + "px";
-		placement.chip.style.visibility = "";
-		bottom = Math.max(bottom, placement.y + placement.height);
-	}
-	if (bottom + padY > layout.height) {
-		layout.height = bottom + padY;
-		content.style.height = layout.height + "px";
-		svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
-		svg.setAttribute("height", String(layout.height));
-	}
-}
-
-//#endregion
-
-//#region Chain isolation
-
-function downstreamOf(id: string): Set<string> {
-	const reached = new Set<string>([id]);
-	const stack = [id];
-	while (stack.length > 0) {
-		const current = stack.pop();
-		if (current === undefined) {
-			continue;
-		}
-		for (const child of childrenById.get(current) ?? []) {
-			if (!reached.has(child)) {
-				reached.add(child);
-				stack.push(child);
-			}
-		}
-	}
-	return reached;
-}
-
-// Class flipping only -- never a re-layout, so isolating a chain stays cheap on a large file.
-function setIsolation(reached: Set<string> | undefined): void {
-	for (const item of rendered) {
-		item.element.classList.toggle("ev-dim", reached !== undefined && !reached.has(item.node.id));
-	}
-	for (const item of renderedEdges) {
-		const on = reached === undefined || (reached.has(item.edge.from) && reached.has(item.edge.to));
-		item.path.classList.toggle("ev-edge-dim", !on);
-		item.chip?.classList.toggle("ev-dim", !on);
-	}
-}
-
-function wireIsolation(): void {
-	for (const item of rendered) {
-		const enter = () => {
-			// Cards slide under a stationary cursor while the canvas is dragged, so without this the
-			// chain would light up card by card for the length of the drag.
-			if (panning$.value) {
-				return;
-			}
-			setIsolation(downstreamOf(item.node.id));
-		};
-		const leave = () => setIsolation(undefined);
-		item.element.addEventListener("mouseenter", enter);
-		item.element.addEventListener("mouseleave", leave);
-		item.element.addEventListener("focusin", enter);
-		item.element.addEventListener("focusout", leave);
-	}
+function edgeClass(edge: DecisionGraphEdge, guarded: boolean): string {
+	return (
+		"ev-edge" +
+		(edge.structural ? " dec-edge-structural" : " dec-edge-call") +
+		(edge.kind === "remove" ? " dec-edge-remove" : "") +
+		(!edge.structural && guarded ? " ev-edge-guarded" : "") +
+		(edge.skipped?.length ? " ev-edge-bridged" : "")
+	);
 }
 
 //#endregion
 
 //#region Search
 
-let searchQuery = "";
-let searchHits: RenderedNode[] = [];
-// The id of the hit Enter is parked on, not its index into searchHits: a rebuild can drop nodes, and
-// remembering the id keeps the cursor on the same card across a toggle change.
-let searchCurrentId: string | undefined = undefined;
-
-function applySearch(navigate: boolean): void {
-	searchHits = searchQuery === "" ? [] : rendered.filter((r) => matchesQuery(r.node, searchQuery));
-	const hits = new Set(searchHits.map((h) => h.node.id));
-	if (searchCurrentId !== undefined && !hits.has(searchCurrentId)) {
-		searchCurrentId = undefined;
-	}
-	for (const item of rendered) {
-		item.card.classList.toggle("ev-hit", hits.has(item.node.id));
-		item.card.classList.toggle("ev-hit-current", item.node.id === searchCurrentId);
-	}
-	if (navigate && searchCurrentId !== undefined) {
-		scrollToHit(searchHits.find((h) => h.node.id === searchCurrentId));
-	}
-	updateSearchCount();
-}
-
-function cycleSearch(backwards: boolean): void {
-	const total = searchHits.length;
-	if (total === 0) {
-		return;
-	}
-	const current = searchHits.findIndex((h) => h.node.id === searchCurrentId);
-	const next =
-		current < 0
-			? // The first Enter lands on the first hit, the first Shift+Enter on the last.
-				backwards
-				? total - 1
-				: 0
-			: (current + (backwards ? total - 1 : 1)) % total;
-	searchCurrentId = searchHits[next]?.node.id;
-	applySearch(true);
-}
-
-function scrollToHit(hit: RenderedNode | undefined): void {
-	// Optional call, not a guard: jsdom leaves scrollIntoView undefined and the webview tests drive
-	// this path, where a throw would be swallowed by tryRun and strand the highlight half applied.
-	hit?.element.scrollIntoView?.({ block: "center", inline: "center" });
-}
-
-function updateSearchCount(): void {
-	const label = document.getElementById("dec-search-count");
-	if (!label) {
-		return;
-	}
-	if (searchQuery === "") {
-		label.textContent = "";
-		return;
-	}
-	if (searchHits.length === 0) {
-		label.textContent = feLocalize("decisiontree.nomatches", "no matches");
-		return;
-	}
-	const current = searchHits.findIndex((h) => h.node.id === searchCurrentId);
-	label.textContent = feLocalize(
-		"decisiontree.searchmatches",
-		"{0}/{1}",
-		current < 0 ? "-" : current + 1,
-		searchHits.length,
-	);
-}
-
-function wireSearch(): void {
-	const box = document.getElementById("dec-searchbox") as HTMLInputElement | null;
-	if (!box) {
-		return;
-	}
-	searchQuery = (getState().decisionSearchQuery ?? "").toLowerCase();
-	box.value = searchQuery;
-
-	const onEdit = () => {
-		const next = box.value.trim().toLowerCase();
-		if (next === searchQuery) {
-			return;
-		}
-		searchQuery = next;
-		// Typing highlights; Enter is what jumps. Starting over from the top on every edit keeps the
-		// cursor from landing somewhere arbitrary in the new set of hits.
-		searchCurrentId = undefined;
-		setState({ decisionSearchQuery: next });
-		applySearch(false);
-	};
-
-	box.addEventListener(
-		"keypress",
-		tryRun((e: KeyboardEvent) => {
-			if (e.key === "Enter") {
-				e.preventDefault();
-				cycleSearch(e.shiftKey);
-			} else {
-				onEdit();
-			}
-		}),
-	);
-	for (const type of ["change", "keyup", "paste", "cut"]) {
-		box.addEventListener(type, tryRun(onEdit));
-	}
-}
+const search = new SearchBox<RenderedNode<DecisionGraphNode>>({
+	boxId: "dec-searchbox",
+	countId: "dec-search-count",
+	stateKey: "decisionSearchQuery",
+	noMatchesKey: "decisiontree.nomatches",
+	countKey: "decisiontree.searchmatches",
+	matches: (item, query) => matchesQuery(item.node, query),
+	target: (item) => ({ id: item.node.id, element: item.element, highlight: item.card }),
+});
 
 //#endregion
 
@@ -1123,6 +770,24 @@ const filterAvailability: Record<DecisionFilter, keyof DecisionToolbarFlags> = {
 	scriptedgui: "hasScriptedGui",
 };
 
+// Every toggle rebuilds the canvas, so the rebuild is bound once instead of at each call site.
+const bindToggle = toggleBinder(buildContent);
+
+// Owns the filter widget and the guard that tells a selection this module pushed into it from
+// one the reader chose.
+const filterControl = new FilterControl<DecisionFilter>({
+	selectId: "dec-filters",
+	containerId: "dec-filter-container",
+	all: decisionFilters,
+	emptyKey: "decisiontree.filterall",
+	emptyText: "(All decisions)",
+	onChange: (selection) => {
+		filters = selection;
+		setState({ decisionFilters: filters });
+		buildContent();
+	},
+});
+
 function applyToolbarFlags(): void {
 	const flags = payload.toolbarFlags ?? allToolbarControls;
 	const state = getState();
@@ -1144,74 +809,15 @@ function applyToolbarFlags(): void {
 		state.decShowScriptedGui,
 		false,
 	);
-	filters = gateFilters(flags, readFilters(state.decisionFilters));
-}
-
-// Returns the selection that should be in force, and puts the list on screen in step with it: an
-// entry this file cannot match is hidden, which is enough for DivDropdown to stop offering it, and
-// the whole control goes when every entry is gone.
-function gateFilters(flags: DecisionToolbarFlags, stored: DecisionFilter[]): DecisionFilter[] {
-	const available = decisionFilters.filter((filter) => flags[filterAvailability[filter]]);
-	const select = document.getElementById("dec-filters");
-	const container = document.getElementById("dec-filter-container");
-
-	if (container) {
-		container.style.display = available.length === 0 ? "none" : "";
-	}
-	select?.querySelectorAll(".option").forEach((option) => {
-		const value = option.getAttribute("value") as DecisionFilter | null;
-		if (value !== null && available.includes(value)) {
-			option.removeAttribute("hidden");
-		} else {
-			option.setAttribute("hidden", "");
-		}
-	});
-
-	const selection = stored.filter((filter) => available.includes(filter));
-	if (filterDropdown) {
-		// Pushing this back into the widget is what puts the closed combobox in step with a gating
-		// that just dropped an entry. The guard keeps that push out of the subscription: it is this
-		// code's own value, not a click, and storing it would lose the reader's real preference.
-		syncingFilters = true;
-		try {
-			filterDropdown.selectedValues$.next(selection);
-		} finally {
-			syncingFilters = false;
-		}
-	}
-	return selection;
-}
-
-// Returns the value the toggle should hold, and puts the input and its widget in step with it. The
-// stored value is read rather than the module variable, so a file that gains icons back gets the
-// toggle in the position its reader last put it, not the one a forcing left behind.
-function gateToggle(
-	id: string,
-	available: boolean,
-	stored: boolean | undefined,
-	neutral: boolean,
-): boolean {
-	const input = document.getElementById(id) as HTMLInputElement | null;
-	const widget = input?.nextElementSibling as HTMLElement | null;
-	if (widget) {
-		widget.style.display = available ? "" : "none";
-	}
-	const value = available ? (stored ?? neutral) : neutral;
-	if (input && input.checked !== value) {
-		input.checked = value;
-		syncCheckbox(input);
-	}
-	return value;
+	filters = filterControl.gate(
+		(filter) => flags[filterAvailability[filter]],
+		readFilters(state.decisionFilters),
+	);
 }
 
 //#endregion
 
 //#region Hover effects
-
-interface EffectSection {
-	head: string;
-	effects: EffectTreeNode[];
-}
 
 const effectBlockLabels: Record<string, string> = {
 	complete_effect: "decisiontree.completeeffect",
@@ -1227,12 +833,12 @@ const effectBlockFallbacks: Record<string, string> = {
 	cancel_effect: "When cancelled",
 };
 
-function effectSectionsOf(node: DecisionGraphNode): EffectSection[] {
+function effectSectionsOf(node: DecisionGraphNode): TooltipSection[] {
 	if (node.kind !== "decision") {
 		return [];
 	}
 
-	const sections: EffectSection[] = [];
+	const sections: TooltipSection[] = [];
 	for (const { name, ref } of node.effects) {
 		const effects = payload.effectBlocks[ref];
 		if (effects && effects.length > 0) {
@@ -1252,84 +858,9 @@ function wireEffectTooltips(): void {
 	for (const item of rendered) {
 		const sections = effectSectionsOf(item.node);
 		if (sections.length > 0) {
-			wireEffectTooltip(item.element, sections);
+			wireEffectTooltip(item.element, sections, effectTooltipOptions);
 		}
 	}
-}
-
-function wireEffectTooltip(host: HTMLDivElement, sections: EffectSection[]): void {
-	let panel: HTMLDivElement | undefined = undefined;
-	let timer: number | undefined = undefined;
-
-	host.addEventListener("mouseenter", () => {
-		if (panning$.value) {
-			return;
-		}
-		timer = window.setTimeout(() => {
-			timer = undefined;
-			// The card can be gone by the time the delay is up: a re-render replaces every card, and
-			// the pointer resting on one leaves this timer behind.
-			if (!host.isConnected) {
-				return;
-			}
-			panel = buildEffectTooltip(sections);
-			document.body.append(panel);
-			placeEffectTooltip(panel, host.getBoundingClientRect());
-		}, effectHoverDelay);
-	});
-
-	host.addEventListener("mouseleave", () => {
-		if (timer !== undefined) {
-			clearTimeout(timer);
-			timer = undefined;
-		}
-		panel?.remove();
-		panel = undefined;
-	});
-}
-
-function buildEffectTooltip(sections: EffectSection[]): HTMLDivElement {
-	const panel = document.createElement("div");
-	// .ev-cond as well, so the panel is typeset exactly like the condition panels on the cards.
-	panel.className = "ev-cond " + effectTooltipClass;
-
-	for (const section of sections) {
-		const head = document.createElement("div");
-		head.className = "ev-cond-head";
-		head.textContent = section.head;
-		panel.appendChild(head);
-		panel.appendChild(effectsToDom(section.effects));
-	}
-
-	// The panel sits outside #decisiontreecontent, so it does not inherit the canvas zoom; scaling
-	// it by hand keeps it the size of the card it belongs to.
-	panel.style.transform = `scale(${currentScale()})`;
-	panel.style.transformOrigin = "top left";
-	panel.style.visibility = "hidden";
-	return panel;
-}
-
-// To the right of the card, top aligned, flipping to the left when the window has no room.
-function placeEffectTooltip(panel: HTMLDivElement, host: DOMRect): void {
-	const size = panel.getBoundingClientRect();
-	const viewWidth = document.documentElement.clientWidth;
-	const viewHeight = document.documentElement.clientHeight;
-
-	let left = host.right + effectTipGap;
-	if (left + size.width > viewWidth) {
-		left = host.left - effectTipGap - size.width;
-	}
-	left = Math.max(effectTipMargin, Math.min(left, viewWidth - size.width - effectTipMargin));
-
-	let top = host.top;
-	if (top + size.height > viewHeight) {
-		top = viewHeight - size.height - effectTipMargin;
-	}
-	top = clampBelowToolbar(top);
-
-	panel.style.left = left + window.scrollX + "px";
-	panel.style.top = top + window.scrollY + "px";
-	panel.style.visibility = "";
 }
 
 //#endregion
@@ -1341,45 +872,18 @@ panning$.subscribe((panning) => {
 		return;
 	}
 	document.querySelectorAll("." + effectTooltipClass).forEach((el) => el.remove());
-	setIsolation(undefined);
+	isolation?.clear();
 });
 
-// In-place update pushed by LoaderPreview when the previewed file changed: re-render from the fresh
-// graph without a full reload, so scroll and zoom survive. Falls back to a full reload if the DOM
-// the re-render needs is gone (e.g. the webview shows the error page, which has no listener).
-window.addEventListener(
-	"message",
-	tryRun(function (event: MessageEvent) {
-		const msg = event.data;
-		if (!msg || msg.type !== "updateBody") {
-			return;
-		}
-
-		const contentElement = document.getElementById(
-			"decisiontreecontent",
-		) as HTMLDivElement | null;
-		if (!contentElement) {
-			vscode.postMessage({ command: "reload" });
-			return;
-		}
-
-		if (typeof msg.styleCss === "string") {
-			const serverStyles = document.getElementById("decision-server-styles");
-			if (serverStyles) {
-				serverStyles.textContent = msg.styleCss;
-			}
-		}
-
-		const data = msg.data ?? {};
-		if (data.decisionGraph) {
-			const scrollX = window.scrollX;
-			const scrollY = window.scrollY;
-			payload = data.decisionGraph as DecisionGraphPayload;
-			buildContent();
-			window.scrollTo(scrollX, scrollY);
-		}
-	}),
-);
+wireUpdateBody<DecisionGraphPayload>({
+	contentId: "decisiontreecontent",
+	styleId: "decision-server-styles",
+	dataKey: "decisionGraph",
+	apply: (next) => {
+		payload = next;
+	},
+	rebuild: buildContent,
+});
 
 window.addEventListener(
 	"load",
@@ -1407,62 +911,13 @@ window.addEventListener(
 			showScriptedGui = value;
 			setState({ decShowScriptedGui: value });
 		});
-		wireFilters();
+		filterControl.wire(filters);
 
 		// Before the first buildContent, so the restored query is applied by the first render rather
 		// than only by the next one.
-		wireSearch();
+		search.wire();
 
 		buildContent();
 	}),
 );
 
-// The restored selection is pushed into the widget before the subscription is attached, so the
-// BehaviorSubject's immediate first emission -- which carries whatever the widget was built with,
-// not a choice anyone made -- cannot write an empty selection over the stored one.
-function wireFilters(): void {
-	const element = document.getElementById("dec-filters") as HTMLDivElement | null;
-	if (!element) {
-		return;
-	}
-
-	filterDropdown = new DivDropdown(element, true, {
-		// Selecting nothing is not "no selection" here: it is the whole file, unfiltered.
-		empty: feLocalize("decisiontree.filterall", "(All decisions)"),
-	});
-
-	syncingFilters = true;
-	try {
-		filterDropdown.selectedValues$.next(filters);
-		filterDropdown.selectedValues$.subscribe(
-			tryRun((selection: readonly string[]) => {
-				if (syncingFilters) {
-					return;
-				}
-				filters = readFilters(selection);
-				setState({ decisionFilters: filters });
-				buildContent();
-			}),
-		);
-	} finally {
-		syncingFilters = false;
-	}
-}
-
-function bindToggle(id: string, initial: boolean, apply: (value: boolean) => void): void {
-	const input = document.getElementById(id) as HTMLInputElement | null;
-	if (!input) {
-		return;
-	}
-	input.checked = initial;
-	// initCommon's load handler runs before this one, so the codicon checkbox over this input was
-	// already built from the unrestored value and would announce a toggle that is on as unchecked.
-	syncCheckbox(input);
-	input.addEventListener(
-		"change",
-		tryRun(() => {
-			apply(input.checked);
-			buildContent();
-		}),
-	);
-}

@@ -13,7 +13,7 @@ import { feLocalize } from "./i18n";
 
 // `andnot` is NOT(a AND b) and `ornot` is NOT(a OR b), so with more than one item they read as
 // "not all of" and "none of" respectively. A bare "not" would be ambiguous for the first.
-const foldLabels: Record<string, string> = {
+export const foldLabels: Record<string, string> = {
 	and: "all of",
 	or: "any of",
 	ornot: "none of",
@@ -23,7 +23,13 @@ const foldLabels: Record<string, string> = {
 
 // conditionToString in hoiformat/condition.ts renders a single flat line, which is unreadable for
 // anything but a trivial trigger. This renders the same tree as nested lists instead.
-export function conditionToDom(condition: ConditionComplexExpr): HTMLUListElement {
+//
+// `labels` is a parameter because the idea preview has always named a `count` folder differently
+// from the two tree previews, and sharing this function is not a reason to retire either wording.
+export function conditionToDom(
+	condition: ConditionComplexExpr,
+	labels: Record<string, string> = foldLabels,
+): HTMLUListElement {
 	const list = document.createElement("ul");
 
 	if (typeof condition === "boolean") {
@@ -39,13 +45,13 @@ export function conditionToDom(condition: ConditionComplexExpr): HTMLUListElemen
 	// A single-item `and` adds a level of nesting without adding meaning, so `trigger = { tag = FROM }`
 	// reads as one line rather than an "all of" wrapping one leaf.
 	if (condition.type === "and" && condition.items.length === 1 && condition.items[0] !== undefined) {
-		return conditionToDom(condition.items[0]);
+		return conditionToDom(condition.items[0], labels);
 	}
 
 	const item = document.createElement("li");
 	const head = document.createElement("span");
 	head.className = "ev-fold";
-	head.textContent = foldLabels[condition.type] ?? condition.type;
+	head.textContent = labels[condition.type] ?? condition.type;
 	if (condition.type === "count") {
 		head.textContent += " == " + condition.amount;
 	}
@@ -53,7 +59,7 @@ export function conditionToDom(condition: ConditionComplexExpr): HTMLUListElemen
 
 	const inner = document.createElement("ul");
 	for (const child of condition.items) {
-		const rendered = conditionToDom(child);
+		const rendered = conditionToDom(child, labels);
 		while (rendered.firstChild) {
 			inner.appendChild(rendered.firstChild);
 		}
@@ -120,14 +126,18 @@ export function conditionToLabel(condition: ConditionComplexExpr): string {
 	return label + " (" + parts.join(", ") + ")";
 }
 
-export function conditionPanel(condition: ConditionComplexExpr, label: string): HTMLDivElement {
+export function conditionPanel(
+	condition: ConditionComplexExpr,
+	label: string,
+	labels: Record<string, string> = foldLabels,
+): HTMLDivElement {
 	const box = document.createElement("div");
 	box.className = "ev-cond";
 	const head = document.createElement("div");
 	head.className = "ev-cond-head";
 	head.textContent = label;
 	box.appendChild(head);
-	box.appendChild(conditionToDom(condition));
+	box.appendChild(conditionToDom(condition, labels));
 	return box;
 }
 

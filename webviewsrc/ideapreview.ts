@@ -1,9 +1,14 @@
 import { tryRun, subscribeNavigators, initCommon, getState, setState } from "./util/common";
-import { syncCheckbox } from "./util/checkbox";
-import { DivDropdown } from "./util/dropdown";
+import { SearchBox } from "./util/searchbox";
+import { applyNav, badge } from "./util/card";
+import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
-import { vscode } from "./util/vscode";
+import { wireUpdateBody } from "./util/updatebody";
 import { ConditionComplexExpr } from "../src/hoiformat/condition";
+import {
+	conditionToDom as conditionTreeToDom,
+	conditionPanel as conditionTreePanel,
+} from "./util/conditiontree";
 import {
 	IdeaCard,
 	IdeaChain,
@@ -48,10 +53,6 @@ let showDescription: boolean = getState().ideaShowDescription ?? false;
 let showConditions: boolean = getState().ideaShowConditions ?? false;
 // Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
 let filters: IdeaFilter[] = readFilters(getState().ideaFilters);
-let filterDropdown: DivDropdown | undefined = undefined;
-// Set while a gated selection is being pushed into the widget, so its subscription can tell a value
-// this module computed from one the reader chose. Only the second is worth storing.
-let syncingFilters = false;
 
 //#region Filtering
 
@@ -82,11 +83,26 @@ const filterAvailability: Record<IdeaFilter, keyof IdeaToolbarFlags> = {
 	chains: "hasChains",
 };
 
+// Every toggle rebuilds the canvas, so the rebuild is bound once instead of at each call site.
+const bindToggle = toggleBinder(buildContent);
+
+// Owns the filter widget and the guard that tells a selection this module pushed into it from
+// one the reader chose.
+const filterControl = new FilterControl<IdeaFilter>({
+	selectId: "idea-filters",
+	containerId: "idea-filter-container",
+	all: ideaFilters,
+	emptyKey: "ideapreview.filterall",
+	emptyText: "(All ideas)",
+	onChange: (selection) => {
+		filters = selection;
+		setState({ ideaFilters: filters });
+		buildContent();
+	},
+});
+
 export function readFilters(stored: unknown): IdeaFilter[] {
-	if (!Array.isArray(stored)) {
-		return [];
-	}
-	return ideaFilters.filter((filter) => stored.includes(filter));
+	return readFilterList(ideaFilters, stored);
 }
 
 /**
@@ -165,77 +181,26 @@ export function matchesQuery(card: IdeaCard, query: string): boolean {
 
 //#region Condition rendering
 
-// `andnot` is NOT(a AND b) and `ornot` is NOT(a OR b), so with more than one item they read as
-// "not all of" and "none of" respectively. A bare "not" would be ambiguous for the first.
+// The tree itself is drawn by util/conditiontree.ts, which the event and decision previews share.
+// Only the fold wording is this preview's own: an idea's `count` folder has always read "at least"
+// here, and one of the two spellings would have to be retired to drop the table.
+//
+// `not` was in the table and never used: ConditionFolderType has no such type. It is not carried
+// over.
 const foldLabels: Record<string, string> = {
 	and: "all of",
 	or: "any of",
-	not: "not",
 	andnot: "not all of",
 	ornot: "none of",
 	count: "at least",
 };
 
 export function conditionToDom(condition: ConditionComplexExpr): HTMLUListElement {
-	const list = document.createElement("ul");
-
-	if (typeof condition === "boolean") {
-		list.appendChild(leafItem(String(condition), ""));
-		return list;
-	}
-
-	if (!("items" in condition)) {
-		list.appendChild(leafItem(condition.nodeContent, condition.scopeName));
-		return list;
-	}
-
-	// A single-item `and` adds a level of nesting without adding meaning, so `allowed = { tag = HOL }`
-	// reads as one line rather than an "all of" wrapping one leaf.
-	if (condition.type === "and" && condition.items.length === 1 && condition.items[0] !== undefined) {
-		return conditionToDom(condition.items[0]);
-	}
-
-	const item = document.createElement("li");
-	const head = document.createElement("span");
-	head.className = "ev-fold";
-	head.textContent = foldLabels[condition.type] ?? condition.type;
-	if (condition.type === "count") {
-		head.textContent += " == " + condition.amount;
-	}
-	item.appendChild(head);
-
-	const inner = document.createElement("ul");
-	for (const child of condition.items) {
-		for (const rendered of Array.from(conditionToDom(child).childNodes)) {
-			inner.appendChild(rendered);
-		}
-	}
-	item.appendChild(inner);
-	list.appendChild(item);
-	return list;
-}
-
-function leafItem(text: string, scopeName: string): HTMLLIElement {
-	const item = document.createElement("li");
-	if (scopeName) {
-		const scope = document.createElement("span");
-		scope.className = "ev-cond-scope";
-		scope.textContent = "[" + scopeName + "] ";
-		item.appendChild(scope);
-	}
-	item.appendChild(document.createTextNode(text));
-	return item;
+	return conditionTreeToDom(condition, foldLabels);
 }
 
 function conditionPanel(condition: ConditionComplexExpr, label: string): HTMLDivElement {
-	const box = document.createElement("div");
-	box.className = "ev-cond";
-	const head = document.createElement("div");
-	head.className = "ev-cond-head";
-	head.textContent = label;
-	box.appendChild(head);
-	box.appendChild(conditionToDom(condition));
-	return box;
+	return conditionTreePanel(condition, label, foldLabels);
 }
 
 //#endregion
@@ -251,23 +216,6 @@ let rendered: RenderedCard[] = [];
 
 function textFor(loc: { key: string; text: string }): string {
 	return showLocalisation ? loc.text : loc.key;
-}
-
-function applyNav(element: HTMLElement, nav: NavTarget | undefined): void {
-	if (!nav) {
-		return;
-	}
-	element.classList.add("navigator");
-	element.setAttribute("start", String(nav.start));
-	element.setAttribute("end", String(nav.end));
-	element.setAttribute("file", nav.file);
-}
-
-function badge(container: HTMLElement, className: string, text: string): void {
-	const element = document.createElement("span");
-	element.className = "ev-badge" + (className ? " " + className : "");
-	element.textContent = text;
-	container.appendChild(element);
 }
 
 export function modifierLineToDom(line: ModifierLine): HTMLDivElement {
@@ -572,7 +520,9 @@ function buildContent(): void {
 		empty.className = "idea-empty";
 		empty.textContent = feLocalize("ideapreview.noideas", "No ideas to show.");
 		container.appendChild(empty);
-		updateSearchCount();
+		// Nothing to highlight, but the counter still has to stop claiming the matches of the roster
+		// that was on screen a moment ago -- which is what refreshing with the emptied list does.
+		search.refresh(rendered);
 		return;
 	}
 
@@ -620,7 +570,7 @@ function buildContent(): void {
 
 	runTasks(tasks, () => {
 		subscribeNavigators();
-		applySearch(false);
+		search.refresh(rendered);
 	});
 }
 
@@ -707,110 +657,15 @@ function buildChain(
 
 //#region Search
 
-let searchQuery = "";
-let searchHits: RenderedCard[] = [];
-// The id of the hit Enter is parked on, not its index into searchHits: a rebuild can drop cards, and
-// remembering the id keeps the cursor on the same card across a toggle change.
-let searchCurrentId: string | undefined = undefined;
-
-// Class flipping only -- never a rebuild, so typing stays cheap on a large file.
-function applySearch(navigate: boolean): void {
-	searchHits =
-		searchQuery === "" ? [] : rendered.filter((r) => matchesQuery(r.card, searchQuery));
-	const hits = new Set(searchHits.map((h) => h.card.id));
-	if (searchCurrentId !== undefined && !hits.has(searchCurrentId)) {
-		searchCurrentId = undefined;
-	}
-	for (const item of rendered) {
-		item.element.classList.toggle("ev-hit", hits.has(item.card.id));
-		item.element.classList.toggle("ev-hit-current", item.card.id === searchCurrentId);
-	}
-	if (navigate && searchCurrentId !== undefined) {
-		scrollToHit(searchHits.find((h) => h.card.id === searchCurrentId));
-	}
-	updateSearchCount();
-}
-
-function cycleSearch(backwards: boolean): void {
-	const total = searchHits.length;
-	if (total === 0) {
-		return;
-	}
-	const current = searchHits.findIndex((h) => h.card.id === searchCurrentId);
-	const next =
-		current < 0
-			? // The first Enter lands on the first hit, the first Shift+Enter on the last.
-				backwards
-				? total - 1
-				: 0
-			: (current + (backwards ? total - 1 : 1)) % total;
-	searchCurrentId = searchHits[next]?.card.id;
-	applySearch(true);
-}
-
-function scrollToHit(hit: RenderedCard | undefined): void {
-	// Optional call, not a guard: jsdom leaves scrollIntoView undefined and the webview tests drive
-	// this path, where a throw would be swallowed by tryRun and strand the highlight half applied.
-	hit?.element.scrollIntoView?.({ block: "center", inline: "center" });
-}
-
-function updateSearchCount(): void {
-	const label = document.getElementById("idea-search-count");
-	if (!label) {
-		return;
-	}
-	if (searchQuery === "") {
-		label.textContent = "";
-		return;
-	}
-	if (searchHits.length === 0) {
-		label.textContent = feLocalize("ideapreview.nomatches", "no matches");
-		return;
-	}
-	const current = searchHits.findIndex((h) => h.card.id === searchCurrentId);
-	label.textContent = feLocalize(
-		"ideapreview.searchmatches",
-		"{0}/{1}",
-		current < 0 ? "-" : current + 1,
-		searchHits.length,
-	);
-}
-
-function wireSearch(): void {
-	const box = document.getElementById("idea-searchbox") as HTMLInputElement | null;
-	if (!box) {
-		return;
-	}
-	searchQuery = (getState().ideaSearchQuery ?? "").toLowerCase();
-	box.value = searchQuery;
-
-	const onEdit = () => {
-		const next = box.value.trim().toLowerCase();
-		if (next === searchQuery) {
-			return;
-		}
-		searchQuery = next;
-		// Typing highlights; Enter is what jumps. Starting over from the top on every edit keeps the
-		// cursor from landing somewhere arbitrary in the new set of hits.
-		searchCurrentId = undefined;
-		setState({ ideaSearchQuery: next });
-		applySearch(false);
-	};
-
-	box.addEventListener(
-		"keypress",
-		tryRun((e: KeyboardEvent) => {
-			if (e.key === "Enter") {
-				e.preventDefault();
-				cycleSearch(e.shiftKey);
-			} else {
-				onEdit();
-			}
-		}),
-	);
-	box.addEventListener("input", tryRun(onEdit));
-	box.addEventListener("change", tryRun(onEdit));
-}
+const search = new SearchBox<RenderedCard>({
+	boxId: "idea-searchbox",
+	countId: "idea-search-count",
+	stateKey: "ideaSearchQuery",
+	noMatchesKey: "ideapreview.nomatches",
+	countKey: "ideapreview.searchmatches",
+	matches: (item, query) => matchesQuery(item.card, query),
+	target: (item) => ({ id: item.card.id, element: item.element, highlight: item.element }),
+});
 
 //#endregion
 
@@ -842,151 +697,23 @@ function applyToolbarFlags(): void {
 	showModifiers = gateToggle("show-modifiers", flags.hasModifiers, state.ideaShowModifiers, true);
 	showDescription = gateToggle("show-description", flags.hasDescriptions, state.ideaShowDescription, false);
 	showConditions = gateToggle("show-conditions", flags.hasConditions, state.ideaShowConditions, false);
-	filters = gateFilters(flags, readFilters(state.ideaFilters));
-}
-
-// Returns the selection that should be in force, and puts the list on screen in step with it: an
-// entry this file cannot match is hidden, which is enough for DivDropdown to stop offering it, and
-// the whole control goes when every entry is gone.
-function gateFilters(flags: IdeaToolbarFlags, stored: IdeaFilter[]): IdeaFilter[] {
-	const available = ideaFilters.filter((filter) => flags[filterAvailability[filter]]);
-	const select = document.getElementById("idea-filters");
-	const container = document.getElementById("idea-filter-container");
-
-	if (container) {
-		container.style.display = available.length === 0 ? "none" : "";
-	}
-	select?.querySelectorAll(".option").forEach((option) => {
-		const value = option.getAttribute("value") as IdeaFilter | null;
-		if (value !== null && available.includes(value)) {
-			option.removeAttribute("hidden");
-		} else {
-			option.setAttribute("hidden", "");
-		}
-	});
-
-	const selection = stored.filter((filter) => available.includes(filter));
-	if (filterDropdown) {
-		// Pushing this back into the widget is what puts the closed combobox in step with a gating
-		// that just dropped an entry. The guard keeps that push out of the subscription below: it is
-		// this code's own value, not a click, and storing it would lose the reader's real preference.
-		syncingFilters = true;
-		try {
-			filterDropdown.selectedValues$.next(selection);
-		} finally {
-			syncingFilters = false;
-		}
-	}
-
-	return selection;
-}
-
-function gateToggle(
-	id: string,
-	available: boolean,
-	stored: boolean | undefined,
-	neutral: boolean,
-): boolean {
-	const input = document.getElementById(id) as HTMLInputElement | null;
-	const widget = input?.nextElementSibling as HTMLElement | null;
-	if (widget) {
-		widget.style.display = available ? "" : "none";
-	}
-	// `neutral` doubles as the default here.
-	const value = available ? (stored ?? neutral) : neutral;
-	if (input && input.checked !== value) {
-		input.checked = value;
-		syncCheckbox(input);
-	}
-	return value;
-}
-
-// The restored selection is pushed into the widget before the subscription is attached, so the
-// BehaviorSubject's immediate first emission -- which carries whatever the widget was built with,
-// not a choice anyone made -- cannot write an empty selection over the stored one.
-function wireFilters(): void {
-	const element = document.getElementById("idea-filters") as HTMLDivElement | null;
-	if (!element) {
-		return;
-	}
-
-	filterDropdown = new DivDropdown(element, true, {
-		// Selecting nothing is not "no selection" here: it is the whole file, unfiltered.
-		empty: feLocalize("ideapreview.filterall", "(All ideas)"),
-	});
-
-	syncingFilters = true;
-	try {
-		filterDropdown.selectedValues$.next(filters);
-		filterDropdown.selectedValues$.subscribe(
-			tryRun((selection: readonly string[]) => {
-				if (syncingFilters) {
-					return;
-				}
-				filters = readFilters(selection);
-				setState({ ideaFilters: filters });
-				buildContent();
-			}),
-		);
-	} finally {
-		syncingFilters = false;
-	}
-}
-
-function bindToggle(id: string, initial: boolean, apply: (value: boolean) => void): void {
-	const input = document.getElementById(id) as HTMLInputElement | null;
-	if (!input) {
-		return;
-	}
-	input.checked = initial;
-	// initCommon's load handler runs before this one, so the codicon checkbox over this input was
-	// already built from the unrestored value and would announce a toggle that is on as unchecked.
-	syncCheckbox(input);
-	input.addEventListener(
-		"change",
-		tryRun(() => {
-			apply(input.checked);
-			buildContent();
-		}),
+	filters = filterControl.gate(
+		(filter) => flags[filterAvailability[filter]],
+		readFilters(state.ideaFilters),
 	);
 }
 
 //#endregion
 
-// In-place update pushed by LoaderPreview when the previewed file changed: re-render from the fresh
-// payload without a full reload, so scroll survives. Falls back to a full reload if the DOM the
-// re-render needs is gone (e.g. the webview shows the error page, which has no listener).
-window.addEventListener(
-	"message",
-	tryRun(function (event: MessageEvent) {
-		const msg = event.data;
-		if (!msg || msg.type !== "updateBody") {
-			return;
-		}
-
-		const contentElement = document.getElementById("ideapreviewcontent") as HTMLDivElement | null;
-		if (!contentElement) {
-			vscode.postMessage({ command: "reload" });
-			return;
-		}
-
-		if (typeof msg.styleCss === "string") {
-			const serverStyles = document.getElementById("idea-server-styles");
-			if (serverStyles) {
-				serverStyles.textContent = msg.styleCss;
-			}
-		}
-
-		const data = msg.data ?? {};
-		if (data.ideaPreview) {
-			const scrollX = window.scrollX;
-			const scrollY = window.scrollY;
-			payload = data.ideaPreview as IdeaPreviewPayload;
-			buildContent();
-			window.scrollTo(scrollX, scrollY);
-		}
-	}),
-);
+wireUpdateBody<IdeaPreviewPayload>({
+	contentId: "ideapreviewcontent",
+	styleId: "idea-server-styles",
+	dataKey: "ideaPreview",
+	apply: (next) => {
+		payload = next;
+	},
+	rebuild: buildContent,
+});
 
 window.addEventListener(
 	"load",
@@ -1011,11 +738,11 @@ window.addEventListener(
 			showConditions = value;
 			setState({ ideaShowConditions: value });
 		});
-		wireFilters();
+		filterControl.wire(filters);
 
 		// Before the first buildContent, so the restored query is applied by the first render rather
 		// than only by the next one.
-		wireSearch();
+		search.wire();
 
 		buildContent();
 	}),
