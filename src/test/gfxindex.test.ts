@@ -158,6 +158,38 @@ describe("util/gfxindex lazy build", function () {
 		assert.strictEqual(listFilesCallCount, 2);
 	});
 
+	// The acceptance test for the Cancel button: stopping a build must leave nothing usable behind,
+	// so the next lookup does the whole thing again instead of reading a half-filled index.
+	it("rebuilds from scratch after a cancelled build rather than serving a partial index", async function () {
+		stubVscode({
+			getConfiguration: () => ({ gfxIndex: true }),
+			getWorkspaceFolder: () => WORKSPACE_FOLDER,
+			withProgress: (_options: unknown, task: any) =>
+				task({ report: () => undefined }, { isCancellationRequested: true }),
+		});
+		featureflags.refreshFeatureFlags();
+
+		// A lookup never throws at its caller, so a cancelled build simply finds nothing.
+		assert.strictEqual(await getGfxContainerFile("GFX_my_sprite"), undefined);
+		await waitForAsyncTasks();
+		assert.strictEqual(listFilesCallCount, 2);
+
+		// Back to a progress notification nobody cancels: the next lookup must list again.
+		stubVscode({
+			getConfiguration: () => ({ gfxIndex: true }),
+			getWorkspaceFolder: () => WORKSPACE_FOLDER,
+			withProgress: (_options: unknown, task: any) =>
+				task({ report: () => undefined }, { isCancellationRequested: false }),
+		});
+		featureflags.refreshFeatureFlags();
+
+		assert.strictEqual(
+			await getGfxContainerFile("GFX_my_sprite"),
+			"interface/sprite.gfx",
+		);
+		assert.strictEqual(listFilesCallCount, 4);
+	});
+
 	describe("incremental events vs. an in-flight build", function () {
 		// The global build passes { mod: false, ... }, the workspace build omits `mod`; route
 		// "sprite.gfx" into the workspace build only, so getGfxContainerFile's fallback to the

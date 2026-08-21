@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { debounceByInput, mapLimit } from "./common";
+import { debounceByInput } from "./common";
 import { localisationIndex } from "./featureflags";
 import { readFileFromModOrHOI4 } from "./fileloader";
 import {
@@ -12,7 +12,12 @@ import {
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { attachTaskWithErrorLogging } from "./promiseUtils";
-import { createIndexBuilder } from "./indexBuild";
+import {
+	createIndexBuilder,
+	indexParseQueue,
+	IndexProgress,
+	withIndexProgress,
+} from "./indexBuild";
 import { Logger } from "./logger";
 import { ConfigurationKey } from "../constants";
 import {
@@ -93,11 +98,11 @@ const builder = createIndexBuilder({
 		"localisationIndex.building",
 		"Building Localisation index...",
 	),
-	build: () => {
+	build: (progress) => {
 		estimatedSize = [0];
 		return Promise.all([
-			buildGlobalLocalisationIndex(estimatedSize),
-			buildWorkspaceLocalisationIndex(estimatedSize),
+			buildGlobalLocalisationIndex(estimatedSize, progress),
+			buildWorkspaceLocalisationIndex(estimatedSize, progress),
 		]);
 	},
 	onSuccess: () => {
@@ -174,49 +179,54 @@ const isLocalisationFile = (relativePath: string) =>
 
 async function buildGlobalLocalisationIndex(
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	const options = { mod: false, hoi4: true, recursively: true };
 	await buildLocalisationIndexWithCache(
 		"localisationIndex.global",
-		() =>
+		(token) =>
 			listIndexFiles({
 				roots: [localisationRoot],
 				filter: isLocalisationFile,
-				options,
+				options: { ...options, token },
 			}),
 		globalLocalisationIndex,
 		null,
 		options,
 		estimatedSize,
+		progress,
 	);
 }
 
 async function buildWorkspaceLocalisationIndex(
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	const options = { mod: true, hoi4: false, recursively: true };
 	await buildLocalisationIndexWithCache(
 		"localisationIndex.workspace",
-		() =>
+		(token) =>
 			listIndexFiles({
 				roots: [localisationRoot],
 				filter: isLocalisationFile,
-				options,
+				options: { ...options, token },
 			}),
 		workspaceLocalisationIndex,
 		workspaceLocalisationFileMap,
 		options,
 		estimatedSize,
+		progress,
 	);
 }
 
 async function buildLocalisationIndexWithCache(
 	cacheName: string,
-	listFiles: () => Promise<IndexListing>,
+	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
 	targetIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	const timer = new IndexTimer(cacheName);
 	try {
@@ -228,6 +238,7 @@ async function buildLocalisationIndexWithCache(
 			fileMap,
 			options,
 			estimatedSize,
+			progress,
 		);
 	} finally {
 		// A build that threw must not leave a phase behind in the live-build report.
@@ -238,11 +249,12 @@ async function buildLocalisationIndexWithCache(
 async function buildLocalisationIndexWithTimer(
 	timer: IndexTimer,
 	cacheName: string,
-	listFiles: () => Promise<IndexListing>,
+	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
 	targetIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
 	// install it is now the directory walk and the mtimes together, which is where a slow cold build
@@ -252,7 +264,7 @@ async function buildLocalisationIndexWithTimer(
 		filePaths: locFiles,
 		uris,
 		mtimes: currentMtimes,
-	} = await listFiles();
+	} = await listFiles(progress.token);
 
 	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, LOC_CACHE_VERSION);
@@ -307,10 +319,22 @@ async function buildLocalisationIndexWithTimer(
 	timer.begin("parse");
 	let parsed = 0;
 	const toParse = toIndexFiles(filesToParse, uris);
-	await mapLimit(toParse, 8, async (f) => {
-		await fillLocalisationItems(f, targetIndex, fileMap, options, estimatedSize);
-		timer.progress(++parsed, toParse.length);
-	});
+	progress.report(0, toParse.length);
+	await indexParseQueue.map(
+		toParse,
+		async (f) => {
+			await fillLocalisationItems(
+				f,
+				targetIndex,
+				fileMap,
+				options,
+				estimatedSize,
+			);
+			timer.progress(++parsed, toParse.length);
+			progress.report(parsed, toParse.length);
+		},
+		{ token: progress.token },
+	);
 	timer.end(locFiles.length, filesToParse.length);
 
 	// Serialize Sets to arrays for JSON cache
@@ -462,24 +486,16 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 		delete workspaceLocalisationFileMap[langKey];
 	}
 	const estimatedSize: [number] = [0];
-	const task = buildWorkspaceLocalisationIndex(estimatedSize);
-	vscode.window.setStatusBarMessage(
-		"$(loading~spin) " +
-			localize(
-				"localisationIndex.workspace.building",
-				"Building workspace Localisation index...",
-			),
-		task,
+	const task = withIndexProgress(
+		localize(
+			"localisationIndex.workspace.building",
+			"Building workspace Localisation index...",
+		),
+		(progress) => buildWorkspaceLocalisationIndex(estimatedSize, progress),
 	);
 	attachTaskWithErrorLogging(
 		task,
 		() => {
-			vscode.window.showInformationMessage(
-				localize(
-					"localisationIndex.workspace.builddone",
-					"Building workspace Localisation index done.",
-				),
-			);
 			sendEvent("localisationIndex.workspace", {
 				size: estimatedSize[0].toString(),
 			});

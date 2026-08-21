@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { debounceByInput, mapLimit } from "./common";
+import { debounceByInput } from "./common";
 import { readFileFromModOrHOI4 } from "./fileloader";
 import {
 	IndexFile,
@@ -11,7 +11,12 @@ import {
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { attachTaskWithErrorLogging } from "./promiseUtils";
-import { createIndexBuilder } from "./indexBuild";
+import {
+	createIndexBuilder,
+	indexParseQueue,
+	IndexProgress,
+	withIndexProgress,
+} from "./indexBuild";
 import { Logger } from "./logger";
 import { Node, parseHoi4File } from "../hoiformat/hoiparser";
 import { ideaSwapIndex } from "./featureflags";
@@ -96,11 +101,11 @@ let estimatedSize: [number] = [0];
 const builder = createIndexBuilder({
 	name: "ideaSwapIndex",
 	message: localize("ideaSwapIndex.building", "Building idea swap index..."),
-	build: () => {
+	build: (progress) => {
 		estimatedSize = [0];
 		return Promise.all([
-			buildGlobalSwapIndex(estimatedSize),
-			buildWorkspaceSwapIndex(estimatedSize),
+			buildGlobalSwapIndex(estimatedSize, progress),
+			buildWorkspaceSwapIndex(estimatedSize, progress),
 		]);
 	},
 	onSuccess: () => {
@@ -116,48 +121,57 @@ function ensureIndexBuilt(): Promise<[void, void]> {
 
 const SWAP_CACHE_VERSION = 1;
 
-function listSwapFiles(options: {
-	mod?: boolean;
-	hoi4?: boolean;
-}): Promise<IndexListing> {
+function listSwapFiles(
+	options: { mod?: boolean; hoi4?: boolean },
+	token: vscode.CancellationToken,
+): Promise<IndexListing> {
 	return listIndexFiles({
 		roots: swapRoots,
 		filter: (relativePath) => relativePath.toLowerCase().endsWith(".txt"),
-		options: { ...options, recursively: true },
+		options: { ...options, recursively: true, token },
 		// A mod that has no events/ folder at all is ordinary, and it should cost that root rather
 		// than the whole index. The other three indexes have a single root and let it propagate.
 		tolerateRootErrors: true,
 	});
 }
 
-async function buildGlobalSwapIndex(estimatedSize: [number]): Promise<void> {
+async function buildGlobalSwapIndex(
+	estimatedSize: [number],
+	progress: IndexProgress,
+): Promise<void> {
 	const options = { mod: false, hoi4: true };
 	await buildSwapIndexWithCache(
 		"ideaSwapIndex.global",
-		() => listSwapFiles(options),
+		(token) => listSwapFiles(options, token),
 		globalSwapIndex,
 		options,
 		estimatedSize,
+		progress,
 	);
 }
 
-async function buildWorkspaceSwapIndex(estimatedSize: [number]): Promise<void> {
+async function buildWorkspaceSwapIndex(
+	estimatedSize: [number],
+	progress: IndexProgress,
+): Promise<void> {
 	const options = { mod: true, hoi4: false };
 	await buildSwapIndexWithCache(
 		"ideaSwapIndex.workspace",
-		() => listSwapFiles(options),
+		(token) => listSwapFiles(options, token),
 		workspaceSwapIndex,
 		options,
 		estimatedSize,
+		progress,
 	);
 }
 
 async function buildSwapIndexWithCache(
 	cacheName: string,
-	listFiles: () => Promise<IndexListing>,
+	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
 	swapIndex: SwapIndex,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	const timer = new IndexTimer(cacheName);
 	try {
@@ -168,6 +182,7 @@ async function buildSwapIndexWithCache(
 			swapIndex,
 			options,
 			estimatedSize,
+			progress,
 		);
 	} finally {
 		// A build that threw must not leave a phase behind in the live-build report.
@@ -178,10 +193,11 @@ async function buildSwapIndexWithCache(
 async function buildSwapIndexWithTimer(
 	timer: IndexTimer,
 	cacheName: string,
-	listFiles: () => Promise<IndexListing>,
+	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
 	swapIndex: SwapIndex,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
 	// install it is now the directory walk and the mtimes together, which is where a slow cold build
@@ -191,7 +207,7 @@ async function buildSwapIndexWithTimer(
 		filePaths: swapFiles,
 		uris,
 		mtimes: currentMtimes,
-	} = await listFiles();
+	} = await listFiles(progress.token);
 
 	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, SWAP_CACHE_VERSION);
@@ -229,10 +245,16 @@ async function buildSwapIndexWithTimer(
 	timer.begin("parse");
 	let parsed = 0;
 	const toParse = toIndexFiles(filesToParse, uris);
-	await mapLimit(toParse, 8, async (f) => {
-		await fillSwaps(f, swapIndex, options, estimatedSize);
-		timer.progress(++parsed, toParse.length);
-	});
+	progress.report(0, toParse.length);
+	await indexParseQueue.map(
+		toParse,
+		async (f) => {
+			await fillSwaps(f, swapIndex, options, estimatedSize);
+			timer.progress(++parsed, toParse.length);
+			progress.report(parsed, toParse.length);
+		},
+		{ token: progress.token },
+	);
 	timer.end(swapFiles.length, filesToParse.length);
 
 	// fire-and-forget: write data before manifest for atomicity
@@ -463,14 +485,12 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 	workspaceSwapIndex = {};
 
 	const folderChangeSize: [number] = [0];
-	const task = buildWorkspaceSwapIndex(folderChangeSize);
-	vscode.window.setStatusBarMessage(
-		"$(loading~spin) " +
-			localize(
-				"ideaSwapIndex.workspace.building",
-				"Building workspace idea swap index...",
-			),
-		task,
+	const task = withIndexProgress(
+		localize(
+			"ideaSwapIndex.workspace.building",
+			"Building workspace idea swap index...",
+		),
+		(progress) => buildWorkspaceSwapIndex(folderChangeSize, progress),
 	);
 	attachTaskWithErrorLogging(
 		task,

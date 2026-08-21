@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { hsvToRgb, slice, clipNumber, withTimeout, mapLimit, forceError, arrayToMap, TimeoutError, UserError, randomString, debounceByInput, memoizeWithTtl, jsonForScript } from '../util/common';
+import { hsvToRgb, slice, clipNumber, withTimeout, mapLimit, forceError, arrayToMap, TimeoutError, UserError, randomString, debounceByInput, memoizeWithTtl, jsonForScript, createWorkQueue, CancelledError } from '../util/common';
 
 describe('util/common', function () {
     describe('arrayToMap', function () {
@@ -109,6 +109,99 @@ describe('util/common', function () {
                 running--;
             });
             assert.strictEqual(maxRunning, 2);
+        });
+    });
+
+    describe('createWorkQueue', function () {
+        it('returns results in input order', async function () {
+            const queue = createWorkQueue(2);
+            const results = await queue.map([3, 1, 2], async (n, i) => n + i);
+            assert.deepStrictEqual(results, [3, 2, 4]);
+        });
+
+        it('holds one budget across concurrent calls, where mapLimit gives each its own', async function () {
+            const queue = createWorkQueue(2);
+            let running = 0;
+            let maxRunning = 0;
+            const work = async () => {
+                running++;
+                maxRunning = Math.max(maxRunning, running);
+                await new Promise(r => setTimeout(r, 5));
+                running--;
+            };
+
+            // Two callers, four items each. Two separate mapLimit(…, 2) calls would reach 4.
+            await Promise.all([
+                queue.map([1, 2, 3, 4], work),
+                queue.map([5, 6, 7, 8], work),
+            ]);
+
+            assert.strictEqual(maxRunning, 2);
+        });
+
+        it('yields the event loop between items', async function () {
+            const queue = createWorkQueue(1);
+            const order: string[] = [];
+
+            const run = queue.map([1, 2], async (n) => {
+                order.push(`item${n}`);
+            });
+            // Queued after the first item is already under way, so it can only run before the
+            // second one if the worker really gives the loop a turn in between.
+            setImmediate(() => order.push('interleaved'));
+            await run;
+
+            assert.deepStrictEqual(order, ['item1', 'interleaved', 'item2']);
+        });
+
+        it('rejects with the first failure and stops running items', async function () {
+            const queue = createWorkQueue(1);
+            const seen: number[] = [];
+
+            await assert.rejects(
+                queue.map([1, 2, 3], async (n) => {
+                    seen.push(n);
+                    if (n === 1) {
+                        throw new Error('parse failed');
+                    }
+                }),
+                /parse failed/,
+            );
+
+            assert.deepStrictEqual(seen, [1]);
+        });
+
+        it('rejects a cancelled run and leaves its remaining items alone', async function () {
+            const queue = createWorkQueue(1);
+            const token = { isCancellationRequested: false };
+            const seen: number[] = [];
+
+            await assert.rejects(
+                queue.map([1, 2, 3], async (n) => {
+                    seen.push(n);
+                    token.isCancellationRequested = true;
+                }, { token }),
+                (cause: unknown) => cause instanceof CancelledError,
+            );
+
+            assert.deepStrictEqual(seen, [1]);
+        });
+
+        it('keeps one run failure out of another run results', async function () {
+            const queue = createWorkQueue(2);
+            const [failed, succeeded] = await Promise.allSettled([
+                queue.map([1], async () => { throw new Error('mine'); }),
+                queue.map([1, 2], async (n) => n * 10),
+            ]);
+
+            assert.strictEqual(failed!.status, 'rejected');
+            assert.strictEqual(succeeded!.status, 'fulfilled');
+            assert.deepStrictEqual((succeeded as PromiseFulfilledResult<number[]>).value, [10, 20]);
+        });
+
+        it('resolves an empty run without touching the queue', async function () {
+            const queue = createWorkQueue(2);
+            assert.deepStrictEqual(await queue.map([], async () => 1), []);
         });
     });
 
