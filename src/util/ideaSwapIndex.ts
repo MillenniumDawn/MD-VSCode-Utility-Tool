@@ -149,6 +149,7 @@ async function buildSwapIndexHalf(
 						swapIndex[file] = swaps;
 					}
 				}
+				markSwapIndexChanged();
 			},
 			parseFile: (file) => fillSwaps(file, swapIndex, options, estimatedSize),
 			serialize: () => swapIndex,
@@ -181,6 +182,7 @@ async function fillSwaps(
 	// of files never mention a swap.
 	if (!fileContent.includes("swap_ideas")) {
 		delete swapIndex[filePath];
+		markSwapIndexChanged();
 		return;
 	}
 
@@ -193,6 +195,7 @@ async function fillSwaps(
 		} else {
 			delete swapIndex[filePath];
 		}
+		markSwapIndexChanged();
 	} catch (e) {
 		reportIndexParseFailure(filePath, options, e);
 	}
@@ -340,7 +343,27 @@ export async function getIdeaSwaps(ideaIds: string[]): Promise<IdeaSwap[]> {
 
 // The mod's copy of a file shadows the game's, so a workspace entry replaces the global entry for
 // the same relative path rather than adding to it.
+/*
+ * The idea -> swaps lookup, rebuilt only when the index behind it has actually changed.
+ *
+ * This used to be rebuilt from scratch on every getIdeaSwaps call -- spreading both whole indexes
+ * into a new object and walking every swap in the workspace -- and an idea preview calls it once
+ * per idea it renders. The revision counter is bumped by everything that writes to either index,
+ * so a stale lookup cannot outlive the data it was built from.
+ */
+let swapRevision = 0;
+let cachedLookup: Map<string, IdeaSwap[]> | undefined;
+let cachedLookupRevision = -1;
+
+function markSwapIndexChanged(): void {
+	swapRevision++;
+}
+
 function buildLookup(): Map<string, IdeaSwap[]> {
+	if (cachedLookup !== undefined && cachedLookupRevision === swapRevision) {
+		return cachedLookup;
+	}
+
 	const merged: SwapIndex = { ...globalSwapIndex, ...workspaceSwapIndex };
 	const byIdea = new Map<string, IdeaSwap[]>();
 
@@ -352,6 +375,8 @@ function buildLookup(): Map<string, IdeaSwap[]> {
 		}
 	}
 
+	cachedLookup = byIdea;
+	cachedLookupRevision = swapRevision;
 	return byIdea;
 }
 
@@ -389,11 +414,13 @@ const watchers = createIndexWatchers({
 		const relative = toWorkspaceRelativePath(file, swapRootPrefixes);
 		if (relative) {
 			delete workspaceSwapIndex[relative];
+			markSwapIndexChanged();
 		}
 	},
 	rebuildWorkspace: {
 		reset: () => {
 			workspaceSwapIndex = {};
+			markSwapIndexChanged();
 		},
 		build: buildWorkspaceSwapIndex,
 		message: localize(
@@ -416,6 +443,7 @@ export function __resetIdeaSwapIndexForTests(): void {
 		delete globalSwapIndex[file];
 	}
 	workspaceSwapIndex = {};
+	markSwapIndexChanged();
 }
 
 // Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
@@ -426,5 +454,6 @@ export function __seedWorkspaceSwapsForTests(index: {
 	[file: string]: SwapRecord[];
 }): void {
 	workspaceSwapIndex = { ...index };
+	markSwapIndexChanged();
 	builder.seed([undefined, undefined]);
 }
