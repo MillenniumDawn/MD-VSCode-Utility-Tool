@@ -5,6 +5,10 @@ import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
 import { ConditionComplexExpr } from "../src/hoiformat/condition";
 import {
+	conditionToDom as conditionTreeToDom,
+	conditionPanel as conditionTreePanel,
+} from "./util/conditiontree";
+import {
 	IdeaCard,
 	IdeaChain,
 	IdeaGroup,
@@ -165,77 +169,26 @@ export function matchesQuery(card: IdeaCard, query: string): boolean {
 
 //#region Condition rendering
 
-// `andnot` is NOT(a AND b) and `ornot` is NOT(a OR b), so with more than one item they read as
-// "not all of" and "none of" respectively. A bare "not" would be ambiguous for the first.
+// The tree itself is drawn by util/conditiontree.ts, which the event and decision previews share.
+// Only the fold wording is this preview's own: an idea's `count` folder has always read "at least"
+// here, and one of the two spellings would have to be retired to drop the table.
+//
+// `not` was in the table and never used: ConditionFolderType has no such type. It is not carried
+// over.
 const foldLabels: Record<string, string> = {
 	and: "all of",
 	or: "any of",
-	not: "not",
 	andnot: "not all of",
 	ornot: "none of",
 	count: "at least",
 };
 
 export function conditionToDom(condition: ConditionComplexExpr): HTMLUListElement {
-	const list = document.createElement("ul");
-
-	if (typeof condition === "boolean") {
-		list.appendChild(leafItem(String(condition), ""));
-		return list;
-	}
-
-	if (!("items" in condition)) {
-		list.appendChild(leafItem(condition.nodeContent, condition.scopeName));
-		return list;
-	}
-
-	// A single-item `and` adds a level of nesting without adding meaning, so `allowed = { tag = HOL }`
-	// reads as one line rather than an "all of" wrapping one leaf.
-	if (condition.type === "and" && condition.items.length === 1 && condition.items[0] !== undefined) {
-		return conditionToDom(condition.items[0]);
-	}
-
-	const item = document.createElement("li");
-	const head = document.createElement("span");
-	head.className = "ev-fold";
-	head.textContent = foldLabels[condition.type] ?? condition.type;
-	if (condition.type === "count") {
-		head.textContent += " == " + condition.amount;
-	}
-	item.appendChild(head);
-
-	const inner = document.createElement("ul");
-	for (const child of condition.items) {
-		for (const rendered of Array.from(conditionToDom(child).childNodes)) {
-			inner.appendChild(rendered);
-		}
-	}
-	item.appendChild(inner);
-	list.appendChild(item);
-	return list;
-}
-
-function leafItem(text: string, scopeName: string): HTMLLIElement {
-	const item = document.createElement("li");
-	if (scopeName) {
-		const scope = document.createElement("span");
-		scope.className = "ev-cond-scope";
-		scope.textContent = "[" + scopeName + "] ";
-		item.appendChild(scope);
-	}
-	item.appendChild(document.createTextNode(text));
-	return item;
+	return conditionTreeToDom(condition, foldLabels);
 }
 
 function conditionPanel(condition: ConditionComplexExpr, label: string): HTMLDivElement {
-	const box = document.createElement("div");
-	box.className = "ev-cond";
-	const head = document.createElement("div");
-	head.className = "ev-cond-head";
-	head.textContent = label;
-	box.appendChild(head);
-	box.appendChild(conditionToDom(condition));
-	return box;
+	return conditionTreePanel(condition, label, foldLabels);
 }
 
 //#endregion
