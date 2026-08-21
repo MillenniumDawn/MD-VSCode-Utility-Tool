@@ -1,4 +1,5 @@
 import { Node, Token } from "../../hoiformat/hoiparser";
+import { readNodeAsString } from "../../hoiformat/schema";
 import { error } from "../../util/debug";
 import { parseHoi4FileCached } from "../../util/fileloader";
 import { FileLoader, FolderLoader, LoadResult, LoadResultOD } from "../../util/loader/loader";
@@ -42,9 +43,9 @@ export function getScriptedGuisFromFile(node: Node, filePath: string): ScriptedG
 			for (const child of gui.value) {
 				const childName = child.name?.toLowerCase();
 				if (childName === "window_name") {
-					windowName = readToken(child);
+					windowName = readNodeAsString(child);
 				} else if (childName === "context_type") {
-					contextType = readToken(child);
+					contextType = readNodeAsString(child);
 				}
 			}
 
@@ -59,19 +60,6 @@ export function getScriptedGuisFromFile(node: Node, filePath: string): ScriptedG
 	}
 
 	return result;
-}
-
-// `window_name = "ISR_knesset_decisions_GUI"` is usually quoted and sometimes not, so both the
-// string and the bare-token spelling have to be read.
-function readToken(node: Node): string | undefined {
-	const value = node.value;
-	if (typeof value === "string") {
-		return value;
-	}
-	if (value && typeof value === "object" && !Array.isArray(value) && "name" in value) {
-		return (value as { name: string }).name;
-	}
-	return undefined;
 }
 
 class ScriptedGuiFileLoader extends FileLoader<ScriptedGuiDef[]> {
