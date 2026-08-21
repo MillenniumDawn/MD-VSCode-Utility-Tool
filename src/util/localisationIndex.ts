@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { debounceByInput } from "./common";
-import { localisationIndex } from "./featureflags";
+import { localisationIndex, previewLocalisation } from "./featureflags";
 import { readFileFromModOrHOI4 } from "./fileloader";
 import {
 	IndexFile,
@@ -19,7 +19,12 @@ import {
 	withIndexProgress,
 } from "./indexBuild";
 import { Logger } from "./logger";
-import { ConfigurationKey } from "../constants";
+import {
+	defaultYmlSuffix,
+	isoBySettingName,
+	ymlSuffixByIso,
+	ymlSuffixes,
+} from "./locales";
 import {
 	loadCacheManifest,
 	loadCacheData,
@@ -41,31 +46,6 @@ const workspaceLocalisationFileMap: Record<
 	Record<string, Set<string>>
 > = {};
 
-// Mapping of language ISO codes to yml file language suffixes
-const localeMapping: Record<string, string> = {
-	en: "l_english",
-	"pt-br": "l_braz_por",
-	de: "l_german",
-	fr: "l_french",
-	es: "l_spanish",
-	pl: "l_polish",
-	ru: "l_russian",
-	ja: "l_japanese",
-	"zh-cn": "l_simp_chinese",
-};
-
-// Mapping of language profiles to language ISO codes
-const localeISOMapping: Record<string, string> = {
-	["Brazilian Portuguese"]: "pt-br",
-	English: "en",
-	French: "fr",
-	German: "de",
-	Japanese: "ja",
-	Polish: "pl",
-	Russian: "ru",
-	["Simplified Chinese"]: "zh-cn",
-	Spanish: "es",
-};
 
 export function registerLocalisationIndex(): vscode.Disposable {
 	const disposables: vscode.Disposable[] = [];
@@ -119,12 +99,10 @@ function ensureIndexBuilt(): Promise<[void, void]> {
 export async function getLocalisedTextQuick(
 	localisationKey: string | undefined,
 ): Promise<string | undefined> {
-	const previewLocalisation =
-		vscode.workspace.getConfiguration(ConfigurationKey).previewLocalisation;
 	if (previewLocalisation) {
 		return getLocalisedText(
 			localisationKey,
-			localeISOMapping[previewLocalisation] ?? vscode.env.language,
+			isoBySettingName[previewLocalisation] ?? vscode.env.language,
 		);
 	}
 	return getLocalisedText(localisationKey, vscode.env.language);
@@ -144,8 +122,8 @@ export async function getLocalisedText(
 
 	await ensureIndexBuilt().catch(() => undefined);
 
-	const langKey = localeMapping[language.toLowerCase()] || "l_english"; // use mapping to get language suffix
-	const defaultLangKey = "l_english";
+	const langKey = ymlSuffixByIso[language.toLowerCase()] || defaultYmlSuffix;
+	const defaultLangKey = defaultYmlSuffix;
 
 	let text =
 		globalLocalisationIndex[langKey]?.[localisationKey] ||
@@ -161,8 +139,7 @@ export async function getLocalisedText(
 }
 
 const LOC_CACHE_VERSION = 1;
-const langSuffixes = Object.values(localeMapping);
-const langSuffixPattern = langSuffixes.join("|");
+const langSuffixPattern = ymlSuffixes.join("|");
 const localisationFileFilter = new RegExp(
 	`.*_(${langSuffixPattern})\\.yml$`,
 	"i",

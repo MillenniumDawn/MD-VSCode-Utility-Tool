@@ -15,6 +15,11 @@ export let ideaSwapIndex = getConfiguration().ideaSwapIndex;
 export let sharedFocusIndex = getConfiguration().sharedFocusIndex;
 export let gfxIndex = getConfiguration().gfxIndex;
 export let localisationIndex = getConfiguration().localisationIndex;
+// Not a feature flag as such, but it is read once per localised string a preview resolves --
+// thousands of times in a single tech tree render -- and building a configuration proxy that
+// often is pure overhead. It lives here because this is what already refreshes on a settings
+// change, so there is no second thing to keep in step.
+export let previewLocalisation = getConfiguration().previewLocalisation;
 
 export function refreshFeatureFlags(): void {
     const config = getConfiguration();
@@ -26,6 +31,7 @@ export function refreshFeatureFlags(): void {
     sharedFocusIndex = config.sharedFocusIndex;
     gfxIndex = config.gfxIndex;
     localisationIndex = config.localisationIndex;
+    previewLocalisation = config.previewLocalisation;
 }
 
 export function registerFeatureFlags(): vscode.Disposable {
