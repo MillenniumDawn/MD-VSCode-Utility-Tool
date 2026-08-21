@@ -1,3 +1,9 @@
+v1.1.29
+
+  Functionality:
+
+- Recover from an index build that fails or overruns instead of hanging on it.
+
 v1.1.28
 
   Functionality:
