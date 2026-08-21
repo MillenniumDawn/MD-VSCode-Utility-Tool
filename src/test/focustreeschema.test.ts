@@ -125,6 +125,81 @@ describe("previewdef/focustree layout warnings", () => {
 		]);
 	});
 
+	// A row of mutually exclusive alternatives that chains further picks along that same row is a
+	// deliberate layout, not a mistake: the Zyuganov row in Millennium Dawn's Russia tree puts five
+	// alternatives on one row, two of which require an earlier one from that row.
+	it("reports no prerequisite warning for a same-row chain when the dependent has a row-mate", () => {
+		const content = treeWithFocuses(
+			focusBlock(
+				"focus_a",
+				0,
+				1,
+				"prerequisite = { focus = focus_b } mutually_exclusive = { focus = focus_c }",
+			),
+			focusBlock("focus_b", 2, 1),
+			focusBlock("focus_c", 4, 1),
+		);
+		assert.deepStrictEqual(warningTexts(content), []);
+	});
+
+	it("reports no prerequisite warning for a same-row chain when the prerequisite has a row-mate", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_root", 0, 0),
+			focusBlock(
+				"focus_alt_a",
+				0,
+				1,
+				"prerequisite = { focus = focus_root } mutually_exclusive = { focus = focus_alt_b }",
+			),
+			focusBlock(
+				"focus_alt_b",
+				2,
+				1,
+				"prerequisite = { focus = focus_root } mutually_exclusive = { focus = focus_alt_a }",
+			),
+			focusBlock(
+				"focus_chain",
+				4,
+				1,
+				"prerequisite = { focus = focus_alt_a focus = focus_alt_b }",
+			),
+		);
+		assert.deepStrictEqual(warningTexts(content), []);
+	});
+
+	it("still warns for a same-row prerequisite when the exclusive partner is on another row", () => {
+		const content = treeWithFocuses(
+			focusBlock(
+				"focus_a",
+				0,
+				1,
+				"prerequisite = { focus = focus_b } mutually_exclusive = { focus = focus_c }",
+			),
+			focusBlock("focus_b", 2, 1),
+			focusBlock("focus_c", 4, 2),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Prerequisite focus_b of focus focus_a is not positioned above it.",
+			"Mutually exclusive focuses focus_a and focus_c are not on the same row.",
+		]);
+	});
+
+	it("still warns for a prerequisite below its dependent inside a mutually exclusive row", () => {
+		const content = treeWithFocuses(
+			focusBlock(
+				"focus_a",
+				0,
+				1,
+				"prerequisite = { focus = focus_b } mutually_exclusive = { focus = focus_c }",
+			),
+			focusBlock("focus_c", 2, 1),
+			focusBlock("focus_b", 4, 2),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Prerequisite focus_b of focus focus_a is not positioned above it.",
+		]);
+	});
+
 	it("reports no prerequisite warning when one option of an OR group is above", () => {
 		const content = treeWithFocuses(
 			focusBlock(

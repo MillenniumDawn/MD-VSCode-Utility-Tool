@@ -813,10 +813,11 @@ function resolveFocusPosition(
 
 /**
  * Layout checks for the common focus-tree mistakes that make the game render a broken tree:
- * a prerequisite not positioned above its dependent, mutually exclusive focuses not sharing a row,
- * and icons less than two grid units apart on the same row (the sprites are two units wide, so
- * they overlap). Positions are resolved through relative_position_id chains like the preview does;
- * condition-dependent offsets are ignored.
+ * a prerequisite not positioned above its dependent (unless the two are row-mates in a mutually
+ * exclusive row, see below), mutually exclusive focuses not sharing a row, and icons less than two
+ * grid units apart on the same row (the sprites are two units wide, so they overlap). Positions are
+ * resolved through relative_position_id chains like the preview does; condition-dependent offsets
+ * are ignored.
  */
 function validateFocusLayout(
 	focuses: Record<string, Focus>,
@@ -836,13 +837,41 @@ function validateFocusLayout(
 		entries.map((entry) => [entry.focus.id, entry.position] as const),
 	);
 
+	// A focus is part of a side-by-side alternative row when one of its mutually exclusive partners
+	// resolves to the same row it does. Millennium Dawn chains further picks along such a row (the
+	// Zyuganov row in 05_russia.txt puts five alternatives on one row, two of which require an
+	// earlier one on that same row), so a prerequisite there is a row-mate, not a mistake.
+	// Cached per focus: y is that focus's own resolved row, so it never varies for a given id.
+	const rowMateCache = new Map<string, boolean>();
+	const hasExclusiveRowMate = (id: string, y: number): boolean => {
+		const cached = rowMateCache.get(id);
+		if (cached !== undefined) {
+			return cached;
+		}
+		const focus = focuses[id];
+		const result =
+			focus !== undefined &&
+			focus.exclusive.some((exclusive) => {
+				const other = focuses[exclusive];
+				return (
+					exclusive !== id &&
+					other !== undefined &&
+					other.file === filePath &&
+					positions.get(exclusive)?.y === y
+				);
+			});
+		rowMateCache.set(id, result);
+		return result;
+	};
+
 	const reportedPairs = new Set<string>();
 	const pairKey = (a: string, b: string) =>
 		a < b ? `${a}\u0001${b}` : `${b}\u0001${a}`;
 
 	for (const { focus, position } of entries) {
 		// An OR-group prerequisite is satisfied by completing any one of its focuses, so it is
-		// only a layout problem when none of the group's options sits above the dependent.
+		// only a layout problem when none of the group's options sits above the dependent, or
+		// alongside it in a mutually exclusive row.
 		for (const group of focus.prerequisite) {
 			const options = group.filter((p) => {
 				const prerequisite = focuses[p];
@@ -852,11 +881,24 @@ function validateFocusLayout(
 					prerequisite.file === filePath
 				);
 			});
-			const anyAbove = options.some((p) => {
+			const anySatisfied = options.some((p) => {
 				const optionPosition = positions.get(p);
-				return optionPosition !== undefined && optionPosition.y < position.y;
+				if (optionPosition === undefined) {
+					return false;
+				}
+				if (optionPosition.y < position.y) {
+					return true;
+				}
+				// Sharing a row is only acceptable when exclusivity explains the row, either for
+				// the dependent itself or for the prerequisite it chains from. A prerequisite
+				// below its dependent is never excused.
+				return (
+					optionPosition.y === position.y &&
+					(hasExclusiveRowMate(focus.id, position.y) ||
+						hasExclusiveRowMate(p, position.y))
+				);
 			});
-			if (options.length > 0 && !anyAbove) {
+			if (options.length > 0 && !anySatisfied) {
 				warnings.push({
 					text: localize(
 						"focustree.warnings.prerequisitenotabove",
