@@ -7,9 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        For our own backlog. Fill in as much or as little as the task needs — nothing here is
-        required. If you are reporting something broken use the bug report, and if you are
-        asking for something new use the suggestion.
+        For our own backlog.
 
   - type: textarea
     id: what
