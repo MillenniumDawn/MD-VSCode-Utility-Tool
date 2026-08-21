@@ -82,10 +82,14 @@ export function tryRun<T extends (...args: any[]) => any>(
 
 let shouldDisableZoom = false;
 export function enableZoom(
-	contentElement: HTMLDivElement,
+	contentElement: HTMLDivElement | null,
 	xOffset: number,
 	yOffset: number,
 ): void {
+	if (!contentElement) {
+		return;
+	}
+
 	let scale = getState().scale || 1;
 	contentElement.style.transform = `scale(${scale})`;
 	contentElement.style.transformOrigin = "0 0";
