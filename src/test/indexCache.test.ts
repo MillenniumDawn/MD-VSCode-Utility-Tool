@@ -1,7 +1,61 @@
 import * as assert from 'assert';
-import { computeStaleFiles } from '../util/indexCache';
+import { cacheNamespaceFor, computeStaleFiles } from '../util/indexCache';
 
 describe('util/indexCache', () => {
+    describe('cacheNamespaceFor', () => {
+        it('gives two mods opened from the same folder two different namespaces', () => {
+            assert.notStrictEqual(
+                cacheNamespaceFor('d:/mods/alpha.mod', ['file:///ws']),
+                cacheNamespaceFor('d:/mods/beta.mod', ['file:///ws']),
+            );
+        });
+
+        it('gives two workspace folders two different namespaces', () => {
+            assert.notStrictEqual(
+                cacheNamespaceFor(undefined, ['file:///alpha']),
+                cacheNamespaceFor(undefined, ['file:///beta']),
+            );
+        });
+
+        it('is unchanged when the same folders arrive in a different order', () => {
+            assert.strictEqual(
+                cacheNamespaceFor(undefined, ['file:///a', 'file:///b']),
+                cacheNamespaceFor(undefined, ['file:///b', 'file:///a']),
+            );
+        });
+
+        it('reads the same mod file whichever slashes and case it is written with', () => {
+            assert.strictEqual(
+                cacheNamespaceFor('D:\\Mods\\Alpha.mod', []),
+                cacheNamespaceFor('d:/mods/alpha.mod', []),
+            );
+        });
+
+        it('treats an unset, empty and whitespace-only mod file as the same', () => {
+            const none = cacheNamespaceFor(undefined, ['file:///ws']);
+            assert.strictEqual(cacheNamespaceFor('', ['file:///ws']), none);
+            assert.strictEqual(cacheNamespaceFor('   ', ['file:///ws']), none);
+        });
+
+        it('still names a namespace when there is no mod file and no folder', () => {
+            const namespace = cacheNamespaceFor(undefined, []);
+            assert.strictEqual(namespace, cacheNamespaceFor(undefined, []));
+            assert.match(namespace, /^[0-9a-f]{16}$/);
+        });
+
+        it('is sixteen hex characters whatever the inputs are', () => {
+            assert.match(cacheNamespaceFor('a'.repeat(500), ['file:///ws']), /^[0-9a-f]{16}$/);
+            assert.match(cacheNamespaceFor('\u00e9\u4e2d', []), /^[0-9a-f]{16}$/);
+        });
+
+        it('does not collapse a folder set into the same namespace as one of its members', () => {
+            assert.notStrictEqual(
+                cacheNamespaceFor(undefined, ['file:///a']),
+                cacheNamespaceFor(undefined, ['file:///a', 'file:///b']),
+            );
+        });
+    });
+
     describe('computeStaleFiles', () => {
         it('returns three empty lists for an empty manifest and empty current mtimes', () => {
             const result = computeStaleFiles(

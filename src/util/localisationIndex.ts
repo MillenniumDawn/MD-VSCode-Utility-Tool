@@ -274,13 +274,9 @@ async function buildLocalisationIndexWithTimer(
 		const staleness = computeStaleFiles(manifest, currentMtimes);
 		const cachedData = await loadCacheData(cacheName);
 
-		if (
-			cachedData &&
-			staleness.stale.length +
-				staleness.removed.length +
-				staleness.added.length <
-				locFiles.length
-		) {
+		// Whatever is still fresh gets reused, however much of the listing changed. See the same
+		// spot in sharedFocusIndex for why counting the changed files only ever added work.
+		if (cachedData) {
 			try {
 				const cached: LocCacheData = JSON.parse(cachedData);
 				const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
@@ -353,6 +349,12 @@ async function buildLocalisationIndexWithTimer(
 		index: targetIndex,
 		fileMap: serializedFileMap,
 	};
+	// TODO: this JSON.stringify runs on the extension host thread and serialises the whole index
+	// plus a second copy of every key in `fileMap` into one string. On a mod the size of Millennium
+	// Dawn that is hundreds of megabytes, enough to stall the host and, at the top end, to exceed
+	// V8's maximum string length outright. Left alone for now because this index is off by default
+	// and off on the machines the hangs were reported from; see the "Cache correctness" stage of the
+	// indexing plan. Streaming the write, or caching per language, is the way out.
 	// fire-and-forget: write data before manifest for atomicity
 	void Promise.all([
 		saveCacheData(cacheName, JSON.stringify(cacheData)),
