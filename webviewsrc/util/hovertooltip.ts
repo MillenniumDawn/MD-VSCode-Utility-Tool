@@ -63,7 +63,9 @@ export function wireEffectTooltip(
 
 	host.addEventListener("mouseleave", () => {
 		if (timer !== undefined) {
-			clearTimeout(timer);
+			// window.clearTimeout, to match the window.setTimeout above: the two are one timer table
+			// in a browser, but not everywhere this module is exercised.
+			window.clearTimeout(timer);
 			timer = undefined;
 		}
 		panel?.remove();
