@@ -953,9 +953,13 @@ describe('scripts/release-pr-body', function () {
             assert.ok(!body.includes('BUMP_TOKEN'));
         });
 
-        it('warns about the missing token only when there is none', function () {
+        it('explains the missing token only when there is none', function () {
             const body = releasePrBody.render({ version: '1.1.24', entries, hasBumpToken: false });
             assert.ok(body.includes('No `BUMP_TOKEN` secret is set'));
+            // The tests do run without the token -- the workflow starts them itself -- so the
+            // note has to say that rather than send the reader off to reopen the pull request.
+            assert.ok(body.includes('test workflow is started against the branch'));
+            assert.ok(!body.includes('Close and reopen'));
         });
 
         it('leaves a blank line before the heading, with the warning and without', function () {

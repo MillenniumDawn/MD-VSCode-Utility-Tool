@@ -53,8 +53,9 @@ function intro(version, hasBumpToken) {
 
 	if (!hasBumpToken) {
 		lines.push(
-			'No `BUMP_TOKEN` secret is set, so the test and version workflows do not run on this pull request. '
-				+ 'Close and reopen it to make them run.',
+			'No `BUMP_TOKEN` secret is set, so a push to this branch starts no run by itself. The test workflow '
+				+ 'is started against the branch instead, on every refresh, and its result is on the commit -- '
+				+ 'read it before you merge. Only the advisory version check is missing.',
 			'');
 	}
 
