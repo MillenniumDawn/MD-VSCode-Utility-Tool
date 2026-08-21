@@ -21,6 +21,7 @@ export namespace Commands {
     export const ScanReferences = 'mdhoi4utilities.scanreferences';
     export const SelectModFile = 'mdhoi4utilities.selectmodfile';
     export const SelectHoiFolder = 'mdhoi4utilities.selecthoifolder';
+    export const ShowIndexStatus = 'mdhoi4utilities.showindexstatus';
 }
 
 export namespace WebviewType {

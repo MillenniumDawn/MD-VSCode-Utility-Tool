@@ -15,6 +15,7 @@ import { registerLocalisationIndex } from "./util/localisationIndex";
 import { registerSharedFocusIndex } from "./util/sharedFocusIndex";
 import { registerIdeaSwapIndex } from "./util/ideaSwapIndex";
 import { registerFeatureFlags } from "./util/featureflags";
+import { registerIndexStatusCommand } from "./util/indexBuild";
 import { disposeImageDecodeWorkers } from "./util/image/imagedecoder";
 
 export function activate(context: vscode.ExtensionContext) {
@@ -45,6 +46,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(registerGfxIndex());
     context.subscriptions.push(registerLocalisationIndex());
     context.subscriptions.push(registerIdeaSwapIndex());
+    context.subscriptions.push(registerIndexStatusCommand());
     context.subscriptions.push({ dispose: disposeImageDecodeWorkers });
 
     setVscodeContext(ContextName.Hoi4MULoaded, true);

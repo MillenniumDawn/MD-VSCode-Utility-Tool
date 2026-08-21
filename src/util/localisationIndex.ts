@@ -9,7 +9,8 @@ import {
 } from "./fileloader";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
-import { attachTaskWithErrorLogging, createBuildGate } from "./promiseUtils";
+import { attachTaskWithErrorLogging } from "./promiseUtils";
+import { createIndexBuilder } from "./indexBuild";
 import { Logger } from "./logger";
 import { ConfigurationKey } from "../constants";
 import {
@@ -81,45 +82,32 @@ export function registerLocalisationIndex(): vscode.Disposable {
 	return vscode.Disposable.from(...disposables);
 }
 
-// Memoized build promise: first caller starts the build, concurrent callers await the same one.
-let buildTask: Promise<[void, void]> | undefined;
-// Gates incremental-event handlers so they don't race the build's writes to the index maps.
-const buildGate = createBuildGate();
+// Both halves report into this so the telemetry event carries the whole build's size. Reset per
+// build, since a build that failed and is retried would otherwise keep counting from where it left off.
+let estimatedSize: [number] = [0];
+
+const builder = createIndexBuilder({
+	name: "localisationIndex",
+	message: localize(
+		"localisationIndex.building",
+		"Building Localisation index...",
+	),
+	build: () => {
+		estimatedSize = [0];
+		return Promise.all([
+			buildGlobalLocalisationIndex(estimatedSize),
+			buildWorkspaceLocalisationIndex(estimatedSize),
+		]);
+	},
+	onSuccess: () => {
+		sendEvent("localisationIndex", { size: estimatedSize[0].toString() });
+	},
+});
+
+const buildGate = builder.gate;
 
 function ensureIndexBuilt(): Promise<[void, void]> {
-	if (buildTask) {
-		return buildTask;
-	}
-
-	const estimatedSize: [number] = [0];
-	const task = Promise.all([
-		buildGlobalLocalisationIndex(estimatedSize),
-		buildWorkspaceLocalisationIndex(estimatedSize),
-	]);
-	buildTask = task;
-	buildGate.start(task);
-
-	vscode.window.setStatusBarMessage(
-		"$(loading~spin) " +
-			localize("localisationIndex.building", "Building Localisation index..."),
-		task,
-	);
-	attachTaskWithErrorLogging(
-		task,
-		() => {
-			vscode.window.showInformationMessage(
-				localize(
-					"localisationIndex.builddone",
-					"Building Localisation index done.",
-				),
-			);
-			sendEvent("localisationIndex", { size: estimatedSize[0].toString() });
-		},
-		"Building Localisation index failed.",
-		Logger.error,
-	);
-
-	return task;
+	return builder.ensureBuilt();
 }
 
 export async function getLocalisedTextQuick(
@@ -226,11 +214,37 @@ async function buildLocalisationIndexWithCache(
 	estimatedSize: [number],
 ): Promise<void> {
 	const timer = new IndexTimer(cacheName);
+	try {
+		await buildLocalisationIndexWithTimer(
+			timer,
+			cacheName,
+			locFiles,
+			targetIndex,
+			fileMap,
+			options,
+			estimatedSize,
+		);
+	} finally {
+		// A build that threw must not leave a phase behind in the live-build report.
+		timer.dispose();
+	}
+}
+
+async function buildLocalisationIndexWithTimer(
+	timer: IndexTimer,
+	cacheName: string,
+	locFiles: string[],
+	targetIndex: LocalisationData,
+	fileMap: Record<string, Record<string, Set<string>>> | null,
+	options: { mod?: boolean; hoi4?: boolean },
+	estimatedSize: [number],
+): Promise<void> {
+	timer.begin("mtime");
 	const resolveUri = (relativePath: string) =>
 		getFilePathFromModOrHOI4(relativePath, options);
 	const currentMtimes = await getFileMtimes(locFiles, resolveUri);
-	timer.mark("mtime");
 
+	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, LOC_CACHE_VERSION);
 	let filesToParse = locFiles;
 
@@ -279,13 +293,14 @@ async function buildLocalisationIndexWithCache(
 			}
 		}
 	}
-	timer.mark("cache");
 
-	await mapLimit(filesToParse, 8, (f) =>
-		fillLocalisationItems(f, targetIndex, fileMap, options, estimatedSize),
-	);
-	timer.mark("parse");
-	timer.log(locFiles.length, filesToParse.length);
+	timer.begin("parse");
+	let parsed = 0;
+	await mapLimit(filesToParse, 8, async (f) => {
+		await fillLocalisationItems(f, targetIndex, fileMap, options, estimatedSize);
+		timer.progress(++parsed, filesToParse.length);
+	});
+	timer.end(locFiles.length, filesToParse.length);
 
 	// Serialize Sets to arrays for JSON cache
 	const serializedFileMap: Record<string, Record<string, string[]>> = {};
@@ -320,8 +335,18 @@ async function fillLocalisationItems(
 	},
 	estimatedSize?: [number],
 ): Promise<void> {
-	const [fileBuffer] = await readFileFromModOrHOI4(localisationFile, options);
-	const content = fileBuffer.toString();
+	let content: string;
+	try {
+		const [fileBuffer] = await readFileFromModOrHOI4(localisationFile, options);
+		content = fileBuffer.toString();
+	} catch (e) {
+		// A file listed but unreadable -- deleted between the listing and the read, or locked --
+		// costs this one file and nothing else. Reading used to sit outside the try, so one such
+		// file rejected the whole build and left the index half-populated for the session.
+		Logger.warn(`Localisation index: can't read ${localisationFile}: ${e}`);
+		return;
+	}
+
 	try {
 		const localisations = parseLocalisation(content);
 		for (const langKey in localisations) {
@@ -412,7 +437,7 @@ export function parseLocalisation(fileContent: string): LocalisationData {
 }
 
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -449,7 +474,7 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 }
 
 function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -472,7 +497,7 @@ const onChangeTextDocumentImpl = debounceByInput(
 );
 
 function onCloseTextDocument(document: vscode.TextDocument) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -486,7 +511,7 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 }
 
 function onCreateFiles(e: vscode.FileCreateEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -500,7 +525,7 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 }
 
 function onDeleteFiles(e: vscode.FileDeleteEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -561,8 +586,7 @@ function getLangKeyFromPath(filePath: string): string {
 
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
 export function __resetLocalisationIndexForTests(): void {
-	buildTask = undefined;
-	buildGate.reset();
+	builder.reset();
 	for (const key of Object.keys(globalLocalisationIndex)) {
 		delete globalLocalisationIndex[key];
 	}

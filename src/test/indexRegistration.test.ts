@@ -104,7 +104,8 @@ describe("util index registration failure path", function () {
 		assert.ok(
 			logs.some(
 				(message) =>
-					message === "Building GFX index failed.: Error: listing failed intentionally",
+					message ===
+					"[Index] gfxIndex: build failed: Error: listing failed intentionally",
 			),
 		);
 	});
@@ -117,7 +118,7 @@ describe("util index registration failure path", function () {
 			logs.some(
 				(message) =>
 					message ===
-					"Building Localisation index failed.: Error: listing failed intentionally",
+					"[Index] localisationIndex: build failed: Error: listing failed intentionally",
 			),
 		);
 	});
@@ -130,7 +131,7 @@ describe("util index registration failure path", function () {
 			logs.some(
 				(message) =>
 					message ===
-					"Building Shared Focus index failed.: Error: listing failed intentionally",
+					"[Index] sharedFocusIndex: build failed: Error: listing failed intentionally",
 			),
 		);
 	});

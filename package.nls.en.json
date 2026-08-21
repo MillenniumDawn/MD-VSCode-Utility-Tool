@@ -30,6 +30,7 @@
     "hoi4modutilities.previewworld.title": "Preview World Map",
     "hoi4modutilities.scanreferences.title": "Scan References",
     "hoi4modutilities.selecthoifolder.title": "Select HOI4 Install Path",
+    "hoi4modutilities.showindexstatus.title": "Show Index Status",
     "hoi4modutilities.selectmodfile.title": "Select Mod File",
     "hoi4modutilities.enableSupplyArea.title": "Enable Supply Area",
     "hoi4modutilities.enableSupplyArea.desc": "If you are developing mod for HOI4(version<=1.10). Check this to enable supply area."

@@ -8,7 +8,8 @@ import {
 } from "./fileloader";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
-import { attachTaskWithErrorLogging, createBuildGate } from "./promiseUtils";
+import { attachTaskWithErrorLogging } from "./promiseUtils";
+import { createIndexBuilder } from "./indexBuild";
 import { Logger } from "./logger";
 import { Node, parseHoi4File } from "../hoiformat/hoiparser";
 import { ideaSwapIndex } from "./featureflags";
@@ -87,39 +88,29 @@ export function registerIdeaSwapIndex(): vscode.Disposable {
 	return vscode.Disposable.from(...disposables);
 }
 
-// Memoized build promise: first caller starts the build, concurrent callers await the same one.
-let buildTask: Promise<[void, void]> | undefined;
-// Gates incremental-event handlers so they don't race the build's writes to the index maps.
-const buildGate = createBuildGate();
+// Both halves report into this so the telemetry event carries the whole build's size. Reset per
+// build, since a build that failed and is retried would otherwise keep counting from where it left off.
+let estimatedSize: [number] = [0];
+
+const builder = createIndexBuilder({
+	name: "ideaSwapIndex",
+	message: localize("ideaSwapIndex.building", "Building idea swap index..."),
+	build: () => {
+		estimatedSize = [0];
+		return Promise.all([
+			buildGlobalSwapIndex(estimatedSize),
+			buildWorkspaceSwapIndex(estimatedSize),
+		]);
+	},
+	onSuccess: () => {
+		sendEvent("ideaSwapIndex", { size: estimatedSize[0].toString() });
+	},
+});
+
+const buildGate = builder.gate;
 
 function ensureIndexBuilt(): Promise<[void, void]> {
-	if (buildTask) {
-		return buildTask;
-	}
-
-	const estimatedSize: [number] = [0];
-	const task = Promise.all([
-		buildGlobalSwapIndex(estimatedSize),
-		buildWorkspaceSwapIndex(estimatedSize),
-	]);
-	buildTask = task;
-	buildGate.start(task);
-
-	vscode.window.setStatusBarMessage(
-		"$(loading~spin) " +
-			localize("ideaSwapIndex.building", "Building idea swap index..."),
-		task,
-	);
-	attachTaskWithErrorLogging(
-		task,
-		() => {
-			sendEvent("ideaSwapIndex", { size: estimatedSize[0].toString() });
-		},
-		"Building idea swap index failed.",
-		Logger.error,
-	);
-
-	return task;
+	return builder.ensureBuilt();
 }
 
 const SWAP_CACHE_VERSION = 1;
@@ -172,11 +163,35 @@ async function buildSwapIndexWithCache(
 	estimatedSize: [number],
 ): Promise<void> {
 	const timer = new IndexTimer(cacheName);
+	try {
+		await buildSwapIndexWithTimer(
+			timer,
+			cacheName,
+			swapFiles,
+			swapIndex,
+			options,
+			estimatedSize,
+		);
+	} finally {
+		// A build that threw must not leave a phase behind in the live-build report.
+		timer.dispose();
+	}
+}
+
+async function buildSwapIndexWithTimer(
+	timer: IndexTimer,
+	cacheName: string,
+	swapFiles: string[],
+	swapIndex: SwapIndex,
+	options: { mod?: boolean; hoi4?: boolean },
+	estimatedSize: [number],
+): Promise<void> {
+	timer.begin("mtime");
 	const resolveUri = (relativePath: string) =>
 		getFilePathFromModOrHOI4(relativePath, options);
 	const currentMtimes = await getFileMtimes(swapFiles, resolveUri);
-	timer.mark("mtime");
 
+	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, SWAP_CACHE_VERSION);
 	let filesToParse = swapFiles;
 
@@ -208,13 +223,14 @@ async function buildSwapIndexWithCache(
 			}
 		}
 	}
-	timer.mark("cache");
 
-	await mapLimit(filesToParse, 8, (f) =>
-		fillSwaps(f, swapIndex, options, estimatedSize),
-	);
-	timer.mark("parse");
-	timer.log(swapFiles.length, filesToParse.length);
+	timer.begin("parse");
+	let parsed = 0;
+	await mapLimit(filesToParse, 8, async (f) => {
+		await fillSwaps(f, swapIndex, options, estimatedSize);
+		timer.progress(++parsed, filesToParse.length);
+	});
+	timer.end(swapFiles.length, filesToParse.length);
 
 	// fire-and-forget: write data before manifest for atomicity
 	void Promise.all([
@@ -432,14 +448,14 @@ function addTo(map: Map<string, IdeaSwap[]>, key: string, swap: IdeaSwap): void 
 }
 
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
 	workspaceSwapIndex = {};
 
-	const estimatedSize: [number] = [0];
-	const task = buildWorkspaceSwapIndex(estimatedSize);
+	const folderChangeSize: [number] = [0];
+	const task = buildWorkspaceSwapIndex(folderChangeSize);
 	vscode.window.setStatusBarMessage(
 		"$(loading~spin) " +
 			localize(
@@ -452,7 +468,7 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 		task,
 		() => {
 			sendEvent("ideaSwapIndex.workspace", {
-				size: estimatedSize[0].toString(),
+				size: folderChangeSize[0].toString(),
 			});
 		},
 		"Building workspace idea swap index failed.",
@@ -461,7 +477,7 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 }
 
 function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -484,7 +500,7 @@ const onChangeTextDocumentImpl = debounceByInput(
 );
 
 function onCloseTextDocument(document: vscode.TextDocument) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -498,7 +514,7 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 }
 
 function onCreateFiles(e: vscode.FileCreateEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -512,7 +528,7 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 }
 
 function onDeleteFiles(e: vscode.FileDeleteEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -562,8 +578,7 @@ function addWorkspaceSwaps(file: vscode.Uri) {
 
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
 export function __resetIdeaSwapIndexForTests(): void {
-	buildTask = undefined;
-	buildGate.reset();
+	builder.reset();
 	for (const file of Object.keys(globalSwapIndex)) {
 		delete globalSwapIndex[file];
 	}
@@ -582,5 +597,5 @@ export function __seedWorkspaceSwapsForTests(index: {
 	[file: string]: SwapRecord[];
 }): void {
 	workspaceSwapIndex = { ...index };
-	buildTask = Promise.all([Promise.resolve(), Promise.resolve()]);
+	builder.seed([undefined, undefined]);
 }

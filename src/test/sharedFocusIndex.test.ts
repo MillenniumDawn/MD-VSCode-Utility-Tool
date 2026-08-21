@@ -350,9 +350,15 @@ describe("util/sharedFocusIndex lazy build", function () {
 			const primed = await findFileByFocusKey("my_shared_focus");
 			assert.strictEqual(primed, "common/national_focus/shared.txt");
 
+			// An unreadable file is a warning, not an error: it costs that one file and the build
+			// (or the re-index) carries on, so both channels are captured here.
 			const logs: string[] = [];
 			const originalLoggerError = Logger.error;
+			const originalLoggerWarn = Logger.warn;
 			Logger.error = (message: string) => {
+				logs.push(message);
+			};
+			Logger.warn = (message: string) => {
 				logs.push(message);
 			};
 
@@ -378,6 +384,7 @@ describe("util/sharedFocusIndex lazy build", function () {
 				assert.ok(logs.some((l) => l.includes("file gone mid-edit")));
 			} finally {
 				Logger.error = originalLoggerError;
+				Logger.warn = originalLoggerWarn;
 			}
 		});
 
