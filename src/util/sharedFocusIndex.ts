@@ -207,6 +207,24 @@ async function fillFocusItems(
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize?: [number],
 ): Promise<void> {
+	const ids = await readFocusIds(focusFile, options, estimatedSize);
+	if (ids === undefined) {
+		return;
+	}
+
+	applyFocusIds(focusFile, ids, focusIndex, reverseMap);
+}
+
+/**
+ * Reading and parsing half of the index fill. Returns the file's focus ids, an empty list when the
+ * file holds no focus definitions at all, or undefined when parsing failed -- so the caller decides
+ * whether a failure means "write nothing" (the build) or "keep what is already indexed" (a re-index).
+ */
+async function readFocusIds(
+	focusFile: string,
+	options: { mod?: boolean; hoi4?: boolean },
+	estimatedSize?: [number],
+): Promise<string[] | undefined> {
 	const [fileBuffer] = await readFileFromModOrHOI4(focusFile, options);
 	const fileContent = fileBuffer.toString();
 
@@ -216,7 +234,7 @@ async function fillFocusItems(
 		!fileContent.includes("shared_focus") &&
 		!fileContent.includes("joint_focus")
 	) {
-		return;
+		return [];
 	}
 
 	try {
@@ -227,15 +245,12 @@ async function fillFocusItems(
 				{ keepTokens: false },
 			),
 		);
-		focusIndex[focusFile] = ids;
-
-		for (const key of ids) {
-			reverseMap.set(key, focusFile);
-		}
 
 		if (estimatedSize) {
 			estimatedSize[0] += fileBuffer.length;
 		}
+
+		return ids;
 	} catch (e) {
 		const baseMessage = options.hoi4
 			? localize("sharedFocusIndex.vanilla", "[Vanilla]")
@@ -257,6 +272,37 @@ async function fillFocusItems(
 						}
 					})();
 		Logger.error(`${baseMessage} ${focusFile} ${failureMessage}\n${errText}`);
+		return undefined;
+	}
+}
+
+/**
+ * Writing half of the index fill: swaps a file's entry for a fresh set of ids in one step, dropping
+ * only the keys that entry still owns. An empty list removes the file from the index entirely.
+ */
+function applyFocusIds(
+	focusFile: string,
+	ids: string[],
+	focusIndex: FocusIndex,
+	reverseMap: Map<string, string>,
+): void {
+	const previous = focusIndex[focusFile];
+	if (previous) {
+		for (const key of previous) {
+			if (reverseMap.get(key) === focusFile) {
+				reverseMap.delete(key);
+			}
+		}
+	}
+
+	if (ids.length === 0) {
+		delete focusIndex[focusFile];
+		return;
+	}
+
+	focusIndex[focusFile] = ids;
+	for (const key of ids) {
+		reverseMap.set(key, focusFile);
 	}
 }
 
@@ -320,8 +366,7 @@ function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
 const onChangeTextDocumentImpl = debounceByInput(
 	(file: vscode.Uri) => {
 		buildGate.runAfterBuild(() => {
-			removeWorkspaceFocusIndex(file);
-			addWorkspaceFocusIndex(file);
+			void reindexWorkspaceFocusFile(file);
 		});
 	},
 	(file) => file.toString(),
@@ -337,8 +382,7 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 	const file = document.uri;
 	if (file.path.endsWith(".txt") && document.isDirty) {
 		buildGate.runAfterBuild(() => {
-			removeWorkspaceFocusIndex(file);
-			addWorkspaceFocusIndex(file);
+			void reindexWorkspaceFocusFile(file);
 		});
 	}
 }
@@ -351,7 +395,7 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 	buildGate.runAfterBuild(() => {
 		for (const file of e.files) {
 			if (file.path.endsWith(".txt")) {
-				addWorkspaceFocusIndex(file);
+				void reindexWorkspaceFocusFile(file);
 			}
 		}
 	});
@@ -376,41 +420,57 @@ function onRenameFiles(e: vscode.FileRenameEvent) {
 	onCreateFiles({ files: e.files.map((f) => f.newUri) });
 }
 
-function removeWorkspaceFocusIndex(file: vscode.Uri) {
+/** The path a focus file is indexed under, or undefined when it isn't a workspace focus file. */
+function toWorkspaceFocusPath(file: vscode.Uri): string | undefined {
 	const wsFolder = vscode.workspace.getWorkspaceFolder(file);
-	if (wsFolder) {
-		const relative = path
-			.relative(wsFolder.uri.path, file.path)
-			.replace(/\\+/g, "/");
-		if (relative && relative.startsWith("common/national_focus/")) {
-			const keys = workspaceFocusIndex[relative];
-			if (keys) {
-				for (const key of keys) {
-					if (workspaceFocusKeyToFile.get(key) === relative) {
-						workspaceFocusKeyToFile.delete(key);
-					}
-				}
-			}
-			delete workspaceFocusIndex[relative];
-		}
+	if (!wsFolder) {
+		return undefined;
 	}
+
+	const relative = path
+		.relative(wsFolder.uri.path, file.path)
+		.replace(/\\+/g, "/");
+	return relative.startsWith("common/national_focus/") ? relative : undefined;
 }
 
-function addWorkspaceFocusIndex(file: vscode.Uri) {
-	const wsFolder = vscode.workspace.getWorkspaceFolder(file);
-	if (wsFolder) {
-		const relative = path
-			.relative(wsFolder.uri.path, file.path)
-			.replace(/\\+/g, "/");
-		if (relative && relative.startsWith("common/national_focus/")) {
-			void fillFocusItems(
-				relative,
-				workspaceFocusIndex,
-				workspaceFocusKeyToFile,
-				{ hoi4: false },
-			);
-		}
+function removeWorkspaceFocusIndex(file: vscode.Uri) {
+	const relative = toWorkspaceFocusPath(file);
+	if (!relative) {
+		return;
 	}
+
+	applyFocusIds(relative, [], workspaceFocusIndex, workspaceFocusKeyToFile);
+}
+
+/**
+ * Re-indexes an edited focus file: parse first, swap the entry in afterwards. Clearing the entry up
+ * front (what an edit used to do) left the index without any of the file's focuses for as long as the
+ * re-parse took, and a focus tree preview refreshing in that window -- which the same edit triggers,
+ * on the same one second debounce -- resolved none of the file's shared focuses and silently dropped
+ * the whole branch from the tree. A file that fails to parse midway through an edit keeps the ids it
+ * was last indexed with, instead of losing them until the next edit that happens to parse.
+ */
+async function reindexWorkspaceFocusFile(file: vscode.Uri): Promise<void> {
+	const relative = toWorkspaceFocusPath(file);
+	if (!relative) {
+		return;
+	}
+
+	let ids: string[] | undefined;
+	try {
+		ids = await readFocusIds(relative, { hoi4: false });
+	} catch (e) {
+		// readFocusIds only throws when the file can't be read at all; a parse failure it logs and
+		// reports as undefined. Either way the previously indexed ids stay in place.
+		Logger.error(`Re-indexing ${relative} failed: ${e}`);
+		return;
+	}
+
+	if (ids === undefined) {
+		return;
+	}
+
+	applyFocusIds(relative, ids, workspaceFocusIndex, workspaceFocusKeyToFile);
 }
 
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.

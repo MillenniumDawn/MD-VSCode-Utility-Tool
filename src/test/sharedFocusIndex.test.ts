@@ -276,6 +276,150 @@ describe("util/sharedFocusIndex lazy build", function () {
 			assert.strictEqual(result, "common/national_focus/shared.txt");
 		});
 	});
+
+	// Issue #126: an edit used to clear the file's keys and only then start the re-parse. A focus
+	// tree preview refreshing in that window -- which the same edit triggers, on the same debounce --
+	// resolved none of the file's shared focuses, so the joint branch vanished from the tree.
+	describe("re-indexing an edited file", function () {
+		beforeEach(function () {
+			(
+				fileloader as typeof fileloader & {
+					listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				}
+			).listFilesFromModOrHOI4 = async (_relativePath, options) => {
+				listFilesCallCount++;
+				return options?.hoi4 ? [] : ["shared.txt"];
+			};
+		});
+
+		it("keeps the file's focuses resolvable while its re-parse is still running", async function () {
+			const primed = await findFileByFocusKey("my_shared_focus");
+			assert.strictEqual(primed, "common/national_focus/shared.txt");
+
+			const read = deferred<[Buffer, unknown]>();
+			(
+				fileloader as typeof fileloader & {
+					readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
+				}
+			).readFileFromModOrHOI4 = () => read.promise;
+
+			__testHandlers.onCloseTextDocument({
+				uri: focusFileUri("common/national_focus/shared.txt"),
+				isDirty: true,
+			} as unknown as vscode.TextDocument);
+			await waitForAsyncTasks();
+
+			// The re-parse is still awaiting the read here.
+			const duringReindex = await findFileByFocusKey("my_shared_focus");
+			assert.strictEqual(duringReindex, "common/national_focus/shared.txt");
+
+			read.resolve([SHARED_FOCUS_FILE_CONTENT, {} as unknown]);
+			await waitForAsyncTasks();
+
+			const afterReindex = await findFileByFocusKey("my_shared_focus");
+			assert.strictEqual(afterReindex, "common/national_focus/shared.txt");
+		});
+
+		it("swaps in the new ids and drops the old ones once the re-parse finishes", async function () {
+			const primed = await findFileByFocusKey("my_shared_focus");
+			assert.strictEqual(primed, "common/national_focus/shared.txt");
+
+			(
+				fileloader as typeof fileloader & {
+					readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
+				}
+			).readFileFromModOrHOI4 = async () => [
+				Buffer.from("shared_focus = { id = renamed_shared_focus }"),
+				{} as unknown,
+			];
+
+			__testHandlers.onCloseTextDocument({
+				uri: focusFileUri("common/national_focus/shared.txt"),
+				isDirty: true,
+			} as unknown as vscode.TextDocument);
+			await waitForAsyncTasks();
+
+			assert.strictEqual(
+				await findFileByFocusKey("renamed_shared_focus"),
+				"common/national_focus/shared.txt",
+			);
+			assert.strictEqual(await findFileByFocusKey("my_shared_focus"), undefined);
+		});
+
+		it("keeps the previously indexed ids when the file can't be read", async function () {
+			const primed = await findFileByFocusKey("my_shared_focus");
+			assert.strictEqual(primed, "common/national_focus/shared.txt");
+
+			const logs: string[] = [];
+			const originalLoggerError = Logger.error;
+			Logger.error = (message: string) => {
+				logs.push(message);
+			};
+
+			try {
+				(
+					fileloader as typeof fileloader & {
+						readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
+					}
+				).readFileFromModOrHOI4 = async () => {
+					throw new Error("file gone mid-edit");
+				};
+
+				__testHandlers.onCloseTextDocument({
+					uri: focusFileUri("common/national_focus/shared.txt"),
+					isDirty: true,
+				} as unknown as vscode.TextDocument);
+				await waitForAsyncTasks();
+
+				assert.strictEqual(
+					await findFileByFocusKey("my_shared_focus"),
+					"common/national_focus/shared.txt",
+				);
+				assert.ok(logs.some((l) => l.includes("file gone mid-edit")));
+			} finally {
+				Logger.error = originalLoggerError;
+			}
+		});
+
+		it("keeps the previously indexed ids when the file doesn't parse midway through an edit", async function () {
+			const primed = await findFileByFocusKey("my_shared_focus");
+			assert.strictEqual(primed, "common/national_focus/shared.txt");
+
+			const hoiparser =
+				require("../hoiformat/hoiparser") as typeof import("../hoiformat/hoiparser");
+			const originalParseHoi4File = hoiparser.parseHoi4File;
+			const originalLoggerError = Logger.error;
+			Logger.error = () => undefined;
+
+			try {
+				(
+					hoiparser as typeof hoiparser & {
+						parseHoi4File: typeof hoiparser.parseHoi4File;
+					}
+				).parseHoi4File = () => {
+					throw new Error("half-typed focus block");
+				};
+
+				__testHandlers.onCloseTextDocument({
+					uri: focusFileUri("common/national_focus/shared.txt"),
+					isDirty: true,
+				} as unknown as vscode.TextDocument);
+				await waitForAsyncTasks();
+
+				assert.strictEqual(
+					await findFileByFocusKey("my_shared_focus"),
+					"common/national_focus/shared.txt",
+				);
+			} finally {
+				(
+					hoiparser as typeof hoiparser & {
+						parseHoi4File: typeof hoiparser.parseHoi4File;
+					}
+				).parseHoi4File = originalParseHoi4File;
+				Logger.error = originalLoggerError;
+			}
+		});
+	});
 });
 
 describe("util/sharedFocusIndex parse failure logging", function () {
