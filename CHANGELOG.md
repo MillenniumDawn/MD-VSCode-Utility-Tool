@@ -6,6 +6,7 @@ v1.1.29
 - Keep the editor responsive while indexing, and show progress you can cancel.
 - Keep a separate index cache per mod, and reuse the parts of it that are still current.
 - Speed up previews and indexing, and remove the duplicated index and preview scaffolding.
+- [ Focus Tree ] Run layout validation on shared and joint focus trees. Issue #82.
 
 v1.1.28
 
