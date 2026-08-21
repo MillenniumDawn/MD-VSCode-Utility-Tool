@@ -8,6 +8,7 @@ v1.1.29
 - Speed up previews and indexing, and remove the duplicated index and preview scaffolding.
 - [ Focus Tree ] Run layout validation on shared and joint focus trees. Issue #82.
 - Focus tree and idea previews no longer crash when a container element is missing.
+- [ Focus Tree ] Share the focus tree preview's update machinery with every other preview. Issue #140.
 
 v1.1.28
 
