@@ -94,6 +94,12 @@ function buildStub() {
         showQuickPick: async () => undefined,
         showOpenDialog: async () => undefined,
         setStatusBarMessage: () => disposable(),
+        // Runs the task rather than ignoring it: an index build does all of its work inside this
+        // callback, so a stub that dropped it would hang every build-triggering suite.
+        withProgress: (_options: any, task: any) => task(
+            { report: noop },
+            { isCancellationRequested: false, onCancellationRequested: () => disposable() },
+        ),
         createOutputChannel: () => ({
             appendLine: noop, append: noop, clear: noop,
             show: noop, hide: noop, dispose: noop,
@@ -116,6 +122,7 @@ function buildStub() {
     };
 
     const ConfigurationTarget = { Global: 1, Workspace: 2 };
+    const ProgressLocation = { SourceControl: 1, Window: 10, Notification: 15 };
     const StatusBarAlignment = { Left: 1, Right: 2 };
     const ViewColumn = { Active: -1, Beside: -2, One: 1, Two: 2, Three: 3 };
 
@@ -138,6 +145,7 @@ function buildStub() {
         env: {},
         FileType,
         ConfigurationTarget,
+        ProgressLocation,
         StatusBarAlignment,
         ViewColumn,
         Position,
@@ -221,6 +229,7 @@ const pristine = {
     showErrorMessage: stub.window.showErrorMessage,
     createWebviewPanel: stub.window.createWebviewPanel,
     registerWebviewPanelSerializer: stub.window.registerWebviewPanelSerializer,
+    withProgress: stub.window.withProgress,
     now: Date.now,
 };
 
@@ -246,6 +255,11 @@ export interface VscodeStubOverrides {
     createWebviewPanel?: (viewType: string, title: string, showOptions: any, options: any) => any;
     /** Captures the serializer a suite's `register()` call installs, e.g. to drive it directly. */
     registerWebviewPanelSerializer?: (viewType: string, serializer: any) => { dispose(): void };
+    /**
+     * Drives an index build's progress notification: hand the task an already-cancelled token to
+     * exercise cancellation, or capture what it reports.
+     */
+    withProgress?: (options: any, task: any) => any;
     /** Replaces `Date.now`, for suites driving a TTL boundary deterministically. */
     now?: () => number;
 }
@@ -305,6 +319,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.registerWebviewPanelSerializer !== undefined) {
         window.registerWebviewPanelSerializer = overrides.registerWebviewPanelSerializer;
     }
+    if (overrides.withProgress !== undefined) {
+        window.withProgress = overrides.withProgress;
+    }
     if (overrides.now !== undefined) {
         Date.now = overrides.now;
     }
@@ -328,5 +345,6 @@ export function restoreVscodeStubs(): void {
     window.showErrorMessage = pristine.showErrorMessage;
     window.createWebviewPanel = pristine.createWebviewPanel;
     window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
+    window.withProgress = pristine.withProgress;
     Date.now = pristine.now;
 }

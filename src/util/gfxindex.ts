@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import { getSpriteTypes } from "../hoiformat/spritetype";
-import { debounceByInput, forceError, mapLimit, UserError } from "./common";
+import { debounceByInput, forceError, UserError } from "./common";
 import { error } from "./debug";
 import { gfxIndex } from "./featureflags";
 import { readFileFromModOrHOI4 } from "./fileloader";
@@ -16,7 +16,12 @@ import { localize } from "./i18n";
 import { uniq } from "lodash";
 import { sendEvent } from "./telemetry";
 import { attachTaskWithErrorLogging } from "./promiseUtils";
-import { createIndexBuilder } from "./indexBuild";
+import {
+	createIndexBuilder,
+	indexParseQueue,
+	IndexProgress,
+	withIndexProgress,
+} from "./indexBuild";
 import { Logger } from "./logger";
 import {
 	loadCacheManifest,
@@ -65,11 +70,11 @@ let estimatedSize: [number] = [0];
 const builder = createIndexBuilder({
 	name: "gfxIndex",
 	message: localize("gfxindex.building", "Building GFX index..."),
-	build: () => {
+	build: (progress) => {
 		estimatedSize = [0];
 		return Promise.all([
-			buildGlobalGfxIndex(estimatedSize),
-			buildWorkspaceGfxIndex(estimatedSize),
+			buildGlobalGfxIndex(estimatedSize, progress),
+			buildWorkspaceGfxIndex(estimatedSize, progress),
 		]);
 	},
 	onSuccess: () => {
@@ -115,37 +120,56 @@ const gfxRoot = "interface";
 const isGfxFile = (relativePath: string) =>
 	relativePath.toLocaleLowerCase().endsWith(".gfx");
 
-async function buildGlobalGfxIndex(estimatedSize: [number]): Promise<void> {
+async function buildGlobalGfxIndex(
+	estimatedSize: [number],
+	progress: IndexProgress,
+): Promise<void> {
 	const options = { mod: false, recursively: true };
 	await buildGfxIndexWithCache(
 		"gfxIndex.global",
-		() => listIndexFiles({ roots: [gfxRoot], filter: isGfxFile, options }),
+		(token) =>
+			listIndexFiles({
+				roots: [gfxRoot],
+				filter: isGfxFile,
+				options: { ...options, token },
+			}),
 		globalGfxIndex,
 		null,
 		options,
 		estimatedSize,
+		progress,
 	);
 }
 
-async function buildWorkspaceGfxIndex(estimatedSize: [number]): Promise<void> {
+async function buildWorkspaceGfxIndex(
+	estimatedSize: [number],
+	progress: IndexProgress,
+): Promise<void> {
 	const options = { hoi4: false, recursively: true };
 	await buildGfxIndexWithCache(
 		"gfxIndex.workspace",
-		() => listIndexFiles({ roots: [gfxRoot], filter: isGfxFile, options }),
+		(token) =>
+			listIndexFiles({
+				roots: [gfxRoot],
+				filter: isGfxFile,
+				options: { ...options, token },
+			}),
 		workspaceGfxIndex,
 		workspaceGfxFileToKeys,
 		options,
 		estimatedSize,
+		progress,
 	);
 }
 
 async function buildGfxIndexWithCache(
 	cacheName: string,
-	listFiles: () => Promise<IndexListing>,
+	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
 	targetIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	const timer = new IndexTimer(cacheName);
 	try {
@@ -157,6 +181,7 @@ async function buildGfxIndexWithCache(
 			fileToKeysMap,
 			options,
 			estimatedSize,
+			progress,
 		);
 	} finally {
 		// A build that threw must not leave a phase behind in the live-build report.
@@ -167,11 +192,12 @@ async function buildGfxIndexWithCache(
 async function buildGfxIndexWithTimer(
 	timer: IndexTimer,
 	cacheName: string,
-	listFiles: () => Promise<IndexListing>,
+	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
 	targetIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
 	// install it is now the directory walk and the mtimes together, which is where a slow cold build
@@ -181,7 +207,7 @@ async function buildGfxIndexWithTimer(
 		filePaths: gfxFiles,
 		uris,
 		mtimes: currentMtimes,
-	} = await listFiles();
+	} = await listFiles(progress.token);
 
 	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, GFX_CACHE_VERSION);
@@ -228,10 +254,16 @@ async function buildGfxIndexWithTimer(
 	timer.begin("parse");
 	let parsed = 0;
 	const toParse = toIndexFiles(filesToParse, uris);
-	await mapLimit(toParse, 8, async (f) => {
-		await fillGfxItems(f, targetIndex, fileToKeysMap, options, estimatedSize);
-		timer.progress(++parsed, toParse.length);
-	});
+	progress.report(0, toParse.length);
+	await indexParseQueue.map(
+		toParse,
+		async (f) => {
+			await fillGfxItems(f, targetIndex, fileToKeysMap, options, estimatedSize);
+			timer.progress(++parsed, toParse.length);
+			progress.report(parsed, toParse.length);
+		},
+		{ token: progress.token },
+	);
 	timer.end(gfxFiles.length, filesToParse.length);
 
 	const serializedFileToKeys: Record<string, string[]> = {};
@@ -302,24 +334,13 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 	workspaceGfxIndex = {};
 	workspaceGfxFileToKeys.clear();
 	const folderChangeSize: [number] = [0];
-	const task = buildWorkspaceGfxIndex(folderChangeSize);
-	vscode.window.setStatusBarMessage(
-		"$(loading~spin) " +
-			localize(
-				"gfxindex.workspace.building",
-				"Building workspace GFX index...",
-			),
-		task,
+	const task = withIndexProgress(
+		localize("gfxindex.workspace.building", "Building workspace GFX index..."),
+		(progress) => buildWorkspaceGfxIndex(folderChangeSize, progress),
 	);
 	attachTaskWithErrorLogging(
 		task,
 		() => {
-			vscode.window.showInformationMessage(
-				localize(
-					"gfxindex.workspace.builddone",
-					"Building workspace GFX index done.",
-				),
-			);
 			sendEvent("gfxIndex.workspace", {
 				size: folderChangeSize[0].toString(),
 			});

@@ -320,6 +320,117 @@ export async function mapLimit<T, R>(
 }
 
 /**
+ * Hands the event loop one turn. `setImmediate` rather than a resolved promise on purpose: a
+ * microtask would run before the host gets to service any of its pending IO or RPC, which is the
+ * whole point of yielding here.
+ */
+export function yieldToEventLoop(): Promise<void> {
+	return new Promise((resolve) => {
+		setImmediate(resolve);
+	});
+}
+
+export interface WorkQueueOptions {
+	/** Checked before each item; a cancelled queue rejects and drops whatever it had left. */
+	token?: CancellationLike;
+}
+
+export interface WorkQueue {
+	/**
+	 * Like {@link mapLimit}, but the concurrency budget belongs to the queue rather than to this
+	 * one call. Results preserve input order; the first rejection is what the call rejects with.
+	 */
+	map<T, R>(
+		items: T[],
+		fn: (item: T, index: number) => Promise<R>,
+		options?: WorkQueueOptions,
+	): Promise<R[]>;
+}
+
+/**
+ * A worker pool shared by everything that runs through it, where `mapLimit` gives every call a
+ * pool of its own. Four index builds each calling `mapLimit(files, 8, parse)` over two halves put
+ * up to 64 synchronous parses on the extension host at once, all competing with the RPC that the
+ * other half of the same build is blocked on. Sharing one small budget is what stops that.
+ *
+ * A worker also yields the event loop after every item, so a run of back-to-back synchronous
+ * parses cannot hold the host for the length of the whole run.
+ *
+ * One rule for callbacks: never await another `map` on the same queue from inside one. Holding a
+ * slot while waiting for a slot is a deadlock as soon as `limit` callbacks do it at once.
+ */
+export function createWorkQueue(limit: number): WorkQueue {
+	const effectiveLimit = Math.max(1, limit);
+	const pending: (() => Promise<void>)[] = [];
+	let active = 0;
+
+	function pump(): void {
+		while (active < effectiveLimit && pending.length > 0) {
+			const job = pending.shift()!;
+			active++;
+			void job().then(onJobSettled, onJobSettled);
+		}
+	}
+
+	function onJobSettled(): void {
+		active--;
+		pump();
+	}
+
+	async function map<T, R>(
+		items: T[],
+		fn: (item: T, index: number) => Promise<R>,
+		options?: WorkQueueOptions,
+	): Promise<R[]> {
+		const results = new Array<R>(items.length);
+		if (items.length === 0) {
+			return results;
+		}
+
+		const token = options?.token;
+		let failure: unknown;
+		let failed = false;
+		let settledCount = 0;
+
+		await new Promise<void>((resolve) => {
+			for (let i = 0; i < items.length; i++) {
+				const index = i;
+				pending.push(async () => {
+					try {
+						// Whatever is left of a call that already failed or was cancelled still has
+						// to drain out of the queue, but it must not do any of its work.
+						if (!failed) {
+							throwIfCancelled(token);
+							results[index] = await fn(items[index]!, index);
+							await yieldToEventLoop();
+						}
+					} catch (cause) {
+						if (!failed) {
+							failed = true;
+							failure = cause;
+						}
+					} finally {
+						if (++settledCount === items.length) {
+							resolve();
+						}
+					}
+				});
+			}
+
+			// Synchronously, so the first item's `fn` is entered in this same microtask chain.
+			pump();
+		});
+
+		if (failed) {
+			throw failure;
+		}
+		return results;
+	}
+
+	return { map };
+}
+
+/**
  * Wraps an async, single-string-keyed function with a short-lived per-key memo. Within `ttl`
  * milliseconds of a key's last computation the memoized promise is returned as-is; after the TTL
  * the value is recomputed. Collapses IO bursts (e.g. the hundreds of fs.stat calls a single

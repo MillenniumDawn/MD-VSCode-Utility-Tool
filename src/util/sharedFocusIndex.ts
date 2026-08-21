@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { debounceByInput, mapLimit } from "./common";
+import { debounceByInput } from "./common";
 import { readFileFromModOrHOI4 } from "./fileloader";
 import {
 	IndexFile,
@@ -10,7 +10,12 @@ import {
 } from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
-import { createIndexBuilder } from "./indexBuild";
+import {
+	createIndexBuilder,
+	indexParseQueue,
+	IndexProgress,
+	withIndexProgress,
+} from "./indexBuild";
 import { attachTaskWithErrorLogging } from "./promiseUtils";
 import { Logger } from "./logger";
 import { extractFocusIds } from "../previewdef/focustree/schema";
@@ -67,11 +72,11 @@ const builder = createIndexBuilder({
 		"sharedFocusIndex.building",
 		"Building Shared Focus index...",
 	),
-	build: () => {
+	build: (progress) => {
 		estimatedSize = [0];
 		return Promise.all([
-			buildGlobalFocusIndex(estimatedSize),
-			buildWorkspaceFocusIndex(estimatedSize),
+			buildGlobalFocusIndex(estimatedSize, progress),
+			buildWorkspaceFocusIndex(estimatedSize, progress),
 		]);
 	},
 	onSuccess: () => {
@@ -89,39 +94,48 @@ const FOCUS_CACHE_VERSION = 1;
 
 const focusRoot = "common/national_focus";
 
-async function buildGlobalFocusIndex(estimatedSize: [number]): Promise<void> {
+async function buildGlobalFocusIndex(
+	estimatedSize: [number],
+	progress: IndexProgress,
+): Promise<void> {
 	const options = { mod: false, hoi4: true, recursively: true };
 	await buildFocusIndexWithCache(
 		"focusIndex.global",
-		() => listIndexFiles({ roots: [focusRoot], options }),
+		(token) =>
+			listIndexFiles({ roots: [focusRoot], options: { ...options, token } }),
 		globalFocusIndex,
 		globalFocusKeyToFile,
 		options,
 		estimatedSize,
+		progress,
 	);
 }
 
 async function buildWorkspaceFocusIndex(
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	const options = { mod: true, hoi4: false, recursively: true };
 	await buildFocusIndexWithCache(
 		"focusIndex.workspace",
-		() => listIndexFiles({ roots: [focusRoot], options }),
+		(token) =>
+			listIndexFiles({ roots: [focusRoot], options: { ...options, token } }),
 		workspaceFocusIndex,
 		workspaceFocusKeyToFile,
 		options,
 		estimatedSize,
+		progress,
 	);
 }
 
 async function buildFocusIndexWithCache(
 	cacheName: string,
-	listFiles: () => Promise<IndexListing>,
+	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
 	focusIndex: FocusIndex,
 	reverseMap: Map<string, string>,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	const timer = new IndexTimer(cacheName);
 	try {
@@ -133,6 +147,7 @@ async function buildFocusIndexWithCache(
 			reverseMap,
 			options,
 			estimatedSize,
+			progress,
 		);
 	} finally {
 		// A build that threw must not leave a phase behind in the live-build report.
@@ -143,11 +158,12 @@ async function buildFocusIndexWithCache(
 async function buildFocusIndexWithTimer(
 	timer: IndexTimer,
 	cacheName: string,
-	listFiles: () => Promise<IndexListing>,
+	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
 	focusIndex: FocusIndex,
 	reverseMap: Map<string, string>,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
+	progress: IndexProgress,
 ): Promise<void> {
 	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
 	// install it is now the directory walk and the mtimes together, which is where a slow cold build
@@ -157,7 +173,7 @@ async function buildFocusIndexWithTimer(
 		filePaths: focusFiles,
 		uris,
 		mtimes: currentMtimes,
-	} = await listFiles();
+	} = await listFiles(progress.token);
 
 	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, FOCUS_CACHE_VERSION);
@@ -200,10 +216,16 @@ async function buildFocusIndexWithTimer(
 	timer.begin("parse");
 	let parsed = 0;
 	const toParse = toIndexFiles(filesToParse, uris);
-	await mapLimit(toParse, 8, async (f) => {
-		await fillFocusItems(f, focusIndex, reverseMap, options, estimatedSize);
-		timer.progress(++parsed, toParse.length);
-	});
+	progress.report(0, toParse.length);
+	await indexParseQueue.map(
+		toParse,
+		async (f) => {
+			await fillFocusItems(f, focusIndex, reverseMap, options, estimatedSize);
+			timer.progress(++parsed, toParse.length);
+			progress.report(parsed, toParse.length);
+		},
+		{ token: progress.token },
+	);
 	timer.end(focusFiles.length, filesToParse.length);
 
 	// fire-and-forget: write data before manifest for atomicity
@@ -358,24 +380,16 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 	workspaceFocusKeyToFile.clear();
 
 	const folderChangeSize: [number] = [0];
-	const task = buildWorkspaceFocusIndex(folderChangeSize);
-	vscode.window.setStatusBarMessage(
-		"$(loading~spin) " +
-			localize(
-				"sharedFocusIndex.workspace.building",
-				"Building workspace Focus index...",
-			),
-		task,
+	const task = withIndexProgress(
+		localize(
+			"sharedFocusIndex.workspace.building",
+			"Building workspace Focus index...",
+		),
+		(progress) => buildWorkspaceFocusIndex(folderChangeSize, progress),
 	);
 	attachTaskWithErrorLogging(
 		task,
 		() => {
-			vscode.window.showInformationMessage(
-				localize(
-					"sharedFocusIndex.workspace.builddone",
-					"Building workspace Focus index done.",
-				),
-			);
 			sendEvent("sharedFocusIndex.workspace", {
 				size: folderChangeSize[0].toString(),
 			});
