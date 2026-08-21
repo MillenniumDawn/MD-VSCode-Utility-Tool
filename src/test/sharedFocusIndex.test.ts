@@ -26,18 +26,43 @@ describe("util/sharedFocusIndex", () => {
 	});
 });
 
+type ListedEntry = {
+	relativePath: string;
+	uri: unknown;
+	mtime: number | undefined;
+};
+
 type FileloaderModule = {
-	listFilesFromModOrHOI4: (
+	listFileEntriesFromModOrHOI4: (
 		relativePath: string,
-		options?: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
-	) => Promise<string[]>;
+		options?: {
+			mod?: boolean;
+			hoi4?: boolean;
+			recursively?: boolean;
+			token?: unknown;
+		},
+	) => Promise<ListedEntry[]>;
 	readFileFromModOrHOI4: (
 		relativePath: string,
 		options?: { mod?: boolean; hoi4?: boolean },
 	) => Promise<[Buffer, unknown]>;
+	getFilePathFromModOrHOI4: (
+		relativePath: string,
+		options?: { mod?: boolean; hoi4?: boolean },
+	) => Promise<unknown>;
 };
 
 const fileloader = require("../util/fileloader") as FileloaderModule;
+
+// A dated entry is what a listing on a real disk produces; leaving the mtime out would send
+// listIndexFiles down its resolve-and-stat fallback and out to the unstubbed file system.
+function toEntries(names: string[]): ListedEntry[] {
+	return names.map((relativePath) => ({
+		relativePath,
+		uri: undefined,
+		mtime: 1,
+	}));
+}
 
 const SHARED_FOCUS_FILE_CONTENT = Buffer.from(
 	"shared_focus = { id = my_shared_focus }",
@@ -69,7 +94,7 @@ function focusFileUri(relativePath: string): vscode.Uri {
 }
 
 describe("util/sharedFocusIndex lazy build", function () {
-	let originalListFiles: FileloaderModule["listFilesFromModOrHOI4"];
+	let originalListFiles: FileloaderModule["listFileEntriesFromModOrHOI4"];
 	let originalReadFile: FileloaderModule["readFileFromModOrHOI4"];
 	let listFilesCallCount: number;
 
@@ -82,16 +107,16 @@ describe("util/sharedFocusIndex lazy build", function () {
 		featureflags.refreshFeatureFlags();
 
 		listFilesCallCount = 0;
-		originalListFiles = fileloader.listFilesFromModOrHOI4;
+		originalListFiles = fileloader.listFileEntriesFromModOrHOI4;
 		originalReadFile = fileloader.readFileFromModOrHOI4;
 
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = async () => {
+		).listFileEntriesFromModOrHOI4 = async () => {
 			listFilesCallCount++;
-			return ["shared.txt"];
+			return toEntries(["shared.txt"]);
 		};
 		(
 			fileloader as typeof fileloader & {
@@ -106,9 +131,9 @@ describe("util/sharedFocusIndex lazy build", function () {
 	afterEach(function () {
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = originalListFiles;
+		).listFileEntriesFromModOrHOI4 = originalListFiles;
 		(
 			fileloader as typeof fileloader & {
 				readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
@@ -153,18 +178,56 @@ describe("util/sharedFocusIndex lazy build", function () {
 		assert.strictEqual(listFilesCallCount, 2);
 	});
 
+	it("still dates its files the old way when the listing cannot", async function () {
+		// The web build and a remote install path both list without mtimes. The build has to fall back
+		// to resolving and stat'ing each file, which is what it used to do for every file it listed.
+		const originalGetFilePath = fileloader.getFilePathFromModOrHOI4;
+		const resolved: string[] = [];
+		(
+			fileloader as typeof fileloader & {
+				getFilePathFromModOrHOI4: FileloaderModule["getFilePathFromModOrHOI4"];
+			}
+		).getFilePathFromModOrHOI4 = async (relativePath) => {
+			resolved.push(relativePath);
+			return undefined;
+		};
+		(
+			fileloader as typeof fileloader & {
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
+			}
+		).listFileEntriesFromModOrHOI4 = async () => [
+			{ relativePath: "shared.txt", uri: undefined, mtime: undefined },
+		];
+
+		try {
+			const result = await findFileByFocusKey("my_shared_focus");
+
+			assert.strictEqual(result, "common/national_focus/shared.txt");
+			assert.deepStrictEqual(resolved, [
+				"common/national_focus/shared.txt",
+				"common/national_focus/shared.txt",
+			]);
+		} finally {
+			(
+				fileloader as typeof fileloader & {
+					getFilePathFromModOrHOI4: FileloaderModule["getFilePathFromModOrHOI4"];
+				}
+			).getFilePathFromModOrHOI4 = originalGetFilePath;
+		}
+	});
+
 	describe("incremental events vs. an in-flight build", function () {
-		// The global (vanilla) build shares the same stubbed listFilesFromModOrHOI4/readFileFromModOrHOI4
+		// The global (vanilla) build shares the same stubbed listFileEntriesFromModOrHOI4/readFileFromModOrHOI4
 		// as the workspace (mod) build. Route "shared.txt" into the workspace build only, so
 		// findFileByFocusKey's fallback to the global index can't mask a workspace-only mutation.
 		beforeEach(function () {
 			(
 				fileloader as typeof fileloader & {
-					listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+					listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 				}
-			).listFilesFromModOrHOI4 = async (_relativePath, options) => {
+			).listFileEntriesFromModOrHOI4 = async (_relativePath, options) => {
 				listFilesCallCount++;
-				return options?.hoi4 ? [] : ["shared.txt"];
+				return toEntries(options?.hoi4 ? [] : ["shared.txt"]);
 			};
 		});
 
@@ -284,11 +347,11 @@ describe("util/sharedFocusIndex lazy build", function () {
 		beforeEach(function () {
 			(
 				fileloader as typeof fileloader & {
-					listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+					listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 				}
-			).listFilesFromModOrHOI4 = async (_relativePath, options) => {
+			).listFileEntriesFromModOrHOI4 = async (_relativePath, options) => {
 				listFilesCallCount++;
-				return options?.hoi4 ? [] : ["shared.txt"];
+				return toEntries(options?.hoi4 ? [] : ["shared.txt"]);
 			};
 		});
 
@@ -350,9 +413,15 @@ describe("util/sharedFocusIndex lazy build", function () {
 			const primed = await findFileByFocusKey("my_shared_focus");
 			assert.strictEqual(primed, "common/national_focus/shared.txt");
 
+			// An unreadable file is a warning, not an error: it costs that one file and the build
+			// (or the re-index) carries on, so both channels are captured here.
 			const logs: string[] = [];
 			const originalLoggerError = Logger.error;
+			const originalLoggerWarn = Logger.warn;
 			Logger.error = (message: string) => {
+				logs.push(message);
+			};
+			Logger.warn = (message: string) => {
 				logs.push(message);
 			};
 
@@ -378,6 +447,7 @@ describe("util/sharedFocusIndex lazy build", function () {
 				assert.ok(logs.some((l) => l.includes("file gone mid-edit")));
 			} finally {
 				Logger.error = originalLoggerError;
+				Logger.warn = originalLoggerWarn;
 			}
 		});
 
@@ -423,7 +493,7 @@ describe("util/sharedFocusIndex lazy build", function () {
 });
 
 describe("util/sharedFocusIndex parse failure logging", function () {
-	let originalListFiles: FileloaderModule["listFilesFromModOrHOI4"];
+	let originalListFiles: FileloaderModule["listFileEntriesFromModOrHOI4"];
 	let originalReadFile: FileloaderModule["readFileFromModOrHOI4"];
 	let originalLoggerError: typeof Logger.error;
 	let logs: string[];
@@ -443,15 +513,15 @@ describe("util/sharedFocusIndex parse failure logging", function () {
 			logs.push(message);
 		};
 
-		originalListFiles = fileloader.listFilesFromModOrHOI4;
+		originalListFiles = fileloader.listFileEntriesFromModOrHOI4;
 		originalReadFile = fileloader.readFileFromModOrHOI4;
 		// Route the file into the workspace (mod) build so hoi4:true does not mask it.
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = async (_relativePath, options) =>
-			options?.hoi4 ? [] : ["bad.txt"];
+		).listFileEntriesFromModOrHOI4 = async (_relativePath, options) =>
+			toEntries(options?.hoi4 ? [] : ["bad.txt"]);
 		(
 			fileloader as typeof fileloader & {
 				readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
@@ -468,9 +538,9 @@ describe("util/sharedFocusIndex parse failure logging", function () {
 	afterEach(function () {
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = originalListFiles;
+		).listFileEntriesFromModOrHOI4 = originalListFiles;
 		(
 			fileloader as typeof fileloader & {
 				readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
@@ -597,10 +667,10 @@ describe("util/sharedFocusIndex parse failure logging", function () {
 		// Re-route to the global (hoi4) build instead of workspace.
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = async (_relativePath, options) =>
-			options?.hoi4 ? ["vanilla_bad.txt"] : [];
+		).listFileEntriesFromModOrHOI4 = async (_relativePath, options) =>
+			toEntries(options?.hoi4 ? ["vanilla_bad.txt"] : []);
 		stubParseToThrow(new Error("vanilla boom"));
 
 		await findFileByFocusKey("anything");

@@ -221,6 +221,29 @@ export class TimeoutError extends Error {
 	}
 }
 
+/**
+ * Thrown by work that noticed its CancellationToken was cancelled and stopped part-way. Deliberately
+ * not `vscode.CancellationError`: this never leaves the extension, and the unit-test vscode stub has
+ * no such class to construct.
+ */
+export class CancelledError extends Error {
+	constructor(message: string = "Operation cancelled") {
+		super(message);
+		this.name = "CancelledError";
+	}
+}
+
+/** The one member of `vscode.CancellationToken` that synchronous, pollable work needs. */
+export interface CancellationLike {
+	readonly isCancellationRequested: boolean;
+}
+
+export function throwIfCancelled(token: CancellationLike | undefined): void {
+	if (token?.isCancellationRequested) {
+		throw new CancelledError();
+	}
+}
+
 export function withTimeout<T>(
 	promise: Promise<T>,
 	ms: number,

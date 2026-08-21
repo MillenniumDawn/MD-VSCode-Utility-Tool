@@ -204,6 +204,11 @@
 				"command": "mdhoi4utilities.selecthoifolder",
 				"title": "%hoi4modutilities.selecthoifolder.title%",
 				"category": "%hoi4modutilities.category%"
+			},
+			{
+				"command": "mdhoi4utilities.showindexstatus",
+				"title": "%hoi4modutilities.showindexstatus.title%",
+				"category": "%hoi4modutilities.category%"
 			}
 		],
 		"customEditors": [
@@ -256,6 +261,9 @@
 				},
 				{
 					"command": "mdhoi4utilities.selecthoifolder"
+				},
+				{
+					"command": "mdhoi4utilities.showindexstatus"
 				}
 			]
 		}

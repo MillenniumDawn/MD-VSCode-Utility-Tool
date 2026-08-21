@@ -166,6 +166,8 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"guipreview.nocontainerwindows": "No containerwindowtype in gui file.",
 	"guipreview.topbar.toggleVisibility.title": "Show or Hide Container Windows",
 	hours: "hour(s)",
+	"indexStatus.idle": "No index build is running.",
+	"indexStatus.running": "Index builds running: {0}",
 	"ideaSwapIndex.building": "Building idea swap index...",
 	"ideaSwapIndex.workspace.building": "Building workspace idea swap index...",
 	"ideapreview.against": "Against {0}",

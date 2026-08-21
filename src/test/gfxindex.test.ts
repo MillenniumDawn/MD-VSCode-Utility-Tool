@@ -9,11 +9,22 @@ import {
 } from "../util/gfxindex";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
+type ListedEntry = {
+	relativePath: string;
+	uri: unknown;
+	mtime: number | undefined;
+};
+
 type FileloaderModule = {
-	listFilesFromModOrHOI4: (
+	listFileEntriesFromModOrHOI4: (
 		relativePath: string,
-		options?: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
-	) => Promise<string[]>;
+		options?: {
+			mod?: boolean;
+			hoi4?: boolean;
+			recursively?: boolean;
+			token?: unknown;
+		},
+	) => Promise<ListedEntry[]>;
 	readFileFromModOrHOI4: (
 		relativePath: string,
 		options?: { mod?: boolean; hoi4?: boolean },
@@ -21,6 +32,17 @@ type FileloaderModule = {
 };
 
 const fileloader = require("../util/fileloader") as FileloaderModule;
+
+// A dated entry is what a listing on a real disk produces; leaving the mtime out would send
+// listIndexFiles down its resolve-and-stat fallback and out to the unstubbed file system.
+function toEntries(names: string[]): ListedEntry[] {
+	return names.map((relativePath) => ({
+		relativePath,
+		uri: undefined,
+		mtime: 1,
+	}));
+}
+
 
 const GFX_FILE_CONTENT = Buffer.from(`spriteTypes = {
 	spriteType = {
@@ -55,7 +77,7 @@ function gfxFileUri(relativePath: string): vscode.Uri {
 }
 
 describe("util/gfxindex lazy build", function () {
-	let originalListFiles: FileloaderModule["listFilesFromModOrHOI4"];
+	let originalListFiles: FileloaderModule["listFileEntriesFromModOrHOI4"];
 	let originalReadFile: FileloaderModule["readFileFromModOrHOI4"];
 	let listFilesCallCount: number;
 
@@ -68,16 +90,16 @@ describe("util/gfxindex lazy build", function () {
 		featureflags.refreshFeatureFlags();
 
 		listFilesCallCount = 0;
-		originalListFiles = fileloader.listFilesFromModOrHOI4;
+		originalListFiles = fileloader.listFileEntriesFromModOrHOI4;
 		originalReadFile = fileloader.readFileFromModOrHOI4;
 
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = async () => {
+		).listFileEntriesFromModOrHOI4 = async () => {
 			listFilesCallCount++;
-			return ["sprite.gfx"];
+			return toEntries(["sprite.gfx"]);
 		};
 		(
 			fileloader as typeof fileloader & {
@@ -89,9 +111,9 @@ describe("util/gfxindex lazy build", function () {
 	afterEach(function () {
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = originalListFiles;
+		).listFileEntriesFromModOrHOI4 = originalListFiles;
 		(
 			fileloader as typeof fileloader & {
 				readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
@@ -143,11 +165,11 @@ describe("util/gfxindex lazy build", function () {
 		beforeEach(function () {
 			(
 				fileloader as typeof fileloader & {
-					listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+					listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 				}
-			).listFilesFromModOrHOI4 = async (_relativePath, options) => {
+			).listFileEntriesFromModOrHOI4 = async (_relativePath, options) => {
 				listFilesCallCount++;
-				return options?.mod === false ? [] : ["sprite.gfx"];
+				return toEntries(options?.mod === false ? [] : ["sprite.gfx"]);
 			};
 		});
 

@@ -5,22 +5,24 @@ import { getSpriteTypes } from "../hoiformat/spritetype";
 import { debounceByInput, forceError, mapLimit, UserError } from "./common";
 import { error } from "./debug";
 import { gfxIndex } from "./featureflags";
+import { readFileFromModOrHOI4 } from "./fileloader";
 import {
-	getFilePathFromModOrHOI4,
-	listFilesFromModOrHOI4,
-	readFileFromModOrHOI4,
-} from "./fileloader";
+	IndexFile,
+	IndexListing,
+	listIndexFiles,
+	toIndexFiles,
+} from "./indexListing";
 import { localize } from "./i18n";
 import { uniq } from "lodash";
 import { sendEvent } from "./telemetry";
-import { attachTaskWithErrorLogging, createBuildGate } from "./promiseUtils";
+import { attachTaskWithErrorLogging } from "./promiseUtils";
+import { createIndexBuilder } from "./indexBuild";
 import { Logger } from "./logger";
 import {
 	loadCacheManifest,
 	loadCacheData,
 	saveCacheManifest,
 	saveCacheData,
-	getFileMtimes,
 	computeStaleFiles,
 	IndexTimer,
 } from "./indexCache";
@@ -56,42 +58,29 @@ export function registerGfxIndex(): vscode.Disposable {
 	return vscode.Disposable.from(...disposables);
 }
 
-// Memoized build promise: first caller starts the build, concurrent callers await the same one.
-let buildTask: Promise<[void, void]> | undefined;
-// Gates incremental-event handlers so they don't race the build's writes to the index maps.
-const buildGate = createBuildGate();
+// Both halves report into this so the telemetry event carries the whole build's size. Reset per
+// build, since a build that failed and is retried would otherwise keep counting from where it left off.
+let estimatedSize: [number] = [0];
+
+const builder = createIndexBuilder({
+	name: "gfxIndex",
+	message: localize("gfxindex.building", "Building GFX index..."),
+	build: () => {
+		estimatedSize = [0];
+		return Promise.all([
+			buildGlobalGfxIndex(estimatedSize),
+			buildWorkspaceGfxIndex(estimatedSize),
+		]);
+	},
+	onSuccess: () => {
+		sendEvent("gfxIndex", { size: estimatedSize[0].toString() });
+	},
+});
+
+const buildGate = builder.gate;
 
 function ensureIndexBuilt(): Promise<[void, void]> {
-	if (buildTask) {
-		return buildTask;
-	}
-
-	const estimatedSize: [number] = [0];
-	const task = Promise.all([
-		buildGlobalGfxIndex(estimatedSize),
-		buildWorkspaceGfxIndex(estimatedSize),
-	]);
-	buildTask = task;
-	buildGate.start(task);
-
-	vscode.window.setStatusBarMessage(
-		"$(loading~spin) " +
-			localize("gfxindex.building", "Building GFX index..."),
-		task,
-	);
-	attachTaskWithErrorLogging(
-		task,
-		() => {
-			vscode.window.showInformationMessage(
-				localize("gfxindex.builddone", "Building GFX index done."),
-			);
-			sendEvent("gfxIndex", { size: estimatedSize[0].toString() });
-		},
-		"Building GFX index failed.",
-		Logger.error,
-	);
-
-	return task;
+	return builder.ensureBuilt();
 }
 
 export async function getGfxContainerFile(
@@ -122,14 +111,15 @@ interface GfxCacheData {
 	fileToKeys: Record<string, string[]>;
 }
 
+const gfxRoot = "interface";
+const isGfxFile = (relativePath: string) =>
+	relativePath.toLocaleLowerCase().endsWith(".gfx");
+
 async function buildGlobalGfxIndex(estimatedSize: [number]): Promise<void> {
 	const options = { mod: false, recursively: true };
-	const gfxFiles = (await listFilesFromModOrHOI4("interface", options))
-		.filter((f) => f.toLocaleLowerCase().endsWith(".gfx"))
-		.map((f) => "interface/" + f);
 	await buildGfxIndexWithCache(
 		"gfxIndex.global",
-		gfxFiles,
+		() => listIndexFiles({ roots: [gfxRoot], filter: isGfxFile, options }),
 		globalGfxIndex,
 		null,
 		options,
@@ -139,12 +129,9 @@ async function buildGlobalGfxIndex(estimatedSize: [number]): Promise<void> {
 
 async function buildWorkspaceGfxIndex(estimatedSize: [number]): Promise<void> {
 	const options = { hoi4: false, recursively: true };
-	const gfxFiles = (await listFilesFromModOrHOI4("interface", options))
-		.filter((f) => f.toLocaleLowerCase().endsWith(".gfx"))
-		.map((f) => "interface/" + f);
 	await buildGfxIndexWithCache(
 		"gfxIndex.workspace",
-		gfxFiles,
+		() => listIndexFiles({ roots: [gfxRoot], filter: isGfxFile, options }),
 		workspaceGfxIndex,
 		workspaceGfxFileToKeys,
 		options,
@@ -154,18 +141,49 @@ async function buildWorkspaceGfxIndex(estimatedSize: [number]): Promise<void> {
 
 async function buildGfxIndexWithCache(
 	cacheName: string,
-	gfxFiles: string[],
+	listFiles: () => Promise<IndexListing>,
 	targetIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
 ): Promise<void> {
 	const timer = new IndexTimer(cacheName);
-	const resolveUri = (relativePath: string) =>
-		getFilePathFromModOrHOI4(relativePath, options);
-	const currentMtimes = await getFileMtimes(gfxFiles, resolveUri);
-	timer.mark("mtime");
+	try {
+		await buildGfxIndexWithTimer(
+			timer,
+			cacheName,
+			listFiles,
+			targetIndex,
+			fileToKeysMap,
+			options,
+			estimatedSize,
+		);
+	} finally {
+		// A build that threw must not leave a phase behind in the live-build report.
+		timer.dispose();
+	}
+}
 
+async function buildGfxIndexWithTimer(
+	timer: IndexTimer,
+	cacheName: string,
+	listFiles: () => Promise<IndexListing>,
+	targetIndex: Record<string, GfxIndexItem | undefined>,
+	fileToKeysMap: Map<string, string[]> | null,
+	options: { mod?: boolean; hoi4?: boolean },
+	estimatedSize: [number],
+): Promise<void> {
+	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
+	// install it is now the directory walk and the mtimes together, which is where a slow cold build
+	// spends its time, and it used to happen before the timer existed.
+	timer.begin("list");
+	const {
+		filePaths: gfxFiles,
+		uris,
+		mtimes: currentMtimes,
+	} = await listFiles();
+
+	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, GFX_CACHE_VERSION);
 	let filesToParse = gfxFiles;
 
@@ -206,13 +224,15 @@ async function buildGfxIndexWithCache(
 			}
 		}
 	}
-	timer.mark("cache");
 
-	await mapLimit(filesToParse, 8, (f) =>
-		fillGfxItems(f, targetIndex, fileToKeysMap, options, estimatedSize),
-	);
-	timer.mark("parse");
-	timer.log(gfxFiles.length, filesToParse.length);
+	timer.begin("parse");
+	let parsed = 0;
+	const toParse = toIndexFiles(filesToParse, uris);
+	await mapLimit(toParse, 8, async (f) => {
+		await fillGfxItems(f, targetIndex, fileToKeysMap, options, estimatedSize);
+		timer.progress(++parsed, toParse.length);
+	});
+	timer.end(gfxFiles.length, filesToParse.length);
 
 	const serializedFileToKeys: Record<string, string[]> = {};
 	if (fileToKeysMap) {
@@ -232,17 +252,23 @@ async function buildGfxIndexWithCache(
 }
 
 async function fillGfxItems(
-	gfxFile: string,
+	gfxFile: IndexFile,
 	gfxIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize?: [number],
 ): Promise<void> {
+	const filePath = gfxFile.path;
 	try {
 		if (estimatedSize) {
-			estimatedSize[0] += gfxFile.length;
+			// The path's length, not the file's, which is what this has always counted.
+			estimatedSize[0] += filePath.length;
 		}
-		const [fileBuffer, uri] = await readFileFromModOrHOI4(gfxFile, options);
+		const [fileBuffer, uri] = await readFileFromModOrHOI4(
+			filePath,
+			options,
+			gfxFile.uri,
+		);
 		const spriteTypes = getSpriteTypes(
 			parseHoi4File(
 				fileBuffer.toString(),
@@ -252,7 +278,7 @@ async function fillGfxItems(
 		);
 		const spriteNames: string[] = [];
 		for (const spriteType of spriteTypes) {
-			gfxIndex[spriteType.name] = { file: gfxFile };
+			gfxIndex[spriteType.name] = { file: filePath };
 			if (fileToKeysMap) {
 				spriteNames.push(spriteType.name);
 			}
@@ -261,7 +287,7 @@ async function fillGfxItems(
 			}
 		}
 		if (fileToKeysMap && spriteNames.length > 0) {
-			fileToKeysMap.set(gfxFile, spriteNames);
+			fileToKeysMap.set(filePath, spriteNames);
 		}
 	} catch (e) {
 		error(new UserError(forceError(e).toString()));
@@ -269,14 +295,14 @@ async function fillGfxItems(
 }
 
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
 	workspaceGfxIndex = {};
 	workspaceGfxFileToKeys.clear();
-	const estimatedSize: [number] = [0];
-	const task = buildWorkspaceGfxIndex(estimatedSize);
+	const folderChangeSize: [number] = [0];
+	const task = buildWorkspaceGfxIndex(folderChangeSize);
 	vscode.window.setStatusBarMessage(
 		"$(loading~spin) " +
 			localize(
@@ -294,7 +320,9 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 					"Building workspace GFX index done.",
 				),
 			);
-			sendEvent("gfxIndex.workspace", { size: estimatedSize[0].toString() });
+			sendEvent("gfxIndex.workspace", {
+				size: folderChangeSize[0].toString(),
+			});
 		},
 		"Building workspace GFX index failed.",
 		Logger.error,
@@ -302,7 +330,7 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 }
 
 function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -325,7 +353,7 @@ const onChangeTextDocumentImpl = debounceByInput(
 );
 
 function onCloseTextDocument(document: vscode.TextDocument) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -339,7 +367,7 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 }
 
 function onCreateFiles(e: vscode.FileCreateEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -353,7 +381,7 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 }
 
 function onDeleteFiles(e: vscode.FileDeleteEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -396,17 +424,20 @@ function addWorkspaceGfxIndex(file: vscode.Uri) {
 			.relative(wsFolder.uri.path, file.path)
 			.replace(/\\+/g, "/");
 		if (relative && relative.startsWith("interface/")) {
-			void fillGfxItems(relative, workspaceGfxIndex, workspaceGfxFileToKeys, {
-				hoi4: false,
-			});
+			// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
+			void fillGfxItems(
+				{ path: relative },
+				workspaceGfxIndex,
+				workspaceGfxFileToKeys,
+				{ hoi4: false },
+			);
 		}
 	}
 }
 
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
 export function __resetGfxIndexForTests(): void {
-	buildTask = undefined;
-	buildGate.reset();
+	builder.reset();
 	for (const key of Object.keys(globalGfxIndex)) {
 		delete globalGfxIndex[key];
 	}

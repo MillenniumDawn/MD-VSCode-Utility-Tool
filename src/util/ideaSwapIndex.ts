@@ -1,14 +1,17 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { debounceByInput, mapLimit } from "./common";
+import { readFileFromModOrHOI4 } from "./fileloader";
 import {
-	getFilePathFromModOrHOI4,
-	listFilesFromModOrHOI4,
-	readFileFromModOrHOI4,
-} from "./fileloader";
+	IndexFile,
+	IndexListing,
+	listIndexFiles,
+	toIndexFiles,
+} from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
-import { attachTaskWithErrorLogging, createBuildGate } from "./promiseUtils";
+import { attachTaskWithErrorLogging } from "./promiseUtils";
+import { createIndexBuilder } from "./indexBuild";
 import { Logger } from "./logger";
 import { Node, parseHoi4File } from "../hoiformat/hoiparser";
 import { ideaSwapIndex } from "./featureflags";
@@ -17,7 +20,6 @@ import {
 	loadCacheData,
 	saveCacheManifest,
 	saveCacheData,
-	getFileMtimes,
 	computeStaleFiles,
 	IndexTimer,
 } from "./indexCache";
@@ -87,66 +89,52 @@ export function registerIdeaSwapIndex(): vscode.Disposable {
 	return vscode.Disposable.from(...disposables);
 }
 
-// Memoized build promise: first caller starts the build, concurrent callers await the same one.
-let buildTask: Promise<[void, void]> | undefined;
-// Gates incremental-event handlers so they don't race the build's writes to the index maps.
-const buildGate = createBuildGate();
+// Both halves report into this so the telemetry event carries the whole build's size. Reset per
+// build, since a build that failed and is retried would otherwise keep counting from where it left off.
+let estimatedSize: [number] = [0];
+
+const builder = createIndexBuilder({
+	name: "ideaSwapIndex",
+	message: localize("ideaSwapIndex.building", "Building idea swap index..."),
+	build: () => {
+		estimatedSize = [0];
+		return Promise.all([
+			buildGlobalSwapIndex(estimatedSize),
+			buildWorkspaceSwapIndex(estimatedSize),
+		]);
+	},
+	onSuccess: () => {
+		sendEvent("ideaSwapIndex", { size: estimatedSize[0].toString() });
+	},
+});
+
+const buildGate = builder.gate;
 
 function ensureIndexBuilt(): Promise<[void, void]> {
-	if (buildTask) {
-		return buildTask;
-	}
-
-	const estimatedSize: [number] = [0];
-	const task = Promise.all([
-		buildGlobalSwapIndex(estimatedSize),
-		buildWorkspaceSwapIndex(estimatedSize),
-	]);
-	buildTask = task;
-	buildGate.start(task);
-
-	vscode.window.setStatusBarMessage(
-		"$(loading~spin) " +
-			localize("ideaSwapIndex.building", "Building idea swap index..."),
-		task,
-	);
-	attachTaskWithErrorLogging(
-		task,
-		() => {
-			sendEvent("ideaSwapIndex", { size: estimatedSize[0].toString() });
-		},
-		"Building idea swap index failed.",
-		Logger.error,
-	);
-
-	return task;
+	return builder.ensureBuilt();
 }
 
 const SWAP_CACHE_VERSION = 1;
 
-async function listSwapFiles(options: {
+function listSwapFiles(options: {
 	mod?: boolean;
 	hoi4?: boolean;
-}): Promise<string[]> {
-	const listOptions = { ...options, recursively: true };
-	const lists = await Promise.all(
-		swapRoots.map(async (root) => {
-			const files = await listFilesFromModOrHOI4(root, listOptions).catch(
-				() => [] as string[],
-			);
-			return files
-				.filter((f) => f.toLowerCase().endsWith(".txt"))
-				.map((f) => `${root}/${f}`);
-		}),
-	);
-	return lists.flat();
+}): Promise<IndexListing> {
+	return listIndexFiles({
+		roots: swapRoots,
+		filter: (relativePath) => relativePath.toLowerCase().endsWith(".txt"),
+		options: { ...options, recursively: true },
+		// A mod that has no events/ folder at all is ordinary, and it should cost that root rather
+		// than the whole index. The other three indexes have a single root and let it propagate.
+		tolerateRootErrors: true,
+	});
 }
 
 async function buildGlobalSwapIndex(estimatedSize: [number]): Promise<void> {
 	const options = { mod: false, hoi4: true };
 	await buildSwapIndexWithCache(
 		"ideaSwapIndex.global",
-		await listSwapFiles(options),
+		() => listSwapFiles(options),
 		globalSwapIndex,
 		options,
 		estimatedSize,
@@ -157,7 +145,7 @@ async function buildWorkspaceSwapIndex(estimatedSize: [number]): Promise<void> {
 	const options = { mod: true, hoi4: false };
 	await buildSwapIndexWithCache(
 		"ideaSwapIndex.workspace",
-		await listSwapFiles(options),
+		() => listSwapFiles(options),
 		workspaceSwapIndex,
 		options,
 		estimatedSize,
@@ -166,17 +154,46 @@ async function buildWorkspaceSwapIndex(estimatedSize: [number]): Promise<void> {
 
 async function buildSwapIndexWithCache(
 	cacheName: string,
-	swapFiles: string[],
+	listFiles: () => Promise<IndexListing>,
 	swapIndex: SwapIndex,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
 ): Promise<void> {
 	const timer = new IndexTimer(cacheName);
-	const resolveUri = (relativePath: string) =>
-		getFilePathFromModOrHOI4(relativePath, options);
-	const currentMtimes = await getFileMtimes(swapFiles, resolveUri);
-	timer.mark("mtime");
+	try {
+		await buildSwapIndexWithTimer(
+			timer,
+			cacheName,
+			listFiles,
+			swapIndex,
+			options,
+			estimatedSize,
+		);
+	} finally {
+		// A build that threw must not leave a phase behind in the live-build report.
+		timer.dispose();
+	}
+}
 
+async function buildSwapIndexWithTimer(
+	timer: IndexTimer,
+	cacheName: string,
+	listFiles: () => Promise<IndexListing>,
+	swapIndex: SwapIndex,
+	options: { mod?: boolean; hoi4?: boolean },
+	estimatedSize: [number],
+): Promise<void> {
+	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
+	// install it is now the directory walk and the mtimes together, which is where a slow cold build
+	// spends its time, and it used to happen before the timer existed.
+	timer.begin("list");
+	const {
+		filePaths: swapFiles,
+		uris,
+		mtimes: currentMtimes,
+	} = await listFiles();
+
+	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, SWAP_CACHE_VERSION);
 	let filesToParse = swapFiles;
 
@@ -208,13 +225,15 @@ async function buildSwapIndexWithCache(
 			}
 		}
 	}
-	timer.mark("cache");
 
-	await mapLimit(filesToParse, 8, (f) =>
-		fillSwaps(f, swapIndex, options, estimatedSize),
-	);
-	timer.mark("parse");
-	timer.log(swapFiles.length, filesToParse.length);
+	timer.begin("parse");
+	let parsed = 0;
+	const toParse = toIndexFiles(filesToParse, uris);
+	await mapLimit(toParse, 8, async (f) => {
+		await fillSwaps(f, swapIndex, options, estimatedSize);
+		timer.progress(++parsed, toParse.length);
+	});
+	timer.end(swapFiles.length, filesToParse.length);
 
 	// fire-and-forget: write data before manifest for atomicity
 	void Promise.all([
@@ -224,14 +243,19 @@ async function buildSwapIndexWithCache(
 }
 
 async function fillSwaps(
-	swapFile: string,
+	swapFile: IndexFile,
 	swapIndex: SwapIndex,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize?: [number],
 ): Promise<void> {
+	const filePath = swapFile.path;
 	let fileContent: string;
 	try {
-		const [fileBuffer] = await readFileFromModOrHOI4(swapFile, options);
+		const [fileBuffer] = await readFileFromModOrHOI4(
+			filePath,
+			options,
+			swapFile.uri,
+		);
 		fileContent = fileBuffer.toString();
 		if (estimatedSize) {
 			estimatedSize[0] += fileBuffer.length;
@@ -239,29 +263,29 @@ async function fillSwaps(
 	} catch (e) {
 		// A file listed but unreadable -- deleted between the listing and the read, or locked --
 		// costs this one file and nothing else.
-		Logger.warn(`Idea swap index: can't read ${swapFile}: ${e}`);
+		Logger.warn(`Idea swap index: can't read ${filePath}: ${e}`);
 		return;
 	}
 
 	// The prescan that makes this affordable: parsing is what costs, and the overwhelming majority
 	// of files never mention a swap.
 	if (!fileContent.includes("swap_ideas")) {
-		delete swapIndex[swapFile];
+		delete swapIndex[filePath];
 		return;
 	}
 
 	try {
 		const swaps = extractIdeaSwaps(
-			parseHoi4File(fileContent, localize("infile", "In file {0}:\n", swapFile)),
+			parseHoi4File(fileContent, localize("infile", "In file {0}:\n", filePath)),
 		);
 		if (swaps.length > 0) {
-			swapIndex[swapFile] = swaps;
+			swapIndex[filePath] = swaps;
 		} else {
-			delete swapIndex[swapFile];
+			delete swapIndex[filePath];
 		}
 	} catch (e) {
 		const errText = e instanceof Error ? (e.stack ?? e.message) : String(e);
-		Logger.error(`Idea swap index: parsing ${swapFile} failed.\n${errText}`);
+		Logger.error(`Idea swap index: parsing ${filePath} failed.\n${errText}`);
 	}
 }
 
@@ -432,14 +456,14 @@ function addTo(map: Map<string, IdeaSwap[]>, key: string, swap: IdeaSwap): void 
 }
 
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
 	workspaceSwapIndex = {};
 
-	const estimatedSize: [number] = [0];
-	const task = buildWorkspaceSwapIndex(estimatedSize);
+	const folderChangeSize: [number] = [0];
+	const task = buildWorkspaceSwapIndex(folderChangeSize);
 	vscode.window.setStatusBarMessage(
 		"$(loading~spin) " +
 			localize(
@@ -452,7 +476,7 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 		task,
 		() => {
 			sendEvent("ideaSwapIndex.workspace", {
-				size: estimatedSize[0].toString(),
+				size: folderChangeSize[0].toString(),
 			});
 		},
 		"Building workspace idea swap index failed.",
@@ -461,7 +485,7 @@ function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
 }
 
 function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -484,7 +508,7 @@ const onChangeTextDocumentImpl = debounceByInput(
 );
 
 function onCloseTextDocument(document: vscode.TextDocument) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -498,7 +522,7 @@ function onCloseTextDocument(document: vscode.TextDocument) {
 }
 
 function onCreateFiles(e: vscode.FileCreateEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -512,7 +536,7 @@ function onCreateFiles(e: vscode.FileCreateEvent) {
 }
 
 function onDeleteFiles(e: vscode.FileDeleteEvent) {
-	if (!buildTask) {
+	if (!builder.hasStarted()) {
 		return;
 	}
 
@@ -556,14 +580,14 @@ function removeWorkspaceSwaps(file: vscode.Uri) {
 function addWorkspaceSwaps(file: vscode.Uri) {
 	const relative = relativeSwapPath(file);
 	if (relative) {
-		void fillSwaps(relative, workspaceSwapIndex, { hoi4: false });
+		// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
+		void fillSwaps({ path: relative }, workspaceSwapIndex, { hoi4: false });
 	}
 }
 
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
 export function __resetIdeaSwapIndexForTests(): void {
-	buildTask = undefined;
-	buildGate.reset();
+	builder.reset();
 	for (const file of Object.keys(globalSwapIndex)) {
 		delete globalSwapIndex[file];
 	}
@@ -582,5 +606,5 @@ export function __seedWorkspaceSwapsForTests(index: {
 	[file: string]: SwapRecord[];
 }): void {
 	workspaceSwapIndex = { ...index };
-	buildTask = Promise.all([Promise.resolve(), Promise.resolve()]);
+	builder.seed([undefined, undefined]);
 }

@@ -112,11 +112,50 @@ export async function getFileMtimes(relativePaths: string[], resolveUri: (relati
     return result;
 }
 
+/** Every timer that has begun a phase and not finished yet, for the heartbeat and the status report. */
+const liveTimers = new Set<IndexTimer>();
+const HEARTBEAT_INTERVAL = 15 * 1000;
+let heartbeat: NodeJS.Timeout | null = null;
+
+function startHeartbeat(): void {
+    if (heartbeat) {
+        return;
+    }
+    heartbeat = setInterval(() => {
+        if (liveTimers.size === 0) {
+            stopHeartbeat();
+            return;
+        }
+        Logger.info(`[Index] still working: ${describeLiveIndexBuilds().join('; ')}`);
+    }, HEARTBEAT_INTERVAL);
+    // Never hold the host process open just to print progress.
+    (heartbeat as unknown as { unref?: () => void }).unref?.();
+}
+
+function stopHeartbeat(): void {
+    if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+    }
+}
+
+/**
+ * One line per index build currently in flight, e.g.
+ * `ideaSwapIndex.workspace phase=parse 1240/3850 for 12s`. A build that finishes normally logs its
+ * own breakdown; this is what makes a build that *doesn't* finish diagnosable.
+ */
+export function describeLiveIndexBuilds(): string[] {
+    return [...liveTimers].map(t => t.describe());
+}
+
 export class IndexTimer {
     private readonly name: string;
     private readonly start: number;
     private lastMark: number;
     private readonly phases: { name: string; ms: number }[] = [];
+    private currentPhase: string | undefined;
+    private done = 0;
+    private total = 0;
 
     constructor(name: string) {
         this.name = name;
@@ -124,16 +163,52 @@ export class IndexTimer {
         this.lastMark = this.start;
     }
 
-    mark(phaseName: string): void {
-        const now = Date.now();
-        this.phases.push({ name: phaseName, ms: now - this.lastMark });
-        this.lastMark = now;
+    /** Closes the phase that was running (recording its duration) and opens `phaseName`. */
+    begin(phaseName: string): void {
+        this.closeCurrentPhase();
+        this.currentPhase = phaseName;
+        this.done = 0;
+        this.total = 0;
+        liveTimers.add(this);
+        startHeartbeat();
     }
 
-    log(fileCount: number, parsedCount: number): void {
+    /** Progress within the current phase, surfaced by the heartbeat and the status report. */
+    progress(done: number, total: number): void {
+        this.done = done;
+        this.total = total;
+    }
+
+    describe(): string {
+        const elapsed = Math.round((Date.now() - this.start) / 1000);
+        const counts = this.total > 0 ? ` ${this.done}/${this.total}` : '';
+        return `${this.name} phase=${this.currentPhase ?? 'none'}${counts} for ${elapsed}s`;
+    }
+
+    /** Closes the last phase, logs the breakdown, and takes this timer out of the live set. */
+    end(fileCount: number, parsedCount: number): void {
+        this.closeCurrentPhase();
+        this.dispose();
         const total = Date.now() - this.start;
         const breakdown = this.phases.map(p => `${p.name}=${p.ms}ms`).join(', ');
         Logger.info(`[Timer] ${this.name}: ${total}ms total (${breakdown}) | ${fileCount} files, ${parsedCount} parsed`);
+    }
+
+    /** Stops tracking this build without logging, for the failure path. Safe to call twice. */
+    dispose(): void {
+        this.currentPhase = undefined;
+        liveTimers.delete(this);
+        if (liveTimers.size === 0) {
+            stopHeartbeat();
+        }
+    }
+
+    private closeCurrentPhase(): void {
+        const now = Date.now();
+        if (this.currentPhase !== undefined) {
+            this.phases.push({ name: this.currentPhase, ms: now - this.lastMark });
+        }
+        this.lastMark = now;
     }
 }
 

@@ -5,10 +5,12 @@ import {
 	DlcZip,
 	getFilePathFromModOrHOI4,
 	listFilesFromModOrHOI4,
+	listFileEntriesFromModOrHOI4,
 	clearDlcZipCache,
 	parseHoi4FileCached,
 	parseAndResolveHoi4FileCached,
 } from "../util/fileloader";
+import { CancelledError } from "../util/common";
 import { Node, SymbolNode } from "../hoiformat/hoiparser";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
@@ -720,5 +722,182 @@ describe("util/fileloader listFilesFromModOrHOI4 error branches", function () {
 		} finally {
 			restore();
 		}
+	});
+});
+
+// The entry-returning listing the index builds use. Two things are worth pinning: that on a root
+// which really is on disk it comes back with real mtimes and real file: URIs from one pass, and that
+// on a root which is not -- the web build, a remote workspace, or an install path that is not set --
+// it degrades to the vscode.workspace.fs listing rather than reporting an empty folder.
+describe("util/fileloader listFileEntriesFromModOrHOI4", function () {
+	const nodeFs = require("fs/promises") as typeof import("fs/promises");
+	const nodePath = require("path") as typeof import("path");
+	const nodeOs = require("os") as typeof import("os");
+
+	let root: string;
+	let workspaceDir: string;
+	let gameDir: string;
+
+	// Where a URI the code under test built lands on the real disk. hoi4installpath: URIs never reach
+	// a FileSystemProvider in a unit test -- none is registered -- so this does the rewrite the real
+	// provider would do, against a temp folder standing in for the install.
+	function realPathOf(uri: unknown): string {
+		const raw = String(
+			(uri as { fsPath?: string; path?: string }).fsPath ??
+				(uri as { path?: string }).path ??
+				"",
+		);
+		if (raw.startsWith("hoi4installpath:")) {
+			return nodePath.join(
+				gameDir,
+				raw.slice("hoi4installpath:".length).replace(/^\/+/, ""),
+			);
+		}
+		// The stub's Uri.parse hands back the whole URI string as an fsPath, so a round trip through
+		// toString() (which is how modfile keys its cache) arrives here still carrying the scheme.
+		return raw.startsWith("file://") ? raw.slice("file://".length) : raw;
+	}
+
+	async function write(fullPath: string, content = "x"): Promise<void> {
+		await nodeFs.mkdir(nodePath.dirname(fullPath), { recursive: true });
+		await nodeFs.writeFile(fullPath, content);
+	}
+
+	beforeEach(async function () {
+		root = await nodeFs.mkdtemp(nodePath.join(nodeOs.tmpdir(), "hoi4entries-"));
+		workspaceDir = nodePath.join(root, "ws");
+		gameDir = nodePath.join(root, "game");
+		await write(nodePath.join(workspaceDir, "interface", "shared.gfx"));
+		await write(nodePath.join(workspaceDir, "interface", "sub", "modonly.gfx"));
+		await write(nodePath.join(gameDir, "interface", "shared.gfx"));
+		await write(nodePath.join(gameDir, "interface", "vanilla.gfx"));
+
+		stubVscode({
+			configuration: { modFile: "", installPath: "", loadDlcContents: false },
+			workspaceFolders: [{ uri: vscode.Uri.file(workspaceDir) }],
+			stat: async (uri: unknown) => {
+				const stat = await nodeFs.stat(realPathOf(uri));
+				return {
+					type: stat.isDirectory()
+						? vscode.FileType.Directory
+						: vscode.FileType.File,
+					mtime: stat.mtime.getTime(),
+					ctime: stat.birthtime.getTime(),
+					size: stat.size,
+				};
+			},
+			readDirectory: async (uri: unknown) => {
+				const dirents = await nodeFs.readdir(realPathOf(uri), {
+					withFileTypes: true,
+				});
+				return dirents.map(
+					(dirent) =>
+						[
+							dirent.name,
+							dirent.isDirectory()
+								? vscode.FileType.Directory
+								: vscode.FileType.File,
+						] as [string, number],
+				);
+			},
+		});
+	});
+
+	afterEach(async function () {
+		restoreVscodeStubs();
+		await clearDlcZipCache();
+		await nodeFs.rm(root, { recursive: true, force: true });
+	});
+
+	it("walks a workspace folder natively, with real mtimes and file: URIs", async function () {
+		const when = new Date(Date.UTC(2022, 6, 8, 9, 10, 11));
+		await nodeFs.utimes(
+			nodePath.join(workspaceDir, "interface", "shared.gfx"),
+			when,
+			when,
+		);
+
+		const entries = await listFileEntriesFromModOrHOI4("interface", {
+			mod: true,
+			hoi4: false,
+			recursively: true,
+		});
+
+		assert.deepStrictEqual(
+			entries.map((e) => e.relativePath).sort(),
+			["shared.gfx", "sub/modonly.gfx"],
+		);
+		const shared = entries.find((e) => e.relativePath === "shared.gfx")!;
+		assert.strictEqual(shared.mtime, when.getTime());
+		assert.strictEqual(shared.uri.scheme, "file");
+		// The real path, so whoever reads it next goes straight to disk.
+		assert.strictEqual(
+			nodePath.resolve(realPathOf(shared.uri)),
+			nodePath.resolve(workspaceDir, "interface", "shared.gfx"),
+		);
+	});
+
+	it("keeps the mod's copy of a name and drops the game's", async function () {
+		const entries = await listFileEntriesFromModOrHOI4("interface", {
+			recursively: true,
+		});
+
+		assert.deepStrictEqual(
+			entries.map((e) => e.relativePath).sort(),
+			["shared.gfx", "sub/modonly.gfx", "vanilla.gfx"],
+		);
+		const shared = entries.filter((e) => e.relativePath === "shared.gfx");
+		assert.strictEqual(shared.length, 1);
+		assert.ok(
+			realPathOf(shared[0]!.uri).includes("ws"),
+			`expected the workspace copy, got ${realPathOf(shared[0]!.uri)}`,
+		);
+	});
+
+	it("falls back to workspace.fs, undated, for a root that is not on this disk", async function () {
+		// The install path is not set, so nothing resolves hoi4installpath: to a real folder and the
+		// walk cannot run. The listing still has to answer -- through the provider, as it always did.
+		const entries = await listFileEntriesFromModOrHOI4("interface", {
+			mod: false,
+			hoi4: true,
+			recursively: true,
+		});
+
+		assert.deepStrictEqual(
+			entries.map((e) => e.relativePath).sort(),
+			["shared.gfx", "vanilla.gfx"],
+		);
+		assert.ok(entries.every((e) => e.mtime === undefined));
+	});
+
+	it("lists only the top level when not asked to recurse", async function () {
+		const entries = await listFileEntriesFromModOrHOI4("interface", {
+			mod: true,
+			hoi4: false,
+		});
+
+		assert.deepStrictEqual(entries.map((e) => e.relativePath), ["shared.gfx"]);
+	});
+
+	it("returns nothing for a folder neither side has", async function () {
+		assert.deepStrictEqual(
+			await listFileEntriesFromModOrHOI4("common/national_focus", {
+				recursively: true,
+			}),
+			[],
+		);
+	});
+
+	it("rejects a cancelled listing instead of returning part of one", async function () {
+		await assert.rejects(
+			() =>
+				listFileEntriesFromModOrHOI4("interface", {
+					recursively: true,
+					token: {
+						isCancellationRequested: true,
+					} as unknown as vscode.CancellationToken,
+				}),
+			CancelledError,
+		);
 	});
 });
