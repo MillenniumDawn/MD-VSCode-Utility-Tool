@@ -331,7 +331,9 @@ export function getFocusTreeWithFocusFile(
 			inlayConditionExprs: [],
 			allowBranchOptions: getAllowBranchOptions(focuses),
 			conditionExprs,
-			isSharedFocues: false,
+			// isSharedFocues also gates loader.ts's cross-file synthetic-tree inclusion and the
+			// webview's always-allow-branch handling for pseudo-trees, both of which apply here too.
+			isSharedFocues: true,
 			warnings,
 		});
 	}
