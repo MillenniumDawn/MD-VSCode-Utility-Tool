@@ -1,11 +1,19 @@
-import { tryRun, subscribeNavigators, enableZoom, initCommon, getState, setState, panning$ } from "./util/common";
+import {
+	tryRun,
+	subscribeNavigators,
+	enableZoom,
+	initCommon,
+	getState,
+	setState,
+	panning$,
+	currentScale,
+} from "./util/common";
 import { SearchBox } from "./util/searchbox";
 import { applyNav, badge } from "./util/card";
 import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
 import {
-	EffectTreeNode,
 	EventGraphEdge,
 	EventGraphEventNode,
 	EventGraphNode,
@@ -14,12 +22,17 @@ import {
 	EventGraphUnresolvedNode,
 	EventToolbarFlags,
 } from "../src/previewdef/event/payload";
-import { conditionToLabel, conditionPanel, effectsToDom } from "./util/conditiontree";
+import { conditionToLabel, conditionPanel } from "./util/conditiontree";
+import {
+	EffectTooltipOptions,
+	TooltipSection,
+	clampBelowToolbar,
+	wireEffectTooltip,
+} from "./util/hovertooltip";
 import {
 	IsolationHandle,
 	RenderedEdge,
 	RenderedNode,
-	currentScale,
 	renderGraph,
 	wireIsolation,
 } from "./util/graphview";
@@ -58,11 +71,16 @@ const toolbarHeight = 52;
 // The hover popups are appended to <body>, so they are placed in viewport coordinates by hand
 // rather than by the layout. The toolbar strip is drawn above them now, so anything they put under
 // it would simply be invisible: this keeps them clear of it instead.
+// The hover picture and the effects panel are both appended to <body> and both kept the same
+// distance clear of the toolbar and of the window edge.
 const popupMargin = 4;
 
-function clampBelowToolbar(top: number): number {
-	return Math.max(toolbarHeight + popupMargin, top);
-}
+const effectTooltipOptions: EffectTooltipOptions = {
+	className: effectTooltipClass,
+	toolbarHeight,
+	gap: 8,
+	margin: popupMargin,
+};
 
 const emptyPayload: EventGraphPayload = {
 	roots: [],
@@ -837,7 +855,9 @@ function showPictureWhenHoverElement(eventNode: HTMLDivElement) {
 		hoverElement.style.left =
 			position.left + window.scrollX - (pictureWidth * scale - position.width) / 2 + "px";
 		hoverElement.style.top =
-			clampBelowToolbar(position.top + position.height) + window.scrollY + "px";
+			clampBelowToolbar(position.top + position.height, toolbarHeight, popupMargin) +
+			window.scrollY +
+			"px";
 		document.body.append(hoverElement);
 	});
 
@@ -850,20 +870,7 @@ function showPictureWhenHoverElement(eventNode: HTMLDivElement) {
 
 //#region Hover effects
 
-// Long enough that panning the pointer across a column does not flash a panel per card.
-const effectHoverDelay = 150;
-// Between the card and the panel, and from the edge of the window.
-const effectTipGap = 8;
-const effectTipMargin = 4;
-
-// One headed block in the hover panel. An event has two of them -- what it does before the card is
-// shown and what it does once the card is dismissed -- and an option has one.
-interface EffectSection {
-	head: string;
-	effects: EffectTreeNode[];
-}
-
-function effectSectionsOf(node: EventGraphNode): EffectSection[] {
+function effectSectionsOf(node: EventGraphNode): TooltipSection[] {
 	if (node.kind === "unresolved") {
 		return [];
 	}
@@ -876,7 +883,7 @@ function effectSectionsOf(node: EventGraphNode): EffectSection[] {
 				]
 			: [{ head: feLocalize("eventtree.effects", "Effects"), ref: node.effectsRef }];
 
-	const sections: EffectSection[] = [];
+	const sections: TooltipSection[] = [];
 	for (const { head, ref } of refs) {
 		const effects = ref === undefined ? undefined : payload.effectBlocks[ref];
 		if (effects && effects.length > 0) {
@@ -890,86 +897,9 @@ function wireEffectTooltips(): void {
 	for (const item of rendered) {
 		const sections = effectSectionsOf(item.node);
 		if (sections.length > 0) {
-			wireEffectTooltip(item.element, sections);
+			wireEffectTooltip(item.element, sections, effectTooltipOptions);
 		}
 	}
-}
-
-function wireEffectTooltip(host: HTMLDivElement, sections: EffectSection[]): void {
-	let panel: HTMLDivElement | undefined = undefined;
-	let timer: number | undefined = undefined;
-
-	host.addEventListener("mouseenter", () => {
-		if (panning$.value) {
-			return;
-		}
-		timer = window.setTimeout(() => {
-			timer = undefined;
-			// The card can be gone by the time the delay is up: a re-render replaces every card, and
-			// the pointer resting on one leaves this timer behind. Without the check the panel of a
-			// card that is no longer on screen opens over the new graph.
-			if (!host.isConnected) {
-				return;
-			}
-			panel = buildEffectTooltip(sections);
-			document.body.append(panel);
-			placeEffectTooltip(panel, host.getBoundingClientRect());
-		}, effectHoverDelay);
-	});
-
-	host.addEventListener("mouseleave", () => {
-		if (timer !== undefined) {
-			clearTimeout(timer);
-			timer = undefined;
-		}
-		panel?.remove();
-		panel = undefined;
-	});
-}
-
-function buildEffectTooltip(sections: EffectSection[]): HTMLDivElement {
-	const panel = document.createElement("div");
-	// .ev-cond as well, so the panel is typeset exactly like the condition panels on the cards.
-	panel.className = "ev-cond " + effectTooltipClass;
-
-	for (const section of sections) {
-		const head = document.createElement("div");
-		head.className = "ev-cond-head";
-		head.textContent = section.head;
-		panel.appendChild(head);
-		panel.appendChild(effectsToDom(section.effects));
-	}
-
-	// The panel sits outside #eventtreecontent, so it does not inherit the canvas zoom; scaling it
-	// by hand keeps it the size of the card it belongs to, the way the hover picture is scaled.
-	panel.style.transform = `scale(${currentScale()})`;
-	panel.style.transformOrigin = "top left";
-	panel.style.visibility = "hidden";
-	return panel;
-}
-
-// To the right of the card, top aligned, flipping to the left when the window has no room. Measured
-// after the transform is set, because getBoundingClientRect already reports the scaled size.
-function placeEffectTooltip(panel: HTMLDivElement, host: DOMRect): void {
-	const size = panel.getBoundingClientRect();
-	const viewWidth = document.documentElement.clientWidth;
-	const viewHeight = document.documentElement.clientHeight;
-
-	let left = host.right + effectTipGap;
-	if (left + size.width > viewWidth) {
-		left = host.left - effectTipGap - size.width;
-	}
-	left = Math.max(effectTipMargin, Math.min(left, viewWidth - size.width - effectTipMargin));
-
-	let top = host.top;
-	if (top + size.height > viewHeight) {
-		top = viewHeight - size.height - effectTipMargin;
-	}
-	top = clampBelowToolbar(top);
-
-	panel.style.left = left + window.scrollX + "px";
-	panel.style.top = top + window.scrollY + "px";
-	panel.style.visibility = "";
 }
 
 //#endregion

@@ -19,14 +19,17 @@ import {
 	DecisionGraphNode,
 	DecisionGraphPayload,
 	DecisionToolbarFlags,
-	EffectTreeNode,
 } from "../src/previewdef/decision/payload";
-import { conditionPanel, conditionToLabel, effectsToDom } from "./util/conditiontree";
+import { conditionPanel, conditionToLabel } from "./util/conditiontree";
+import {
+	EffectTooltipOptions,
+	TooltipSection,
+	wireEffectTooltip,
+} from "./util/hovertooltip";
 import {
 	IsolationHandle,
 	RenderedEdge,
 	RenderedNode,
-	currentScale,
 	renderGraph,
 	wireIsolation,
 } from "./util/graphview";
@@ -41,17 +44,18 @@ const effectTooltipClass = "dec-effects-tip";
 // the strip. Change one and the other has to follow.
 const toolbarHeight = 52;
 
-const effectHoverDelay = 150;
-const effectTipGap = 12;
-const effectTipMargin = 8;
-
 // The card is this wide, so a scripted GUI window drawn inside one is scaled down to fit it rather
 // than pushing the column out to the width of a 1920px game screen.
 const guiPreviewWidth = 300;
 
-function clampBelowToolbar(top: number): number {
-	return Math.max(toolbarHeight + effectTipMargin, top);
-}
+// Kept as they were: the decision preview has always sat its panel a little further from the card
+// than the event preview does.
+const effectTooltipOptions: EffectTooltipOptions = {
+	className: effectTooltipClass,
+	toolbarHeight,
+	gap: 12,
+	margin: 8,
+};
 
 const emptyPayload: DecisionGraphPayload = {
 	roots: [],
@@ -815,11 +819,6 @@ function applyToolbarFlags(): void {
 
 //#region Hover effects
 
-interface EffectSection {
-	head: string;
-	effects: EffectTreeNode[];
-}
-
 const effectBlockLabels: Record<string, string> = {
 	complete_effect: "decisiontree.completeeffect",
 	remove_effect: "decisiontree.removeeffect",
@@ -834,12 +833,12 @@ const effectBlockFallbacks: Record<string, string> = {
 	cancel_effect: "When cancelled",
 };
 
-function effectSectionsOf(node: DecisionGraphNode): EffectSection[] {
+function effectSectionsOf(node: DecisionGraphNode): TooltipSection[] {
 	if (node.kind !== "decision") {
 		return [];
 	}
 
-	const sections: EffectSection[] = [];
+	const sections: TooltipSection[] = [];
 	for (const { name, ref } of node.effects) {
 		const effects = payload.effectBlocks[ref];
 		if (effects && effects.length > 0) {
@@ -859,84 +858,9 @@ function wireEffectTooltips(): void {
 	for (const item of rendered) {
 		const sections = effectSectionsOf(item.node);
 		if (sections.length > 0) {
-			wireEffectTooltip(item.element, sections);
+			wireEffectTooltip(item.element, sections, effectTooltipOptions);
 		}
 	}
-}
-
-function wireEffectTooltip(host: HTMLDivElement, sections: EffectSection[]): void {
-	let panel: HTMLDivElement | undefined = undefined;
-	let timer: number | undefined = undefined;
-
-	host.addEventListener("mouseenter", () => {
-		if (panning$.value) {
-			return;
-		}
-		timer = window.setTimeout(() => {
-			timer = undefined;
-			// The card can be gone by the time the delay is up: a re-render replaces every card, and
-			// the pointer resting on one leaves this timer behind.
-			if (!host.isConnected) {
-				return;
-			}
-			panel = buildEffectTooltip(sections);
-			document.body.append(panel);
-			placeEffectTooltip(panel, host.getBoundingClientRect());
-		}, effectHoverDelay);
-	});
-
-	host.addEventListener("mouseleave", () => {
-		if (timer !== undefined) {
-			clearTimeout(timer);
-			timer = undefined;
-		}
-		panel?.remove();
-		panel = undefined;
-	});
-}
-
-function buildEffectTooltip(sections: EffectSection[]): HTMLDivElement {
-	const panel = document.createElement("div");
-	// .ev-cond as well, so the panel is typeset exactly like the condition panels on the cards.
-	panel.className = "ev-cond " + effectTooltipClass;
-
-	for (const section of sections) {
-		const head = document.createElement("div");
-		head.className = "ev-cond-head";
-		head.textContent = section.head;
-		panel.appendChild(head);
-		panel.appendChild(effectsToDom(section.effects));
-	}
-
-	// The panel sits outside #decisiontreecontent, so it does not inherit the canvas zoom; scaling
-	// it by hand keeps it the size of the card it belongs to.
-	panel.style.transform = `scale(${currentScale()})`;
-	panel.style.transformOrigin = "top left";
-	panel.style.visibility = "hidden";
-	return panel;
-}
-
-// To the right of the card, top aligned, flipping to the left when the window has no room.
-function placeEffectTooltip(panel: HTMLDivElement, host: DOMRect): void {
-	const size = panel.getBoundingClientRect();
-	const viewWidth = document.documentElement.clientWidth;
-	const viewHeight = document.documentElement.clientHeight;
-
-	let left = host.right + effectTipGap;
-	if (left + size.width > viewWidth) {
-		left = host.left - effectTipGap - size.width;
-	}
-	left = Math.max(effectTipMargin, Math.min(left, viewWidth - size.width - effectTipMargin));
-
-	let top = host.top;
-	if (top + size.height > viewHeight) {
-		top = viewHeight - size.height - effectTipMargin;
-	}
-	top = clampBelowToolbar(top);
-
-	panel.style.left = left + window.scrollX + "px";
-	panel.style.top = top + window.scrollY + "px";
-	panel.style.visibility = "";
 }
 
 //#endregion

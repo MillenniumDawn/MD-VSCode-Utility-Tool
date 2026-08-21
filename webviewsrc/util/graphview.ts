@@ -6,7 +6,7 @@
 // helpers, which sat at the same line numbers in both files. What genuinely differs between the two
 // is passed in: which toggle guards an arrow, what its label says, and which classes its curve gets.
 
-import { getState, panning$ } from "./common";
+import { currentScale, panning$ } from "./common";
 import {
 	ChipInput,
 	LayoutInput,
@@ -47,10 +47,6 @@ export interface BuiltChip<E extends GraphEdgeLike> {
 	edge: E;
 	guarded: boolean;
 	chip?: HTMLDivElement;
-}
-
-export function currentScale(): number {
-	return getState().scale || 1;
 }
 
 // One rail down the middle of every gap between two columns. `railLabel` is optional because only
