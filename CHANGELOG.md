@@ -1,3 +1,18 @@
+v1.1.29
+
+  Functionality:
+
+- Recover from an index build that fails or overruns instead of hanging on it.
+- Keep the editor responsive while indexing, and show progress you can cancel.
+- Keep a separate index cache per mod, and reuse the parts of it that are still current.
+- Speed up previews and indexing, and remove the duplicated index and preview scaffolding.
+- [ Focus Tree ] Run layout validation on shared and joint focus trees. Issue #82.
+- Focus tree and idea previews no longer crash when a container element is missing.
+- [ Focus Tree ] Share the focus tree preview's update machinery with every other preview. Issue #140.
+- [ CI ] Run the test suite on the release pull request.
+- Share the graph, search and toolbar code the decision, event and idea previews each had a copy of. Issue #139.
+- [ Focus Tree ] Fix joint-focus layout warnings not reaching the live previewer.
+
 v1.1.28
 
   Functionality:
