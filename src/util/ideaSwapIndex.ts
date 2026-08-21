@@ -1,21 +1,17 @@
 import * as vscode from "vscode";
-import * as path from "path";
-import { debounceByInput } from "./common";
 import { IndexFile, IndexListing, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
-import { attachTaskWithErrorLogging } from "./promiseUtils";
-import {
-	createIndexBuilder,
-	IndexProgress,
-	withIndexProgress,
-} from "./indexBuild";
+import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import {
 	buildIndexHalf,
 	readIndexFileContent,
 	reportIndexParseFailure,
 } from "./indexHalf";
-import { Logger } from "./logger";
+import {
+	createIndexWatchers,
+	toWorkspaceRelativePath,
+} from "./indexWatchers";
 import { Node, parseHoi4File } from "../hoiformat/hoiparser";
 import { ideaSwapIndex } from "./featureflags";
 
@@ -63,26 +59,6 @@ const swapRoots = ["common", "events"];
 const globalSwapIndex: SwapIndex = {};
 let workspaceSwapIndex: SwapIndex = {};
 
-export function registerIdeaSwapIndex(): vscode.Disposable {
-	const disposables: vscode.Disposable[] = [];
-
-	if (ideaSwapIndex) {
-		disposables.push(
-			vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
-		);
-		disposables.push(
-			vscode.workspace.onDidChangeTextDocument(onChangeTextDocument),
-		);
-		disposables.push(
-			vscode.workspace.onDidCloseTextDocument(onCloseTextDocument),
-		);
-		disposables.push(vscode.workspace.onDidCreateFiles(onCreateFiles));
-		disposables.push(vscode.workspace.onDidDeleteFiles(onDeleteFiles));
-		disposables.push(vscode.workspace.onDidRenameFiles(onRenameFiles));
-	}
-
-	return vscode.Disposable.from(...disposables);
-}
 
 // Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
@@ -343,7 +319,7 @@ export async function getIdeaSwaps(ideaIds: string[]): Promise<IdeaSwap[]> {
 		seen.add(id);
 
 		for (const swap of byIdea.get(id) ?? []) {
-			const key = `${swap.from} ${swap.to} ${swap.file} ${swap.start}`;
+			const key = `${swap.from}\u0000${swap.to}\u0000${swap.file}\u0000${swap.start}`;
 			if (found.has(key)) {
 				continue;
 			}
@@ -388,132 +364,49 @@ function addTo(map: Map<string, IdeaSwap[]>, key: string, swap: IdeaSwap): void 
 	}
 }
 
-function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
+const swapRootPrefixes = swapRoots.map((root) => `${root}/`);
 
-	workspaceSwapIndex = {};
-
-	const folderChangeSize: [number] = [0];
-	const task = withIndexProgress(
-		localize(
-			"ideaSwapIndex.workspace.building",
-			"Building workspace idea swap index...",
-		),
-		(progress) => buildWorkspaceSwapIndex(folderChangeSize, progress),
-	);
-	attachTaskWithErrorLogging(
-		task,
-		() => {
-			sendEvent("ideaSwapIndex.workspace", {
-				size: folderChangeSize[0].toString(),
-			});
-		},
-		"Building workspace idea swap index failed.",
-		Logger.error,
-	);
-}
-
-function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	const file = e.document.uri;
-	if (file.path.endsWith(".txt")) {
-		onChangeTextDocumentImpl(file);
-	}
-}
-
-const onChangeTextDocumentImpl = debounceByInput(
-	(file: vscode.Uri) => {
-		buildGate.runAfterBuild(() => {
-			removeWorkspaceSwaps(file);
-			addWorkspaceSwaps(file);
-		});
-	},
-	(file) => file.toString(),
-	1000,
-	{ trailing: true },
-);
-
-function onCloseTextDocument(document: vscode.TextDocument) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	const file = document.uri;
-	if (file.path.endsWith(".txt") && document.isDirty) {
-		buildGate.runAfterBuild(() => {
-			removeWorkspaceSwaps(file);
-			addWorkspaceSwaps(file);
-		});
-	}
-}
-
-function onCreateFiles(e: vscode.FileCreateEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	buildGate.runAfterBuild(() => {
-		for (const file of e.files) {
-			if (file.path.endsWith(".txt")) {
-				addWorkspaceSwaps(file);
-			}
-		}
-	});
-}
-
-function onDeleteFiles(e: vscode.FileDeleteEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	buildGate.runAfterBuild(() => {
-		for (const file of e.files) {
-			if (file.path.endsWith(".txt")) {
-				removeWorkspaceSwaps(file);
-			}
-		}
-	});
-}
-
-function onRenameFiles(e: vscode.FileRenameEvent) {
-	onDeleteFiles({ files: e.files.map((f) => f.oldUri) });
-	onCreateFiles({ files: e.files.map((f) => f.newUri) });
-}
-
-function relativeSwapPath(file: vscode.Uri): string | undefined {
-	const wsFolder = vscode.workspace.getWorkspaceFolder(file);
-	if (!wsFolder) {
-		return undefined;
-	}
-
-	const relative = path
-		.relative(wsFolder.uri.path, file.path)
-		.replace(/\\+/g, "/");
-	if (!relative || !swapRoots.some((root) => relative.startsWith(`${root}/`))) {
-		return undefined;
-	}
-
-	return relative;
-}
-
-function removeWorkspaceSwaps(file: vscode.Uri) {
-	const relative = relativeSwapPath(file);
-	if (relative) {
-		delete workspaceSwapIndex[relative];
-	}
-}
-
-function addWorkspaceSwaps(file: vscode.Uri) {
-	const relative = relativeSwapPath(file);
+/**
+ * Re-indexes an edited file. fillSwaps writes the file's entry in one step at the end -- setting
+ * it when the file defines swaps and deleting it when it does not -- so it is already parse-first.
+ * The removal that used to run before it just left the file's swaps missing while the parse ran.
+ */
+function reindexWorkspaceSwapFile(file: vscode.Uri): void {
+	const relative = toWorkspaceRelativePath(file, swapRootPrefixes);
 	if (relative) {
 		// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
 		void fillSwaps({ path: relative }, workspaceSwapIndex, { hoi4: false });
 	}
+}
+
+const watchers = createIndexWatchers({
+	enabled: ideaSwapIndex,
+	extension: ".txt",
+	hasStarted: () => builder.hasStarted(),
+	gate: buildGate,
+	reindexFile: reindexWorkspaceSwapFile,
+	removeFile: (file) => {
+		const relative = toWorkspaceRelativePath(file, swapRootPrefixes);
+		if (relative) {
+			delete workspaceSwapIndex[relative];
+		}
+	},
+	rebuildWorkspace: {
+		reset: () => {
+			workspaceSwapIndex = {};
+		},
+		build: buildWorkspaceSwapIndex,
+		message: localize(
+			"ideaSwapIndex.workspace.building",
+			"Building workspace idea swap index...",
+		),
+		telemetryEvent: "ideaSwapIndex.workspace",
+		failureMessage: "Building workspace idea swap index failed.",
+	},
+});
+
+export function registerIdeaSwapIndex(): vscode.Disposable {
+	return watchers.register();
 }
 
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
@@ -526,11 +419,7 @@ export function __resetIdeaSwapIndexForTests(): void {
 }
 
 // Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
-export const __testHandlers = {
-	onCreateFiles,
-	onDeleteFiles,
-	onCloseTextDocument,
-};
+export const __testHandlers = watchers.handlers;
 
 // Test-only: lets a test seed the workspace half of the index without touching the file system.
 export function __seedWorkspaceSwapsForTests(index: {

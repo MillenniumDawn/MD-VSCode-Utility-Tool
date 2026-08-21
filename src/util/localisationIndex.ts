@@ -1,22 +1,18 @@
 import * as vscode from "vscode";
-import * as path from "path";
-import { debounceByInput } from "./common";
 import { localisationIndex, previewLocalisation } from "./featureflags";
 import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
-import { attachTaskWithErrorLogging } from "./promiseUtils";
-import {
-	createIndexBuilder,
-	IndexProgress,
-	withIndexProgress,
-} from "./indexBuild";
+import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import {
 	buildIndexHalf,
 	readIndexFileContent,
 	reportIndexParseFailure,
 } from "./indexHalf";
-import { Logger } from "./logger";
+import {
+	createIndexWatchers,
+	toWorkspaceRelativePath,
+} from "./indexWatchers";
 import {
 	defaultYmlSuffix,
 	isoBySettingName,
@@ -37,26 +33,6 @@ const workspaceLocalisationFileMap: Record<
 > = {};
 
 
-export function registerLocalisationIndex(): vscode.Disposable {
-	const disposables: vscode.Disposable[] = [];
-
-	if (localisationIndex) {
-		disposables.push(
-			vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
-		);
-		disposables.push(
-			vscode.workspace.onDidChangeTextDocument(onChangeTextDocument),
-		);
-		disposables.push(
-			vscode.workspace.onDidCloseTextDocument(onCloseTextDocument),
-		);
-		disposables.push(vscode.workspace.onDidCreateFiles(onCreateFiles));
-		disposables.push(vscode.workspace.onDidDeleteFiles(onDeleteFiles));
-		disposables.push(vscode.workspace.onDidRenameFiles(onRenameFiles));
-	}
-
-	return vscode.Disposable.from(...disposables);
-}
 
 // Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
@@ -216,14 +192,15 @@ async function buildLocalisationIndexHalf(
 					}
 				}
 			},
-			parseFile: (file) =>
-				fillLocalisationItems(
+			parseFile: async (file) => {
+				await fillLocalisationItems(
 					file,
 					targetIndex,
 					fileMap,
 					options,
 					estimatedSize,
-				),
+				);
+			},
 			// TODO: serialising this runs on the extension host thread and produces the whole index
 			// plus a second copy of every key in `fileMap` as one string. On a mod the size of
 			// Millennium Dawn that is hundreds of megabytes, enough to stall the host and, at the top
@@ -251,6 +228,7 @@ async function buildLocalisationIndexHalf(
 	);
 }
 
+/** Returns whether the file was read and parsed, so a re-index knows not to discard what it has. */
 async function fillLocalisationItems(
 	localisationFile: IndexFile,
 	localisationIndex: LocalisationData,
@@ -260,7 +238,7 @@ async function fillLocalisationItems(
 		hoi4?: boolean;
 	},
 	estimatedSize?: [number],
-): Promise<void> {
+): Promise<boolean> {
 	const filePath = localisationFile.path;
 	const fileBuffer = await readIndexFileContent(
 		"Localisation index",
@@ -268,7 +246,7 @@ async function fillLocalisationItems(
 		options,
 	);
 	if (fileBuffer === undefined) {
-		return;
+		return false;
 	}
 	const content = fileBuffer.toString();
 
@@ -299,10 +277,12 @@ async function fillLocalisationItems(
 				);
 			}
 		}
+		return true;
 	} catch (e) {
 		// This logged only the message, where the focus index logged the stack. Both go through the
 		// same reporter now, which prefers the stack.
 		reportIndexParseFailure(filePath, options, e);
+		return false;
 	}
 }
 
@@ -352,140 +332,96 @@ export function parseLocalisation(fileContent: string): LocalisationData {
 	return result;
 }
 
-function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	workspaceLocalisationIndex = {};
-	for (const langKey in workspaceLocalisationFileMap) {
-		delete workspaceLocalisationFileMap[langKey];
-	}
-	const estimatedSize: [number] = [0];
-	const task = withIndexProgress(
-		localize(
-			"localisationIndex.workspace.building",
-			"Building workspace Localisation index...",
-		),
-		(progress) => buildWorkspaceLocalisationIndex(estimatedSize, progress),
-	);
-	attachTaskWithErrorLogging(
-		task,
-		() => {
-			sendEvent("localisationIndex.workspace", {
-				size: estimatedSize[0].toString(),
-			});
-		},
-		"Building workspace Localisation index failed.",
-		Logger.error,
-	);
-}
-
-function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	const file = e.document.uri;
-	if (file.path.endsWith(".yml")) {
-		onChangeTextDocumentImpl(file);
+function removeWorkspaceLocalisationFile(relative: string): void {
+	const langKey = getLangKeyFromPath(relative);
+	const fileKeys = workspaceLocalisationFileMap[langKey]?.[relative];
+	if (fileKeys && workspaceLocalisationIndex[langKey]) {
+		for (const key of fileKeys) {
+			delete workspaceLocalisationIndex[langKey][key];
+		}
+		delete workspaceLocalisationFileMap[langKey]?.[relative];
 	}
 }
 
-const onChangeTextDocumentImpl = debounceByInput(
-	(file: vscode.Uri) => {
-		buildGate.runAfterBuild(() => {
-			removeWorkspaceLocalisationIndex(file);
-			addWorkspaceLocalisationIndex(file);
-		});
+/**
+ * Re-indexes an edited localisation file: parse first, swap the entries in afterwards.
+ *
+ * Clearing the file's keys up front -- what an edit used to do -- left every string it defines
+ * unresolved for as long as the re-parse took, and a preview refreshing in that window, which the
+ * same edit triggers on the same debounce, fell back to showing raw keys. A file that fails to
+ * parse midway through an edit keeps the strings it was last indexed with.
+ */
+async function reindexWorkspaceLocalisationFile(
+	file: vscode.Uri,
+): Promise<void> {
+	const relative = toWorkspaceRelativePath(file, `${localisationRoot}/`);
+	if (!relative) {
+		return;
+	}
+
+	// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
+	const parsedIndex: LocalisationData = {};
+	const parsedFileMap: Record<string, Record<string, Set<string>>> = {};
+	const parsed = await fillLocalisationItems(
+		{ path: relative },
+		parsedIndex,
+		parsedFileMap,
+		{ hoi4: false },
+	);
+	if (!parsed) {
+		return;
+	}
+
+	removeWorkspaceLocalisationFile(relative);
+	for (const langKey in parsedIndex) {
+		const target =
+			workspaceLocalisationIndex[langKey] ??
+			(workspaceLocalisationIndex[langKey] = {});
+		Object.assign(target, parsedIndex[langKey]);
+
+		const keys = parsedFileMap[langKey]?.[relative];
+		if (keys) {
+			const fileMapForLang =
+				workspaceLocalisationFileMap[langKey] ??
+				(workspaceLocalisationFileMap[langKey] = {});
+			fileMapForLang[relative] = keys;
+		}
+	}
+}
+
+const watchers = createIndexWatchers({
+	enabled: localisationIndex,
+	extension: ".yml",
+	hasStarted: () => builder.hasStarted(),
+	gate: buildGate,
+	reindexFile: (file) => {
+		void reindexWorkspaceLocalisationFile(file);
 	},
-	(file) => file.toString(),
-	1000,
-	{ trailing: true },
-);
-
-function onCloseTextDocument(document: vscode.TextDocument) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	const file = document.uri;
-	if (file.path.endsWith(".yml") && document.isDirty) {
-		buildGate.runAfterBuild(() => {
-			removeWorkspaceLocalisationIndex(file);
-			addWorkspaceLocalisationIndex(file);
-		});
-	}
-}
-
-function onCreateFiles(e: vscode.FileCreateEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	buildGate.runAfterBuild(() => {
-		for (const file of e.files) {
-			if (file.path.endsWith(".yml")) {
-				addWorkspaceLocalisationIndex(file);
+	removeFile: (file) => {
+		const relative = toWorkspaceRelativePath(file, `${localisationRoot}/`);
+		if (relative) {
+			removeWorkspaceLocalisationFile(relative);
+		}
+	},
+	rebuildWorkspace: {
+		reset: () => {
+			workspaceLocalisationIndex = {};
+			for (const key of Object.keys(workspaceLocalisationFileMap)) {
+				delete workspaceLocalisationFileMap[key];
 			}
-		}
-	});
-}
+		},
+		build: buildWorkspaceLocalisationIndex,
+		message: localize(
+			"localisationIndex.workspace.building",
+			"Building workspace localisation index...",
+		),
+		telemetryEvent: "localisationIndex.workspace",
+		failureMessage: "Building workspace localisation index failed.",
+	},
+});
 
-function onDeleteFiles(e: vscode.FileDeleteEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	buildGate.runAfterBuild(() => {
-		for (const file of e.files) {
-			if (file.path.endsWith(".yml")) {
-				removeWorkspaceLocalisationIndex(file);
-			}
-		}
-	});
-}
-
-function onRenameFiles(e: vscode.FileRenameEvent) {
-	onDeleteFiles({ files: e.files.map((f) => f.oldUri) });
-	onCreateFiles({ files: e.files.map((f) => f.newUri) });
-}
-
-function removeWorkspaceLocalisationIndex(file: vscode.Uri) {
-	const wsFolder = vscode.workspace.getWorkspaceFolder(file);
-	if (wsFolder) {
-		const relative = path
-			.relative(wsFolder.uri.path, file.path)
-			.replace(/\\+/g, "/");
-		if (relative && relative.startsWith("localisation/")) {
-			const langKey = getLangKeyFromPath(relative);
-			const fileKeys = workspaceLocalisationFileMap[langKey]?.[relative];
-			if (fileKeys && workspaceLocalisationIndex[langKey]) {
-				for (const key of fileKeys) {
-					delete workspaceLocalisationIndex[langKey][key];
-				}
-				delete workspaceLocalisationFileMap[langKey]?.[relative];
-			}
-		}
-	}
-}
-
-function addWorkspaceLocalisationIndex(file: vscode.Uri) {
-	const wsFolder = vscode.workspace.getWorkspaceFolder(file);
-	if (wsFolder) {
-		const relative = path
-			.relative(wsFolder.uri.path, file.path)
-			.replace(/\\+/g, "/");
-		if (relative && relative.startsWith("localisation/")) {
-			// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
-			void fillLocalisationItems(
-				{ path: relative },
-				workspaceLocalisationIndex,
-				workspaceLocalisationFileMap,
-				{ hoi4: false },
-			);
-		}
-	}
+export function registerLocalisationIndex(): vscode.Disposable {
+	return watchers.register();
 }
 
 function getLangKeyFromPath(filePath: string): string {
@@ -506,8 +442,4 @@ export function __resetLocalisationIndexForTests(): void {
 }
 
 // Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
-export const __testHandlers = {
-	onCreateFiles,
-	onDeleteFiles,
-	onCloseTextDocument,
-};
+export const __testHandlers = watchers.handlers;
