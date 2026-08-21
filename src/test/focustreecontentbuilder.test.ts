@@ -19,6 +19,11 @@ import {
 	warningListClass,
 } from "../previewdef/focustree/warningstyles";
 import {
+	registerTraceStyles,
+	traceDimClass,
+	traceLineClass,
+} from "../previewdef/focustree/tracestyles";
+import {
 	exclusiveLinkClass,
 	exclusiveLinkInsets,
 	registerExclusiveLinkStyles,
@@ -252,6 +257,33 @@ describe("previewdef/focustree contentbuilder", () => {
 				`missing rule for ${className}`,
 			);
 		}
+	});
+
+	it("registerTraceStyles emits the exported class names, scoped so they win", () => {
+		const styleTable = new StyleTable();
+		registerTraceStyles(styleTable);
+		const css = styleTable.toRawCss();
+		for (const className of [traceLineClass, traceDimClass]) {
+			// The id prefix is what beats the per-line geometry class, which is serialized into the
+			// body after this stylesheet. A plain class rule here would silently lose.
+			assert.ok(
+				css.includes(`#focustreeplaceholder .${className} {`),
+				`missing scoped rule for ${className}`,
+			);
+		}
+	});
+
+	it("buildFocusTreeHtml emits the trace styles into the shell", async () => {
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([minimalFocusTree()]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		assert.ok(html.includes(`#focustreeplaceholder .${traceLineClass} {`));
+		assert.ok(html.includes(`#focustreeplaceholder .${traceDimClass} {`));
+		assert.ok(html.includes('id="trace-status-container"'));
 	});
 
 	it("registerExclusiveLinkStyles falls back to the plain line without textures", () => {
