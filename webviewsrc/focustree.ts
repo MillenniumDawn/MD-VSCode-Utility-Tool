@@ -1044,7 +1044,9 @@ window.addEventListener("message", async (event) => {
 		return;
 	}
 
-	if (msg.type !== "update") return;
+	if (msg.type !== "update") {
+		return;
+	}
 
 	focusTrees = msg.focusTrees;
 	(window as any).focusTrees = msg.focusTrees;
