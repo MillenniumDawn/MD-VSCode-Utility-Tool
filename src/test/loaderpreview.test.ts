@@ -8,6 +8,8 @@ import {
     normalizeNoncesForHash,
     decideLoaderRender,
     LoaderRenderResult,
+    LoaderRenderPrevious,
+    LoaderUpdateAction,
     LoaderRender,
     LoaderPreview,
 } from '../previewdef/loaderpreview';
@@ -90,22 +92,37 @@ describe('previewdef/loaderpreview', () => {
     });
 
     describe('decideLoaderRender', () => {
+        // The previous-render state the decision compares against. Only `hash` and
+        // `pageUpdateCapable` matter to the previews that set no extra fingerprints.
+        function previous(hash: number | undefined, pageUpdateCapable: boolean, extra: Partial<LoaderRenderPrevious> = {}): LoaderRenderPrevious {
+            return { hash, pageUpdateCapable, shellFingerprint: undefined, sideFingerprint: undefined, ...extra };
+        }
+
+        function after(action: LoaderUpdateAction, pageUpdateCapable: boolean): LoaderRenderPrevious {
+            return {
+                hash: action.hash,
+                shellFingerprint: action.shellFingerprint,
+                sideFingerprint: action.sideFingerprint,
+                pageUpdateCapable,
+            };
+        }
+
         it('skips a plain-string render that differs only by nonce values', () => {
             // Two event/gui/technology renders with identical content but fresh CSP nonces: the html
             // strings differ, but normalizing the nonces out makes them hash equal so the skip fires.
             const a = normalizeRender(`<meta content="script-src 'nonce-AAA'"><script nonce="AAA">same</script>`);
-            const first = decideLoaderRender(a, undefined, true, false);
+            const first = decideLoaderRender(a, previous(undefined, false), true);
             assert.strictEqual(first.kind, 'assign');
             const b = normalizeRender(`<meta content="script-src 'nonce-BBB'"><script nonce="BBB">same</script>`);
-            const d = decideLoaderRender(b, first.hash, true, false);
+            const d = decideLoaderRender(b, previous(first.hash, false), true);
             assert.strictEqual(d.kind, 'skip');
         });
 
         it('does not skip a plain-string render whose content changed (beyond the nonce)', () => {
             const a = normalizeRender('<script nonce="AAA">bodyA</script>');
-            const first = decideLoaderRender(a, undefined, true, false);
+            const first = decideLoaderRender(a, previous(undefined, false), true);
             const b = normalizeRender('<script nonce="BBB">bodyB</script>');
-            const d = decideLoaderRender(b, first.hash, true, false);
+            const d = decideLoaderRender(b, previous(first.hash, false), true);
             assert.strictEqual(d.kind, 'assign');
         });
 
@@ -113,15 +130,15 @@ describe('previewdef/loaderpreview', () => {
             // The initial full assign is done by getContent; once initialized, a first differing
             // sendPartialUpdate against an update-capable, visible page posts in place.
             const rendered: LoaderRenderResult = { html: '<h/>', update: { styleCss: '.a{}' } };
-            const d = decideLoaderRender(rendered, undefined, true, true);
+            const d = decideLoaderRender(rendered, previous(undefined, true), true);
             assert.strictEqual(d.kind, 'post');
         });
 
         it('posts an in-place update when the content changed and the panel is visible', () => {
             const rendered: LoaderRenderResult = { html: '<h/>', update: { styleCss: '.a{}' } };
-            const first = decideLoaderRender(rendered, undefined, true, true);
+            const first = decideLoaderRender(rendered, previous(undefined, true), true);
             const changed: LoaderRenderResult = { html: '<h2/>', update: { styleCss: '.b{}' } };
-            const d = decideLoaderRender(changed, first.hash, true, true);
+            const d = decideLoaderRender(changed, previous(first.hash, true), true);
             assert.strictEqual(d.kind, 'post');
             if (d.kind === 'post') {
                 assert.strictEqual(d.message.type, 'updateBody');
@@ -130,22 +147,22 @@ describe('previewdef/loaderpreview', () => {
         });
 
         it('skips when the update payload is unchanged (even if the html nonces differ)', () => {
-            const first = decideLoaderRender({ html: '<a nonce="1"/>', update: { styleCss: '.a{}' } }, undefined, true, true);
+            const first = decideLoaderRender({ html: '<a nonce="1"/>', update: { styleCss: '.a{}' } }, previous(undefined, true), true);
             // Same update parts, different html (fresh nonce), same page kind: must still skip.
-            const d = decideLoaderRender({ html: '<a nonce="2"/>', update: { styleCss: '.a{}' } }, first.hash, true, true);
+            const d = decideLoaderRender({ html: '<a nonce="2"/>', update: { styleCss: '.a{}' } }, previous(first.hash, true), true);
             assert.strictEqual(d.kind, 'skip');
         });
 
         it('assigns html (no in-place post) for an update-capable preview when the panel is hidden', () => {
-            const first = decideLoaderRender({ html: '<a/>', update: { styleCss: '.a{}' } }, undefined, true, true);
-            const d = decideLoaderRender({ html: '<b/>', update: { styleCss: '.b{}' } }, first.hash, false, true);
+            const first = decideLoaderRender({ html: '<a/>', update: { styleCss: '.a{}' } }, previous(undefined, true), true);
+            const d = decideLoaderRender({ html: '<b/>', update: { styleCss: '.b{}' } }, previous(first.hash, true), false);
             assert.strictEqual(d.kind, 'assign');
         });
 
         it('assigns full html for a plain-string preview (no update support) and skips when unchanged', () => {
-            const changed = decideLoaderRender(normalizeRender('<div>a</div>'), undefined, true, false);
+            const changed = decideLoaderRender(normalizeRender('<div>a</div>'), previous(undefined, false), true);
             assert.strictEqual(changed.kind, 'assign');
-            const same = decideLoaderRender(normalizeRender('<div>a</div>'), changed.hash, true, false);
+            const same = decideLoaderRender(normalizeRender('<div>a</div>'), previous(changed.hash, false), true);
             assert.strictEqual(same.kind, 'skip');
         });
 
@@ -153,7 +170,7 @@ describe('previewdef/loaderpreview', () => {
             // Loaded page is the no-mio / error page (not update-capable). A post here would be
             // dropped and strand the preview, so the fixed render must full-reload.
             const rendered: LoaderRenderResult = { html: '<full/>', update: { styleCss: '.a{}' } };
-            const d = decideLoaderRender(rendered, undefined, true, false);
+            const d = decideLoaderRender(rendered, previous(undefined, false), true);
             assert.strictEqual(d.kind, 'assign');
             if (d.kind === 'assign') {
                 assert.strictEqual(d.updateCapable, true);
@@ -164,20 +181,71 @@ describe('previewdef/loaderpreview', () => {
             const rendered: LoaderRenderResult = { html: '<full/>', update: { styleCss: '.a{}' } };
             // Get this render's hash, then feed it back with a not-update-capable loaded page: the
             // hash matches but the kind differs, so it must not be treated as an already-applied skip.
-            const seed = decideLoaderRender(rendered, undefined, true, true);
-            const d = decideLoaderRender(rendered, seed.hash, true, false);
+            const seed = decideLoaderRender(rendered, previous(undefined, true), true);
+            const d = decideLoaderRender(rendered, previous(seed.hash, false), true);
             assert.strictEqual(d.kind, 'assign');
         });
 
         it('after an error-page assign, the next valid render assigns (regains the listener)', () => {
             // Error page: plain string, assign, page becomes not update-capable.
-            const err = decideLoaderRender(normalizeRender('<pre>Error</pre>'), 123, true, true);
+            const err = decideLoaderRender(normalizeRender('<pre>Error</pre>'), previous(123, true), true);
             assert.strictEqual(err.kind, 'assign');
             assert.strictEqual(err.kind === 'assign' && err.updateCapable, false);
             // Error fixed: update-capable render, visible, but the loaded page has no listener.
             const valid: LoaderRenderResult = { html: '<full/>', update: { styleCss: '.a{}', data: {} } };
-            const next = decideLoaderRender(valid, err.hash, true, err.kind === 'assign' ? err.updateCapable : true);
+            const next = decideLoaderRender(valid, after(err, err.kind === 'assign' ? err.updateCapable : true), true);
             assert.strictEqual(next.kind, 'assign');
+        });
+
+        // The focus tree renders the same payload from two passes (structure-only and
+        // icon-resolved), so it supplies its own fingerprint instead of letting the payload be
+        // hashed, and adds a shell (toolbar) and a side channel (icon CSS).
+        describe('with the extra fingerprints', () => {
+            const render = (fingerprint: string, extra: Partial<LoaderRenderResult> = {}): LoaderRenderResult =>
+                ({ html: '<full nonce="x"/>', update: { data: { trees: 1 } }, fingerprint, ...extra });
+
+            it('uses the supplied fingerprint instead of the payload, so an unchanged one skips', () => {
+                const first = decideLoaderRender(render('S1'), previous(undefined, true), true);
+                // Different payload, same fingerprint: the preview says nothing rendered changed.
+                const same = { ...render('S1'), update: { data: { trees: 2 } } };
+                assert.strictEqual(decideLoaderRender(same, after(first, true), true).kind, 'skip');
+                assert.strictEqual(decideLoaderRender(render('S2'), after(first, true), true).kind, 'post');
+            });
+
+            it('assigns instead of posting when the shell fingerprint changed', () => {
+                // The toolbar is baked into the html, so a post could never patch it.
+                const first = decideLoaderRender(render('S1', { shellFingerprint: 'T1' }), previous(undefined, true), true);
+                const d = decideLoaderRender(render('S2', { shellFingerprint: 'T2' }), after(first, true), true);
+                assert.strictEqual(d.kind, 'assign');
+            });
+
+            it('assigns (does not skip) when only the shell fingerprint changed', () => {
+                const first = decideLoaderRender(render('S1', { shellFingerprint: 'T1' }), previous(undefined, true), true);
+                const d = decideLoaderRender(render('S1', { shellFingerprint: 'T2' }), after(first, true), true);
+                assert.strictEqual(d.kind, 'assign');
+            });
+
+            it('reports sideChanged on an unchanged render instead of skipping it silently', () => {
+                // Same structure, new icon identities: nothing to post, but the icons must be pushed.
+                const first = decideLoaderRender(render('S1', { sideFingerprint: 'I1' }), previous(undefined, true), true);
+                const d = decideLoaderRender(render('S1', { sideFingerprint: 'I2' }), after(first, true), true);
+                assert.strictEqual(d.kind, 'skip');
+                assert.strictEqual(d.sideChanged, true);
+            });
+
+            it('reports sideChanged alongside a post when both moved', () => {
+                const first = decideLoaderRender(render('S1', { sideFingerprint: 'I1' }), previous(undefined, true), true);
+                const d = decideLoaderRender(render('S2', { sideFingerprint: 'I2' }), after(first, true), true);
+                assert.strictEqual(d.kind, 'post');
+                assert.strictEqual(d.sideChanged, true);
+            });
+
+            it('leaves sideChanged false when only the structure moved', () => {
+                const first = decideLoaderRender(render('S1', { sideFingerprint: 'I1' }), previous(undefined, true), true);
+                const d = decideLoaderRender(render('S2', { sideFingerprint: 'I1' }), after(first, true), true);
+                assert.strictEqual(d.kind, 'post');
+                assert.strictEqual(d.sideChanged, false);
+            });
         });
     });
 

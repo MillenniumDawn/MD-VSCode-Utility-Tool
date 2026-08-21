@@ -1044,18 +1044,22 @@ window.addEventListener("message", async (event) => {
 		return;
 	}
 
-	if (msg.type !== "update") {
+	// In-place update pushed by UpdateablePreviewBase when the structure changed, so scroll, zoom
+	// and the selected tree survive. Same `updateBody` shape every other preview receives: the
+	// re-rendered globals arrive under `data`.
+	if (msg.type !== "updateBody") {
 		return;
 	}
 
-	focusTrees = msg.focusTrees;
-	(window as any).focusTrees = msg.focusTrees;
-	(window as any).renderedFocus = msg.renderedFocus;
-	(window as any).renderedInlayWindows = msg.renderedInlayWindows;
-	(window as any).gridBox = msg.gridBox;
-	useConditionInFocus = msg.useConditionInFocus;
-	(window as any).useConditionInFocus = msg.useConditionInFocus;
-	(window as any).xGridSize = msg.xGridSize;
+	const data = msg.data ?? {};
+	focusTrees = data.focusTrees;
+	(window as any).focusTrees = data.focusTrees;
+	(window as any).renderedFocus = data.renderedFocus;
+	(window as any).renderedInlayWindows = data.renderedInlayWindows;
+	(window as any).gridBox = data.gridBox;
+	useConditionInFocus = data.useConditionInFocus;
+	(window as any).useConditionInFocus = data.useConditionInFocus;
+	(window as any).xGridSize = data.xGridSize;
 
 	if (selectedFocusTreeIndex >= focusTrees.length) {
 		selectedFocusTreeIndex = Math.max(0, focusTrees.length - 1);

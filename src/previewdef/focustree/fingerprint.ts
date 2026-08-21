@@ -112,28 +112,3 @@ export function computeTreeIconFingerprint(focusTrees: FingerprintTree[]): strin
     }
     return JSON.stringify([...keys].sort());
 }
-
-export interface FocusTreeFingerprints {
-    structural: string;
-    iconSource: string;
-}
-
-export interface FocusTreeUpdateDecision {
-    postUpdate: boolean;
-    pushIcons: boolean;
-}
-
-/**
- * Decides what the webview needs given the previous and current fingerprints. `postUpdate` rebuilds
- * the focus DOM; `pushIcons` re-resolves and re-pushes the real icon CSS. Both false means nothing
- * the webview renders changed, so the update can be skipped entirely (the common while-typing case).
- */
-export function decideFocusTreeUpdate(prev: FocusTreeFingerprints | undefined, next: FocusTreeFingerprints): FocusTreeUpdateDecision {
-    if (prev === undefined) {
-        return { postUpdate: true, pushIcons: true };
-    }
-    return {
-        postUpdate: next.structural !== prev.structural,
-        pushIcons: next.iconSource !== prev.iconSource,
-    };
-}
