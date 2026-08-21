@@ -1,3 +1,10 @@
+v1.1.28
+
+  Functionality:
+
+- Fix a joint focus branch vanishing while its file is edited, and a false prerequisite warning on a mutually exclusive row. Issue #126.
+- [ Focus Tree ] Shift+click a focus to isolate its prerequisite lines. Issue #127.
+
 v1.1.27
 
   Functionality:
