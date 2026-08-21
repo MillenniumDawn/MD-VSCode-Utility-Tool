@@ -1440,7 +1440,10 @@ window.addEventListener(
 window.addEventListener(
 	"load",
 	tryRun(function () {
-		const contentElement = document.getElementById("eventtreecontent") as HTMLDivElement;
+		const contentElement = document.getElementById("eventtreecontent") as HTMLDivElement | null;
+		if (!contentElement) {
+			return;
+		}
 		enableZoom(contentElement, 0, toolbarHeight);
 
 		bindToggle("show-localisation", showLocalisation, (value) => {

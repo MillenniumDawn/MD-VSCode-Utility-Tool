@@ -159,37 +159,46 @@ export function renderLineConnections(items: Record<string, GridBoxItem>, format
     ).join('');
 }
 
+function renderConnectionBox(
+    diag: string,
+    classNames: string | undefined,
+    styleTable: StyleTable,
+    left: number,
+    top: number,
+    width: number,
+    height: number,
+    border: string,
+): string {
+    return `<div${diag}
+        class="
+            ${classNames ? classNames : ''}
+            ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
+            ${styleTable.oneTimeStyle('gridbox-connection', () => `
+                left: ${left}px;
+                top: ${top}px;
+                width: ${width}px;
+                height: ${height}px;
+                ${border}
+            `)}
+            ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
+        "></div>`;
+}
+
 export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, style: string, type: GridBoxConnectionType, format: Format['_name'], gridSize: NumberSize, classNames: string | undefined, styleTable: StyleTable, cornerPosition: number = 1.5, fromId: string = '', toId: string = ''): string {
     const diag = ` data-conn-from="${fromId}" data-conn-to="${toId}" data-conn-type="${type}" data-conn-style="${style.replace(/"/g, '&quot;')}"`;
     if (a.y === b.y) {
-        return `<div${diag}
-            class="
-                ${classNames ? classNames : ''}
-                ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
-                ${styleTable.oneTimeStyle('gridbox-connection', () => `
-                    left: ${Math.min(a.x, b.x)}px;
-                    top: ${a.y}px;
-                    width: ${Math.abs(a.x - b.x)}px;
-                    height: ${1}px;
-                    border-top: ${style};
-                `)}
-                ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
-            "></div>`;
+        return renderConnectionBox(
+            diag, classNames, styleTable,
+            Math.min(a.x, b.x), a.y, Math.abs(a.x - b.x), 1,
+            `border-top: ${style};`,
+        );
     }
     if (a.x === b.x) {
-        return `<div${diag}
-            class="
-                ${classNames ? classNames : ''}
-                ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
-                ${styleTable.oneTimeStyle('gridbox-connection', () => `
-                    left: ${a.x}px;
-                    top: ${Math.min(a.y, b.y)}px;
-                    width: ${1}px;
-                    height: ${Math.abs(a.y - b.y)}px;
-                    border-left: ${style};
-                `)}
-                ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
-            "></div>`;
+        return renderConnectionBox(
+            diag, classNames, styleTable,
+            a.x, Math.min(a.y, b.y), 1, Math.abs(a.y - b.y),
+            `border-left: ${style};`,
+        );
     }
 
     if (type === 'parent') {
@@ -204,96 +213,42 @@ export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, st
         const by = b.y - a.y;
         const cornerWidth = gridSize.width * cornerPosition;
         if (Math.abs(bx) < cornerWidth) {
-            return `<div${diag}
-                class="
-                    ${classNames ? classNames : ''}
-                    ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
-                    ${styleTable.oneTimeStyle('gridbox-connection', () => `
-                        left: ${Math.min(a.x, b.x)}px;
-                        top: ${Math.min(a.y, b.y)}px;
-                        width: ${Math.abs(bx)}px;
-                        height: ${Math.abs(by)}px;
-                        ${bx < 0 ? 'border-left' : 'border-right'}: ${style};
-                        ${by < 0 ? 'border-bottom' : 'border-top'}: ${style};
-                    `)}
-                    ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
-                "></div>`;
+            return renderConnectionBox(
+                diag, classNames, styleTable,
+                Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(bx), Math.abs(by),
+                `${bx < 0 ? 'border-left' : 'border-right'}: ${style}; ${by < 0 ? 'border-bottom' : 'border-top'}: ${style};`,
+            );
         } else {
-            return `<div${diag}
-                class="
-                    ${classNames ? classNames : ''}
-                    ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
-                    ${styleTable.oneTimeStyle('gridbox-connection', () => `
-                        left: ${Math.min(a.x, a.x + cornerWidth * Math.sign(bx))}px;
-                        top: ${Math.min(a.y, b.y)}px;
-                        width: ${cornerWidth}px;
-                        height: ${Math.abs(by)}px;
-                        ${bx < 0 ? 'border-left' : 'border-right'}: ${style};
-                        ${by < 0 ? 'border-bottom' : 'border-top'}: ${style};
-                    `)}
-                    ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
-                "></div>
-                <div${diag}
-                class="
-                    ${classNames ? classNames : ''}
-                    ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
-                    ${styleTable.oneTimeStyle('gridbox-connection', () => `
-                        left: ${Math.min(b.x, a.x + cornerWidth * Math.sign(bx))}px;
-                        top: ${Math.min(a.y, b.y)}px;
-                        width: ${Math.abs(bx) - cornerWidth}px;
-                        height: ${Math.abs(by)}px;
-                        ${by > 0 ? 'border-bottom' : 'border-top'}: ${style};
-                    `)}
-                    ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
-                "></div>`;
+            return renderConnectionBox(
+                diag, classNames, styleTable,
+                Math.min(a.x, a.x + cornerWidth * Math.sign(bx)), Math.min(a.y, b.y), cornerWidth, Math.abs(by),
+                `${bx < 0 ? 'border-left' : 'border-right'}: ${style}; ${by < 0 ? 'border-bottom' : 'border-top'}: ${style};`,
+            ) + renderConnectionBox(
+                diag, classNames, styleTable,
+                Math.min(b.x, a.x + cornerWidth * Math.sign(bx)), Math.min(a.y, b.y), Math.abs(bx) - cornerWidth, Math.abs(by),
+                `${by > 0 ? 'border-bottom' : 'border-top'}: ${style};`,
+            );
         }
     } else {
         const bx = b.x - a.x;
         const by = b.y - a.y;
         const cornerHeight = gridSize.height * cornerPosition;
         if (Math.abs(by) < cornerHeight) {
-            return `<div${diag}
-                class="
-                    ${classNames ? classNames : ''}
-                    ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
-                    ${styleTable.oneTimeStyle('gridbox-connection', () => `
-                        left: ${Math.min(a.x, b.x)}px;
-                        top: ${Math.min(a.y, b.y)}px;
-                        width: ${Math.abs(bx)}px;
-                        height: ${Math.abs(by)}px;
-                        ${bx > 0 ? 'border-left' : 'border-right'}: ${style};
-                        ${by > 0 ? 'border-bottom' : 'border-top'}: ${style};
-                    `)}
-                    ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
-                "></div>`;
+            return renderConnectionBox(
+                diag, classNames, styleTable,
+                Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(bx), Math.abs(by),
+                `${bx > 0 ? 'border-left' : 'border-right'}: ${style}; ${by > 0 ? 'border-bottom' : 'border-top'}: ${style};`,
+            );
         } else {
-            return `<div${diag}
-                class="
-                    ${classNames ? classNames : ''}
-                    ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
-                    ${styleTable.oneTimeStyle('gridbox-connection', () => `
-                        left: ${Math.min(a.x, b.x)}px;
-                        top: ${Math.min(a.y, a.y + cornerHeight * Math.sign(by))}px;
-                        width: ${Math.abs(bx)}px;
-                        height: ${cornerHeight}px;
-                        ${bx > 0 ? 'border-left' : 'border-right'}: ${style};
-                        ${by > 0 ? 'border-bottom' : 'border-top'}: ${style};
-                    `)}
-                    ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
-                "></div>
-                <div${diag}
-                class="
-                    ${classNames ? classNames : ''}
-                    ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
-                    ${styleTable.oneTimeStyle('gridbox-connection', () => `
-                        left: ${Math.min(a.x, b.x)}px;
-                        top: ${Math.min(b.y, a.y + cornerHeight * Math.sign(by))}px;
-                        width: ${Math.abs(bx)}px;
-                        height: ${Math.abs(by) - cornerHeight}px;
-                        ${bx > 0 ? 'border-right' : 'border-left'}: ${style};
-                    `)}
-                    ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
-                "></div>`;
+            return renderConnectionBox(
+                diag, classNames, styleTable,
+                Math.min(a.x, b.x), Math.min(a.y, a.y + cornerHeight * Math.sign(by)), Math.abs(bx), cornerHeight,
+                `${bx > 0 ? 'border-left' : 'border-right'}: ${style}; ${by > 0 ? 'border-bottom' : 'border-top'}: ${style};`,
+            ) + renderConnectionBox(
+                diag, classNames, styleTable,
+                Math.min(a.x, b.x), Math.min(b.y, a.y + cornerHeight * Math.sign(by)), Math.abs(bx), Math.abs(by) - cornerHeight,
+                `${bx > 0 ? 'border-right' : 'border-left'}: ${style};`,
+            );
         }
     }
 }

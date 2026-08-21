@@ -14,6 +14,21 @@ export interface OpenOrCopyHoiFileOptions {
 	failedToOpenMessage: (errorMessage: string) => string;
 }
 
+async function openDocumentAtRange(
+	document: vscode.TextDocument,
+	start: number | undefined,
+	end: number | undefined,
+	viewColumn: vscode.ViewColumn | undefined,
+): Promise<void> {
+	await vscode.window.showTextDocument(document, {
+		selection:
+			start !== undefined && end !== undefined
+				? new vscode.Range(document.positionAt(start), document.positionAt(end))
+				: undefined,
+		viewColumn,
+	});
+}
+
 export async function openOrCopyHoiFile(
 	file: string,
 	start: number | undefined,
@@ -22,21 +37,11 @@ export async function openOrCopyHoiFile(
 ): Promise<void> {
 	const filePathInMod = await getFilePathFromMod(file);
 	if (filePathInMod !== undefined) {
-		const filePathInModWithoutOpened =
-			getHoiOpenedFileOriginalUri(filePathInMod);
+		const filePathInModWithoutOpened = getHoiOpenedFileOriginalUri(filePathInMod);
 		const document =
 			getDocumentByUri(filePathInModWithoutOpened) ??
 			(await vscode.workspace.openTextDocument(filePathInModWithoutOpened));
-		await vscode.window.showTextDocument(document, {
-			selection:
-				start !== undefined && end !== undefined
-					? new vscode.Range(
-							document.positionAt(start),
-							document.positionAt(end),
-						)
-					: undefined,
-			viewColumn: options.viewColumn,
-		});
+		await openDocumentAtRange(document, start, end, options.viewColumn);
 		return;
 	}
 
@@ -68,16 +73,7 @@ export async function openOrCopyHoiFile(
 		await writeFile(targetPath, buffer);
 
 		const document = await vscode.workspace.openTextDocument(targetPath);
-		await vscode.window.showTextDocument(document, {
-			selection:
-				start !== undefined && end !== undefined
-					? new vscode.Range(
-							document.positionAt(start),
-							document.positionAt(end),
-						)
-					: undefined,
-			viewColumn: options.viewColumn,
-		});
+		await openDocumentAtRange(document, start, end, options.viewColumn);
 	} catch (e) {
 		await vscode.window.showErrorMessage(
 			options.failedToOpenMessage(forceError(e).toString()),
