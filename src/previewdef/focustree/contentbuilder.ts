@@ -19,6 +19,7 @@ import { calculateBBox, ParentInfo } from "../../util/hoi4gui/common";
 import { renderInstantTextBox } from "../../util/hoi4gui/instanttextbox";
 import { renderSprite } from "../../util/hoi4gui/nodecommon";
 import { registerWarningStyles, warningListClass } from "./warningstyles";
+import { registerTraceStyles } from "./tracestyles";
 import { registerExclusiveLinkStyles } from "../../util/hoi4gui/exclusivelink";
 import { loadExclusiveLinkImages } from "../../util/hoi4gui/exclusivelinkimages";
 
@@ -242,6 +243,10 @@ export const focusTreeGridBox: HOIPartial<GridBoxType> = {
  * injected by the webview, so this is a cheap synchronous step.
  */
 function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, toolbarFlags: ToolbarFlags, styleNonce: string): string {
+    // Same reason as registerWarningStyles below: the shell stylesheet is the only one the webview
+    // can still attach classes against after a render. See tracestyles.ts.
+    registerTraceStyles(styleTable);
+
     // CSP-nonced <style> element the webview later fills with the resolved focus-icon background CSS.
     const progressiveIconStyles = `<style id="ft-progressive-icons" nonce="${styleNonce}"></style>`;
     const continuousFocusContent =
@@ -402,6 +407,17 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             <i class="codicon codicon-clear-all"></i>
         </button>`;
 
+    // Shown by the webview only while a prerequisite trace is active, so there is always a visible
+    // way out of the dimmed view. Hidden through an inline display rather than the `hidden`
+    // attribute: the class below sets a display of its own, which would win over `[hidden]`.
+    const traceStatus = `
+        <div id="trace-status-container" style="display:none" class="${styleTable.style('traceStatusContainer', () => `margin-left:10px; align-items:center;`)}">
+            <span id="trace-status" class="${styleTable.style('traceStatus', () => `margin-right:5px; opacity:0.8;`)}"></span>
+            <button id="clear-trace" title="${localize('focustree.traceclear', 'Stop tracing prerequisite lines')}">
+                <i class="codicon codicon-close"></i>
+            </button>
+        </div>`;
+
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 52px;`)}">
         <div class="toolbar">
             ${useConditionInFocus ? conditions + inlayConditions : allowbranch}
@@ -414,6 +430,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${warningsButton}
             ${warningMarkersButton}
             ${resetCheckboxesButton}
+            ${traceStatus}
         </div>
     </div>`;
 }
@@ -649,7 +666,7 @@ async function renderFocus(
     start="${focus.token?.start}"
     end="${focus.token?.end}"
     ${file === focus.file ? '' : `file="${focus.file}"`}
-    title="${escapeAttr(focus.id)}\n({{position}})">
+    title="${escapeAttr(focus.id)}\n({{position}})\n${escapeAttr(localize('focustree.tracehint', 'Shift+click: show only this focus\'s prerequisite lines'))}">
         <div
         class="{{iconClass}} ${styleTable.style('focus-icon-layer', () => `
             position: absolute;
