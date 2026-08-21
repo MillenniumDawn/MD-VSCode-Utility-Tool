@@ -29,7 +29,7 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
-        const loadedLoaders = Array.from((session as any).loadedLoader).map<string>(v => (v as any).toString());
+        const loadedLoaders = session.loadedLoaderNames();
         debug('Loader session tech tree', loadedLoaders);
 
         const technologyTrees = loadResult.result.technologyTrees;

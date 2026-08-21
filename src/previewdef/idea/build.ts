@@ -1,5 +1,5 @@
-import { localisationIndex } from "../../util/featureflags";
-import { getLocalisedTextQuick } from "../../util/localisationIndex";
+import { localise } from "../localise";
+import { navOf } from "../sharedpayload";
 import { getImageByPath, getSpriteByGfxName } from "../../util/image/imagecache";
 import { StyleTable, normalizeForStyle } from "../../util/styletable";
 import { localize } from "../../util/i18n";
@@ -13,7 +13,6 @@ import {
 	IdeaGroup,
 	IdeaPreviewPayload,
 	IdeaToolbarFlags,
-	LocText,
 	ModifierGroup,
 	NavTarget,
 } from "./payload";
@@ -274,22 +273,7 @@ export function toolbarFlagsOf(
 	};
 }
 
-async function localise(key: string): Promise<LocText> {
-	// getLocalisedTextQuick echoes the key back when nothing resolves, which is exactly the fallback
-	// the preview wants, so an unresolved key simply reads the same either way.
-	const text = localisationIndex ? await getLocalisedTextQuick(key) : key;
-	return { key, text: text ?? key };
-}
 
-function navOf(
-	token: { start: number; end: number } | undefined,
-	file: string | undefined,
-): NavTarget | undefined {
-	if (!token || file === undefined) {
-		return undefined;
-	}
-	return { start: token.start, end: token.end, file };
-}
 
 function fileOf(ideas: HOIIdea[]): string | undefined {
 	return ideas[0]?.file;
