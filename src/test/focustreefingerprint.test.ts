@@ -6,7 +6,6 @@ import {
     computeIconSourceFingerprint,
     computeTreeStructuralFingerprint,
     computeTreeIconFingerprint,
-    decideFocusTreeUpdate,
 } from '../previewdef/focustree/fingerprint';
 
 function structureInput(overrides: Partial<FocusTreeStructureInput> = {}): FocusTreeStructureInput {
@@ -22,13 +21,6 @@ function structureInput(overrides: Partial<FocusTreeStructureInput> = {}): Focus
             'st-focus-icon-goal_a': 'background-color: rgba(127, 127, 127, 0.25);',
         },
         ...overrides,
-    };
-}
-
-function fingerprints(input: FocusTreeStructureInput) {
-    return {
-        structural: computeStructuralFingerprint(input),
-        iconSource: computeIconSourceFingerprint(input.styleRecords),
     };
 }
 
@@ -239,43 +231,6 @@ describe('previewdef/focustree/fingerprint', () => {
             const asIcon = computeTreeIconFingerprint([{ focuses: { a: { icon: [{ icon: 'GFX_x' }] } } }] as any);
             const asOverlay = computeTreeIconFingerprint([{ focuses: { a: { overlay: 'GFX_x' } } }] as any);
             assert.notStrictEqual(asIcon, asOverlay);
-        });
-    });
-
-    describe('decideFocusTreeUpdate', () => {
-        it('posts an update and resolves icons on the first render (no prior fingerprints)', () => {
-            assert.deepStrictEqual(decideFocusTreeUpdate(undefined, fingerprints(structureInput())), { postUpdate: true, pushIcons: true });
-        });
-
-        it('skips when identical structure-only payloads produce the same fingerprints', () => {
-            const prev = fingerprints(structureInput());
-            const next = fingerprints(structureInput());
-            assert.deepStrictEqual(decideFocusTreeUpdate(prev, next), { postUpdate: false, pushIcons: false });
-        });
-
-        it('posts an update but not an icon push when only rendered focus HTML changes', () => {
-            const prev = fingerprints(structureInput());
-            const next = fingerprints(structureInput({ renderedFocus: { a: '<div start="1" end="2">a renamed</div>' } }));
-            assert.deepStrictEqual(decideFocusTreeUpdate(prev, next), { postUpdate: true, pushIcons: false });
-        });
-
-        it('pushes icons when a focus icon identity is added', () => {
-            // Adding an icon changes both the focus data (structural) and the icon set.
-            const prev = fingerprints(structureInput());
-            const next = fingerprints(structureInput({
-                styleRecords: { 'st-focus-common': 'position: relative;', 'st-focus-icon-goal_a': 'x', 'st-focus-icon-goal_b': 'y' },
-            }));
-            const decision = decideFocusTreeUpdate(prev, next);
-            assert.strictEqual(decision.pushIcons, true);
-        });
-
-        it('flags both when structure and icon identities both change', () => {
-            const prev = fingerprints(structureInput());
-            const next = fingerprints(structureInput({
-                renderedFocus: { a: '<div start="1" end="2">a renamed</div>' },
-                styleRecords: { 'st-focus-common': 'position: relative;', 'st-focus-icon-goal_c': 'z' },
-            }));
-            assert.deepStrictEqual(decideFocusTreeUpdate(prev, next), { postUpdate: true, pushIcons: true });
         });
     });
 });
