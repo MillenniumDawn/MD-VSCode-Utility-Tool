@@ -5,11 +5,13 @@ import { getSpriteTypes } from "../hoiformat/spritetype";
 import { debounceByInput, forceError, mapLimit, UserError } from "./common";
 import { error } from "./debug";
 import { gfxIndex } from "./featureflags";
+import { readFileFromModOrHOI4 } from "./fileloader";
 import {
-	getFilePathFromModOrHOI4,
-	listFilesFromModOrHOI4,
-	readFileFromModOrHOI4,
-} from "./fileloader";
+	IndexFile,
+	IndexListing,
+	listIndexFiles,
+	toIndexFiles,
+} from "./indexListing";
 import { localize } from "./i18n";
 import { uniq } from "lodash";
 import { sendEvent } from "./telemetry";
@@ -21,7 +23,6 @@ import {
 	loadCacheData,
 	saveCacheManifest,
 	saveCacheData,
-	getFileMtimes,
 	computeStaleFiles,
 	IndexTimer,
 } from "./indexCache";
@@ -110,14 +111,15 @@ interface GfxCacheData {
 	fileToKeys: Record<string, string[]>;
 }
 
+const gfxRoot = "interface";
+const isGfxFile = (relativePath: string) =>
+	relativePath.toLocaleLowerCase().endsWith(".gfx");
+
 async function buildGlobalGfxIndex(estimatedSize: [number]): Promise<void> {
 	const options = { mod: false, recursively: true };
-	const gfxFiles = (await listFilesFromModOrHOI4("interface", options))
-		.filter((f) => f.toLocaleLowerCase().endsWith(".gfx"))
-		.map((f) => "interface/" + f);
 	await buildGfxIndexWithCache(
 		"gfxIndex.global",
-		gfxFiles,
+		() => listIndexFiles({ roots: [gfxRoot], filter: isGfxFile, options }),
 		globalGfxIndex,
 		null,
 		options,
@@ -127,12 +129,9 @@ async function buildGlobalGfxIndex(estimatedSize: [number]): Promise<void> {
 
 async function buildWorkspaceGfxIndex(estimatedSize: [number]): Promise<void> {
 	const options = { hoi4: false, recursively: true };
-	const gfxFiles = (await listFilesFromModOrHOI4("interface", options))
-		.filter((f) => f.toLocaleLowerCase().endsWith(".gfx"))
-		.map((f) => "interface/" + f);
 	await buildGfxIndexWithCache(
 		"gfxIndex.workspace",
-		gfxFiles,
+		() => listIndexFiles({ roots: [gfxRoot], filter: isGfxFile, options }),
 		workspaceGfxIndex,
 		workspaceGfxFileToKeys,
 		options,
@@ -142,7 +141,7 @@ async function buildWorkspaceGfxIndex(estimatedSize: [number]): Promise<void> {
 
 async function buildGfxIndexWithCache(
 	cacheName: string,
-	gfxFiles: string[],
+	listFiles: () => Promise<IndexListing>,
 	targetIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
 	options: { mod?: boolean; hoi4?: boolean },
@@ -153,7 +152,7 @@ async function buildGfxIndexWithCache(
 		await buildGfxIndexWithTimer(
 			timer,
 			cacheName,
-			gfxFiles,
+			listFiles,
 			targetIndex,
 			fileToKeysMap,
 			options,
@@ -168,16 +167,21 @@ async function buildGfxIndexWithCache(
 async function buildGfxIndexWithTimer(
 	timer: IndexTimer,
 	cacheName: string,
-	gfxFiles: string[],
+	listFiles: () => Promise<IndexListing>,
 	targetIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
 ): Promise<void> {
-	timer.begin("mtime");
-	const resolveUri = (relativePath: string) =>
-		getFilePathFromModOrHOI4(relativePath, options);
-	const currentMtimes = await getFileMtimes(gfxFiles, resolveUri);
+	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
+	// install it is now the directory walk and the mtimes together, which is where a slow cold build
+	// spends its time, and it used to happen before the timer existed.
+	timer.begin("list");
+	const {
+		filePaths: gfxFiles,
+		uris,
+		mtimes: currentMtimes,
+	} = await listFiles();
 
 	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, GFX_CACHE_VERSION);
@@ -223,9 +227,10 @@ async function buildGfxIndexWithTimer(
 
 	timer.begin("parse");
 	let parsed = 0;
-	await mapLimit(filesToParse, 8, async (f) => {
+	const toParse = toIndexFiles(filesToParse, uris);
+	await mapLimit(toParse, 8, async (f) => {
 		await fillGfxItems(f, targetIndex, fileToKeysMap, options, estimatedSize);
-		timer.progress(++parsed, filesToParse.length);
+		timer.progress(++parsed, toParse.length);
 	});
 	timer.end(gfxFiles.length, filesToParse.length);
 
@@ -247,17 +252,23 @@ async function buildGfxIndexWithTimer(
 }
 
 async function fillGfxItems(
-	gfxFile: string,
+	gfxFile: IndexFile,
 	gfxIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize?: [number],
 ): Promise<void> {
+	const filePath = gfxFile.path;
 	try {
 		if (estimatedSize) {
-			estimatedSize[0] += gfxFile.length;
+			// The path's length, not the file's, which is what this has always counted.
+			estimatedSize[0] += filePath.length;
 		}
-		const [fileBuffer, uri] = await readFileFromModOrHOI4(gfxFile, options);
+		const [fileBuffer, uri] = await readFileFromModOrHOI4(
+			filePath,
+			options,
+			gfxFile.uri,
+		);
 		const spriteTypes = getSpriteTypes(
 			parseHoi4File(
 				fileBuffer.toString(),
@@ -267,7 +278,7 @@ async function fillGfxItems(
 		);
 		const spriteNames: string[] = [];
 		for (const spriteType of spriteTypes) {
-			gfxIndex[spriteType.name] = { file: gfxFile };
+			gfxIndex[spriteType.name] = { file: filePath };
 			if (fileToKeysMap) {
 				spriteNames.push(spriteType.name);
 			}
@@ -276,7 +287,7 @@ async function fillGfxItems(
 			}
 		}
 		if (fileToKeysMap && spriteNames.length > 0) {
-			fileToKeysMap.set(gfxFile, spriteNames);
+			fileToKeysMap.set(filePath, spriteNames);
 		}
 	} catch (e) {
 		error(new UserError(forceError(e).toString()));
@@ -413,9 +424,13 @@ function addWorkspaceGfxIndex(file: vscode.Uri) {
 			.relative(wsFolder.uri.path, file.path)
 			.replace(/\\+/g, "/");
 		if (relative && relative.startsWith("interface/")) {
-			void fillGfxItems(relative, workspaceGfxIndex, workspaceGfxFileToKeys, {
-				hoi4: false,
-			});
+			// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
+			void fillGfxItems(
+				{ path: relative },
+				workspaceGfxIndex,
+				workspaceGfxFileToKeys,
+				{ hoi4: false },
+			);
 		}
 	}
 }

@@ -99,11 +99,22 @@ describe("util/ideaSwapIndex extraction", () => {
 	});
 });
 
+type ListedEntry = {
+	relativePath: string;
+	uri: unknown;
+	mtime: number | undefined;
+};
+
 type FileloaderModule = {
-	listFilesFromModOrHOI4: (
+	listFileEntriesFromModOrHOI4: (
 		relativePath: string,
-		options?: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
-	) => Promise<string[]>;
+		options?: {
+			mod?: boolean;
+			hoi4?: boolean;
+			recursively?: boolean;
+			token?: unknown;
+		},
+	) => Promise<ListedEntry[]>;
 	readFileFromModOrHOI4: (
 		relativePath: string,
 		options?: { mod?: boolean; hoi4?: boolean },
@@ -111,6 +122,16 @@ type FileloaderModule = {
 };
 
 const fileloader = require("../util/fileloader") as FileloaderModule;
+
+// A dated entry is what a listing on a real disk produces; leaving the mtime out would send
+// listIndexFiles down its resolve-and-stat fallback and out to the unstubbed file system.
+function toEntries(names: string[]): ListedEntry[] {
+	return names.map((relativePath) => ({
+		relativePath,
+		uri: undefined,
+		mtime: 1,
+	}));
+}
 
 const SWAP_FILE = Buffer.from(
 	"focus = { completion_reward = { swap_ideas = { remove_idea = political_power_bonus add_idea = political_power_bonus2 } } }",
@@ -145,22 +166,24 @@ describe("util/ideaSwapIndex registration", () => {
 });
 
 describe("util/ideaSwapIndex lookup", function () {
-	let originalListFiles: FileloaderModule["listFilesFromModOrHOI4"];
+	let originalListFiles: FileloaderModule["listFileEntriesFromModOrHOI4"];
 	let originalReadFile: FileloaderModule["readFileFromModOrHOI4"];
 	let readFiles: string[];
 
 	function stubFiles(files: Record<string, Buffer>) {
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = async (relativePath, options) => {
+		).listFileEntriesFromModOrHOI4 = async (relativePath, options) => {
 			if (options?.hoi4) {
 				return [];
 			}
-			return Object.keys(files)
-				.filter((f) => f.startsWith(relativePath + "/"))
-				.map((f) => f.slice(relativePath.length + 1));
+			return toEntries(
+				Object.keys(files)
+					.filter((f) => f.startsWith(relativePath + "/"))
+					.map((f) => f.slice(relativePath.length + 1)),
+			);
 		};
 		(
 			fileloader as typeof fileloader & {
@@ -185,7 +208,7 @@ describe("util/ideaSwapIndex lookup", function () {
 		featureflags.refreshFeatureFlags();
 
 		readFiles = [];
-		originalListFiles = fileloader.listFilesFromModOrHOI4;
+		originalListFiles = fileloader.listFileEntriesFromModOrHOI4;
 		originalReadFile = fileloader.readFileFromModOrHOI4;
 		stubFiles({
 			"common/national_focus/00_generic.txt": SWAP_FILE,
@@ -196,9 +219,9 @@ describe("util/ideaSwapIndex lookup", function () {
 	afterEach(function () {
 		(
 			fileloader as typeof fileloader & {
-				listFilesFromModOrHOI4: FileloaderModule["listFilesFromModOrHOI4"];
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
 			}
-		).listFilesFromModOrHOI4 = originalListFiles;
+		).listFileEntriesFromModOrHOI4 = originalListFiles;
 		(
 			fileloader as typeof fileloader & {
 				readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];

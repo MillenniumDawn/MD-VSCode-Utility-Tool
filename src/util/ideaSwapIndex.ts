@@ -1,11 +1,13 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { debounceByInput, mapLimit } from "./common";
+import { readFileFromModOrHOI4 } from "./fileloader";
 import {
-	getFilePathFromModOrHOI4,
-	listFilesFromModOrHOI4,
-	readFileFromModOrHOI4,
-} from "./fileloader";
+	IndexFile,
+	IndexListing,
+	listIndexFiles,
+	toIndexFiles,
+} from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { attachTaskWithErrorLogging } from "./promiseUtils";
@@ -18,7 +20,6 @@ import {
 	loadCacheData,
 	saveCacheManifest,
 	saveCacheData,
-	getFileMtimes,
 	computeStaleFiles,
 	IndexTimer,
 } from "./indexCache";
@@ -115,29 +116,25 @@ function ensureIndexBuilt(): Promise<[void, void]> {
 
 const SWAP_CACHE_VERSION = 1;
 
-async function listSwapFiles(options: {
+function listSwapFiles(options: {
 	mod?: boolean;
 	hoi4?: boolean;
-}): Promise<string[]> {
-	const listOptions = { ...options, recursively: true };
-	const lists = await Promise.all(
-		swapRoots.map(async (root) => {
-			const files = await listFilesFromModOrHOI4(root, listOptions).catch(
-				() => [] as string[],
-			);
-			return files
-				.filter((f) => f.toLowerCase().endsWith(".txt"))
-				.map((f) => `${root}/${f}`);
-		}),
-	);
-	return lists.flat();
+}): Promise<IndexListing> {
+	return listIndexFiles({
+		roots: swapRoots,
+		filter: (relativePath) => relativePath.toLowerCase().endsWith(".txt"),
+		options: { ...options, recursively: true },
+		// A mod that has no events/ folder at all is ordinary, and it should cost that root rather
+		// than the whole index. The other three indexes have a single root and let it propagate.
+		tolerateRootErrors: true,
+	});
 }
 
 async function buildGlobalSwapIndex(estimatedSize: [number]): Promise<void> {
 	const options = { mod: false, hoi4: true };
 	await buildSwapIndexWithCache(
 		"ideaSwapIndex.global",
-		await listSwapFiles(options),
+		() => listSwapFiles(options),
 		globalSwapIndex,
 		options,
 		estimatedSize,
@@ -148,7 +145,7 @@ async function buildWorkspaceSwapIndex(estimatedSize: [number]): Promise<void> {
 	const options = { mod: true, hoi4: false };
 	await buildSwapIndexWithCache(
 		"ideaSwapIndex.workspace",
-		await listSwapFiles(options),
+		() => listSwapFiles(options),
 		workspaceSwapIndex,
 		options,
 		estimatedSize,
@@ -157,7 +154,7 @@ async function buildWorkspaceSwapIndex(estimatedSize: [number]): Promise<void> {
 
 async function buildSwapIndexWithCache(
 	cacheName: string,
-	swapFiles: string[],
+	listFiles: () => Promise<IndexListing>,
 	swapIndex: SwapIndex,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
@@ -167,7 +164,7 @@ async function buildSwapIndexWithCache(
 		await buildSwapIndexWithTimer(
 			timer,
 			cacheName,
-			swapFiles,
+			listFiles,
 			swapIndex,
 			options,
 			estimatedSize,
@@ -181,15 +178,20 @@ async function buildSwapIndexWithCache(
 async function buildSwapIndexWithTimer(
 	timer: IndexTimer,
 	cacheName: string,
-	swapFiles: string[],
+	listFiles: () => Promise<IndexListing>,
 	swapIndex: SwapIndex,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
 ): Promise<void> {
-	timer.begin("mtime");
-	const resolveUri = (relativePath: string) =>
-		getFilePathFromModOrHOI4(relativePath, options);
-	const currentMtimes = await getFileMtimes(swapFiles, resolveUri);
+	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
+	// install it is now the directory walk and the mtimes together, which is where a slow cold build
+	// spends its time, and it used to happen before the timer existed.
+	timer.begin("list");
+	const {
+		filePaths: swapFiles,
+		uris,
+		mtimes: currentMtimes,
+	} = await listFiles();
 
 	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, SWAP_CACHE_VERSION);
@@ -226,9 +228,10 @@ async function buildSwapIndexWithTimer(
 
 	timer.begin("parse");
 	let parsed = 0;
-	await mapLimit(filesToParse, 8, async (f) => {
+	const toParse = toIndexFiles(filesToParse, uris);
+	await mapLimit(toParse, 8, async (f) => {
 		await fillSwaps(f, swapIndex, options, estimatedSize);
-		timer.progress(++parsed, filesToParse.length);
+		timer.progress(++parsed, toParse.length);
 	});
 	timer.end(swapFiles.length, filesToParse.length);
 
@@ -240,14 +243,19 @@ async function buildSwapIndexWithTimer(
 }
 
 async function fillSwaps(
-	swapFile: string,
+	swapFile: IndexFile,
 	swapIndex: SwapIndex,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize?: [number],
 ): Promise<void> {
+	const filePath = swapFile.path;
 	let fileContent: string;
 	try {
-		const [fileBuffer] = await readFileFromModOrHOI4(swapFile, options);
+		const [fileBuffer] = await readFileFromModOrHOI4(
+			filePath,
+			options,
+			swapFile.uri,
+		);
 		fileContent = fileBuffer.toString();
 		if (estimatedSize) {
 			estimatedSize[0] += fileBuffer.length;
@@ -255,29 +263,29 @@ async function fillSwaps(
 	} catch (e) {
 		// A file listed but unreadable -- deleted between the listing and the read, or locked --
 		// costs this one file and nothing else.
-		Logger.warn(`Idea swap index: can't read ${swapFile}: ${e}`);
+		Logger.warn(`Idea swap index: can't read ${filePath}: ${e}`);
 		return;
 	}
 
 	// The prescan that makes this affordable: parsing is what costs, and the overwhelming majority
 	// of files never mention a swap.
 	if (!fileContent.includes("swap_ideas")) {
-		delete swapIndex[swapFile];
+		delete swapIndex[filePath];
 		return;
 	}
 
 	try {
 		const swaps = extractIdeaSwaps(
-			parseHoi4File(fileContent, localize("infile", "In file {0}:\n", swapFile)),
+			parseHoi4File(fileContent, localize("infile", "In file {0}:\n", filePath)),
 		);
 		if (swaps.length > 0) {
-			swapIndex[swapFile] = swaps;
+			swapIndex[filePath] = swaps;
 		} else {
-			delete swapIndex[swapFile];
+			delete swapIndex[filePath];
 		}
 	} catch (e) {
 		const errText = e instanceof Error ? (e.stack ?? e.message) : String(e);
-		Logger.error(`Idea swap index: parsing ${swapFile} failed.\n${errText}`);
+		Logger.error(`Idea swap index: parsing ${filePath} failed.\n${errText}`);
 	}
 }
 
@@ -572,7 +580,8 @@ function removeWorkspaceSwaps(file: vscode.Uri) {
 function addWorkspaceSwaps(file: vscode.Uri) {
 	const relative = relativeSwapPath(file);
 	if (relative) {
-		void fillSwaps(relative, workspaceSwapIndex, { hoi4: false });
+		// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
+		void fillSwaps({ path: relative }, workspaceSwapIndex, { hoi4: false });
 	}
 }
 

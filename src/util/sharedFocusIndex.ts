@@ -1,11 +1,13 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { debounceByInput, mapLimit } from "./common";
+import { readFileFromModOrHOI4 } from "./fileloader";
 import {
-	getFilePathFromModOrHOI4,
-	listFilesFromModOrHOI4,
-	readFileFromModOrHOI4,
-} from "./fileloader";
+	IndexFile,
+	IndexListing,
+	listIndexFiles,
+	toIndexFiles,
+} from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder } from "./indexBuild";
@@ -19,7 +21,6 @@ import {
 	loadCacheData,
 	saveCacheManifest,
 	saveCacheData,
-	getFileMtimes,
 	computeStaleFiles,
 	IndexTimer,
 } from "./indexCache";
@@ -86,14 +87,13 @@ function ensureIndexBuilt(): Promise<[void, void]> {
 
 const FOCUS_CACHE_VERSION = 1;
 
+const focusRoot = "common/national_focus";
+
 async function buildGlobalFocusIndex(estimatedSize: [number]): Promise<void> {
 	const options = { mod: false, hoi4: true, recursively: true };
-	const focusFiles = (
-		await listFilesFromModOrHOI4("common/national_focus", options)
-	).map((f) => "common/national_focus/" + f);
 	await buildFocusIndexWithCache(
 		"focusIndex.global",
-		focusFiles,
+		() => listIndexFiles({ roots: [focusRoot], options }),
 		globalFocusIndex,
 		globalFocusKeyToFile,
 		options,
@@ -105,12 +105,9 @@ async function buildWorkspaceFocusIndex(
 	estimatedSize: [number],
 ): Promise<void> {
 	const options = { mod: true, hoi4: false, recursively: true };
-	const focusFiles = (
-		await listFilesFromModOrHOI4("common/national_focus", options)
-	).map((f) => "common/national_focus/" + f);
 	await buildFocusIndexWithCache(
 		"focusIndex.workspace",
-		focusFiles,
+		() => listIndexFiles({ roots: [focusRoot], options }),
 		workspaceFocusIndex,
 		workspaceFocusKeyToFile,
 		options,
@@ -120,7 +117,7 @@ async function buildWorkspaceFocusIndex(
 
 async function buildFocusIndexWithCache(
 	cacheName: string,
-	focusFiles: string[],
+	listFiles: () => Promise<IndexListing>,
 	focusIndex: FocusIndex,
 	reverseMap: Map<string, string>,
 	options: { mod?: boolean; hoi4?: boolean },
@@ -131,7 +128,7 @@ async function buildFocusIndexWithCache(
 		await buildFocusIndexWithTimer(
 			timer,
 			cacheName,
-			focusFiles,
+			listFiles,
 			focusIndex,
 			reverseMap,
 			options,
@@ -146,16 +143,21 @@ async function buildFocusIndexWithCache(
 async function buildFocusIndexWithTimer(
 	timer: IndexTimer,
 	cacheName: string,
-	focusFiles: string[],
+	listFiles: () => Promise<IndexListing>,
 	focusIndex: FocusIndex,
 	reverseMap: Map<string, string>,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
 ): Promise<void> {
-	timer.begin("mtime");
-	const resolveUri = (relativePath: string) =>
-		getFilePathFromModOrHOI4(relativePath, options);
-	const currentMtimes = await getFileMtimes(focusFiles, resolveUri);
+	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
+	// install it is now the directory walk and the mtimes together, which is where a slow cold build
+	// spends its time, and it used to happen before the timer existed.
+	timer.begin("list");
+	const {
+		filePaths: focusFiles,
+		uris,
+		mtimes: currentMtimes,
+	} = await listFiles();
 
 	timer.begin("cache");
 	const manifest = await loadCacheManifest(cacheName, FOCUS_CACHE_VERSION);
@@ -197,9 +199,10 @@ async function buildFocusIndexWithTimer(
 
 	timer.begin("parse");
 	let parsed = 0;
-	await mapLimit(filesToParse, 8, async (f) => {
+	const toParse = toIndexFiles(filesToParse, uris);
+	await mapLimit(toParse, 8, async (f) => {
 		await fillFocusItems(f, focusIndex, reverseMap, options, estimatedSize);
-		timer.progress(++parsed, filesToParse.length);
+		timer.progress(++parsed, toParse.length);
 	});
 	timer.end(focusFiles.length, filesToParse.length);
 
@@ -216,7 +219,7 @@ async function buildFocusIndexWithTimer(
 }
 
 async function fillFocusItems(
-	focusFile: string,
+	focusFile: IndexFile,
 	focusIndex: FocusIndex,
 	reverseMap: Map<string, string>,
 	options: { mod?: boolean; hoi4?: boolean },
@@ -227,7 +230,7 @@ async function fillFocusItems(
 		return;
 	}
 
-	applyFocusIds(focusFile, ids, focusIndex, reverseMap);
+	applyFocusIds(focusFile.path, ids, focusIndex, reverseMap);
 }
 
 /**
@@ -236,20 +239,25 @@ async function fillFocusItems(
  * whether a failure means "write nothing" (the build) or "keep what is already indexed" (a re-index).
  */
 async function readFocusIds(
-	focusFile: string,
+	focusFile: IndexFile,
 	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize?: [number],
 ): Promise<string[] | undefined> {
+	const filePath = focusFile.path;
 	let fileBuffer: Buffer;
 	let fileContent: string;
 	try {
-		[fileBuffer] = await readFileFromModOrHOI4(focusFile, options);
+		[fileBuffer] = await readFileFromModOrHOI4(
+			filePath,
+			options,
+			focusFile.uri,
+		);
 		fileContent = fileBuffer.toString();
 	} catch (e) {
 		// A file listed but unreadable -- deleted between the listing and the read, or locked --
 		// costs this one file and nothing else. Reading used to sit outside the try, so one such
 		// file rejected the whole build and left the index half-populated for the session.
-		Logger.warn(`Shared focus index: can't read ${focusFile}: ${e}`);
+		Logger.warn(`Shared focus index: can't read ${filePath}: ${e}`);
 		return undefined;
 	}
 
@@ -266,7 +274,7 @@ async function readFocusIds(
 		const ids = extractFocusIds(
 			parseHoi4File(
 				fileContent,
-				localize("infile", "In file {0}:\n", focusFile),
+				localize("infile", "In file {0}:\n", filePath),
 				{ keepTokens: false },
 			),
 		);
@@ -296,7 +304,7 @@ async function readFocusIds(
 							return Object.prototype.toString.call(e);
 						}
 					})();
-		Logger.error(`${baseMessage} ${focusFile} ${failureMessage}\n${errText}`);
+		Logger.error(`${baseMessage} ${filePath} ${failureMessage}\n${errText}`);
 		return undefined;
 	}
 }
@@ -483,7 +491,8 @@ async function reindexWorkspaceFocusFile(file: vscode.Uri): Promise<void> {
 
 	// readFocusIds reports both an unreadable file and a parse failure as undefined, logging either
 	// itself, so there is nothing to catch here: the previously indexed ids stay in place.
-	const ids = await readFocusIds(relative, { hoi4: false });
+	// No URI: a re-index reaches one file, so resolving it the usual way costs nothing worth avoiding.
+	const ids = await readFocusIds({ path: relative }, { hoi4: false });
 	if (ids === undefined) {
 		return;
 	}
