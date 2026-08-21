@@ -24,6 +24,17 @@ interface Tokenizer<T extends string> {
 	throw: (message: string, prev?: boolean) => never;
 }
 
+// These used to be `value.match(/^[,;]$/)`. A regex literal is a fresh RegExp object every time
+// the expression is evaluated, and a matching `.match` allocates a result array on top, two or
+// three times per node parsed -- to ask whether a one-character string is a separator.
+function isSeparator(value: string): boolean {
+	return value === "," || value === ";";
+}
+
+function isSeparatorOrClose(value: string): boolean {
+	return value === "," || value === ";" || value === "}";
+}
+
 export interface Token<T extends string = string> {
 	value: string;
 	start: number;
@@ -51,17 +62,21 @@ function tokenizer(
 				throwError("Invalid token");
 			}
 
-			const result = groups.groups?.["result"];
+			const result = groups[1];
 			if (result === undefined) {
 				throwError("Invalid token");
 			}
 			// input = input.substr(groups[0].length);
 			pos += groups[0].length;
 
-			const localGroups = groups;
-			const type = tokenTypes.find(
-				(t) => localGroups.groups?.[t] !== undefined,
-			);
+			// Exactly one alternative matched, so the first group that is set names the type.
+			let type: HOITokenType | undefined;
+			for (let g = 0; g < tokenTypeByGroup.length; g++) {
+				if (groups[g + 2] !== undefined) {
+					type = tokenTypeByGroup[g];
+					break;
+				}
+			}
 
 			token = {
 				value: result,
@@ -143,14 +158,24 @@ const tokenRegexStrings: Record<HOITokenType, [string, number]> = {
 	eof: ["$", 1000],
 };
 
-const tokenTypes = Object.keys(tokenRegexStrings) as HOITokenType[];
 const tokenTypeEntries = Object.entries<[string, number]>(
 	tokenRegexStrings,
 ).sort((a, b) => a[1][1] - b[1][1]);
+
+/*
+ * Numbered groups, not named ones. A regex with named groups makes V8 build a fresh object
+ * holding every group on each exec, and recovering which alternative matched then meant a
+ * linear search over that object. This is the innermost loop of every parse in the extension --
+ * millions of tokens per index build -- so both costs are paid per token.
+ *
+ * Group 1 is the whole token; groups 2..n are the alternatives in the order below. None of the
+ * sub-patterns capture (they all use `(?:...)`), so those indices stay fixed.
+ */
+const tokenTypeByGroup: HOITokenType[] = tokenTypeEntries.map(
+	([name]) => name as HOITokenType,
+);
 const tokenRegex = new RegExp(
-	"\\s*(?<result>" +
-		tokenTypeEntries.map(([n, [s]]) => `(?<${n}>${s})`).join("|") +
-		")",
+	"\\s*(" + tokenTypeEntries.map(([, [s]]) => `(${s})`).join("|") + ")",
 	"y",
 );
 
@@ -244,8 +269,8 @@ function parseNode(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node {
 	}
 
 	let nextToken = tokens.peek();
-	if (nextToken.type !== "operator" || nextToken.value.match(/^[,;}]$/)) {
-		while (nextToken.value.match(/^[,;]$/)) {
+	if (nextToken.type !== "operator" || isSeparatorOrClose(nextToken.value)) {
+		while (isSeparator(nextToken.value)) {
 			tokens.next();
 			nextToken = tokens.peek();
 		}
@@ -293,7 +318,7 @@ function parseNode(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node {
 	}
 
 	let tailComma = tokens.peek();
-	while (tailComma.value.match(/^[,;]$/)) {
+	while (isSeparator(tailComma.value)) {
 		tokens.next();
 		tailComma = tokens.peek();
 	}
