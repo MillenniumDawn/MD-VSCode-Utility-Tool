@@ -209,15 +209,14 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"ideapreview.swappedin": "Swapped in by {0}",
 	"ideapreview.targeted": "Targeted",
 	infile: "In file {0}:\n",
+	"index.mod": "[Mod]",
+	"index.parseFailure": "Parsing failed! Please check if the file has issues!",
+	"index.vanilla": "[Vanilla]",
 	"installpath.notdirectory":
 		"Hearts of Iron IV install path does not exist: {0}",
 	"installpath.notset": "Install path of Hearts of Iron IV is not set.",
 	loading: "Loading...",
 	"localisationIndex.building": "Building localisation index...",
-	"localisationIndex.mod": "[Mod]",
-	"localisationIndex.parseFailure":
-		"parsing failed! Please check if the file has issues!",
-	"localisationIndex.vanilla": "[Vanilla]",
 	"localisationIndex.workspace.building":
 		"Building workspace localisation index...",
 	"miopreview.conditions": "Conditions: ",
@@ -266,10 +265,6 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"scanref.noeditor": "No opened editor.",
 	"scanref.unsupportedtype": "Unsupported file type to scan references.",
 	"sharedFocusIndex.building": "Building shared focus index...",
-	"sharedFocusIndex.mod": "[Mod]",
-	"sharedFocusIndex.parseFailure":
-		"Parsing failed! Please check if the file has issues!",
-	"sharedFocusIndex.vanilla": "[Vanilla]",
 	"sharedFocusIndex.workspace.building": "Building workspace Focus index...",
 	"techtree.cantfindtechfolderin": "Can't find technology folder {0} in {1}.",
 	"techtree.cantfindtechitemin": 'Can\'t find containerwindowtype "{0}" in {1}',

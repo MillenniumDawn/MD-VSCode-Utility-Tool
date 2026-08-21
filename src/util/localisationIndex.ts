@@ -2,22 +2,20 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { debounceByInput } from "./common";
 import { localisationIndex, previewLocalisation } from "./featureflags";
-import { readFileFromModOrHOI4 } from "./fileloader";
-import {
-	IndexFile,
-	IndexListing,
-	listIndexFiles,
-	toIndexFiles,
-} from "./indexListing";
+import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { attachTaskWithErrorLogging } from "./promiseUtils";
 import {
 	createIndexBuilder,
-	indexParseQueue,
 	IndexProgress,
 	withIndexProgress,
 } from "./indexBuild";
+import {
+	buildIndexHalf,
+	readIndexFileContent,
+	reportIndexParseFailure,
+} from "./indexHalf";
 import { Logger } from "./logger";
 import {
 	defaultYmlSuffix,
@@ -25,14 +23,6 @@ import {
 	ymlSuffixByIso,
 	ymlSuffixes,
 } from "./locales";
-import {
-	loadCacheManifest,
-	loadCacheData,
-	saveCacheManifest,
-	saveCacheData,
-	computeStaleFiles,
-	IndexTimer,
-} from "./indexCache";
 
 type LocalisationData = Record<string, Record<string, string>>;
 
@@ -158,18 +148,13 @@ async function buildGlobalLocalisationIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const options = { mod: false, hoi4: true, recursively: true };
-	await buildLocalisationIndexWithCache(
+	// The global half keeps no per-file key map: nothing invalidates a vanilla file on its own, so
+	// maintaining one only ever wrote an empty object into the cache.
+	await buildLocalisationIndexHalf(
 		"localisationIndex.global",
-		(token) =>
-			listIndexFiles({
-				roots: [localisationRoot],
-				filter: isLocalisationFile,
-				options: { ...options, token },
-			}),
+		{ mod: false, hoi4: true, recursively: true },
 		globalLocalisationIndex,
 		null,
-		options,
 		estimatedSize,
 		progress,
 	);
@@ -179,85 +164,35 @@ async function buildWorkspaceLocalisationIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const options = { mod: true, hoi4: false, recursively: true };
-	await buildLocalisationIndexWithCache(
+	await buildLocalisationIndexHalf(
 		"localisationIndex.workspace",
-		(token) =>
-			listIndexFiles({
-				roots: [localisationRoot],
-				filter: isLocalisationFile,
-				options: { ...options, token },
-			}),
+		{ mod: true, hoi4: false, recursively: true },
 		workspaceLocalisationIndex,
 		workspaceLocalisationFileMap,
-		options,
 		estimatedSize,
 		progress,
 	);
 }
 
-async function buildLocalisationIndexWithCache(
+async function buildLocalisationIndexHalf(
 	cacheName: string,
-	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
+	options: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
 	targetIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
-	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const timer = new IndexTimer(cacheName);
-	try {
-		await buildLocalisationIndexWithTimer(
-			timer,
+	await buildIndexHalf<LocCacheData>(
+		{
 			cacheName,
-			listFiles,
-			targetIndex,
-			fileMap,
-			options,
-			estimatedSize,
-			progress,
-		);
-	} finally {
-		// A build that threw must not leave a phase behind in the live-build report.
-		timer.dispose();
-	}
-}
-
-async function buildLocalisationIndexWithTimer(
-	timer: IndexTimer,
-	cacheName: string,
-	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
-	targetIndex: LocalisationData,
-	fileMap: Record<string, Record<string, Set<string>>> | null,
-	options: { mod?: boolean; hoi4?: boolean },
-	estimatedSize: [number],
-	progress: IndexProgress,
-): Promise<void> {
-	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
-	// install it is now the directory walk and the mtimes together, which is where a slow cold build
-	// spends its time, and it used to happen before the timer existed.
-	timer.begin("list");
-	const {
-		filePaths: locFiles,
-		uris,
-		mtimes: currentMtimes,
-	} = await listFiles(progress.token);
-
-	timer.begin("cache");
-	const manifest = await loadCacheManifest(cacheName, LOC_CACHE_VERSION);
-	let filesToParse = locFiles;
-
-	if (manifest) {
-		const staleness = computeStaleFiles(manifest, currentMtimes);
-		const cachedData = await loadCacheData(cacheName);
-
-		// Whatever is still fresh gets reused, however much of the listing changed. See the same
-		// spot in sharedFocusIndex for why counting the changed files only ever added work.
-		if (cachedData) {
-			try {
-				const cached: LocCacheData = JSON.parse(cachedData);
-				const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
-
+			version: LOC_CACHE_VERSION,
+			listFiles: (token) =>
+				listIndexFiles({
+					roots: [localisationRoot],
+					filter: isLocalisationFile,
+					options: { ...options, token },
+				}),
+			hydrate: (cached, skipFiles) => {
 				for (const langKey in cached.index) {
 					const cachedLanguageIndex = cached.index[langKey] ?? {};
 					const targetLanguageIndex =
@@ -280,63 +215,40 @@ async function buildLocalisationIndexWithTimer(
 						}
 					}
 				}
-
-				filesToParse = [...staleness.stale, ...staleness.added];
-			} catch {
-				Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
-				filesToParse = locFiles;
-			}
-		}
-	}
-
-	timer.begin("parse");
-	let parsed = 0;
-	const toParse = toIndexFiles(filesToParse, uris);
-	progress.report(0, toParse.length);
-	await indexParseQueue.map(
-		toParse,
-		async (f) => {
-			await fillLocalisationItems(
-				f,
-				targetIndex,
-				fileMap,
-				options,
-				estimatedSize,
-			);
-			timer.progress(++parsed, toParse.length);
-			progress.report(parsed, toParse.length);
+			},
+			parseFile: (file) =>
+				fillLocalisationItems(
+					file,
+					targetIndex,
+					fileMap,
+					options,
+					estimatedSize,
+				),
+			// TODO: serialising this runs on the extension host thread and produces the whole index
+			// plus a second copy of every key in `fileMap` as one string. On a mod the size of
+			// Millennium Dawn that is hundreds of megabytes, enough to stall the host and, at the top
+			// end, to exceed V8's maximum string length outright. Left alone for now because this
+			// index is off by default and off on the machines the hangs were reported from.
+			// Streaming the write, or caching per language, is the way out.
+			serialize: () => {
+				const serializedFileMap: Record<
+					string,
+					Record<string, string[]>
+				> = {};
+				if (fileMap) {
+					for (const langKey in fileMap) {
+						const perFile: Record<string, string[]> = {};
+						for (const filePath in fileMap[langKey]) {
+							perFile[filePath] = [...(fileMap[langKey]?.[filePath] ?? [])];
+						}
+						serializedFileMap[langKey] = perFile;
+					}
+				}
+				return { index: targetIndex, fileMap: serializedFileMap };
+			},
 		},
-		{ token: progress.token },
+		progress,
 	);
-	timer.end(locFiles.length, filesToParse.length);
-
-	// Serialize Sets to arrays for JSON cache
-	const serializedFileMap: Record<string, Record<string, string[]>> = {};
-	if (fileMap) {
-		for (const langKey in fileMap) {
-			serializedFileMap[langKey] = {};
-			for (const filePath in fileMap[langKey]) {
-				serializedFileMap[langKey][filePath] = [
-					...(fileMap[langKey]?.[filePath] ?? []),
-				];
-			}
-		}
-	}
-	const cacheData: LocCacheData = {
-		index: targetIndex,
-		fileMap: serializedFileMap,
-	};
-	// TODO: this JSON.stringify runs on the extension host thread and serialises the whole index
-	// plus a second copy of every key in `fileMap` into one string. On a mod the size of Millennium
-	// Dawn that is hundreds of megabytes, enough to stall the host and, at the top end, to exceed
-	// V8's maximum string length outright. Left alone for now because this index is off by default
-	// and off on the machines the hangs were reported from; see the "Cache correctness" stage of the
-	// indexing plan. Streaming the write, or caching per language, is the way out.
-	// fire-and-forget: write data before manifest for atomicity
-	void Promise.all([
-		saveCacheData(cacheName, JSON.stringify(cacheData)),
-		saveCacheManifest(cacheName, locFiles, currentMtimes, LOC_CACHE_VERSION),
-	]).catch((e) => Logger.error(`Cache save failed for ${cacheName}: ${e}`));
 }
 
 async function fillLocalisationItems(
@@ -350,21 +262,15 @@ async function fillLocalisationItems(
 	estimatedSize?: [number],
 ): Promise<void> {
 	const filePath = localisationFile.path;
-	let content: string;
-	try {
-		const [fileBuffer] = await readFileFromModOrHOI4(
-			filePath,
-			options,
-			localisationFile.uri,
-		);
-		content = fileBuffer.toString();
-	} catch (e) {
-		// A file listed but unreadable -- deleted between the listing and the read, or locked --
-		// costs this one file and nothing else. Reading used to sit outside the try, so one such
-		// file rejected the whole build and left the index half-populated for the session.
-		Logger.warn(`Localisation index: can't read ${filePath}: ${e}`);
+	const fileBuffer = await readIndexFileContent(
+		"Localisation index",
+		localisationFile,
+		options,
+	);
+	if (fileBuffer === undefined) {
 		return;
 	}
+	const content = fileBuffer.toString();
 
 	try {
 		const localisations = parseLocalisation(content);
@@ -394,18 +300,9 @@ async function fillLocalisationItems(
 			}
 		}
 	} catch (e) {
-		const baseMessage = options.hoi4
-			? localize("localisationIndex.vanilla", "[Vanilla]")
-			: localize("localisationIndex.mod", "[mod]");
-
-		const failureMessage = localize(
-			"localisationIndex.parseFailure",
-			"parsing failed! Please check if the file has issues!",
-		);
-
-		Logger.error(
-			`${baseMessage} ${filePath} ${failureMessage}\n${e instanceof Error ? e.message : String(e)}`,
-		);
+		// This logged only the message, where the focus index logged the stack. Both go through the
+		// same reporter now, which prefers the stack.
+		reportIndexParseFailure(filePath, options, e);
 	}
 }
 

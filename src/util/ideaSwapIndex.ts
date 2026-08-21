@@ -1,33 +1,23 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { debounceByInput } from "./common";
-import { readFileFromModOrHOI4 } from "./fileloader";
-import {
-	IndexFile,
-	IndexListing,
-	listIndexFiles,
-	toIndexFiles,
-} from "./indexListing";
+import { IndexFile, IndexListing, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { attachTaskWithErrorLogging } from "./promiseUtils";
 import {
 	createIndexBuilder,
-	indexParseQueue,
 	IndexProgress,
 	withIndexProgress,
 } from "./indexBuild";
+import {
+	buildIndexHalf,
+	readIndexFileContent,
+	reportIndexParseFailure,
+} from "./indexHalf";
 import { Logger } from "./logger";
 import { Node, parseHoi4File } from "../hoiformat/hoiparser";
 import { ideaSwapIndex } from "./featureflags";
-import {
-	loadCacheManifest,
-	loadCacheData,
-	saveCacheManifest,
-	saveCacheData,
-	computeStaleFiles,
-	IndexTimer,
-} from "./indexCache";
 
 /*
  * Where every `swap_ideas` in the workspace is written, so an idea preview can say which idea an
@@ -139,12 +129,10 @@ async function buildGlobalSwapIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const options = { mod: false, hoi4: true };
-	await buildSwapIndexWithCache(
+	await buildSwapIndexHalf(
 		"ideaSwapIndex.global",
-		(token) => listSwapFiles(options, token),
+		{ mod: false, hoi4: true },
 		globalSwapIndex,
-		options,
 		estimatedSize,
 		progress,
 	);
@@ -154,75 +142,28 @@ async function buildWorkspaceSwapIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const options = { mod: true, hoi4: false };
-	await buildSwapIndexWithCache(
+	await buildSwapIndexHalf(
 		"ideaSwapIndex.workspace",
-		(token) => listSwapFiles(options, token),
+		{ mod: true, hoi4: false },
 		workspaceSwapIndex,
-		options,
 		estimatedSize,
 		progress,
 	);
 }
 
-async function buildSwapIndexWithCache(
+async function buildSwapIndexHalf(
 	cacheName: string,
-	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
-	swapIndex: SwapIndex,
 	options: { mod?: boolean; hoi4?: boolean },
+	swapIndex: SwapIndex,
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const timer = new IndexTimer(cacheName);
-	try {
-		await buildSwapIndexWithTimer(
-			timer,
+	await buildIndexHalf<SwapIndex>(
+		{
 			cacheName,
-			listFiles,
-			swapIndex,
-			options,
-			estimatedSize,
-			progress,
-		);
-	} finally {
-		// A build that threw must not leave a phase behind in the live-build report.
-		timer.dispose();
-	}
-}
-
-async function buildSwapIndexWithTimer(
-	timer: IndexTimer,
-	cacheName: string,
-	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
-	swapIndex: SwapIndex,
-	options: { mod?: boolean; hoi4?: boolean },
-	estimatedSize: [number],
-	progress: IndexProgress,
-): Promise<void> {
-	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
-	// install it is now the directory walk and the mtimes together, which is where a slow cold build
-	// spends its time, and it used to happen before the timer existed.
-	timer.begin("list");
-	const {
-		filePaths: swapFiles,
-		uris,
-		mtimes: currentMtimes,
-	} = await listFiles(progress.token);
-
-	timer.begin("cache");
-	const manifest = await loadCacheManifest(cacheName, SWAP_CACHE_VERSION);
-	let filesToParse = swapFiles;
-
-	if (manifest) {
-		const staleness = computeStaleFiles(manifest, currentMtimes);
-		const cachedData = await loadCacheData(cacheName);
-
-		// Whatever is still fresh gets reused, however much of the listing changed. See the same
-		// spot in sharedFocusIndex for why counting the changed files only ever added work.
-		if (cachedData) {
-			try {
-				const cached: SwapIndex = JSON.parse(cachedData);
-				const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
+			version: SWAP_CACHE_VERSION,
+			listFiles: (token) => listSwapFiles(options, token),
+			hydrate: (cached, skipFiles) => {
 				for (const file in cached) {
 					if (!skipFiles.has(file)) {
 						const swaps = cached[file];
@@ -232,34 +173,12 @@ async function buildSwapIndexWithTimer(
 						swapIndex[file] = swaps;
 					}
 				}
-				filesToParse = [...staleness.stale, ...staleness.added];
-			} catch {
-				Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
-				filesToParse = swapFiles;
-			}
-		}
-	}
-
-	timer.begin("parse");
-	let parsed = 0;
-	const toParse = toIndexFiles(filesToParse, uris);
-	progress.report(0, toParse.length);
-	await indexParseQueue.map(
-		toParse,
-		async (f) => {
-			await fillSwaps(f, swapIndex, options, estimatedSize);
-			timer.progress(++parsed, toParse.length);
-			progress.report(parsed, toParse.length);
+			},
+			parseFile: (file) => fillSwaps(file, swapIndex, options, estimatedSize),
+			serialize: () => swapIndex,
 		},
-		{ token: progress.token },
+		progress,
 	);
-	timer.end(swapFiles.length, filesToParse.length);
-
-	// fire-and-forget: write data before manifest for atomicity
-	void Promise.all([
-		saveCacheData(cacheName, JSON.stringify(swapIndex)),
-		saveCacheManifest(cacheName, swapFiles, currentMtimes, SWAP_CACHE_VERSION),
-	]).catch((e) => Logger.error(`Cache save failed for ${cacheName}: ${e}`));
 }
 
 async function fillSwaps(
@@ -269,22 +188,17 @@ async function fillSwaps(
 	estimatedSize?: [number],
 ): Promise<void> {
 	const filePath = swapFile.path;
-	let fileContent: string;
-	try {
-		const [fileBuffer] = await readFileFromModOrHOI4(
-			filePath,
-			options,
-			swapFile.uri,
-		);
-		fileContent = fileBuffer.toString();
-		if (estimatedSize) {
-			estimatedSize[0] += fileBuffer.length;
-		}
-	} catch (e) {
-		// A file listed but unreadable -- deleted between the listing and the read, or locked --
-		// costs this one file and nothing else.
-		Logger.warn(`Idea swap index: can't read ${filePath}: ${e}`);
+	const fileBuffer = await readIndexFileContent(
+		"Idea swap index",
+		swapFile,
+		options,
+	);
+	if (fileBuffer === undefined) {
 		return;
+	}
+	const fileContent = fileBuffer.toString();
+	if (estimatedSize) {
+		estimatedSize[0] += fileBuffer.length;
 	}
 
 	// The prescan that makes this affordable: parsing is what costs, and the overwhelming majority
@@ -304,8 +218,7 @@ async function fillSwaps(
 			delete swapIndex[filePath];
 		}
 	} catch (e) {
-		const errText = e instanceof Error ? (e.stack ?? e.message) : String(e);
-		Logger.error(`Idea swap index: parsing ${filePath} failed.\n${errText}`);
+		reportIndexParseFailure(filePath, options, e);
 	}
 }
 

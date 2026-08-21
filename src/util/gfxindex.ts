@@ -2,35 +2,24 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import { getSpriteTypes } from "../hoiformat/spritetype";
-import { debounceByInput, forceError, UserError } from "./common";
-import { error } from "./debug";
+import { debounceByInput } from "./common";
 import { gfxIndex } from "./featureflags";
-import { readFileFromModOrHOI4 } from "./fileloader";
-import {
-	IndexFile,
-	IndexListing,
-	listIndexFiles,
-	toIndexFiles,
-} from "./indexListing";
+import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { uniq } from "lodash";
 import { sendEvent } from "./telemetry";
 import { attachTaskWithErrorLogging } from "./promiseUtils";
 import {
 	createIndexBuilder,
-	indexParseQueue,
 	IndexProgress,
 	withIndexProgress,
 } from "./indexBuild";
-import { Logger } from "./logger";
 import {
-	loadCacheManifest,
-	loadCacheData,
-	saveCacheManifest,
-	saveCacheData,
-	computeStaleFiles,
-	IndexTimer,
-} from "./indexCache";
+	buildIndexHalf,
+	readIndexFileContent,
+	reportIndexParseFailure,
+} from "./indexHalf";
+import { Logger } from "./logger";
 
 interface GfxIndexItem {
 	file: string;
@@ -124,18 +113,13 @@ async function buildGlobalGfxIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const options = { mod: false, recursively: true };
-	await buildGfxIndexWithCache(
+	// The global half keeps no file-to-keys map: nothing invalidates a vanilla file per-file, so
+	// building one only ever wrote an empty object into the cache.
+	await buildGfxIndexHalf(
 		"gfxIndex.global",
-		(token) =>
-			listIndexFiles({
-				roots: [gfxRoot],
-				filter: isGfxFile,
-				options: { ...options, token },
-			}),
+		{ mod: false, recursively: true },
 		globalGfxIndex,
 		null,
-		options,
 		estimatedSize,
 		progress,
 	);
@@ -145,84 +129,35 @@ async function buildWorkspaceGfxIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const options = { hoi4: false, recursively: true };
-	await buildGfxIndexWithCache(
+	await buildGfxIndexHalf(
 		"gfxIndex.workspace",
-		(token) =>
-			listIndexFiles({
-				roots: [gfxRoot],
-				filter: isGfxFile,
-				options: { ...options, token },
-			}),
+		{ hoi4: false, recursively: true },
 		workspaceGfxIndex,
 		workspaceGfxFileToKeys,
-		options,
 		estimatedSize,
 		progress,
 	);
 }
 
-async function buildGfxIndexWithCache(
+async function buildGfxIndexHalf(
 	cacheName: string,
-	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
+	options: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
 	targetIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
-	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const timer = new IndexTimer(cacheName);
-	try {
-		await buildGfxIndexWithTimer(
-			timer,
+	await buildIndexHalf<GfxCacheData>(
+		{
 			cacheName,
-			listFiles,
-			targetIndex,
-			fileToKeysMap,
-			options,
-			estimatedSize,
-			progress,
-		);
-	} finally {
-		// A build that threw must not leave a phase behind in the live-build report.
-		timer.dispose();
-	}
-}
-
-async function buildGfxIndexWithTimer(
-	timer: IndexTimer,
-	cacheName: string,
-	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
-	targetIndex: Record<string, GfxIndexItem | undefined>,
-	fileToKeysMap: Map<string, string[]> | null,
-	options: { mod?: boolean; hoi4?: boolean },
-	estimatedSize: [number],
-	progress: IndexProgress,
-): Promise<void> {
-	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
-	// install it is now the directory walk and the mtimes together, which is where a slow cold build
-	// spends its time, and it used to happen before the timer existed.
-	timer.begin("list");
-	const {
-		filePaths: gfxFiles,
-		uris,
-		mtimes: currentMtimes,
-	} = await listFiles(progress.token);
-
-	timer.begin("cache");
-	const manifest = await loadCacheManifest(cacheName, GFX_CACHE_VERSION);
-	let filesToParse = gfxFiles;
-
-	if (manifest) {
-		const staleness = computeStaleFiles(manifest, currentMtimes);
-		const cachedData = await loadCacheData(cacheName);
-
-		// Whatever is still fresh gets reused, however much of the listing changed. See the same
-		// spot in sharedFocusIndex for why counting the changed files only ever added work.
-		if (cachedData) {
-			try {
-				const cached: GfxCacheData = JSON.parse(cachedData);
-				const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
+			version: GFX_CACHE_VERSION,
+			listFiles: (token) =>
+				listIndexFiles({
+					roots: [gfxRoot],
+					filter: isGfxFile,
+					options: { ...options, token },
+				}),
+			hydrate: (cached, skipFiles) => {
 				for (const spriteName in cached.index) {
 					const item = cached.index[spriteName];
 					if (item && !skipFiles.has(item.file)) {
@@ -239,44 +174,16 @@ async function buildGfxIndexWithTimer(
 						}
 					}
 				}
-				filesToParse = [...staleness.stale, ...staleness.added];
-			} catch {
-				Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
-				filesToParse = gfxFiles;
-			}
-		}
-	}
-
-	timer.begin("parse");
-	let parsed = 0;
-	const toParse = toIndexFiles(filesToParse, uris);
-	progress.report(0, toParse.length);
-	await indexParseQueue.map(
-		toParse,
-		async (f) => {
-			await fillGfxItems(f, targetIndex, fileToKeysMap, options, estimatedSize);
-			timer.progress(++parsed, toParse.length);
-			progress.report(parsed, toParse.length);
+			},
+			parseFile: (file) =>
+				fillGfxItems(file, targetIndex, fileToKeysMap, options, estimatedSize),
+			serialize: () => ({
+				index: targetIndex,
+				fileToKeys: Object.fromEntries(fileToKeysMap ?? []),
+			}),
 		},
-		{ token: progress.token },
+		progress,
 	);
-	timer.end(gfxFiles.length, filesToParse.length);
-
-	const serializedFileToKeys: Record<string, string[]> = {};
-	if (fileToKeysMap) {
-		fileToKeysMap.forEach((keys, file) => {
-			serializedFileToKeys[file] = keys;
-		});
-	}
-	const cacheData: GfxCacheData = {
-		index: targetIndex,
-		fileToKeys: serializedFileToKeys,
-	};
-	// fire-and-forget: write data before manifest for atomicity
-	void Promise.all([
-		saveCacheData(cacheName, JSON.stringify(cacheData)),
-		saveCacheManifest(cacheName, gfxFiles, currentMtimes, GFX_CACHE_VERSION),
-	]).catch((e) => Logger.error(`Cache save failed for ${cacheName}: ${e}`));
 }
 
 async function fillGfxItems(
@@ -287,20 +194,21 @@ async function fillGfxItems(
 	estimatedSize?: [number],
 ): Promise<void> {
 	const filePath = gfxFile.path;
+	if (estimatedSize) {
+		// The path's length, not the file's, which is what this has always counted.
+		estimatedSize[0] += filePath.length;
+	}
+
+	const fileBuffer = await readIndexFileContent("Gfx index", gfxFile, options);
+	if (fileBuffer === undefined) {
+		return;
+	}
+
 	try {
-		if (estimatedSize) {
-			// The path's length, not the file's, which is what this has always counted.
-			estimatedSize[0] += filePath.length;
-		}
-		const [fileBuffer, uri] = await readFileFromModOrHOI4(
-			filePath,
-			options,
-			gfxFile.uri,
-		);
 		const spriteTypes = getSpriteTypes(
 			parseHoi4File(
 				fileBuffer.toString(),
-				localize("infile", "In file {0}:\n", uri.toString()),
+				localize("infile", "In file {0}:\n", filePath),
 				{ keepTokens: false },
 			),
 		);
@@ -318,7 +226,9 @@ async function fillGfxItems(
 			fileToKeysMap.set(filePath, spriteNames);
 		}
 	} catch (e) {
-		error(new UserError(forceError(e).toString()));
+		// This used to go to the debug console wrapped in a UserError, so a malformed .gfx file
+		// never showed up in the output channel where every other index reports.
+		reportIndexParseFailure(filePath, options, e);
 	}
 }
 
