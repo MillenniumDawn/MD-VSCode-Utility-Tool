@@ -9,6 +9,7 @@ import {
 	__testHandlers,
 } from "../util/sharedFocusIndex";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
+import { contextContainer } from "../context";
 
 describe("util/sharedFocusIndex", () => {
 	it("findFileByFocusKey returns undefined for unknown key", async () => {
@@ -678,5 +679,142 @@ describe("util/sharedFocusIndex parse failure logging", function () {
 		assert.strictEqual(logs.length, 1);
 		assert.ok(logs[0].includes("[Vanilla]"));
 		assert.ok(logs[0].includes("common/national_focus/vanilla_bad.txt"));
+	});
+});
+
+describe("util/sharedFocusIndex disk cache", function () {
+	// The two files the workspace listing reports, and what the manifest last recorded for them.
+	const FRESH = "common/national_focus/fresh.txt";
+	const STALE = "common/national_focus/stale.txt";
+
+	// Eight files the manifest still names that the listing no longer reports. Together with the one
+	// stale file that is stale + removed + added = 9 against a listing of 2, which is what the old
+	// "fewer changes than files" guard rejected -- it would have re-parsed both files from scratch.
+	const REMOVED = Array.from(
+		{ length: 8 },
+		(_, i) => `common/national_focus/gone${i}.txt`,
+	);
+
+	const MANIFEST = JSON.stringify({
+		version: 1,
+		entries: [
+			{ filePath: FRESH, mtime: 1 },
+			{ filePath: STALE, mtime: 1 },
+			...REMOVED.map((filePath) => ({ filePath, mtime: 1 })),
+		],
+	});
+
+	const CACHED_INDEX = JSON.stringify({
+		[FRESH]: ["cached_fresh"],
+		[STALE]: ["cached_stale"],
+	});
+
+	let originalListFiles: FileloaderModule["listFileEntriesFromModOrHOI4"];
+	let originalReadFile: FileloaderModule["readFileFromModOrHOI4"];
+	let originalContext: unknown;
+	let parsedFiles: string[];
+
+	beforeEach(function () {
+		__resetSharedFocusIndexForTests();
+		parsedFiles = [];
+
+		originalContext = contextContainer.current;
+		contextContainer.current = {
+			globalStorageUri: vscode.Uri.file("storage"),
+		} as unknown as vscode.ExtensionContext;
+
+		stubVscode({
+			getConfiguration: () => ({ sharedFocusIndex: true }),
+			getWorkspaceFolder: () => WORKSPACE_FOLDER,
+			// Only the workspace half has a cache on disk; the global half's reads reject, which is
+			// what a missing cache file looks like from here.
+			readFile: async (uri: vscode.Uri) => {
+				if (uri.path.endsWith("focusIndex.workspace.manifest.json")) {
+					return Buffer.from(MANIFEST);
+				}
+				if (uri.path.endsWith("focusIndex.workspace.data.json")) {
+					return Buffer.from(CACHED_INDEX);
+				}
+				throw new Error(`no such cache file: ${uri.path}`);
+			},
+		});
+		featureflags.refreshFeatureFlags();
+
+		originalListFiles = fileloader.listFileEntriesFromModOrHOI4;
+		originalReadFile = fileloader.readFileFromModOrHOI4;
+
+		(
+			fileloader as typeof fileloader & {
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
+			}
+		).listFileEntriesFromModOrHOI4 = async (_relativePath, options) =>
+			options?.hoi4
+				? []
+				: [
+						{ relativePath: "fresh.txt", uri: undefined, mtime: 1 },
+						{ relativePath: "stale.txt", uri: undefined, mtime: 2 },
+					];
+
+		// A distinct focus id per file, so an id in the index says which file produced it and
+		// whether it came off the disk cache or out of the parser.
+		(
+			fileloader as typeof fileloader & {
+				readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
+			}
+		).readFileFromModOrHOI4 = async (relativePath) => {
+			parsedFiles.push(relativePath);
+			const name = relativePath.replace(/^.*\/|\.txt$/g, "");
+			return [
+				Buffer.from(`shared_focus = { id = parsed_${name} }`),
+				{} as unknown,
+			];
+		};
+	});
+
+	afterEach(function () {
+		(
+			fileloader as typeof fileloader & {
+				listFileEntriesFromModOrHOI4: FileloaderModule["listFileEntriesFromModOrHOI4"];
+			}
+		).listFileEntriesFromModOrHOI4 = originalListFiles;
+		(
+			fileloader as typeof fileloader & {
+				readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
+			}
+		).readFileFromModOrHOI4 = originalReadFile;
+		contextContainer.current =
+			originalContext as vscode.ExtensionContext | null;
+		restoreVscodeStubs();
+		featureflags.refreshFeatureFlags();
+		__resetSharedFocusIndexForTests();
+	});
+
+	it("reuses the cached entry for a file that has not changed, however much else has", async function () {
+		assert.strictEqual(await findFileByFocusKey("cached_fresh"), FRESH);
+		// Never read, so never parsed: the whole point of the cache.
+		assert.deepStrictEqual(parsedFiles, [STALE]);
+	});
+
+	it("re-parses a file whose mtime moved and drops what the cache said about it", async function () {
+		assert.strictEqual(await findFileByFocusKey("parsed_stale"), STALE);
+		assert.strictEqual(await findFileByFocusKey("cached_stale"), undefined);
+	});
+
+	it("falls back to a full rebuild when the cached data is corrupted", async function () {
+		stubVscode({
+			readFile: async (uri: vscode.Uri) => {
+				if (uri.path.endsWith("focusIndex.workspace.manifest.json")) {
+					return Buffer.from(MANIFEST);
+				}
+				if (uri.path.endsWith("focusIndex.workspace.data.json")) {
+					return Buffer.from("{ this is not json");
+				}
+				throw new Error(`no such cache file: ${uri.path}`);
+			},
+		});
+
+		assert.strictEqual(await findFileByFocusKey("parsed_fresh"), FRESH);
+		assert.strictEqual(await findFileByFocusKey("parsed_stale"), STALE);
+		assert.deepStrictEqual(parsedFiles.sort(), [FRESH, STALE]);
 	});
 });

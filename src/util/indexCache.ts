@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { contextContainer } from '../context';
 import { Logger } from './logger';
-import { readFile, writeFile, mkdirs, getLastModifiedAsync } from './vsccommon';
+import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration } from './vsccommon';
 
 interface CacheManifest {
     version: number;
@@ -21,26 +21,146 @@ export interface StalenessResult {
 
 const MTIME_BATCH_SIZE = 30;
 
+const CACHE_ROOT = 'indexCache';
+
+/**
+ * A short, stable name for "the thing being indexed", so two mods opened in the same VS Code
+ * profile get two caches instead of overwriting each other's.
+ *
+ * The identity is the selected `modFile` plus the workspace folders, sorted, so reordering the
+ * folders does not invalidate anything. A plain FNV-1a hash rather than `node:crypto`, because this
+ * module is loaded in the web build too (where it never reaches disk at all) and because a collision
+ * costs no more than two mods sharing one cache -- which is exactly today's behaviour.
+ *
+ * The vanilla (`.global`) halves are namespaced along with the mod's, so a second mod rebuilds them
+ * once. That is a few seconds of the shared parse queue, and it buys one identity rule instead of
+ * two.
+ */
+export function cacheNamespaceFor(modFile: string | undefined, workspaceFolderUris: readonly string[]): string {
+    const parts: string[] = [];
+
+    const mod = modFile?.trim();
+    if (mod) {
+        parts.push('mod:' + mod.replace(/\\+/g, '/').toLowerCase());
+    }
+
+    // Sorted, so that dragging a folder up the explorer does not throw the cache away.
+    for (const uri of [...workspaceFolderUris].sort()) {
+        parts.push('ws:' + uri);
+    }
+
+    return fnv1a64(parts.join('\n'));
+}
+
+/**
+ * 16 hex characters, from two 32-bit FNV-1a passes: one over the text, one over it backwards from a
+ * different offset basis, so the two halves do not move together.
+ */
+function fnv1a64(text: string): string {
+    return fnv1a32(text, 0x811c9dc5, false) + fnv1a32(text, 0x01000193, true);
+}
+
+function fnv1a32(text: string, offsetBasis: number, backwards: boolean): string {
+    let hash = offsetBasis;
+    for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(backwards ? text.length - 1 - i : i);
+        // The usual `hash *= 16777619` in 32-bit arithmetic. `Math.imul` because a plain multiply
+        // loses the low bits once the product passes 2^53.
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+/** The two inputs to `cacheNamespaceFor`, each read defensively -- neither is worth failing over. */
+function cacheNamespace(): string {
+    let modFile: string | undefined;
+    try {
+        modFile = getConfiguration().modFile as string | undefined;
+    } catch {
+        modFile = undefined;
+    }
+
+    let folders: string[] = [];
+    try {
+        folders = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.toString());
+    } catch {
+        folders = [];
+    }
+
+    return cacheNamespaceFor(modFile, folders);
+}
+
 function getCacheDir(): vscode.Uri | null {
     const ctx = contextContainer.current;
     if (!ctx || IS_WEB_EXT) {
         return null;
     }
-    return vscode.Uri.joinPath(ctx.globalStorageUri, 'indexCache');
+    return vscode.Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT, cacheNamespace());
 }
 
-let cacheDirPromise: Promise<vscode.Uri | null> | null = null;
+// Keyed on the directory rather than memoized once, because the namespace can change inside a
+// session: a workspace folder is added, or the `modFile` setting is pointed at another mod.
+const cacheDirPromises = new Map<string, Promise<vscode.Uri | null>>();
 
 function ensureCacheDir(): Promise<vscode.Uri | null> {
-    if (!cacheDirPromise) {
-        cacheDirPromise = (async () => {
-            const dir = getCacheDir();
-            if (!dir) { return null; }
+    const dir = getCacheDir();
+    if (!dir) {
+        return Promise.resolve(null);
+    }
+
+    const key = dir.toString();
+    let pending = cacheDirPromises.get(key);
+    if (!pending) {
+        pending = (async () => {
             try { await mkdirs(dir); } catch {}
+            // One line per namespace, so a bug report about the wrong cache says which one it used.
+            Logger.info(`[Index] cache directory: ${dir.fsPath}`);
+            void removeUnnamespacedCaches();
             return dir;
         })();
+        cacheDirPromises.set(key, pending);
     }
-    return cacheDirPromise;
+    return pending;
+}
+
+let removedUnnamespacedCaches = false;
+
+/**
+ * The caches written before the namespacing above sit loose in `indexCache/` under names no one
+ * reads any more. Delete them once per session rather than leaving them on disk forever. The
+ * namespaces are directories, so only files are touched, and every part of this is best-effort:
+ * a cache tidy-up must never be able to fail a build.
+ */
+async function removeUnnamespacedCaches(): Promise<void> {
+    if (removedUnnamespacedCaches) {
+        return;
+    }
+    removedUnnamespacedCaches = true;
+
+    const ctx = contextContainer.current;
+    if (!ctx || IS_WEB_EXT) {
+        return;
+    }
+
+    try {
+        const root = vscode.Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT);
+        const entries = await vscode.workspace.fs.readDirectory(root);
+        let removed = 0;
+        for (const [name, type] of entries) {
+            if (type !== vscode.FileType.File || !name.endsWith('.json')) {
+                continue;
+            }
+            try {
+                await vscode.workspace.fs.delete(vscode.Uri.joinPath(root, name));
+                removed++;
+            } catch {}
+        }
+        if (removed > 0) {
+            Logger.info(`[Index] removed ${removed} cache file(s) written before caches were per-mod.`);
+        }
+    } catch {
+        // No cache directory yet, or no delete support -- either way there is nothing to clean.
+    }
 }
 
 export async function saveCacheManifest(indexName: string, filePaths: string[], mtimes: Map<string, number>, version: number): Promise<void> {
