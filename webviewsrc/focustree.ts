@@ -23,6 +23,10 @@ import {
 	warningEntryClass,
 	warningFlashClass,
 } from "../src/previewdef/focustree/warningstyles";
+import {
+	traceDimClass,
+	traceLineClass,
+} from "../src/previewdef/focustree/tracestyles";
 import { applyExclusiveLinkStyle } from "../src/util/hoi4gui/exclusivelink";
 import { applyCondition, ConditionItem } from "../src/hoiformat/condition";
 import { NumberPosition } from "../src/util/common";
@@ -82,6 +86,126 @@ function search(searchContent: string, navigate: boolean = true) {
 	}
 
 	return searchedFocus;
+}
+
+// Prerequisite line tracing. A dense tree draws hundreds of overlapping connector lines underneath
+// the nodes, so following one by eye is guesswork. Shift+clicking a focus dims every connection in
+// the tree except the ones that focus's own prerequisite blocks produce. Focus nodes are left
+// untouched -- only lines are filtered.
+let tracedFocusId: string | undefined;
+
+// Exported for the same reason applyWarningMarkers is: the classes landing on the emitted
+// connection divs is the whole behaviour, and only a DOM test can prove it.
+export function applyPrerequisiteTrace(
+	root: HTMLElement,
+	focusId: string | undefined,
+): void {
+	const connections = root.querySelectorAll("[data-conn-from]");
+	for (let i = 0; i < connections.length; i++) {
+		const connection = connections[i] as HTMLElement;
+		connection.classList.remove(traceLineClass, traceDimClass);
+		if (focusId === undefined) {
+			continue;
+		}
+
+		// data-conn-from is the focus that owns the connection, and data-conn-type is written
+		// before renderGridBoxConnection flips a diagonal "parent" to "child", so this pair means
+		// exactly "a line one of this focus's prerequisite blocks produced". A mutually exclusive
+		// link is "related" and dims with everything else.
+		const isPrerequisiteOfTraced =
+			connection.dataset.connFrom === focusId &&
+			connection.dataset.connType === "parent";
+		connection.classList.add(
+			isPrerequisiteOfTraced ? traceLineClass : traceDimClass,
+		);
+	}
+}
+
+function reapplyPrerequisiteTrace(): void {
+	const placeholder = document.getElementById("focustreeplaceholder");
+	if (placeholder) {
+		applyPrerequisiteTrace(placeholder, tracedFocusId);
+	}
+}
+
+function setTracedFocus(focusId: string | undefined): void {
+	tracedFocusId = focusId;
+	reapplyPrerequisiteTrace();
+
+	const status = document.getElementById("trace-status");
+	if (status) {
+		// Focus ids come from the mod file, so they go in as text and never as markup.
+		status.textContent = focusId
+			? feLocalize("focustree.tracing", "Tracing: {0}", focusId)
+			: "";
+	}
+
+	const container = document.getElementById("trace-status-container");
+	if (container) {
+		container.style.display = focusId ? "flex" : "none";
+	}
+}
+
+// Wired to the shell elements, which outlive every rebuild of the tree, so this runs once.
+function subscribeTracing(): void {
+	const content = document.getElementById("focustreecontent");
+	if (content) {
+		content.addEventListener(
+			"click",
+			(e) => {
+				if (!e.shiftKey) {
+					return;
+				}
+
+				// Capture phase: stopping the event here is what keeps the bubble-phase .navigator
+				// handler from also jumping to the focus in the editor, and keeps a shift+click that
+				// lands on the completion checkbox from ticking it.
+				e.preventDefault();
+				e.stopPropagation();
+
+				const item = (e.target as Element | null)?.closest(
+					"[data-gridbox-item]",
+				) as HTMLElement | null;
+				const id = item?.dataset.gridboxItem;
+				if (!id) {
+					return;
+				}
+
+				setTracedFocus(id === tracedFocusId ? undefined : id);
+			},
+			true,
+		);
+	}
+
+	const clearButton = document.getElementById("clear-trace");
+	clearButton?.addEventListener("click", () => setTracedFocus(undefined));
+
+	window.addEventListener("keydown", (e) => {
+		if (e.key === "Escape" && tracedFocusId !== undefined) {
+			setTracedFocus(undefined);
+		}
+	});
+
+	// Clicking empty canvas clears the trace. The end of a pan is a click on that same canvas, so
+	// only a press that stayed where it started counts as one.
+	const dragger = document.getElementById("dragger");
+	if (dragger) {
+		let downX = 0;
+		let downY = 0;
+		dragger.addEventListener("mousedown", (e) => {
+			downX = e.pageX;
+			downY = e.pageY;
+		});
+		dragger.addEventListener("mouseup", (e) => {
+			if (
+				tracedFocusId !== undefined &&
+				Math.abs(e.pageX - downX) < 4 &&
+				Math.abs(e.pageY - downY) < 4
+			) {
+				setTracedFocus(undefined);
+			}
+		});
+	}
 }
 
 let useConditionInFocus: boolean = (window as any).useConditionInFocus;
@@ -268,6 +392,8 @@ async function buildContent() {
 	applyWarningMarkers(focusTree, focusGrixBoxItems);
 	applyCustomTitlebarVisibility();
 	applyFocusOverlayVisibility();
+	// The connection divs are new after every rebuild, so an active trace has to be put back on.
+	reapplyPrerequisiteTrace();
 }
 
 // Focuses named in a layout warning get a red box with a warning badge so the problem is visible
@@ -1158,6 +1284,9 @@ window.addEventListener(
 			"focustreecontent",
 		) as HTMLDivElement;
 		enableZoom(contentElement, 0, 40);
+
+		// Shift+click a focus to isolate its prerequisite lines
+		subscribeTracing();
 
 		// Toggle warnings
 		const showWarnings = document.getElementById(
