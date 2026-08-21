@@ -15,15 +15,17 @@ import {
 	EventToolbarFlags,
 } from "../src/previewdef/event/payload";
 import { conditionToLabel, conditionPanel, effectsToDom } from "./util/conditiontree";
+import { ChipInput, LayoutInput, layoutGraph } from "./util/graphlayout";
 import {
-	ChipInput,
-	LayoutInput,
-	LayoutResult,
-	columnGap,
-	layoutGraph,
-	padY,
-	separateChips,
-} from "./util/graphlayout";
+	IsolationHandle,
+	RenderedEdge,
+	RenderedNode,
+	buildChips,
+	currentScale,
+	renderEdges,
+	renderRails,
+	wireIsolation,
+} from "./util/graphview";
 
 // The condition/effect rendering and the graph layout are shared with the decision preview and now
 // live in webviewsrc/util. They are re-exported here, the way loaderpreview.ts re-exports the update
@@ -600,25 +602,14 @@ function buildCard(node: EventGraphNode): HTMLDivElement {
 
 //#region Render
 
-interface RenderedNode {
-	node: EventGraphNode;
-	// The positioned wrapper. Hover isolation dims this one.
-	element: HTMLDivElement;
-	// The card inside it. The search highlight goes here instead, so the two never fight over the
-	// same element and neither needs !important.
-	card: HTMLDivElement;
-}
-
-let rendered: RenderedNode[] = [];
-let renderedEdges: { edge: EventGraphEdge; path: SVGPathElement; chip?: HTMLDivElement }[] = [];
+let rendered: RenderedNode<EventGraphNode>[] = [];
+let renderedEdges: RenderedEdge<EventGraphEdge>[] = [];
 let childrenById = new Map<string, string[]>();
+// Replaced by every rebuild, so a drag always puts back the graph that is actually on screen.
+let isolation: IsolationHandle | undefined = undefined;
 // Filled by buildContent before the cards are built, and read by buildEventCard. Empty whenever no
 // filter is selected, because nothing can have been left out.
 let skippedByEvent = new Map<string, string[]>();
-
-function currentScale(): number {
-	return getState().scale || 1;
-}
 
 function buildContent(): void {
 	const content = document.getElementById("eventtreecontent") as HTMLDivElement | null;
@@ -632,6 +623,7 @@ function buildContent(): void {
 	content.textContent = "";
 	rendered = [];
 	renderedEdges = [];
+	isolation = undefined;
 
 	// Before the filters: a control this file cannot use is forced back to its neutral position here,
 	// and a filter entry it cannot use is one the stored selection must not be allowed to keep.
@@ -673,7 +665,7 @@ function buildContent(): void {
 	}
 	// The arrow labels are measured alongside the cards, because a gap is only wide enough to keep a
 	// label clear of the cards if the layout knows how wide the label is.
-	const built = buildChips(content, graph);
+	const built = buildChips(content, graph.edges, chipGuarded, chipTextFor);
 	for (const item of rendered) {
 		const rect = item.element.getBoundingClientRect();
 		measured.push({ id: item.node.id, width: rect.width / scale, height: rect.height / scale });
@@ -704,8 +696,8 @@ function buildContent(): void {
 	svg.setAttribute("width", String(layout.width));
 	svg.setAttribute("height", String(layout.height));
 
-	renderRails(content, layout);
-	renderEdges(content, svg, layout, measured, built);
+	renderRails(content, layout, (step) => feLocalize("eventtree.step", "step {0}", step));
+	renderedEdges = renderEdges(content, svg, layout, measured, built, edgeClass);
 
 	childrenById = new Map();
 	for (const edge of graph.edges) {
@@ -717,7 +709,7 @@ function buildContent(): void {
 		}
 	}
 
-	wireIsolation();
+	isolation = wireIsolation(rendered, renderedEdges, childrenById);
 	if (showPicture) {
 		showPictureWhenHover();
 	}
@@ -728,20 +720,6 @@ function buildContent(): void {
 	// The query survives every rebuild -- a toggle change, an in-place update, the first load -- so
 	// the highlight is re-applied to the cards that were just built. Class flipping only, no layout.
 	applySearch(false);
-}
-
-function renderRails(content: HTMLDivElement, layout: LayoutResult): void {
-	for (let i = 1; i < layout.columnX.length; i++) {
-		const rail = document.createElement("div");
-		rail.className = "ev-rail";
-		// Down the middle of the gap before this column, which is no longer a fixed width.
-		rail.style.left = (layout.gapX[i - 1] ?? 0) + (layout.gapWidth[i - 1] ?? columnGap) / 2 + "px";
-		rail.style.height = layout.height + "px";
-		const label = document.createElement("span");
-		label.textContent = feLocalize("eventtree.step", "step {0}", i);
-		rail.appendChild(label);
-		content.appendChild(rail);
-	}
 }
 
 // Everything an arrow says next to itself: the scope it fires in, its delay, its random_list weight
@@ -782,191 +760,18 @@ export function chipTextFor(edge: EventGraphEdge, guarded: boolean): string {
 	return bits.join(" · ");
 }
 
-interface BuiltChip {
-	edge: EventGraphEdge;
-	guarded: boolean;
-	chip?: HTMLDivElement;
+function chipGuarded(edge: EventGraphEdge): boolean {
+	return showEdgeConditions && edge.condition !== true;
 }
 
-// Chips are created before the layout runs, because their measured width is what decides how wide
-// the gap they sit in has to be. They are hidden until the layout says where they go.
-function buildChips(content: HTMLDivElement, graph: VisibleGraph): BuiltChip[] {
-	return graph.edges.map((edge) => {
-		const guarded = showEdgeConditions && edge.condition !== true;
-		const text = chipTextFor(edge, guarded);
-		if (!text) {
-			return { edge, guarded };
-		}
-		const chip = document.createElement("div");
-		chip.className =
-			"ev-chip" +
-			(guarded ? " ev-chip-guarded" : "") +
-			(edge.skipped?.length ? " ev-chip-bridged" : "");
-		chip.textContent = text;
-		chip.style.left = "0px";
-		chip.style.top = "0px";
-		chip.style.visibility = "hidden";
-		content.appendChild(chip);
-		return { edge, guarded, chip };
-	});
-}
-
-// x of the cubic used for the arrows, which is monotonic from x1 to x2, so a bisection finds the
-// parameter that puts a point at a given x.
-function cubicAt(a: number, b: number, c: number, d: number, t: number): number {
-	const s = 1 - t;
-	return s * s * s * a + 3 * s * s * t * b + 3 * s * t * t * c + t * t * t * d;
-}
-
-function parameterAtX(x1: number, c1: number, c2: number, x2: number, target: number): number {
-	let low = 0;
-	let high = 1;
-	for (let i = 0; i < 20; i++) {
-		const mid = (low + high) / 2;
-		if (cubicAt(x1, c1, c2, x2, mid) < target) {
-			low = mid;
-		} else {
-			high = mid;
-		}
-	}
-	return (low + high) / 2;
-}
-
-function renderEdges(
-	content: HTMLDivElement,
-	svg: SVGSVGElement,
-	layout: LayoutResult,
-	measured: LayoutInput[],
-	built: BuiltChip[],
-): void {
-	const sizeById = new Map(measured.map((m) => [m.id, m]));
-	const fanOut = new Map<string, number>();
-	const placements: { gap: number; x: number; y: number; height: number; chip: HTMLDivElement }[] = [];
-
-	for (const { edge, guarded, chip } of built) {
-		const from = layout.positions[edge.from];
-		const to = layout.positions[edge.to];
-		const fromSize = sizeById.get(edge.from);
-		const toSize = sizeById.get(edge.to);
-		if (!from || !to || !fromSize || !toSize) {
-			chip?.remove();
-			continue;
-		}
-
-		const index = fanOut.get(edge.from) ?? 0;
-		fanOut.set(edge.from, index + 1);
-
-		const x1 = from.x + fromSize.width;
-		// Fanning the origins apart keeps parallel arrows readable, but the spread has to stay on the
-		// card it leaves from -- unclamped, a node with a dozen calls put the last arrow below its box.
-		const spread = Math.min(7, Math.max(2, (fromSize.height - 8) / Math.max(1, index + 1)));
-		const y1 = from.y + fromSize.height / 2 + (index - 0.5) * spread;
-		const x2 = to.x;
-		const y2 = to.y + toSize.height / 2;
-		const dx = Math.max(28, (x2 - x1) * 0.5);
-
-		const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-		path.setAttribute("d", `M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`);
-		path.setAttribute(
-			"class",
-			"ev-edge" +
-				// The event fires this itself, from its immediate or its after block, rather than
-				// waiting for the player to pick an option: both get the same dotted arrow.
-				(edge.source !== "option"
-					? " ev-edge-immediate"
-					: guarded
-						? " ev-edge-guarded"
-						: "") +
-				(edge.skipped?.length ? " ev-edge-bridged" : ""),
-		);
-		svg.appendChild(path);
-
-		if (chip) {
-			// The gap after the source column is the one the layout widened for this chip, and the only
-			// band on the canvas guaranteed to be free of cards -- an arrow that skips a column would
-			// otherwise drop its label onto a card in between.
-			const gap = layout.rank[edge.from] ?? 0;
-			const centre = (layout.gapX[gap] ?? x1) + (layout.gapWidth[gap] ?? 0) / 2;
-			const t = parameterAtX(x1, x1 + dx, x2 - dx, x2, centre);
-			const height = chip.getBoundingClientRect().height / currentScale();
-			placements.push({
-				gap,
-				x: centre,
-				y: cubicAt(y1, y1, y2, y2, t) - height / 2,
-				height,
-				chip,
-			});
-		}
-
-		renderedEdges.push({ edge, path, chip });
-	}
-
-	let bottom = 0;
-	for (const placement of separateChips(placements)) {
-		placement.chip.style.left = placement.x + "px";
-		// .ev-chip is translated by -50% on both axes, so the style position is its centre.
-		placement.chip.style.top = placement.y + placement.height / 2 + "px";
-		placement.chip.style.visibility = "";
-		bottom = Math.max(bottom, placement.y + placement.height);
-	}
-	if (bottom + padY > layout.height) {
-		layout.height = bottom + padY;
-		content.style.height = layout.height + "px";
-		svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
-		svg.setAttribute("height", String(layout.height));
-	}
-}
-
-//#endregion
-
-//#region Chain isolation
-
-function downstreamOf(id: string): Set<string> {
-	const reached = new Set<string>([id]);
-	const stack = [id];
-	while (stack.length > 0) {
-		const current = stack.pop();
-		if (current === undefined) {
-			continue;
-		}
-		for (const child of childrenById.get(current) ?? []) {
-			if (!reached.has(child)) {
-				reached.add(child);
-				stack.push(child);
-			}
-		}
-	}
-	return reached;
-}
-
-// Class flipping only -- never a re-layout, so isolating a chain stays cheap on a large file.
-function setIsolation(reached: Set<string> | undefined): void {
-	for (const item of rendered) {
-		item.element.classList.toggle("ev-dim", reached !== undefined && !reached.has(item.node.id));
-	}
-	for (const item of renderedEdges) {
-		const on = reached === undefined || (reached.has(item.edge.from) && reached.has(item.edge.to));
-		item.path.classList.toggle("ev-edge-dim", !on);
-		item.chip?.classList.toggle("ev-dim", !on);
-	}
-}
-
-function wireIsolation(): void {
-	for (const item of rendered) {
-		const enter = () => {
-			// Cards slide under a stationary cursor while the canvas is dragged, so without this the
-			// chain would light up card by card for the length of the drag.
-			if (panning$.value) {
-				return;
-			}
-			setIsolation(downstreamOf(item.node.id));
-		};
-		const leave = () => setIsolation(undefined);
-		item.element.addEventListener("mouseenter", enter);
-		item.element.addEventListener("mouseleave", leave);
-		item.element.addEventListener("focusin", enter);
-		item.element.addEventListener("focusout", leave);
-	}
+function edgeClass(edge: EventGraphEdge, guarded: boolean): string {
+	return (
+		"ev-edge" +
+		// The event fires this itself, from its immediate or its after block, rather than waiting for
+		// the player to pick an option: both get the same dotted arrow.
+		(edge.source !== "option" ? " ev-edge-immediate" : guarded ? " ev-edge-guarded" : "") +
+		(edge.skipped?.length ? " ev-edge-bridged" : "")
+	);
 }
 
 //#endregion
@@ -974,7 +779,7 @@ function wireIsolation(): void {
 //#region Search
 
 let searchQuery = "";
-let searchHits: RenderedNode[] = [];
+let searchHits: RenderedNode<EventGraphNode>[] = [];
 // The id of the hit Enter is parked on, not its index into searchHits: a rebuild can drop nodes, and
 // remembering the id keeps the cursor on the same card across a toggle change.
 let searchCurrentId: string | undefined = undefined;
@@ -1014,7 +819,7 @@ function cycleSearch(backwards: boolean): void {
 	applySearch(true);
 }
 
-function scrollToHit(hit: RenderedNode | undefined): void {
+function scrollToHit(hit: RenderedNode<EventGraphNode> | undefined): void {
 	// Optional call, not a guard: jsdom leaves scrollIntoView undefined and the webview tests drive
 	// this path, where a throw would be swallowed by tryRun and strand the highlight half applied.
 	hit?.element.scrollIntoView?.({ block: "center", inline: "center" });
@@ -1383,7 +1188,7 @@ panning$.subscribe((panning) => {
 	document
 		.querySelectorAll("." + hoverPictureClass + ", ." + effectTooltipClass)
 		.forEach((el) => el.remove());
-	setIsolation(undefined);
+	isolation?.clear();
 });
 
 // In-place update pushed by LoaderPreview when the previewed file changed: re-render from the fresh
