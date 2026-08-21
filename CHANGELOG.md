@@ -3,6 +3,7 @@ v1.1.29
   Functionality:
 
 - Recover from an index build that fails or overruns instead of hanging on it.
+- Keep the editor responsive while indexing, and show progress you can cancel.
 
 v1.1.28
 
