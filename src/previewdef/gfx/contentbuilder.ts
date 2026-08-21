@@ -3,9 +3,8 @@ import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { getSpriteTypes, SpriteType } from "../../hoiformat/spritetype";
 import { getImageByPath } from "../../util/image/imagecache";
 import { localize } from "../../util/i18n";
-import { escapeAttr, html, htmlEscape, previewedFileUriScript } from "../../util/html";
+import { escapeAttr, html, htmlEscape, previewedFileUriScript, errorPageContent } from "../../util/html";
 import { StyleTable } from "../../util/styletable";
-import { forceError } from "../../util/common";
 import { LoaderRenderResult } from "../updateablepreview";
 
 // Renders the .gfx preview as a full html doc plus an in-place update payload. The update carries the
@@ -45,7 +44,7 @@ export async function renderGfxFile(
 			},
 		};
 	} catch (e) {
-		const baseContent = `${localize("error", "Error")}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
+		const baseContent = errorPageContent(e);
 		return {
 			html: html(webview, baseContent, [previewedFileUriScript(uri)], []),
 		};

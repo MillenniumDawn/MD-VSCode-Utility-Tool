@@ -14,6 +14,21 @@ export interface LocText {
 	text: string;
 }
 
+/**
+ * A NavTarget from a token and the file it came from, or undefined when either is missing.
+ *
+ * The decision and idea payload builders each had their own copy of this, written differently but
+ * meaning the same thing. Pure, so it can live here with the type it builds.
+ */
+export function navOf(
+	token: { start: number; end: number } | undefined,
+	file: string | undefined,
+): NavTarget | undefined {
+	return token && file !== undefined
+		? { start: token.start, end: token.end, file }
+		: undefined;
+}
+
 export interface NavTarget {
 	start: number;
 	end: number;

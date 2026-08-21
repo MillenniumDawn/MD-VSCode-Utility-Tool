@@ -87,7 +87,7 @@ export class WorldMapLoader extends Loader<WorldMapData> {
         const resources = await this.resourcesLoader.load(session);
         session.throwIfCancelled();
 
-        const loadedLoaders = Array.from((session as any).loadedLoader).map<string>(v => (v as any).toString());
+        const loadedLoaders = session.loadedLoaderNames();
         debug('Loader session', loadedLoaders);
 
         const subLoaderResults = [ provinceMap, stateMap, countries, strategicRegions, supplyAreas, railways, supplyNodes, resources ];

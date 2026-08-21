@@ -1,9 +1,7 @@
 import * as vscode from 'vscode';
-import { localize } from './util/i18n';
-import { html, htmlEscape, loadingShellHtml } from './util/html';
+import { html, loadingShellHtml, errorPageContent } from './util/html';
 import { StyleTable } from './util/styletable';
 import { sendEvent } from './util/telemetry';
-import { forceError } from './util/common';
 import { readFile } from './util/vsccommon';
 import { decodeImageToPng } from './util/image/imagedecoder';
 
@@ -53,7 +51,7 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
                 [styleTable]
             );
         } catch (e) {
-            webviewPanel.webview.html = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
+            webviewPanel.webview.html = errorPageContent(e);
         }
     }
 

@@ -2,12 +2,12 @@ import * as vscode from "vscode";
 import { EventsLoader, EventsLoaderResult } from "./loader";
 import { LoaderSession } from "../../util/loader/loader";
 import { debug } from "../../util/debug";
-import { html, htmlEscape, previewedFileUriScript } from "../../util/html";
+import { html, previewedFileUriScript, errorPage } from "../../util/html";
 import { localize, i18nTableAsScript } from "../../util/i18n";
 import { StyleTable } from "../../util/styletable";
 import { HOIEvent } from "./schema";
 import { flatten } from "lodash";
-import { arrayToMap, forceError, jsonForScript } from "../../util/common";
+import { arrayToMap, jsonForScript } from "../../util/common";
 import { buildEventGraphPayload, eventsToGraph } from "./graph";
 import { EventGraphPayload } from "./payload";
 import { LoaderRender } from "../loaderpreview";
@@ -75,8 +75,7 @@ export async function renderEventFile(
 			update: { styleCss: styleTable.toRawCss(), data: { eventGraph } },
 		};
 	} catch (e) {
-		const baseContent = `${localize("error", "Error")}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-		return html(webview, baseContent, [previewedFileUriScript(uri)], []);
+		return errorPage(webview, uri, e);
 	}
 }
 

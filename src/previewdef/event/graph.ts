@@ -1,8 +1,9 @@
 import { repeat } from "lodash";
+import { getLocalisedTextQuick } from "../../util/localisationIndex";
+import { localisationIndex } from "../../util/featureflags";
+import { localise } from "../localise";
 import { ConditionComplexExpr } from "../../hoiformat/condition";
 import { Token } from "../../hoiformat/hoiparser";
-import { localisationIndex } from "../../util/featureflags";
-import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { getSpriteByGfxName } from "../../util/image/imagecache";
 import { StyleTable, normalizeForStyle } from "../../util/styletable";
 import { HOIEvent, HOIEventOption } from "./schema";
@@ -573,11 +574,5 @@ async function makeUnresolvedNode(
 	};
 }
 
-async function localise(key: string): Promise<LocText> {
-	// getLocalisedTextQuick echoes the key back when nothing resolves, which is exactly the
-	// fallback the preview wants, so an unresolved key simply reads the same either way.
-	const text = localisationIndex ? await getLocalisedTextQuick(key) : key;
-	return { key, text: text ?? key };
-}
 
 //#endregion

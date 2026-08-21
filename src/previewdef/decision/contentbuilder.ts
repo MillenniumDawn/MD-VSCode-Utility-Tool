@@ -2,10 +2,10 @@ import * as vscode from "vscode";
 import { DecisionsLoader } from "./loader";
 import { LoaderSession } from "../../util/loader/loader";
 import { debug } from "../../util/debug";
-import { html, htmlEscape, previewedFileUriScript } from "../../util/html";
+import { html, previewedFileUriScript, errorPage } from "../../util/html";
 import { localize, i18nTableAsScript } from "../../util/i18n";
 import { StyleTable } from "../../util/styletable";
-import { forceError, jsonForScript } from "../../util/common";
+import { jsonForScript } from "../../util/common";
 import { buildDecisionGraphPayload } from "./graph";
 import { LoaderRender } from "../loaderpreview";
 
@@ -66,8 +66,7 @@ export async function renderDecisionFile(
 			update: { styleCss: styleTable.toRawCss(), data: { decisionGraph } },
 		};
 	} catch (e) {
-		const baseContent = `${localize("error", "Error")}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-		return html(webview, baseContent, [previewedFileUriScript(uri)], []);
+		return errorPage(webview, uri, e);
 	}
 }
 

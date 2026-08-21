@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { getSpriteByGfxName, Image, getImageByPath } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
-import { forceError, randomString } from '../../util/common';
+import { randomString } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
+import { escapeAttr, html, htmlEscape, previewedFileUriScript, errorPage } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
 import { MioLoader } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
@@ -27,7 +27,7 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
     try {
         const session = new LoaderSession(false);
         const loadResult = await loader.load(session);
-        const loadedLoaders = Array.from((session as any).loadedLoader).map<string>(v => (v as any).toString());
+        const loadedLoaders = session.loadedLoaderNames();
         debug('Loader session mio', loadedLoaders);
 
         const mios = loadResult.result.mios;
@@ -71,8 +71,7 @@ export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview:
         return { html: fullHtml, update: { styleCss: styleTable.toRawCss(), data } };
 
     } catch (e) {
-        const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
+        return errorPage(webview, uri, e);
     }
 }
 

@@ -1,34 +1,21 @@
 import * as vscode from "vscode";
-import * as path from "path";
-import { debounceByInput } from "./common";
-import { readFileFromModOrHOI4 } from "./fileloader";
-import {
-	IndexFile,
-	IndexListing,
-	listIndexFiles,
-	toIndexFiles,
-} from "./indexListing";
+
+import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
+import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import {
-	createIndexBuilder,
-	indexParseQueue,
-	IndexProgress,
-	withIndexProgress,
-} from "./indexBuild";
-import { attachTaskWithErrorLogging } from "./promiseUtils";
-import { Logger } from "./logger";
+	buildIndexHalf,
+	readIndexFileContent,
+	reportIndexParseFailure,
+} from "./indexHalf";
+import {
+	createIndexWatchers,
+	toWorkspaceRelativePath,
+} from "./indexWatchers";
 import { extractFocusIds } from "../previewdef/focustree/schema";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import { sharedFocusIndex } from "./featureflags";
-import {
-	loadCacheManifest,
-	loadCacheData,
-	saveCacheManifest,
-	saveCacheData,
-	computeStaleFiles,
-	IndexTimer,
-} from "./indexCache";
 
 interface FocusIndex {
 	[file: string]: string[]; // Filename -> array of focus keys
@@ -41,26 +28,6 @@ let workspaceFocusIndex: FocusIndex = {};
 const globalFocusKeyToFile = new Map<string, string>();
 const workspaceFocusKeyToFile = new Map<string, string>();
 
-export function registerSharedFocusIndex(): vscode.Disposable {
-	const disposables: vscode.Disposable[] = [];
-
-	if (sharedFocusIndex) {
-		disposables.push(
-			vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
-		);
-		disposables.push(
-			vscode.workspace.onDidChangeTextDocument(onChangeTextDocument),
-		);
-		disposables.push(
-			vscode.workspace.onDidCloseTextDocument(onCloseTextDocument),
-		);
-		disposables.push(vscode.workspace.onDidCreateFiles(onCreateFiles));
-		disposables.push(vscode.workspace.onDidDeleteFiles(onDeleteFiles));
-		disposables.push(vscode.workspace.onDidRenameFiles(onRenameFiles));
-	}
-
-	return vscode.Disposable.from(...disposables);
-}
 
 // Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
@@ -98,14 +65,11 @@ async function buildGlobalFocusIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const options = { mod: false, hoi4: true, recursively: true };
-	await buildFocusIndexWithCache(
-		"focusIndex.global",
-		(token) =>
-			listIndexFiles({ roots: [focusRoot], options: { ...options, token } }),
+	await buildFocusIndexHalf(
+		"sharedFocusIndex.global",
+		{ mod: false, hoi4: true, recursively: true },
 		globalFocusIndex,
 		globalFocusKeyToFile,
-		options,
 		estimatedSize,
 		progress,
 	);
@@ -115,83 +79,31 @@ async function buildWorkspaceFocusIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const options = { mod: true, hoi4: false, recursively: true };
-	await buildFocusIndexWithCache(
-		"focusIndex.workspace",
-		(token) =>
-			listIndexFiles({ roots: [focusRoot], options: { ...options, token } }),
+	await buildFocusIndexHalf(
+		"sharedFocusIndex.workspace",
+		{ mod: true, hoi4: false, recursively: true },
 		workspaceFocusIndex,
 		workspaceFocusKeyToFile,
-		options,
 		estimatedSize,
 		progress,
 	);
 }
 
-async function buildFocusIndexWithCache(
+async function buildFocusIndexHalf(
 	cacheName: string,
-	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
+	options: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
 	focusIndex: FocusIndex,
 	reverseMap: Map<string, string>,
-	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const timer = new IndexTimer(cacheName);
-	try {
-		await buildFocusIndexWithTimer(
-			timer,
+	await buildIndexHalf<FocusIndex>(
+		{
 			cacheName,
-			listFiles,
-			focusIndex,
-			reverseMap,
-			options,
-			estimatedSize,
-			progress,
-		);
-	} finally {
-		// A build that threw must not leave a phase behind in the live-build report.
-		timer.dispose();
-	}
-}
-
-async function buildFocusIndexWithTimer(
-	timer: IndexTimer,
-	cacheName: string,
-	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
-	focusIndex: FocusIndex,
-	reverseMap: Map<string, string>,
-	options: { mod?: boolean; hoi4?: boolean },
-	estimatedSize: [number],
-	progress: IndexProgress,
-): Promise<void> {
-	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
-	// install it is now the directory walk and the mtimes together, which is where a slow cold build
-	// spends its time, and it used to happen before the timer existed.
-	timer.begin("list");
-	const {
-		filePaths: focusFiles,
-		uris,
-		mtimes: currentMtimes,
-	} = await listFiles(progress.token);
-
-	timer.begin("cache");
-	const manifest = await loadCacheManifest(cacheName, FOCUS_CACHE_VERSION);
-	let filesToParse = focusFiles;
-
-	if (manifest) {
-		const staleness = computeStaleFiles(manifest, currentMtimes);
-		const cachedData = await loadCacheData(cacheName);
-
-		// Whatever is still fresh gets reused, however much of the listing changed. This used to be
-		// gated on stale + removed + added being fewer than the files listed, so a large pull -- or
-		// a manifest naming files that have since been deleted, which count towards that sum but
-		// not towards the listing -- threw away a cache that was still most of the way good. The
-		// stale files have to be parsed either way, so counting them only ever added work.
-		if (cachedData) {
-			try {
-				const cached: FocusIndex = JSON.parse(cachedData);
-				const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
+			version: FOCUS_CACHE_VERSION,
+			listFiles: (token) =>
+				listIndexFiles({ roots: [focusRoot], options: { ...options, token } }),
+			hydrate: (cached, skipFiles) => {
 				for (const file in cached) {
 					if (!skipFiles.has(file)) {
 						const keys = cached[file];
@@ -204,39 +116,13 @@ async function buildFocusIndexWithTimer(
 						}
 					}
 				}
-				filesToParse = [...staleness.stale, ...staleness.added];
-			} catch {
-				Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
-				filesToParse = focusFiles;
-			}
-		}
-	}
-
-	timer.begin("parse");
-	let parsed = 0;
-	const toParse = toIndexFiles(filesToParse, uris);
-	progress.report(0, toParse.length);
-	await indexParseQueue.map(
-		toParse,
-		async (f) => {
-			await fillFocusItems(f, focusIndex, reverseMap, options, estimatedSize);
-			timer.progress(++parsed, toParse.length);
-			progress.report(parsed, toParse.length);
+			},
+			parseFile: (file) =>
+				fillFocusItems(file, focusIndex, reverseMap, options, estimatedSize),
+			serialize: () => focusIndex,
 		},
-		{ token: progress.token },
+		progress,
 	);
-	timer.end(focusFiles.length, filesToParse.length);
-
-	// fire-and-forget: write data before manifest for atomicity
-	void Promise.all([
-		saveCacheData(cacheName, JSON.stringify(focusIndex)),
-		saveCacheManifest(
-			cacheName,
-			focusFiles,
-			currentMtimes,
-			FOCUS_CACHE_VERSION,
-		),
-	]).catch((e) => Logger.error(`Cache save failed for ${cacheName}: ${e}`));
 }
 
 async function fillFocusItems(
@@ -265,22 +151,15 @@ async function readFocusIds(
 	estimatedSize?: [number],
 ): Promise<string[] | undefined> {
 	const filePath = focusFile.path;
-	let fileBuffer: Buffer;
-	let fileContent: string;
-	try {
-		[fileBuffer] = await readFileFromModOrHOI4(
-			filePath,
-			options,
-			focusFile.uri,
-		);
-		fileContent = fileBuffer.toString();
-	} catch (e) {
-		// A file listed but unreadable -- deleted between the listing and the read, or locked --
-		// costs this one file and nothing else. Reading used to sit outside the try, so one such
-		// file rejected the whole build and left the index half-populated for the session.
-		Logger.warn(`Shared focus index: can't read ${filePath}: ${e}`);
+	const fileBuffer = await readIndexFileContent(
+		"Shared focus index",
+		focusFile,
+		options,
+	);
+	if (fileBuffer === undefined) {
 		return undefined;
 	}
+	const fileContent = fileBuffer.toString();
 
 	// Skip files that don't contain any focus type definitions
 	if (
@@ -306,26 +185,7 @@ async function readFocusIds(
 
 		return ids;
 	} catch (e) {
-		const baseMessage = options.hoi4
-			? localize("sharedFocusIndex.vanilla", "[Vanilla]")
-			: localize("sharedFocusIndex.mod", "[Mod]");
-
-		const failureMessage = localize(
-			"sharedFocusIndex.parseFailure",
-			"Parsing failed! Please check if the file has issues!",
-		);
-		// prefer stack for focus parse failures, fall back to message (unlike localisationIndex which logs message only)
-		const errText =
-			e instanceof Error
-				? e.stack || e.message
-				: (() => {
-						try {
-							return String(e);
-						} catch {
-							return Object.prototype.toString.call(e);
-						}
-					})();
-		Logger.error(`${baseMessage} ${filePath} ${failureMessage}\n${errText}`);
+		reportIndexParseFailure(filePath, options, e);
 		return undefined;
 	}
 }
@@ -370,121 +230,7 @@ export async function findFileByFocusKey(
 	return workspaceFocusKeyToFile.get(key) ?? globalFocusKeyToFile.get(key);
 }
 
-function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	workspaceFocusIndex = {};
-	workspaceFocusKeyToFile.clear();
-
-	const folderChangeSize: [number] = [0];
-	const task = withIndexProgress(
-		localize(
-			"sharedFocusIndex.workspace.building",
-			"Building workspace Focus index...",
-		),
-		(progress) => buildWorkspaceFocusIndex(folderChangeSize, progress),
-	);
-	attachTaskWithErrorLogging(
-		task,
-		() => {
-			sendEvent("sharedFocusIndex.workspace", {
-				size: folderChangeSize[0].toString(),
-			});
-		},
-		"Building workspace Focus index failed.",
-		Logger.error,
-	);
-}
-
-function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	const file = e.document.uri;
-	if (file.path.endsWith(".txt")) {
-		onChangeTextDocumentImpl(file);
-	}
-}
-
-const onChangeTextDocumentImpl = debounceByInput(
-	(file: vscode.Uri) => {
-		buildGate.runAfterBuild(() => {
-			void reindexWorkspaceFocusFile(file);
-		});
-	},
-	(file) => file.toString(),
-	1000,
-	{ trailing: true },
-);
-
-function onCloseTextDocument(document: vscode.TextDocument) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	const file = document.uri;
-	if (file.path.endsWith(".txt") && document.isDirty) {
-		buildGate.runAfterBuild(() => {
-			void reindexWorkspaceFocusFile(file);
-		});
-	}
-}
-
-function onCreateFiles(e: vscode.FileCreateEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	buildGate.runAfterBuild(() => {
-		for (const file of e.files) {
-			if (file.path.endsWith(".txt")) {
-				void reindexWorkspaceFocusFile(file);
-			}
-		}
-	});
-}
-
-function onDeleteFiles(e: vscode.FileDeleteEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	buildGate.runAfterBuild(() => {
-		for (const file of e.files) {
-			if (file.path.endsWith(".txt")) {
-				removeWorkspaceFocusIndex(file);
-			}
-		}
-	});
-}
-
-function onRenameFiles(e: vscode.FileRenameEvent) {
-	onDeleteFiles({ files: e.files.map((f) => f.oldUri) });
-	onCreateFiles({ files: e.files.map((f) => f.newUri) });
-}
-
-/** The path a focus file is indexed under, or undefined when it isn't a workspace focus file. */
-function toWorkspaceFocusPath(file: vscode.Uri): string | undefined {
-	const wsFolder = vscode.workspace.getWorkspaceFolder(file);
-	if (!wsFolder) {
-		return undefined;
-	}
-
-	const relative = path
-		.relative(wsFolder.uri.path, file.path)
-		.replace(/\\+/g, "/");
-	return relative.startsWith("common/national_focus/") ? relative : undefined;
-}
-
-function removeWorkspaceFocusIndex(file: vscode.Uri) {
-	const relative = toWorkspaceFocusPath(file);
-	if (!relative) {
-		return;
-	}
-
+function removeWorkspaceFocusFile(relative: string): void {
 	applyFocusIds(relative, [], workspaceFocusIndex, workspaceFocusKeyToFile);
 }
 
@@ -497,7 +243,7 @@ function removeWorkspaceFocusIndex(file: vscode.Uri) {
  * was last indexed with, instead of losing them until the next edit that happens to parse.
  */
 async function reindexWorkspaceFocusFile(file: vscode.Uri): Promise<void> {
-	const relative = toWorkspaceFocusPath(file);
+	const relative = toWorkspaceRelativePath(file, `${focusRoot}/`);
 	if (!relative) {
 		return;
 	}
@@ -513,6 +259,39 @@ async function reindexWorkspaceFocusFile(file: vscode.Uri): Promise<void> {
 	applyFocusIds(relative, ids, workspaceFocusIndex, workspaceFocusKeyToFile);
 }
 
+const watchers = createIndexWatchers({
+	enabled: sharedFocusIndex,
+	extension: ".txt",
+	hasStarted: () => builder.hasStarted(),
+	gate: buildGate,
+	reindexFile: (file) => {
+		void reindexWorkspaceFocusFile(file);
+	},
+	removeFile: (file) => {
+		const relative = toWorkspaceRelativePath(file, `${focusRoot}/`);
+		if (relative) {
+			removeWorkspaceFocusFile(relative);
+		}
+	},
+	rebuildWorkspace: {
+		reset: () => {
+			workspaceFocusIndex = {};
+			workspaceFocusKeyToFile.clear();
+		},
+		build: buildWorkspaceFocusIndex,
+		message: localize(
+			"sharedFocusIndex.workspace.building",
+			"Building workspace Focus index...",
+		),
+		telemetryEvent: "sharedFocusIndex.workspace",
+		failureMessage: "Building workspace Focus index failed.",
+	},
+});
+
+export function registerSharedFocusIndex(): vscode.Disposable {
+	return watchers.register();
+}
+
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
 export function __resetSharedFocusIndexForTests(): void {
 	builder.reset();
@@ -525,8 +304,4 @@ export function __resetSharedFocusIndexForTests(): void {
 }
 
 // Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
-export const __testHandlers = {
-	onCreateFiles,
-	onDeleteFiles,
-	onCloseTextDocument,
-};
+export const __testHandlers = watchers.handlers;

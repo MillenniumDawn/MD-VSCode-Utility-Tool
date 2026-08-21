@@ -7,6 +7,7 @@ import {
 } from "../fileloader";
 import { error } from "../debug";
 import { UserError } from "../common";
+import { fnv1a32 } from "../hash";
 import { Dependency, getDependenciesFromText } from "../dependency";
 import { sendEvent } from "../telemetry";
 export { Dependency } from "../dependency";
@@ -306,7 +307,7 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 		}
 		// Peek at in-memory content to compute hash; store it to avoid a second call in loadImpl
 		const content = await this.contentProvider();
-		const hash = fnv1a(content);
+		const hash = fnv1a32(content);
 		const depsChanged = await this.loaderDependencies.shouldReload(session);
 		if (hash === this.lastContentHash && !depsChanged) {
 			return false;
@@ -446,10 +447,17 @@ export function mergeInLoadResult<
 	K extends string,
 	T extends { [k in K]: any[] },
 >(loadResults: T[], key: K): T[K] {
-	return loadResults.reduce<T[K]>(
-		(p, c) => (p as any).concat(c[key]),
-		[] as unknown as T[K],
-	);
+	// One array, pushed into. `reduce` with `concat` allocated a fresh array holding everything so
+	// far on every step, so merging n results cost n^2/2 element copies -- and the world map merges
+	// one result per state file, of which a large mod has around a thousand.
+	const merged: any[] = [];
+	for (const loadResult of loadResults) {
+		const values = loadResult[key];
+		for (const value of values) {
+			merged.push(value);
+		}
+	}
+	return merged as T[K];
 }
 
 function checkLoaderSessionLoadingFile(session: LoaderSession, file: string) {
@@ -469,11 +477,3 @@ function checkLoaderSessionLoadingFile(session: LoaderSession, file: string) {
 	}
 }
 
-function fnv1a(s: string): number {
-	let h = 2166136261;
-	for (let i = 0; i < s.length; i++) {
-		h ^= s.charCodeAt(i);
-		h = (h * 16777619) >>> 0;
-	}
-	return h;
-}

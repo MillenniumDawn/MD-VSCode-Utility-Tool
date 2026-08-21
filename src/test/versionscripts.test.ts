@@ -754,7 +754,7 @@ describe('scripts/changelog-bullets', function () {
 
         it('counts the release scripts as CI but not the extension tooling', function () {
             assert.strictEqual(changelogBullets.componentForFiles(['scripts/bump-version.js']), 'CI');
-            assert.strictEqual(changelogBullets.componentForFiles(['scripts/geni18n.js']), 'Localisation');
+            assert.strictEqual(changelogBullets.componentForFiles(['scripts/genzhi18n.js']), 'Localisation');
         });
 
         it('gives no prefix when nothing owns a majority', function () {

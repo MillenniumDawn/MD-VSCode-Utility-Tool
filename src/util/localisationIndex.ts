@@ -1,33 +1,24 @@
 import * as vscode from "vscode";
-import * as path from "path";
-import { debounceByInput } from "./common";
-import { localisationIndex } from "./featureflags";
-import { readFileFromModOrHOI4 } from "./fileloader";
-import {
-	IndexFile,
-	IndexListing,
-	listIndexFiles,
-	toIndexFiles,
-} from "./indexListing";
+import { localisationIndex, previewLocalisation } from "./featureflags";
+import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
-import { attachTaskWithErrorLogging } from "./promiseUtils";
+import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import {
-	createIndexBuilder,
-	indexParseQueue,
-	IndexProgress,
-	withIndexProgress,
-} from "./indexBuild";
-import { Logger } from "./logger";
-import { ConfigurationKey } from "../constants";
+	buildIndexHalf,
+	readIndexFileContent,
+	reportIndexParseFailure,
+} from "./indexHalf";
 import {
-	loadCacheManifest,
-	loadCacheData,
-	saveCacheManifest,
-	saveCacheData,
-	computeStaleFiles,
-	IndexTimer,
-} from "./indexCache";
+	createIndexWatchers,
+	toWorkspaceRelativePath,
+} from "./indexWatchers";
+import {
+	defaultYmlSuffix,
+	isoBySettingName,
+	ymlSuffixByIso,
+	ymlSuffixes,
+} from "./locales";
 
 type LocalisationData = Record<string, Record<string, string>>;
 
@@ -41,52 +32,7 @@ const workspaceLocalisationFileMap: Record<
 	Record<string, Set<string>>
 > = {};
 
-// Mapping of language ISO codes to yml file language suffixes
-const localeMapping: Record<string, string> = {
-	en: "l_english",
-	"pt-br": "l_braz_por",
-	de: "l_german",
-	fr: "l_french",
-	es: "l_spanish",
-	pl: "l_polish",
-	ru: "l_russian",
-	ja: "l_japanese",
-	"zh-cn": "l_simp_chinese",
-};
 
-// Mapping of language profiles to language ISO codes
-const localeISOMapping: Record<string, string> = {
-	["Brazilian Portuguese"]: "pt-br",
-	English: "en",
-	French: "fr",
-	German: "de",
-	Japanese: "ja",
-	Polish: "pl",
-	Russian: "ru",
-	["Simplified Chinese"]: "zh-cn",
-	Spanish: "es",
-};
-
-export function registerLocalisationIndex(): vscode.Disposable {
-	const disposables: vscode.Disposable[] = [];
-
-	if (localisationIndex) {
-		disposables.push(
-			vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
-		);
-		disposables.push(
-			vscode.workspace.onDidChangeTextDocument(onChangeTextDocument),
-		);
-		disposables.push(
-			vscode.workspace.onDidCloseTextDocument(onCloseTextDocument),
-		);
-		disposables.push(vscode.workspace.onDidCreateFiles(onCreateFiles));
-		disposables.push(vscode.workspace.onDidDeleteFiles(onDeleteFiles));
-		disposables.push(vscode.workspace.onDidRenameFiles(onRenameFiles));
-	}
-
-	return vscode.Disposable.from(...disposables);
-}
 
 // Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
@@ -119,12 +65,10 @@ function ensureIndexBuilt(): Promise<[void, void]> {
 export async function getLocalisedTextQuick(
 	localisationKey: string | undefined,
 ): Promise<string | undefined> {
-	const previewLocalisation =
-		vscode.workspace.getConfiguration(ConfigurationKey).previewLocalisation;
 	if (previewLocalisation) {
 		return getLocalisedText(
 			localisationKey,
-			localeISOMapping[previewLocalisation] ?? vscode.env.language,
+			isoBySettingName[previewLocalisation] ?? vscode.env.language,
 		);
 	}
 	return getLocalisedText(localisationKey, vscode.env.language);
@@ -144,8 +88,8 @@ export async function getLocalisedText(
 
 	await ensureIndexBuilt().catch(() => undefined);
 
-	const langKey = localeMapping[language.toLowerCase()] || "l_english"; // use mapping to get language suffix
-	const defaultLangKey = "l_english";
+	const langKey = ymlSuffixByIso[language.toLowerCase()] || defaultYmlSuffix;
+	const defaultLangKey = defaultYmlSuffix;
 
 	let text =
 		globalLocalisationIndex[langKey]?.[localisationKey] ||
@@ -161,8 +105,7 @@ export async function getLocalisedText(
 }
 
 const LOC_CACHE_VERSION = 1;
-const langSuffixes = Object.values(localeMapping);
-const langSuffixPattern = langSuffixes.join("|");
+const langSuffixPattern = ymlSuffixes.join("|");
 const localisationFileFilter = new RegExp(
 	`.*_(${langSuffixPattern})\\.yml$`,
 	"i",
@@ -181,18 +124,13 @@ async function buildGlobalLocalisationIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const options = { mod: false, hoi4: true, recursively: true };
-	await buildLocalisationIndexWithCache(
+	// The global half keeps no per-file key map: nothing invalidates a vanilla file on its own, so
+	// maintaining one only ever wrote an empty object into the cache.
+	await buildLocalisationIndexHalf(
 		"localisationIndex.global",
-		(token) =>
-			listIndexFiles({
-				roots: [localisationRoot],
-				filter: isLocalisationFile,
-				options: { ...options, token },
-			}),
+		{ mod: false, hoi4: true, recursively: true },
 		globalLocalisationIndex,
 		null,
-		options,
 		estimatedSize,
 		progress,
 	);
@@ -202,85 +140,35 @@ async function buildWorkspaceLocalisationIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const options = { mod: true, hoi4: false, recursively: true };
-	await buildLocalisationIndexWithCache(
+	await buildLocalisationIndexHalf(
 		"localisationIndex.workspace",
-		(token) =>
-			listIndexFiles({
-				roots: [localisationRoot],
-				filter: isLocalisationFile,
-				options: { ...options, token },
-			}),
+		{ mod: true, hoi4: false, recursively: true },
 		workspaceLocalisationIndex,
 		workspaceLocalisationFileMap,
-		options,
 		estimatedSize,
 		progress,
 	);
 }
 
-async function buildLocalisationIndexWithCache(
+async function buildLocalisationIndexHalf(
 	cacheName: string,
-	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
+	options: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
 	targetIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
-	options: { mod?: boolean; hoi4?: boolean },
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	const timer = new IndexTimer(cacheName);
-	try {
-		await buildLocalisationIndexWithTimer(
-			timer,
+	await buildIndexHalf<LocCacheData>(
+		{
 			cacheName,
-			listFiles,
-			targetIndex,
-			fileMap,
-			options,
-			estimatedSize,
-			progress,
-		);
-	} finally {
-		// A build that threw must not leave a phase behind in the live-build report.
-		timer.dispose();
-	}
-}
-
-async function buildLocalisationIndexWithTimer(
-	timer: IndexTimer,
-	cacheName: string,
-	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>,
-	targetIndex: LocalisationData,
-	fileMap: Record<string, Record<string, Set<string>>> | null,
-	options: { mod?: boolean; hoi4?: boolean },
-	estimatedSize: [number],
-	progress: IndexProgress,
-): Promise<void> {
-	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
-	// install it is now the directory walk and the mtimes together, which is where a slow cold build
-	// spends its time, and it used to happen before the timer existed.
-	timer.begin("list");
-	const {
-		filePaths: locFiles,
-		uris,
-		mtimes: currentMtimes,
-	} = await listFiles(progress.token);
-
-	timer.begin("cache");
-	const manifest = await loadCacheManifest(cacheName, LOC_CACHE_VERSION);
-	let filesToParse = locFiles;
-
-	if (manifest) {
-		const staleness = computeStaleFiles(manifest, currentMtimes);
-		const cachedData = await loadCacheData(cacheName);
-
-		// Whatever is still fresh gets reused, however much of the listing changed. See the same
-		// spot in sharedFocusIndex for why counting the changed files only ever added work.
-		if (cachedData) {
-			try {
-				const cached: LocCacheData = JSON.parse(cachedData);
-				const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
-
+			version: LOC_CACHE_VERSION,
+			listFiles: (token) =>
+				listIndexFiles({
+					roots: [localisationRoot],
+					filter: isLocalisationFile,
+					options: { ...options, token },
+				}),
+			hydrate: (cached, skipFiles) => {
 				for (const langKey in cached.index) {
 					const cachedLanguageIndex = cached.index[langKey] ?? {};
 					const targetLanguageIndex =
@@ -303,65 +191,44 @@ async function buildLocalisationIndexWithTimer(
 						}
 					}
 				}
-
-				filesToParse = [...staleness.stale, ...staleness.added];
-			} catch {
-				Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
-				filesToParse = locFiles;
-			}
-		}
-	}
-
-	timer.begin("parse");
-	let parsed = 0;
-	const toParse = toIndexFiles(filesToParse, uris);
-	progress.report(0, toParse.length);
-	await indexParseQueue.map(
-		toParse,
-		async (f) => {
-			await fillLocalisationItems(
-				f,
-				targetIndex,
-				fileMap,
-				options,
-				estimatedSize,
-			);
-			timer.progress(++parsed, toParse.length);
-			progress.report(parsed, toParse.length);
+			},
+			parseFile: async (file) => {
+				await fillLocalisationItems(
+					file,
+					targetIndex,
+					fileMap,
+					options,
+					estimatedSize,
+				);
+			},
+			// TODO: serialising this runs on the extension host thread and produces the whole index
+			// plus a second copy of every key in `fileMap` as one string. On a mod the size of
+			// Millennium Dawn that is hundreds of megabytes, enough to stall the host and, at the top
+			// end, to exceed V8's maximum string length outright. Left alone for now because this
+			// index is off by default and off on the machines the hangs were reported from.
+			// Streaming the write, or caching per language, is the way out.
+			serialize: () => {
+				const serializedFileMap: Record<
+					string,
+					Record<string, string[]>
+				> = {};
+				if (fileMap) {
+					for (const langKey in fileMap) {
+						const perFile: Record<string, string[]> = {};
+						for (const filePath in fileMap[langKey]) {
+							perFile[filePath] = [...(fileMap[langKey]?.[filePath] ?? [])];
+						}
+						serializedFileMap[langKey] = perFile;
+					}
+				}
+				return { index: targetIndex, fileMap: serializedFileMap };
+			},
 		},
-		{ token: progress.token },
+		progress,
 	);
-	timer.end(locFiles.length, filesToParse.length);
-
-	// Serialize Sets to arrays for JSON cache
-	const serializedFileMap: Record<string, Record<string, string[]>> = {};
-	if (fileMap) {
-		for (const langKey in fileMap) {
-			serializedFileMap[langKey] = {};
-			for (const filePath in fileMap[langKey]) {
-				serializedFileMap[langKey][filePath] = [
-					...(fileMap[langKey]?.[filePath] ?? []),
-				];
-			}
-		}
-	}
-	const cacheData: LocCacheData = {
-		index: targetIndex,
-		fileMap: serializedFileMap,
-	};
-	// TODO: this JSON.stringify runs on the extension host thread and serialises the whole index
-	// plus a second copy of every key in `fileMap` into one string. On a mod the size of Millennium
-	// Dawn that is hundreds of megabytes, enough to stall the host and, at the top end, to exceed
-	// V8's maximum string length outright. Left alone for now because this index is off by default
-	// and off on the machines the hangs were reported from; see the "Cache correctness" stage of the
-	// indexing plan. Streaming the write, or caching per language, is the way out.
-	// fire-and-forget: write data before manifest for atomicity
-	void Promise.all([
-		saveCacheData(cacheName, JSON.stringify(cacheData)),
-		saveCacheManifest(cacheName, locFiles, currentMtimes, LOC_CACHE_VERSION),
-	]).catch((e) => Logger.error(`Cache save failed for ${cacheName}: ${e}`));
 }
 
+/** Returns whether the file was read and parsed, so a re-index knows not to discard what it has. */
 async function fillLocalisationItems(
 	localisationFile: IndexFile,
 	localisationIndex: LocalisationData,
@@ -371,23 +238,17 @@ async function fillLocalisationItems(
 		hoi4?: boolean;
 	},
 	estimatedSize?: [number],
-): Promise<void> {
+): Promise<boolean> {
 	const filePath = localisationFile.path;
-	let content: string;
-	try {
-		const [fileBuffer] = await readFileFromModOrHOI4(
-			filePath,
-			options,
-			localisationFile.uri,
-		);
-		content = fileBuffer.toString();
-	} catch (e) {
-		// A file listed but unreadable -- deleted between the listing and the read, or locked --
-		// costs this one file and nothing else. Reading used to sit outside the try, so one such
-		// file rejected the whole build and left the index half-populated for the session.
-		Logger.warn(`Localisation index: can't read ${filePath}: ${e}`);
-		return;
+	const fileBuffer = await readIndexFileContent(
+		"Localisation index",
+		localisationFile,
+		options,
+	);
+	if (fileBuffer === undefined) {
+		return false;
 	}
+	const content = fileBuffer.toString();
 
 	try {
 		const localisations = parseLocalisation(content);
@@ -416,19 +277,12 @@ async function fillLocalisationItems(
 				);
 			}
 		}
+		return true;
 	} catch (e) {
-		const baseMessage = options.hoi4
-			? localize("localisationIndex.vanilla", "[Vanilla]")
-			: localize("localisationIndex.mod", "[mod]");
-
-		const failureMessage = localize(
-			"localisationIndex.parseFailure",
-			"parsing failed! Please check if the file has issues!",
-		);
-
-		Logger.error(
-			`${baseMessage} ${filePath} ${failureMessage}\n${e instanceof Error ? e.message : String(e)}`,
-		);
+		// This logged only the message, where the focus index logged the stack. Both go through the
+		// same reporter now, which prefers the stack.
+		reportIndexParseFailure(filePath, options, e);
+		return false;
 	}
 }
 
@@ -478,140 +332,96 @@ export function parseLocalisation(fileContent: string): LocalisationData {
 	return result;
 }
 
-function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	workspaceLocalisationIndex = {};
-	for (const langKey in workspaceLocalisationFileMap) {
-		delete workspaceLocalisationFileMap[langKey];
-	}
-	const estimatedSize: [number] = [0];
-	const task = withIndexProgress(
-		localize(
-			"localisationIndex.workspace.building",
-			"Building workspace Localisation index...",
-		),
-		(progress) => buildWorkspaceLocalisationIndex(estimatedSize, progress),
-	);
-	attachTaskWithErrorLogging(
-		task,
-		() => {
-			sendEvent("localisationIndex.workspace", {
-				size: estimatedSize[0].toString(),
-			});
-		},
-		"Building workspace Localisation index failed.",
-		Logger.error,
-	);
-}
-
-function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	const file = e.document.uri;
-	if (file.path.endsWith(".yml")) {
-		onChangeTextDocumentImpl(file);
+function removeWorkspaceLocalisationFile(relative: string): void {
+	const langKey = getLangKeyFromPath(relative);
+	const fileKeys = workspaceLocalisationFileMap[langKey]?.[relative];
+	if (fileKeys && workspaceLocalisationIndex[langKey]) {
+		for (const key of fileKeys) {
+			delete workspaceLocalisationIndex[langKey][key];
+		}
+		delete workspaceLocalisationFileMap[langKey]?.[relative];
 	}
 }
 
-const onChangeTextDocumentImpl = debounceByInput(
-	(file: vscode.Uri) => {
-		buildGate.runAfterBuild(() => {
-			removeWorkspaceLocalisationIndex(file);
-			addWorkspaceLocalisationIndex(file);
-		});
+/**
+ * Re-indexes an edited localisation file: parse first, swap the entries in afterwards.
+ *
+ * Clearing the file's keys up front -- what an edit used to do -- left every string it defines
+ * unresolved for as long as the re-parse took, and a preview refreshing in that window, which the
+ * same edit triggers on the same debounce, fell back to showing raw keys. A file that fails to
+ * parse midway through an edit keeps the strings it was last indexed with.
+ */
+async function reindexWorkspaceLocalisationFile(
+	file: vscode.Uri,
+): Promise<void> {
+	const relative = toWorkspaceRelativePath(file, `${localisationRoot}/`);
+	if (!relative) {
+		return;
+	}
+
+	// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
+	const parsedIndex: LocalisationData = {};
+	const parsedFileMap: Record<string, Record<string, Set<string>>> = {};
+	const parsed = await fillLocalisationItems(
+		{ path: relative },
+		parsedIndex,
+		parsedFileMap,
+		{ hoi4: false },
+	);
+	if (!parsed) {
+		return;
+	}
+
+	removeWorkspaceLocalisationFile(relative);
+	for (const langKey in parsedIndex) {
+		const target =
+			workspaceLocalisationIndex[langKey] ??
+			(workspaceLocalisationIndex[langKey] = {});
+		Object.assign(target, parsedIndex[langKey]);
+
+		const keys = parsedFileMap[langKey]?.[relative];
+		if (keys) {
+			const fileMapForLang =
+				workspaceLocalisationFileMap[langKey] ??
+				(workspaceLocalisationFileMap[langKey] = {});
+			fileMapForLang[relative] = keys;
+		}
+	}
+}
+
+const watchers = createIndexWatchers({
+	enabled: localisationIndex,
+	extension: ".yml",
+	hasStarted: () => builder.hasStarted(),
+	gate: buildGate,
+	reindexFile: (file) => {
+		void reindexWorkspaceLocalisationFile(file);
 	},
-	(file) => file.toString(),
-	1000,
-	{ trailing: true },
-);
-
-function onCloseTextDocument(document: vscode.TextDocument) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	const file = document.uri;
-	if (file.path.endsWith(".yml") && document.isDirty) {
-		buildGate.runAfterBuild(() => {
-			removeWorkspaceLocalisationIndex(file);
-			addWorkspaceLocalisationIndex(file);
-		});
-	}
-}
-
-function onCreateFiles(e: vscode.FileCreateEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	buildGate.runAfterBuild(() => {
-		for (const file of e.files) {
-			if (file.path.endsWith(".yml")) {
-				addWorkspaceLocalisationIndex(file);
+	removeFile: (file) => {
+		const relative = toWorkspaceRelativePath(file, `${localisationRoot}/`);
+		if (relative) {
+			removeWorkspaceLocalisationFile(relative);
+		}
+	},
+	rebuildWorkspace: {
+		reset: () => {
+			workspaceLocalisationIndex = {};
+			for (const key of Object.keys(workspaceLocalisationFileMap)) {
+				delete workspaceLocalisationFileMap[key];
 			}
-		}
-	});
-}
+		},
+		build: buildWorkspaceLocalisationIndex,
+		message: localize(
+			"localisationIndex.workspace.building",
+			"Building workspace localisation index...",
+		),
+		telemetryEvent: "localisationIndex.workspace",
+		failureMessage: "Building workspace localisation index failed.",
+	},
+});
 
-function onDeleteFiles(e: vscode.FileDeleteEvent) {
-	if (!builder.hasStarted()) {
-		return;
-	}
-
-	buildGate.runAfterBuild(() => {
-		for (const file of e.files) {
-			if (file.path.endsWith(".yml")) {
-				removeWorkspaceLocalisationIndex(file);
-			}
-		}
-	});
-}
-
-function onRenameFiles(e: vscode.FileRenameEvent) {
-	onDeleteFiles({ files: e.files.map((f) => f.oldUri) });
-	onCreateFiles({ files: e.files.map((f) => f.newUri) });
-}
-
-function removeWorkspaceLocalisationIndex(file: vscode.Uri) {
-	const wsFolder = vscode.workspace.getWorkspaceFolder(file);
-	if (wsFolder) {
-		const relative = path
-			.relative(wsFolder.uri.path, file.path)
-			.replace(/\\+/g, "/");
-		if (relative && relative.startsWith("localisation/")) {
-			const langKey = getLangKeyFromPath(relative);
-			const fileKeys = workspaceLocalisationFileMap[langKey]?.[relative];
-			if (fileKeys && workspaceLocalisationIndex[langKey]) {
-				for (const key of fileKeys) {
-					delete workspaceLocalisationIndex[langKey][key];
-				}
-				delete workspaceLocalisationFileMap[langKey]?.[relative];
-			}
-		}
-	}
-}
-
-function addWorkspaceLocalisationIndex(file: vscode.Uri) {
-	const wsFolder = vscode.workspace.getWorkspaceFolder(file);
-	if (wsFolder) {
-		const relative = path
-			.relative(wsFolder.uri.path, file.path)
-			.replace(/\\+/g, "/");
-		if (relative && relative.startsWith("localisation/")) {
-			// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
-			void fillLocalisationItems(
-				{ path: relative },
-				workspaceLocalisationIndex,
-				workspaceLocalisationFileMap,
-				{ hoi4: false },
-			);
-		}
-	}
+export function registerLocalisationIndex(): vscode.Disposable {
+	return watchers.register();
 }
 
 function getLangKeyFromPath(filePath: string): string {
@@ -632,8 +442,4 @@ export function __resetLocalisationIndexForTests(): void {
 }
 
 // Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
-export const __testHandlers = {
-	onCreateFiles,
-	onDeleteFiles,
-	onCloseTextDocument,
-};
+export const __testHandlers = watchers.handlers;

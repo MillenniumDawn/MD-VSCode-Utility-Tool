@@ -953,15 +953,15 @@ function setupCheckedFocuses(focuses: Focus[], focusTree: FocusTree) {
 }
 
 function dedupeConditionExprs(exprs: ConditionItem[]): ConditionItem[] {
+	// Keyed rather than scanned: the inlay windows of a large tree carry thousands of
+	// expressions, and comparing each against everything kept so far grew with the square of
+	// that. The separator is a character no scope name or node content can contain.
 	const result: ConditionItem[] = [];
+	const seen = new Set<string>();
 	for (const expr of exprs) {
-		if (
-			!result.some(
-				(existing) =>
-					existing.scopeName === expr.scopeName &&
-					existing.nodeContent === expr.nodeContent,
-			)
-		) {
+		const key = expr.scopeName + "\u0000" + expr.nodeContent;
+		if (!seen.has(key)) {
+			seen.add(key);
 			result.push(expr);
 		}
 	}
@@ -1044,7 +1044,9 @@ window.addEventListener("message", async (event) => {
 		return;
 	}
 
-	if (msg.type !== "update") return;
+	if (msg.type !== "update") {
+		return;
+	}
 
 	focusTrees = msg.focusTrees;
 	(window as any).focusTrees = msg.focusTrees;

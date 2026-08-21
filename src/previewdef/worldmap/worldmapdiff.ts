@@ -1,15 +1,6 @@
 export type ItemHasher = (item: unknown) => string;
 
-const FNV_PRIME = 16777619;
-
-function fnv1a(s: string, seed: number): number {
-    let h = seed;
-    for (let i = 0; i < s.length; i++) {
-        h ^= s.charCodeAt(i);
-        h = (h * FNV_PRIME) >>> 0;
-    }
-    return h;
-}
+import { fnv1a32 } from "../../util/hash";
 
 export function createItemHasher(serialize: (item: unknown) => string = JSON.stringify): ItemHasher {
     const cache = new WeakMap<object, string>();
@@ -29,7 +20,7 @@ export function createItemHasher(serialize: (item: unknown) => string = JSON.str
 
         const serialized = serialize(item);
         // Combine two independent 32-bit FNV-1a hashes so a collision can't silently drop a real change.
-        const hash = fnv1a(serialized, 2166136261) + ':' + fnv1a(serialized, 2654435761);
+        const hash = fnv1a32(serialized) + ':' + fnv1a32(serialized, 2654435761);
         cache.set(key, hash);
         return hash;
     };

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { contextContainer } from '../context';
 import { Logger } from './logger';
+import { fnv1a64Hex } from './hash';
 import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration } from './vsccommon';
 
 interface CacheManifest {
@@ -49,27 +50,9 @@ export function cacheNamespaceFor(modFile: string | undefined, workspaceFolderUr
         parts.push('ws:' + uri);
     }
 
-    return fnv1a64(parts.join('\n'));
+    return fnv1a64Hex(parts.join('\n'));
 }
 
-/**
- * 16 hex characters, from two 32-bit FNV-1a passes: one over the text, one over it backwards from a
- * different offset basis, so the two halves do not move together.
- */
-function fnv1a64(text: string): string {
-    return fnv1a32(text, 0x811c9dc5, false) + fnv1a32(text, 0x01000193, true);
-}
-
-function fnv1a32(text: string, offsetBasis: number, backwards: boolean): string {
-    let hash = offsetBasis;
-    for (let i = 0; i < text.length; i++) {
-        hash ^= text.charCodeAt(backwards ? text.length - 1 - i : i);
-        // The usual `hash *= 16777619` in 32-bit arithmetic. `Math.imul` because a plain multiply
-        // loses the low bits once the product passes 2^53.
-        hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(16).padStart(8, '0');
-}
 
 /** The two inputs to `cacheNamespaceFor`, each read defensively -- neither is worth failing over. */
 function cacheNamespace(): string {

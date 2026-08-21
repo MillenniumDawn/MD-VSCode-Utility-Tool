@@ -729,10 +729,10 @@ describe("util/sharedFocusIndex disk cache", function () {
 			// Only the workspace half has a cache on disk; the global half's reads reject, which is
 			// what a missing cache file looks like from here.
 			readFile: async (uri: vscode.Uri) => {
-				if (uri.path.endsWith("focusIndex.workspace.manifest.json")) {
+				if (uri.path.endsWith("sharedFocusIndex.workspace.manifest.json")) {
 					return Buffer.from(MANIFEST);
 				}
-				if (uri.path.endsWith("focusIndex.workspace.data.json")) {
+				if (uri.path.endsWith("sharedFocusIndex.workspace.data.json")) {
 					return Buffer.from(CACHED_INDEX);
 				}
 				throw new Error(`no such cache file: ${uri.path}`);
@@ -803,10 +803,10 @@ describe("util/sharedFocusIndex disk cache", function () {
 	it("falls back to a full rebuild when the cached data is corrupted", async function () {
 		stubVscode({
 			readFile: async (uri: vscode.Uri) => {
-				if (uri.path.endsWith("focusIndex.workspace.manifest.json")) {
+				if (uri.path.endsWith("sharedFocusIndex.workspace.manifest.json")) {
 					return Buffer.from(MANIFEST);
 				}
-				if (uri.path.endsWith("focusIndex.workspace.data.json")) {
+				if (uri.path.endsWith("sharedFocusIndex.workspace.data.json")) {
 					return Buffer.from("{ this is not json");
 				}
 				throw new Error(`no such cache file: ${uri.path}`);
