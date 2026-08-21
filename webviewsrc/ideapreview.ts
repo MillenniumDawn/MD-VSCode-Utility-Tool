@@ -3,7 +3,7 @@ import { SearchBox } from "./util/searchbox";
 import { applyNav, badge } from "./util/card";
 import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
-import { vscode } from "./util/vscode";
+import { wireUpdateBody } from "./util/updatebody";
 import { ConditionComplexExpr } from "../src/hoiformat/condition";
 import {
 	conditionToDom as conditionTreeToDom,
@@ -705,40 +705,15 @@ function applyToolbarFlags(): void {
 
 //#endregion
 
-// In-place update pushed by LoaderPreview when the previewed file changed: re-render from the fresh
-// payload without a full reload, so scroll survives. Falls back to a full reload if the DOM the
-// re-render needs is gone (e.g. the webview shows the error page, which has no listener).
-window.addEventListener(
-	"message",
-	tryRun(function (event: MessageEvent) {
-		const msg = event.data;
-		if (!msg || msg.type !== "updateBody") {
-			return;
-		}
-
-		const contentElement = document.getElementById("ideapreviewcontent") as HTMLDivElement | null;
-		if (!contentElement) {
-			vscode.postMessage({ command: "reload" });
-			return;
-		}
-
-		if (typeof msg.styleCss === "string") {
-			const serverStyles = document.getElementById("idea-server-styles");
-			if (serverStyles) {
-				serverStyles.textContent = msg.styleCss;
-			}
-		}
-
-		const data = msg.data ?? {};
-		if (data.ideaPreview) {
-			const scrollX = window.scrollX;
-			const scrollY = window.scrollY;
-			payload = data.ideaPreview as IdeaPreviewPayload;
-			buildContent();
-			window.scrollTo(scrollX, scrollY);
-		}
-	}),
-);
+wireUpdateBody<IdeaPreviewPayload>({
+	contentId: "ideapreviewcontent",
+	styleId: "idea-server-styles",
+	dataKey: "ideaPreview",
+	apply: (next) => {
+		payload = next;
+	},
+	rebuild: buildContent,
+});
 
 window.addEventListener(
 	"load",
