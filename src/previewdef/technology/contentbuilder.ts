@@ -2,14 +2,14 @@ import * as vscode from 'vscode';
 import { localize } from '../../util/i18n';
 import { Technology, TechnologyTree, TechnologyFolder } from './schema';
 import { getSpriteByGfxName, Sprite } from '../../util/image/imagecache';
-import { arrayToMap, forceError, UserError } from '../../util/common';
+import { arrayToMap, UserError } from '../../util/common';
 import { HOIPartial } from '../../hoiformat/schema';
 import { renderContainerWindow, renderContainerWindowChildren } from '../../util/hoi4gui/containerwindow';
 import { ParentInfo, RenderCommonOptions } from '../../util/hoi4gui/common';
 import { renderGridBox, GridBoxItem, GridBoxConnection, GridBoxConnectionItem } from '../../util/hoi4gui/gridbox';
 import { renderInstantTextBox } from '../../util/hoi4gui/instanttextbox';
 import { renderIcon } from '../../util/hoi4gui/icon';
-import { escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
+import { escapeAttr, html, previewedFileUriScript, errorPage } from '../../util/html';
 import { ContainerWindowType, GridBoxType, IconType, InstantTextBoxType, Format } from '../../hoiformat/gui';
 import { TechnologyTreeLoader, TechnologyTreeLoaderResult } from './loader';
 import { EquipmentArchetype } from './equipmentschema';
@@ -77,8 +77,7 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
         };
 
     } catch (e) {
-        const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
+        return errorPage(webview, uri, e);
     }
 }
 

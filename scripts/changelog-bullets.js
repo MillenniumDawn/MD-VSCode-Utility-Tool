@@ -8,8 +8,8 @@
 
 'use strict';
 
-// The scripts that exist only to run a release. scripts/geni18n.js and the rest are tooling for the
-// extension itself and are deliberately not here.
+// The scripts that exist only to run a release. scripts/genzhi18n.js is tooling for the extension
+// itself and is deliberately not here.
 const releaseScripts = new Set([
 	'scripts/bump-version.js',
 	'scripts/changelog-bullets.js',
@@ -66,7 +66,6 @@ const componentRules = [
 		label: 'Localisation',
 		test: (file) => file.startsWith('i18n/')
 			|| /^package\.nls(\.[\w-]+)?\.json$/.test(file)
-			|| file === 'scripts/geni18n.js'
 			|| file === 'scripts/genzhi18n.js',
 	},
 	{

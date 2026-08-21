@@ -2,10 +2,10 @@ import { chain } from 'lodash';
 import * as vscode from 'vscode';
 import { ContainerWindowType } from '../../hoiformat/gui';
 import { HOIPartial } from '../../hoiformat/schema';
-import { arrayToMap, forceError } from '../../util/common';
+import { arrayToMap } from '../../util/common';
 import { debug } from '../../util/debug';
 import { renderStandaloneWindow } from '../../util/hoi4gui/window';
-import { html, htmlEscape, previewedFileUriScript } from '../../util/html';
+import { html, previewedFileUriScript, errorPage } from '../../util/html';
 import { localize } from '../../util/i18n';
 import { LoaderSession } from '../../util/loader/loader';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
@@ -46,8 +46,7 @@ export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webv
         );
 
     } catch (e) {
-        const baseContent = `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(e).toString())}</pre>`;
-        return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
+        return errorPage(webview, uri, e);
     }
 }
 

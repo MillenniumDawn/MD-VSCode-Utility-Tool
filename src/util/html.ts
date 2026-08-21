@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { contextContainer } from '../context';
 import { StyleTable } from './styletable';
-import { randomString } from './common';
+import { forceError, randomString } from './common';
 import { localize } from './i18n';
 
 export interface DynamicScript {
@@ -156,6 +156,25 @@ export function loadingShellHtml(message?: string): string {
 </script>
 </body>
 </html>`;
+}
+
+/**
+ * The body of the page a preview shows when it could not render: the word "Error" and whatever was
+ * thrown, escaped.
+ *
+ * Every preview had its own copy of this line, eight in all, split across two formatting
+ * conventions so a plain text search did not even find them together.
+ */
+export function errorPageContent(cause: unknown): string {
+    return `${localize('error', 'Error')}: <br/>  <pre>${htmlEscape(forceError(cause).toString())}</pre>`;
+}
+
+/**
+ * The whole error page, for the previews that render one through `html()`. The DDS viewer assigns
+ * the body directly and so uses {@link errorPageContent} on its own.
+ */
+export function errorPage(webview: vscode.Webview, uri: vscode.Uri, cause: unknown): string {
+    return html(webview, errorPageContent(cause), [previewedFileUriScript(uri)], []);
 }
 
 // One pass with a lookup table rather than a chain of seven .replace() calls, each of which
