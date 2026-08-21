@@ -1,5 +1,6 @@
 import { tryRun, subscribeNavigators, initCommon, getState, setState } from "./util/common";
 import { syncCheckbox } from "./util/checkbox";
+import { applyNav, badge } from "./util/card";
 import { DivDropdown } from "./util/dropdown";
 import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
@@ -204,23 +205,6 @@ let rendered: RenderedCard[] = [];
 
 function textFor(loc: { key: string; text: string }): string {
 	return showLocalisation ? loc.text : loc.key;
-}
-
-function applyNav(element: HTMLElement, nav: NavTarget | undefined): void {
-	if (!nav) {
-		return;
-	}
-	element.classList.add("navigator");
-	element.setAttribute("start", String(nav.start));
-	element.setAttribute("end", String(nav.end));
-	element.setAttribute("file", nav.file);
-}
-
-function badge(container: HTMLElement, className: string, text: string): void {
-	const element = document.createElement("span");
-	element.className = "ev-badge" + (className ? " " + className : "");
-	element.textContent = text;
-	container.appendChild(element);
 }
 
 export function modifierLineToDom(line: ModifierLine): HTMLDivElement {

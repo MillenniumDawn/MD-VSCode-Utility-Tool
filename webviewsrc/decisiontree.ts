@@ -8,6 +8,7 @@ import {
 	panning$,
 } from "./util/common";
 import { syncCheckbox } from "./util/checkbox";
+import { applyNav, badge } from "./util/card";
 import { DivDropdown } from "./util/dropdown";
 import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
@@ -335,13 +336,6 @@ export function matchesQuery(node: DecisionGraphNode, query: string): boolean {
 
 //#region Node markup
 
-function badge(container: HTMLElement, className: string, text: string): void {
-	const element = document.createElement("span");
-	element.className = "ev-badge" + (className ? " " + className : "");
-	element.textContent = text;
-	container.appendChild(element);
-}
-
 function iconElement(icon: { styleKey: string; width: number; height: number }): HTMLDivElement {
 	const element = document.createElement("div");
 	element.className = "dec-icon " + icon.styleKey;
@@ -391,22 +385,11 @@ function identifierOf(node: DecisionGraphNode): string {
 	return node.kind === "category" ? node.categoryKey : node.decisionId;
 }
 
-function applyNav(card: HTMLDivElement, node: DecisionGraphNode): void {
-	if (!node.nav) {
-		return;
-	}
-	card.classList.add("navigator");
-	card.setAttribute("start", String(node.nav.start));
-	card.setAttribute("end", String(node.nav.end));
-	card.setAttribute("file", node.nav.file);
-	card.tabIndex = 0;
-}
-
 function buildCategoryCard(node: DecisionGraphCategoryNode): HTMLDivElement {
 	const card = document.createElement("div");
 	card.className = "ev-card dec-card-category";
 	head(card, node, node.scriptedGui ? ["gui"] : []);
-	applyNav(card, node);
+	applyNav(card, node.nav, true);
 
 	const meta = document.createElement("div");
 	meta.className = "ev-meta";
@@ -482,7 +465,7 @@ function buildDecisionCard(node: DecisionGraphDecisionNode): HTMLDivElement {
 	const card = document.createElement("div");
 	card.className = "ev-card " + (node.isMission ? "dec-card-mission" : "dec-card-decision");
 	head(card, node, [node.isMission ? "mission" : "decision"]);
-	applyNav(card, node);
+	applyNav(card, node.nav, true);
 
 	const meta = document.createElement("div");
 	meta.className = "ev-meta";

@@ -1,5 +1,6 @@
 import { tryRun, subscribeNavigators, enableZoom, initCommon, getState, setState, panning$ } from "./util/common";
 import { syncCheckbox } from "./util/checkbox";
+import { applyNav, badge } from "./util/card";
 import { DivDropdown } from "./util/dropdown";
 import { feLocalize } from "./util/i18n";
 import { vscode } from "./util/vscode";
@@ -354,13 +355,6 @@ export function matchesQuery(node: EventGraphNode, query: string): boolean {
 
 //#region Node markup
 
-function badge(container: HTMLElement, className: string, text: string): void {
-	const element = document.createElement("span");
-	element.className = "ev-badge" + (className ? " " + className : "");
-	element.textContent = text;
-	container.appendChild(element);
-}
-
 // What a card says about the events a filter took out from under it: every id its own arrows now
 // step over, in the order they were walked. Collected per event, so an event whose three options all
 // bridge past the same card mentions it once.
@@ -419,16 +413,6 @@ function buildMarkers(node: EventGraphEventNode): HTMLDivElement {
 	return markers;
 }
 
-function applyNav(element: HTMLElement, node: EventGraphNode): void {
-	if (!node.nav) {
-		return;
-	}
-	element.classList.add("navigator");
-	element.setAttribute("start", String(node.nav.start));
-	element.setAttribute("end", String(node.nav.end));
-	element.setAttribute("file", node.nav.file);
-}
-
 function textFor(loc: { key: string; text: string }): string {
 	return showLocalisation ? loc.text : loc.key;
 }
@@ -449,7 +433,7 @@ function buildEventCard(node: EventGraphEventNode): HTMLDivElement {
 	const card = document.createElement("div");
 	card.className = "ev-card ev-card-event" + (node.hidden ? " ev-card-hidden" : "");
 	card.tabIndex = 0;
-	applyNav(card, node);
+	applyNav(card, node.nav);
 
 	if (node.picture) {
 		card.classList.add("event-picture-host");
@@ -528,7 +512,7 @@ function buildOptionCard(node: EventGraphOptionNode): HTMLDivElement {
 	const card = document.createElement("div");
 	card.className = "ev-card ev-card-option" + (gated ? " ev-card-gated" : "");
 	card.tabIndex = 0;
-	applyNav(card, node);
+	applyNav(card, node.nav);
 
 	const head = document.createElement("div");
 	head.className = "ev-head";
