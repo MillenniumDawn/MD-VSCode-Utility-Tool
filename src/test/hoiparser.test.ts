@@ -14,6 +14,27 @@ describe('parseHoi4File', () => {
         assert.strictEqual(child(root, 'b').value, 'two');
     });
 
+    // These are valid Paradox comparison operators, but the single-character operator class used
+    // to come first in the alternation, so `>=` matched only the `>` and the `=` was then read as
+    // the start of a value -- which made the whole file fail to parse.
+    it('parses the two-character comparison operators', () => {
+        for (const operator of ['>=', '<=', '!=']) {
+            const root = parseHoi4File(`limit = { num_of_factories ${operator} 10 }`);
+            const compared = child(child(root, 'limit'), 'num_of_factories');
+            assert.strictEqual(compared.operator, operator, `operator ${operator}`);
+            assert.strictEqual(compared.value, 10, `value after ${operator}`);
+        }
+    });
+
+    it('still parses the single-character comparison operators', () => {
+        for (const operator of ['>', '<', '=']) {
+            const root = parseHoi4File(`limit = { num_of_factories ${operator} 10 }`);
+            const compared = child(child(root, 'limit'), 'num_of_factories');
+            assert.strictEqual(compared.operator, operator, `operator ${operator}`);
+            assert.strictEqual(compared.value, 10, `value after ${operator}`);
+        }
+    });
+
     it('keeps position tokens by default', () => {
         const root = parseHoi4File('a = 1');
         assert.notStrictEqual(child(root, 'a').nameToken, null);

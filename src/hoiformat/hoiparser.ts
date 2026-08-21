@@ -151,7 +151,10 @@ const tokenRegexStrings: Record<HOITokenType, [string, number]> = {
 		"(?:\\d+\\.)?[a-zA-Z_@\\[\\]][\\w:\\._@\\[\\]\\-\\?\\^\\/\\u00A0-\\u024F|]*",
 		40,
 	],
-	operator: ["[={}<>;,]|>=|<=|!=", 10],
+	// Two-character operators first: regex alternation takes the leftmost branch that matches, so
+	// with the single-character class in front, `>=` only ever matched the `>` and left the `=` to
+	// be read as the start of a value. `a >= 5` then failed to parse at all.
+	operator: [">=|<=|!=|[={}<>;,]", 10],
 	string: ['"(?:\\\\"|\\\\\\\\|[^"])*"', 10],
 	number: ["-?\\d*\\.\\d+|-?\\d+|0x\\d+", 50],
 	unitnumber: ["(?:-?\\d*\\.\\d+|-?\\d+)(?:%%?)", 49],
