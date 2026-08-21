@@ -10,6 +10,7 @@ v1.1.29
 - Focus tree and idea previews no longer crash when a container element is missing.
 - [ Focus Tree ] Share the focus tree preview's update machinery with every other preview. Issue #140.
 - [ CI ] Run the test suite on the release pull request.
+- Share the graph, search and toolbar code the decision, event and idea previews each had a copy of. Issue #139.
 
 v1.1.28
 
