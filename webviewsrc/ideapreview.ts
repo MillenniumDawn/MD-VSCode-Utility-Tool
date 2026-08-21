@@ -1,5 +1,6 @@
 import { tryRun, subscribeNavigators, initCommon, getState, setState } from "./util/common";
 import { syncCheckbox } from "./util/checkbox";
+import { SearchBox } from "./util/searchbox";
 import { applyNav, badge } from "./util/card";
 import { DivDropdown } from "./util/dropdown";
 import { feLocalize } from "./util/i18n";
@@ -509,7 +510,9 @@ function buildContent(): void {
 		empty.className = "idea-empty";
 		empty.textContent = feLocalize("ideapreview.noideas", "No ideas to show.");
 		container.appendChild(empty);
-		updateSearchCount();
+		// Nothing to highlight, but the counter still has to stop claiming the matches of the roster
+		// that was on screen a moment ago -- which is what refreshing with the emptied list does.
+		search.refresh(rendered);
 		return;
 	}
 
@@ -557,7 +560,7 @@ function buildContent(): void {
 
 	runTasks(tasks, () => {
 		subscribeNavigators();
-		applySearch(false);
+		search.refresh(rendered);
 	});
 }
 
@@ -644,110 +647,15 @@ function buildChain(
 
 //#region Search
 
-let searchQuery = "";
-let searchHits: RenderedCard[] = [];
-// The id of the hit Enter is parked on, not its index into searchHits: a rebuild can drop cards, and
-// remembering the id keeps the cursor on the same card across a toggle change.
-let searchCurrentId: string | undefined = undefined;
-
-// Class flipping only -- never a rebuild, so typing stays cheap on a large file.
-function applySearch(navigate: boolean): void {
-	searchHits =
-		searchQuery === "" ? [] : rendered.filter((r) => matchesQuery(r.card, searchQuery));
-	const hits = new Set(searchHits.map((h) => h.card.id));
-	if (searchCurrentId !== undefined && !hits.has(searchCurrentId)) {
-		searchCurrentId = undefined;
-	}
-	for (const item of rendered) {
-		item.element.classList.toggle("ev-hit", hits.has(item.card.id));
-		item.element.classList.toggle("ev-hit-current", item.card.id === searchCurrentId);
-	}
-	if (navigate && searchCurrentId !== undefined) {
-		scrollToHit(searchHits.find((h) => h.card.id === searchCurrentId));
-	}
-	updateSearchCount();
-}
-
-function cycleSearch(backwards: boolean): void {
-	const total = searchHits.length;
-	if (total === 0) {
-		return;
-	}
-	const current = searchHits.findIndex((h) => h.card.id === searchCurrentId);
-	const next =
-		current < 0
-			? // The first Enter lands on the first hit, the first Shift+Enter on the last.
-				backwards
-				? total - 1
-				: 0
-			: (current + (backwards ? total - 1 : 1)) % total;
-	searchCurrentId = searchHits[next]?.card.id;
-	applySearch(true);
-}
-
-function scrollToHit(hit: RenderedCard | undefined): void {
-	// Optional call, not a guard: jsdom leaves scrollIntoView undefined and the webview tests drive
-	// this path, where a throw would be swallowed by tryRun and strand the highlight half applied.
-	hit?.element.scrollIntoView?.({ block: "center", inline: "center" });
-}
-
-function updateSearchCount(): void {
-	const label = document.getElementById("idea-search-count");
-	if (!label) {
-		return;
-	}
-	if (searchQuery === "") {
-		label.textContent = "";
-		return;
-	}
-	if (searchHits.length === 0) {
-		label.textContent = feLocalize("ideapreview.nomatches", "no matches");
-		return;
-	}
-	const current = searchHits.findIndex((h) => h.card.id === searchCurrentId);
-	label.textContent = feLocalize(
-		"ideapreview.searchmatches",
-		"{0}/{1}",
-		current < 0 ? "-" : current + 1,
-		searchHits.length,
-	);
-}
-
-function wireSearch(): void {
-	const box = document.getElementById("idea-searchbox") as HTMLInputElement | null;
-	if (!box) {
-		return;
-	}
-	searchQuery = (getState().ideaSearchQuery ?? "").toLowerCase();
-	box.value = searchQuery;
-
-	const onEdit = () => {
-		const next = box.value.trim().toLowerCase();
-		if (next === searchQuery) {
-			return;
-		}
-		searchQuery = next;
-		// Typing highlights; Enter is what jumps. Starting over from the top on every edit keeps the
-		// cursor from landing somewhere arbitrary in the new set of hits.
-		searchCurrentId = undefined;
-		setState({ ideaSearchQuery: next });
-		applySearch(false);
-	};
-
-	box.addEventListener(
-		"keypress",
-		tryRun((e: KeyboardEvent) => {
-			if (e.key === "Enter") {
-				e.preventDefault();
-				cycleSearch(e.shiftKey);
-			} else {
-				onEdit();
-			}
-		}),
-	);
-	box.addEventListener("input", tryRun(onEdit));
-	box.addEventListener("change", tryRun(onEdit));
-}
+const search = new SearchBox<RenderedCard>({
+	boxId: "idea-searchbox",
+	countId: "idea-search-count",
+	stateKey: "ideaSearchQuery",
+	noMatchesKey: "ideapreview.nomatches",
+	countKey: "ideapreview.searchmatches",
+	matches: (item, query) => matchesQuery(item.card, query),
+	target: (item) => ({ id: item.card.id, element: item.element, highlight: item.element }),
+});
 
 //#endregion
 
@@ -952,7 +860,7 @@ window.addEventListener(
 
 		// Before the first buildContent, so the restored query is applied by the first render rather
 		// than only by the next one.
-		wireSearch();
+		search.wire();
 
 		buildContent();
 	}),

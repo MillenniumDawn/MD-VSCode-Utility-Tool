@@ -1,5 +1,6 @@
 import { tryRun, subscribeNavigators, enableZoom, initCommon, getState, setState, panning$ } from "./util/common";
 import { syncCheckbox } from "./util/checkbox";
+import { SearchBox } from "./util/searchbox";
 import { applyNav, badge } from "./util/card";
 import { DivDropdown } from "./util/dropdown";
 import { feLocalize } from "./util/i18n";
@@ -637,7 +638,7 @@ function buildContent(): void {
 		content.appendChild(empty);
 		// Nothing to highlight, but the counter still has to stop claiming the matches of the graph
 		// that was on screen a moment ago.
-		applySearch(false);
+		search.refresh(rendered);
 		return;
 	}
 
@@ -663,7 +664,7 @@ function buildContent(): void {
 	subscribeNavigators();
 	// The query survives every rebuild -- a toggle change, an in-place update, the first load -- so
 	// the highlight is re-applied to the cards that were just built. Class flipping only, no layout.
-	applySearch(false);
+	search.refresh(rendered);
 }
 
 // Everything an arrow says next to itself: the scope it fires in, its delay, its random_list weight
@@ -722,113 +723,15 @@ function edgeClass(edge: EventGraphEdge, guarded: boolean): string {
 
 //#region Search
 
-let searchQuery = "";
-let searchHits: RenderedNode<EventGraphNode>[] = [];
-// The id of the hit Enter is parked on, not its index into searchHits: a rebuild can drop nodes, and
-// remembering the id keeps the cursor on the same card across a toggle change.
-let searchCurrentId: string | undefined = undefined;
-
-// Class flipping only -- never a re-layout, so typing stays cheap on a large file. Same contract as
-// setIsolation.
-function applySearch(navigate: boolean): void {
-	searchHits = searchQuery === "" ? [] : rendered.filter((r) => matchesQuery(r.node, searchQuery));
-	const hits = new Set(searchHits.map((h) => h.node.id));
-	if (searchCurrentId !== undefined && !hits.has(searchCurrentId)) {
-		searchCurrentId = undefined;
-	}
-	for (const item of rendered) {
-		item.card.classList.toggle("ev-hit", hits.has(item.node.id));
-		item.card.classList.toggle("ev-hit-current", item.node.id === searchCurrentId);
-	}
-	if (navigate && searchCurrentId !== undefined) {
-		scrollToHit(searchHits.find((h) => h.node.id === searchCurrentId));
-	}
-	updateSearchCount();
-}
-
-function cycleSearch(backwards: boolean): void {
-	const total = searchHits.length;
-	if (total === 0) {
-		return;
-	}
-	const current = searchHits.findIndex((h) => h.node.id === searchCurrentId);
-	const next =
-		current < 0
-			? // The first Enter lands on the first hit, the first Shift+Enter on the last.
-				backwards
-				? total - 1
-				: 0
-			: (current + (backwards ? total - 1 : 1)) % total;
-	searchCurrentId = searchHits[next]?.node.id;
-	applySearch(true);
-}
-
-function scrollToHit(hit: RenderedNode<EventGraphNode> | undefined): void {
-	// Optional call, not a guard: jsdom leaves scrollIntoView undefined and the webview tests drive
-	// this path, where a throw would be swallowed by tryRun and strand the highlight half applied.
-	hit?.element.scrollIntoView?.({ block: "center", inline: "center" });
-}
-
-function updateSearchCount(): void {
-	const label = document.getElementById("ev-search-count");
-	if (!label) {
-		return;
-	}
-	if (searchQuery === "") {
-		label.textContent = "";
-		return;
-	}
-	if (searchHits.length === 0) {
-		label.textContent = feLocalize("eventtree.nomatches", "no matches");
-		return;
-	}
-	// Matches a filter took off the canvas are not in `rendered`, so this counts the ones actually on
-	// screen -- which is the number Enter can walk.
-	const current = searchHits.findIndex((h) => h.node.id === searchCurrentId);
-	label.textContent = feLocalize(
-		"eventtree.searchmatches",
-		"{0}/{1}",
-		current < 0 ? "-" : current + 1,
-		searchHits.length,
-	);
-}
-
-function wireSearch(): void {
-	const box = document.getElementById("ev-searchbox") as HTMLInputElement | null;
-	if (!box) {
-		return;
-	}
-	searchQuery = (getState().eventSearchQuery ?? "").toLowerCase();
-	box.value = searchQuery;
-
-	const onEdit = () => {
-		const next = box.value.trim().toLowerCase();
-		if (next === searchQuery) {
-			return;
-		}
-		searchQuery = next;
-		// Typing highlights; Enter is what jumps. Starting over from the top on every edit keeps the
-		// cursor from landing somewhere arbitrary in the new set of hits.
-		searchCurrentId = undefined;
-		setState({ eventSearchQuery: next });
-		applySearch(false);
-	};
-
-	box.addEventListener(
-		"keypress",
-		tryRun((e: KeyboardEvent) => {
-			if (e.key === "Enter") {
-				e.preventDefault();
-				cycleSearch(e.shiftKey);
-			} else {
-				onEdit();
-			}
-		}),
-	);
-	for (const type of ["change", "keyup", "paste", "cut"]) {
-		box.addEventListener(type, tryRun(onEdit));
-	}
-}
+const search = new SearchBox<RenderedNode<EventGraphNode>>({
+	boxId: "ev-searchbox",
+	countId: "ev-search-count",
+	stateKey: "eventSearchQuery",
+	noMatchesKey: "eventtree.nomatches",
+	countKey: "eventtree.searchmatches",
+	matches: (item, query) => matchesQuery(item.node, query),
+	target: (item) => ({ id: item.node.id, element: item.element, highlight: item.card }),
+});
 
 //#endregion
 
@@ -1207,7 +1110,7 @@ window.addEventListener(
 
 		// Before the first buildContent, so the restored query is applied by the first render rather
 		// than only by the next one.
-		wireSearch();
+		search.wire();
 
 		buildContent();
 	}),
