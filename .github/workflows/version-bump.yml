@@ -27,11 +27,15 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      # Starting the Test workflow against the release branch, which is the only way the release
+      # pull request gets checked when there is no BUMP_TOKEN.
+      actions: write
 
     env:
-      # A personal access token makes the pull request run the test and version workflows. A pull
-      # request opened with GITHUB_TOKEN triggers no workflow by design, so without the token the
-      # release pull request arrives with no checks -- the body says so.
+      # A personal access token makes the pull request run the test and version workflows itself,
+      # against the merge commit. A pull request opened with GITHUB_TOKEN triggers no workflow by
+      # design, so on the fallback the last step starts the tests against the branch instead --
+      # only the advisory version check is then missing, and the body says so.
       GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
       HAS_BUMP_TOKEN: ${{ secrets.BUMP_TOKEN != '' }}
       RELEASE_BRANCH: release/version-bump
@@ -115,6 +119,7 @@ jobs:
             git commit -m "Bump version to $version"
           fi
           git push --force origin "HEAD:$RELEASE_BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
       - name: Open the release pull request
         if: ${{ steps.state.outputs.bump == 'true' && steps.existing.outputs.number == '' }}
         env:
@@ -130,6 +135,7 @@ jobs:
 
       # --- One is already open: catch it up with main and add only the new bullets. ---
       - name: Refresh the open release pull request
+        id: refresh
         if: ${{ steps.state.outputs.bump == 'true' && steps.existing.outputs.number != '' }}
         env:
           ADOPTED_FROM: ${{ steps.state.outputs.adoptedFrom }}
@@ -187,6 +193,7 @@ jobs:
           fi
           git diff --cached --quiet || git commit -m "Catch up with main"
           git push origin "HEAD:$RELEASE_BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
 
           next=$(node -p "require('./package.json').version")
           gh pr edit "$PR" --title "Release v$next - collects every merge until you merge it"
@@ -196,3 +203,16 @@ jobs:
             --existing "$RUNNER_TEMP/current-body.md" --output "$RUNNER_TEMP/updated-body.md"
           gh pr edit "$PR" --body-file "$RUNNER_TEMP/updated-body.md"
           gh pr comment "$PR" --body "Caught up with \`main\`, now releasing \`v$next\`. Included pull requests: $PRS"
+
+      # --- Whichever path ran, test what it pushed. ---
+      - name: Run the tests on the release branch
+        # The release is what nobody has tested: every branch in it was green on its own, but the
+        # collection of them never runs anywhere. A pull request opened and pushed with
+        # GITHUB_TOKEN starts no run by design, so this one reached the marketplace with no check
+        # on it at all. Dispatching is the exception to that rule and works with the default
+        # token, so the tests stop depending on a personal access token being configured.
+        #
+        # With BUMP_TOKEN set the push already starts a run, and against the merge commit rather
+        # than the branch head, which is the better test -- so this only fills in for the fallback.
+        if: ${{ env.HAS_BUMP_TOKEN != 'true' && (steps.bump.outputs.pushed == 'true' || steps.refresh.outputs.pushed == 'true') }}
+        run: gh workflow run test.yml --ref "$RELEASE_BRANCH"
