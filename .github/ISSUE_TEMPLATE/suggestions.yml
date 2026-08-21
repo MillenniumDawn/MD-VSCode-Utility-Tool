@@ -4,12 +4,6 @@ title: "[SUGGESTION] "
 labels: ["enhancement"]
 type: Suggestion
 body:
-  - type: markdown
-    attributes:
-      value: |
-        This repository is the **VSCode extension**, not the mod. Ideas for Millennium Dawn
-        itself belong at
-        [MillenniumDawn/Millennium-Dawn](https://github.com/MillenniumDawn/Millennium-Dawn/issues).
 
   - type: dropdown
     id: utility

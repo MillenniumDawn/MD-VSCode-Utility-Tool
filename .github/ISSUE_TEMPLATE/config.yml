@@ -1,8 +1,1 @@
-blank_issues_enabled: true
-contact_links:
-  - name: Millennium Dawn mod issue
-    url: https://github.com/MillenniumDawn/Millennium-Dawn/issues
-    about: A wrong focus, decision, event or modifier in the mod itself. This repository is only the VSCode extension.
-  - name: Nothing previews at all
-    url: https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool#steps-to-start
-    about: Usually an unset Install Path. Walk the setup steps first, then open a bug report if it still fails.
+blank_issues_enabled: false

@@ -7,13 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        This repository is the **VSCode extension**, not the mod.
-
-        If the problem is with Millennium Dawn itself — a focus that does not fire, a wrong
-        modifier, a broken event — report it at
-        [MillenniumDawn/Millennium-Dawn](https://github.com/MillenniumDawn/Millennium-Dawn/issues)
-        instead. Report it here when the extension shows you something wrong, or refuses to
-        show you anything.
+        Report it here when the extension shows you something wrong, or refuses to show you anything.
 
   - type: dropdown
     id: utility
