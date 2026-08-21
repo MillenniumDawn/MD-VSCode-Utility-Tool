@@ -361,12 +361,38 @@ export interface WorkQueue {
  */
 export function createWorkQueue(limit: number): WorkQueue {
 	const effectiveLimit = Math.max(1, limit);
+	// Drained through a moving head rather than `shift`, which moves every remaining element on
+	// each call. All eight index build halves queue into this one array, so a cold build puts tens
+	// of thousands of jobs in it and draining them cost the square of that in element moves. The
+	// consumed prefix is dropped once it is more than half the array, so the array does not grow
+	// without bound over a long session either.
 	const pending: (() => Promise<void>)[] = [];
+	let head = 0;
 	let active = 0;
 
+	function takeNextJob(): (() => Promise<void>) | undefined {
+		if (head >= pending.length) {
+			return undefined;
+		}
+
+		const job = pending[head];
+		pending[head] = undefined as unknown as () => Promise<void>;
+		head++;
+
+		if (head > 32 && head * 2 >= pending.length) {
+			pending.splice(0, head);
+			head = 0;
+		}
+
+		return job;
+	}
+
 	function pump(): void {
-		while (active < effectiveLimit && pending.length > 0) {
-			const job = pending.shift()!;
+		while (active < effectiveLimit) {
+			const job = takeNextJob();
+			if (job === undefined) {
+				return;
+			}
 			active++;
 			void job().then(onJobSettled, onJobSettled);
 		}

@@ -446,10 +446,17 @@ export function mergeInLoadResult<
 	K extends string,
 	T extends { [k in K]: any[] },
 >(loadResults: T[], key: K): T[K] {
-	return loadResults.reduce<T[K]>(
-		(p, c) => (p as any).concat(c[key]),
-		[] as unknown as T[K],
-	);
+	// One array, pushed into. `reduce` with `concat` allocated a fresh array holding everything so
+	// far on every step, so merging n results cost n^2/2 element copies -- and the world map merges
+	// one result per state file, of which a large mod has around a thousand.
+	const merged: any[] = [];
+	for (const loadResult of loadResults) {
+		const values = loadResult[key];
+		for (const value of values) {
+			merged.push(value);
+		}
+	}
+	return merged as T[K];
 }
 
 function checkLoaderSessionLoadingFile(session: LoaderSession, file: string) {
