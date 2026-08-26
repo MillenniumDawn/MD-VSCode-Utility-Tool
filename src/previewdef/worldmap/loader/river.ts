@@ -13,9 +13,9 @@ export class RiverLoader extends FileLoader<RiverBmp> {
         };
     }
 
-    protected extraMesurements(result: LoadResult<RiverBmp>) {
+    protected extraMeasurements(result: LoadResult<RiverBmp>) {
         return {
-            ...super.extraMesurements(result),
+            ...super.extraMeasurements(result),
             riverCount: result.result.rivers.length,
         };
     }

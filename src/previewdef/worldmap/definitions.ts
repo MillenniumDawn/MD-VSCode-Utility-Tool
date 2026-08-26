@@ -210,14 +210,14 @@ export interface Region {
     mass: number;
 }
 
-export interface TokenInFile {
+interface TokenInFile {
     file: string;
     token: Token | null;
 }
 
 export type WorldMapMessage = LoadedMessage | RequestMapItemMessage | MapItemMessage | ErrorMessage | ProgressMessage | ProvinceMapSummaryMessage | OpenFileMessage | ExportMapMessage;
 
-export interface LoadedMessage {
+interface LoadedMessage {
     command: 'loaded';
     force: boolean;
 }
@@ -235,22 +235,22 @@ export interface MapItemMessage {
     end: number;
 }
 
-export interface ErrorMessage {
+interface ErrorMessage {
     command: 'error';
     data: string;
 }
 
-export interface ProgressMessage {
+interface ProgressMessage {
     command: 'progress';
     data: string;
 }
 
-export interface ProvinceMapSummaryMessage {
+interface ProvinceMapSummaryMessage {
     command: 'provincemapsummary';
     data: WorldMapData;
 }
 
-export interface OpenFileMessage {
+interface OpenFileMessage {
     command: 'openfile';
     type: 'state' | 'strategicregion' | 'supplyarea';
     file: string;
@@ -258,7 +258,7 @@ export interface OpenFileMessage {
     end: number | undefined;
 }
 
-export interface ExportMapMessage {
+interface ExportMapMessage {
     command: 'exportmap' | 'requestexportmap';
     dataUrl?: string;
 }

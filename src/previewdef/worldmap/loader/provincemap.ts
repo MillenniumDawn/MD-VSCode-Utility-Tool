@@ -208,7 +208,7 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 		};
 	}
 
-	private checkAndCreateLoader<T extends FileLoader<any>>(
+	private checkAndCreateLoader<T extends FileLoader<unknown>>(
 		loader: T | undefined,
 		file: string,
 		constructor: { new (file: string): T },
@@ -222,9 +222,9 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 		return loader;
 	}
 
-	protected extraMesurements(result: LoadResult<ProvinceMap>) {
+	protected extraMeasurements(result: LoadResult<ProvinceMap>) {
 		return {
-			...super.extraMesurements(result),
+			...super.extraMeasurements(result),
 			width: result.result.width,
 			height: result.result.height,
 			provinceCount: result.result.provinces.length,
@@ -539,7 +539,9 @@ function fillAdjacencyEdges(
 		rule,
 		type,
 	} of adjacencies) {
-		if (!provinces[from] || !provinces[to]) {
+		const fromProvince = provinces[from];
+		const toProvince = provinces[to];
+		if (!fromProvince || !toProvince) {
 			warnings.push({
 				source: [{ type: "province", id: from, color: -1 }],
 				relatedFiles,
@@ -575,7 +577,7 @@ function fillAdjacencyEdges(
 			: undefined;
 		const stop = saveStop ? { ...saveStop, y: height - saveStop.y } : undefined;
 
-		const existingEdgeInFrom = provinces[from]!.edges.find((e) => e.to === to);
+		const existingEdgeInFrom = fromProvince.edges.find((e) => e.to === to);
 		if (existingEdgeInFrom) {
 			Object.assign<ProvinceEdge, Partial<ProvinceEdge>>(existingEdgeInFrom, {
 				through: resultThrough,
@@ -585,7 +587,7 @@ function fillAdjacencyEdges(
 				type,
 			});
 		} else {
-			provinces[from]!.edges.push({
+			fromProvince.edges.push({
 				to,
 				through: resultThrough,
 				start,
@@ -596,7 +598,7 @@ function fillAdjacencyEdges(
 			});
 		}
 
-		const existingEdgeInTo = provinces[to]!.edges.find((e) => e.to === from);
+		const existingEdgeInTo = toProvince.edges.find((e) => e.to === from);
 		if (existingEdgeInTo) {
 			Object.assign<ProvinceEdge, Partial<ProvinceEdge>>(existingEdgeInTo, {
 				through: resultThrough,
@@ -606,7 +608,7 @@ function fillAdjacencyEdges(
 				type,
 			});
 		} else {
-			provinces[to]!.edges.push({
+			toProvince.edges.push({
 				to: from,
 				through: resultThrough,
 				start: stop,

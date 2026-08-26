@@ -104,8 +104,8 @@ export class CountriesLoader extends Loader<Country[]> {
         };
     }
 
-    protected extraMesurements(result: LoadResult<Country[]>) {
-        return { ...super.extraMesurements(result), fileCount: Object.keys(this.countryLoaders).length };
+    protected extraMeasurements(result: LoadResult<Country[]>) {
+        return { ...super.extraMeasurements(result), fileCount: Object.keys(this.countryLoaders).length };
     }
 
     public toString() {

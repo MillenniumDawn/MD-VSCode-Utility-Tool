@@ -17,6 +17,7 @@ import {
 	sortItems,
 	mergeRegion,
 	LoadResultOD,
+	shouldReloadDependencies,
 } from "./common";
 import { readFileFromModOrHOI4AsJson } from "../../../util/fileloader";
 import { error } from "../../../util/debug";
@@ -69,8 +70,10 @@ export class StrategicRegionsLoader extends FolderLoader<
 	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		return (
 			(await super.shouldReloadImpl(session)) ||
-			(await this.defaultMapLoader.shouldReload(session)) ||
-			(await this.statesLoader.shouldReload(session))
+			(await shouldReloadDependencies(session, [
+				this.defaultMapLoader,
+				this.statesLoader,
+			]))
 		);
 	}
 
@@ -375,7 +378,9 @@ function validateProvincesInStrategicRegions(
 		strategicRegion.provinces.forEach((p) => {
 			const province = provinces[p];
 			if (provinceToStrategicRegion[p] !== undefined) {
-				if (!province) {
+				const existingStrategicRegion =
+					strategicRegions[provinceToStrategicRegion[p]];
+				if (!province || !existingStrategicRegion) {
 					return;
 				}
 
@@ -390,10 +395,7 @@ function validateProvincesInStrategicRegions(
 						})),
 						{ type: "province", id: p, color: province.color },
 					],
-					relatedFiles: [
-						strategicRegion.file,
-						strategicRegions[provinceToStrategicRegion[p]]!.file,
-					],
+					relatedFiles: [strategicRegion.file, existingStrategicRegion.file],
 					text: localize(
 						"worldmap.warnings.provinceinmultiplestrategicregions",
 						"Province {0} exists in multiple strategic regions: {1}, {2}.",

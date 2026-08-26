@@ -50,7 +50,11 @@ export function arrayToMap<T, K extends keyof T, V = T>(
 		result[id] = valueSelector ? valueSelector(item) : item;
 	}
 
-	return result as any;
+	return result as T[K] extends string
+		? Record<string, V | T>
+		: T[K] extends number
+			? Record<number, V | T>
+			: never;
 }
 
 export function hsvToRgb(
@@ -154,7 +158,7 @@ export function slice<T>(
 	return array.slice(realStart, realEnd);
 }
 
-export function debounceByInput<TI extends any[], TO>(
+export function debounceByInput<TI extends unknown[], TO>(
 	func: (...input: TI) => TO,
 	keySelector: (...input: TI) => string,
 	wait?: number,

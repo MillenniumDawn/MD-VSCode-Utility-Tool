@@ -10,6 +10,13 @@ export abstract class FolderLoader<T, F> extends CommonFolderLoader<T, F, MapLoa
 
 export const mergeInLoadResult = commonMergeInLoadResult;
 
+export async function shouldReloadDependencies<T>(
+    session: T,
+    loaders: { shouldReload(session: T): Promise<boolean> }[],
+): Promise<boolean> {
+    return (await Promise.all(loaders.map(loader => loader.shouldReload(session)))).some(Boolean);
+}
+
 export type LoadResult<T> = CommonLoadResult<T, MapLoaderExtra>;
 export type LoadResultOD<T> = CommonLoadResultOD<T, MapLoaderExtra>;
 

@@ -133,9 +133,9 @@ export class WorldMapLoader extends Loader<WorldMapData> {
         this.shouldReloadValue = true;
     }
     
-    protected extraMesurements(result: LoadResult<WorldMapData>) {
+    protected extraMeasurements(result: LoadResult<WorldMapData>) {
         return {
-            ...super.extraMesurements(result),
+            ...super.extraMeasurements(result),
             width: result.result.width,
             height: result.result.height,
             provincesCount: result.result.provincesCount,
