@@ -174,7 +174,13 @@ function installGuiShell(): void {
 	const toggle = element("button", "toggleVisibility");
 	const child = element("div", undefined, "childcontainerwindow_Child");
 	container.append(child);
-	document.body.append(folders, container, mainContent, visibilityContent, toggle);
+	document.body.append(
+		folders,
+		container,
+		mainContent,
+		visibilityContent,
+		toggle,
+	);
 	(window as any).containerWindowToggles = {
 		main: {
 			content:
@@ -195,7 +201,11 @@ function installWorldMapShell(): void {
 	display.append(element("span", undefined, "value"));
 	addDivOption(display, "edge");
 	addDivOption(display, "supply", "false");
-	const warningFilter = element("div", "warningfilter", "select multiple-select");
+	const warningFilter = element(
+		"div",
+		"warningfilter",
+		"select multiple-select",
+	);
 	warningFilter.append(element("span", undefined, "value"));
 	addDivOption(warningFilter, "province");
 	addDivOption(warningFilter, "supplyarea", "true");
@@ -243,7 +253,10 @@ describe("webview entrypoints", () => {
 
 		withQuietScrolling(() => run(gfx, "load", new Event("load")));
 
-		assert.strictEqual((document.getElementById("filter") as HTMLInputElement).value, "keep");
+		assert.strictEqual(
+			(document.getElementById("filter") as HTMLInputElement).value,
+			"keep",
+		);
 		assert.strictEqual(
 			(document.getElementById("KeepMe") as HTMLDivElement).style.display,
 			"inline-block",
@@ -256,7 +269,9 @@ describe("webview entrypoints", () => {
 		runMessage(gfx, {
 			type: "updateBody",
 			styleCss: ".new {}",
-			data: { contentHtml: '<div class="spriteTypePreview" id="KeepNew"></div>' },
+			data: {
+				contentHtml: '<div class="spriteTypePreview" id="KeepNew"></div>',
+			},
 		});
 
 		assert.strictEqual(
@@ -312,15 +327,20 @@ describe("webview entrypoints", () => {
 		installGuiShell();
 		withQuietScrolling(() => run(guipreview, "load", new Event("load")));
 
-		const toggle = document.getElementById("toggleVisibility") as HTMLButtonElement;
-		const mainContent = document.getElementById("mainContent") as HTMLDivElement;
+		const toggle = document.getElementById(
+			"toggleVisibility",
+		) as HTMLButtonElement;
+		const mainContent = document.getElementById(
+			"mainContent",
+		) as HTMLDivElement;
 		assert.strictEqual(toggle.disabled, false);
 		assert.strictEqual(mainContent.style.marginTop, "40px");
 
 		toggle.dispatchEvent(new Event("click"));
 		assert.strictEqual(mainContent.style.marginTop, "240px");
 		assert.strictEqual(
-			(document.getElementById("toggleVisibilityContent") as HTMLDivElement).style.display,
+			(document.getElementById("toggleVisibilityContent") as HTMLDivElement)
+				.style.display,
 			"block",
 		);
 
@@ -328,10 +348,14 @@ describe("webview entrypoints", () => {
 		child.checked = false;
 		child.dispatchEvent(new Event("change"));
 		assert.strictEqual(
-			(document.querySelector(".childcontainerwindow_Child") as HTMLDivElement).style.display,
+			(document.querySelector(".childcontainerwindow_Child") as HTMLDivElement)
+				.style.display,
 			"none",
 		);
-		assert.strictEqual(vscode.getState().containerWindowVisibilities.child, false);
+		assert.strictEqual(
+			vscode.getState().containerWindowVisibilities.child,
+			false,
+		);
 	});
 
 	it("starts the world-map loader and hides supply-area controls when disabled", () => {
@@ -345,9 +369,12 @@ describe("webview entrypoints", () => {
 		};
 		const canvasPrototype = (window as any).HTMLCanvasElement.prototype;
 		const originalGetContext = canvasPrototype.getContext;
-		const originalRequestAnimationFrame = (globalThis as any).requestAnimationFrame;
+		const originalRequestAnimationFrame = (globalThis as any)
+			.requestAnimationFrame;
 		canvasPrototype.getContext = () => context;
-		(globalThis as any).requestAnimationFrame = (callback: (time: number) => void) => {
+		(globalThis as any).requestAnimationFrame = (
+			callback: (time: number) => void,
+		) => {
 			callback(0);
 			return 0;
 		};
@@ -357,7 +384,9 @@ describe("webview entrypoints", () => {
 				withoutWindowListeners(() =>
 					withQuietScrolling(() => run(worldmap, "load", new Event("load"))),
 				);
-				assert.ok(posts.some((message) => (message as any).command === "loaded"));
+				assert.ok(
+					posts.some((message) => (message as any).command === "loaded"),
+				);
 			});
 			assert.strictEqual(
 				document.querySelectorAll('[enablesupplyarea="true"]').length,

@@ -224,11 +224,13 @@ describe("previewdef/worldmap/loader provincemap helpers", () => {
 				{ x: 1, y: 1 },
 			],
 		] as [Point, Point][];
-		assert.deepStrictEqual(concatEdges(edges), [[
-			{ x: 0, y: 0 },
-			{ x: 1, y: 0 },
-			{ x: 1, y: 1 },
-		]]);
+		assert.deepStrictEqual(concatEdges(edges), [
+			[
+				{ x: 0, y: 0 },
+				{ x: 1, y: 0 },
+				{ x: 1, y: 1 },
+			],
+		]);
 	});
 });
 
