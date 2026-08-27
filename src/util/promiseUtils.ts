@@ -33,6 +33,7 @@ export async function appendEntriesWithErrorLogging(
 export interface BuildGate {
 	start(task: Promise<unknown>): void;
 	runAfterBuild(fn: () => void): void;
+	followOn(startNew: () => Promise<unknown>): Promise<unknown>;
 	reset(): void;
 }
 
@@ -41,28 +42,62 @@ export function createBuildGate(): BuildGate {
 	let task: Promise<unknown> | undefined;
 	let settled = false;
 
-	return {
-		start(newTask) {
-			task = newTask;
-			settled = false;
-			newTask.then(
-				() => {
+	function start(newTask: Promise<unknown>): void {
+		task = newTask;
+		settled = false;
+		newTask.then(
+			() => {
+				if (task === newTask) {
 					settled = true;
-				},
-				() => {
+				}
+			},
+			() => {
+				if (task === newTask) {
 					settled = true;
-				},
-			);
-		},
-		runAfterBuild(fn) {
-			if (!task) {
-				return;
-			}
-			if (settled) {
+				}
+			},
+		);
+	}
+
+	function runAfterBuild(fn: () => void): void {
+		if (!task) {
+			return;
+		}
+		if (settled) {
+			fn();
+			return;
+		}
+		const pending = task;
+		pending.then(
+			() => {
+				if (task !== pending) {
+					runAfterBuild(fn);
+					return;
+				}
 				fn();
-				return;
-			}
-			task.then(fn, fn);
+			},
+			() => {
+				if (task !== pending) {
+					runAfterBuild(fn);
+					return;
+				}
+				fn();
+			},
+		);
+	}
+
+	return {
+		start,
+		runAfterBuild,
+		// Occupy the gate now so waiters attach to the follow-on; don't run it until the current build finishes.
+		followOn(startNew) {
+			const previous = task;
+			const next =
+				previous !== undefined && !settled
+					? previous.then(startNew, startNew)
+					: startNew();
+			start(next);
+			return next;
 		},
 		reset() {
 			task = undefined;

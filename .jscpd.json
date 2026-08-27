@@ -1,0 +1,10 @@
+{
+	"path": ["src", "webviewsrc"],
+	"format": ["typescript"],
+	"ignore": ["**/test/**", "**/*.test.ts"],
+	"minLines": 8,
+	"minTokens": 60,
+	"threshold": 1,
+	"reporters": ["console"],
+	"absolute": false
+}

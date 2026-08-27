@@ -556,7 +556,8 @@ function validateProvinceInState(
 		state.provinces.forEach((p) => {
 			const province = provinces[p];
 			if (provinceToState[p] !== undefined) {
-				if (!province) {
+				const existingState = states[provinceToState[p]];
+				if (!province || !existingState) {
 					return;
 				}
 
@@ -567,7 +568,7 @@ function validateProvinceInState(
 						),
 						{ type: "province", id: p, color: province.color },
 					],
-					relatedFiles: [state.file, states[provinceToState[p]]!.file],
+					relatedFiles: [state.file, existingState.file],
 					text: localize(
 						"worldmap.warnings.provinceinmultistates",
 						"Province {0} exists in multiple states: {1}, {2}.",
