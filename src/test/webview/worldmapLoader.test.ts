@@ -1,6 +1,9 @@
 import './setup';
 import * as assert from 'assert';
-import { FEWorldMapClass } from '../../../webviewsrc/worldmap/loader';
+import { WorldMapData } from '../../previewdef/worldmap/definitions';
+import { buildWorldMapChangeMessages } from '../../previewdef/worldmap/worldmapchanges';
+import { Loader, FEWorldMapClass } from '../../../webviewsrc/worldmap/loader';
+import { vscode } from '../../../webviewsrc/util/vscode';
 
 function buildMap() {
     const state1 = { id: 1, provinces: [10, 11] };
@@ -88,5 +91,92 @@ describe('webview/worldmap/FEWorldMapClass reverse maps', function () {
             assert.notStrictEqual(a.getProvinceToStrategicRegionMap(), b.getProvinceToStrategicRegionMap());
             assert.notStrictEqual(a.getStateToSupplyAreaMap(), b.getStateToSupplyAreaMap());
         });
+    });
+});
+
+describe('webview/worldmap/Loader protocol', function () {
+    it('applies requested chunks and later deltas after a map summary', function () {
+        const posted: unknown[] = [];
+        const originalPostMessage = vscode.postMessage;
+        const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+        globalThis.requestAnimationFrame = (callback): number => {
+            callback(0);
+            return 0;
+        };
+        vscode.postMessage = <T>(message: T): void => {
+            posted.push(message);
+        };
+        const loader = new Loader();
+        posted.length = 0;
+
+        const summary: WorldMapData = {
+            width: 1,
+            height: 1,
+            provinces: [],
+            states: [],
+            countries: [],
+            strategicRegions: [],
+            supplyAreas: [],
+            railways: [],
+            supplyNodes: [],
+            provincesCount: 0,
+            statesCount: 0,
+            countriesCount: 1,
+            strategicRegionsCount: 0,
+            supplyAreasCount: 0,
+            railwaysCount: 0,
+            supplyNodesCount: 0,
+            badProvincesCount: 0,
+            badStatesCount: 0,
+            badStrategicRegionsCount: 0,
+            badSupplyAreasCount: 0,
+            continents: [],
+            terrains: [],
+            resources: [],
+            rivers: [],
+            warnings: [],
+        };
+        const send = (data: unknown): void => {
+            window.dispatchEvent(new window.MessageEvent('message', { data }));
+        };
+
+        try {
+            send({ command: 'provincemapsummary', data: summary });
+            assert.deepStrictEqual(posted, [
+                { command: 'requestcountries', start: 0, end: 1 },
+            ]);
+
+            send({
+                command: 'countries',
+                data: JSON.stringify([{ tag: 'AAA', color: 1 }]),
+                start: 0,
+                end: 1,
+            });
+            assert.strictEqual(loader.worldMap.countries[0].tag, 'AAA');
+
+            const updated: WorldMapData = {
+                ...summary,
+                countries: [{ tag: 'BBB', color: 2 }],
+                warnings: [{ text: 'updated', source: [], relatedFiles: [] }],
+            };
+            const messages = buildWorldMapChangeMessages(
+                { ...summary, countries: [{ tag: 'AAA', color: 1 }] },
+                updated,
+            );
+            assert.deepStrictEqual(
+                messages?.map((message) => message.command),
+                ['warnings', 'countries'],
+            );
+            for (const message of messages ?? []) {
+                send(message);
+            }
+
+            assert.strictEqual(loader.worldMap.warnings[0].text, 'updated');
+            assert.strictEqual(loader.worldMap.countries[0].tag, 'BBB');
+        } finally {
+            loader.dispose();
+            vscode.postMessage = originalPostMessage;
+            globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+        }
     });
 });

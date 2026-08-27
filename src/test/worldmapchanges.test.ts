@@ -42,12 +42,27 @@ describe("previewdef/worldmap/worldmapchanges", () => {
 		assert.deepStrictEqual(buildWorldMapChangeMessages(worldMap, worldMap), []);
 	});
 
-	it("rejects delta updates when a summary field changes", () => {
-		assert.strictEqual(
-			buildWorldMapChangeMessages(map(), map({ width: 2 })),
-			undefined,
-		);
-	});
+	for (const key of [
+		"width",
+		"height",
+		"provincesCount",
+		"statesCount",
+		"countriesCount",
+		"strategicRegionsCount",
+		"supplyAreasCount",
+		"railwaysCount",
+		"supplyNodesCount",
+		"badProvincesCount",
+		"badStatesCount",
+		"badStrategicRegionsCount",
+		"badSupplyAreasCount",
+	] as const) {
+		it(`rejects delta updates when ${key} changes`, () => {
+			const changed = map();
+			changed[key] += 1;
+			assert.strictEqual(buildWorldMapChangeMessages(map(), changed), undefined);
+		});
+	}
 
 	it("keeps summary and item changes in protocol order", () => {
 		const changed = map({
