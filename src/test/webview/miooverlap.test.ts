@@ -5,7 +5,6 @@ import { GridBoxItem } from '../../util/hoi4gui/gridboxcommon';
 // miopreview.ts reads window.mios at module scope, so it has to exist before the import runs.
 (global as any).window.mios = [];
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { findOverlaps } = require('../../../webviewsrc/miopreview') as typeof import('../../../webviewsrc/miopreview');
 
 function item(id: string, gridX: number, gridY: number): GridBoxItem {

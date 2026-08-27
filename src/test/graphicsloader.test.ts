@@ -16,7 +16,7 @@ import { clearDlcZipCache } from "../util/fileloader";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 // Imported only so tsc emits the worker file into this test's outDir; it is import-safe on the main
 // thread (its message handler attaches only when actually run as a worker_threads worker).
-import "../util/image/imageworker";
+import "../util/image/imageWorker";
 
 // A tiny uncompressed A8R8G8B8 (DDPF_RGB|DDPF_ALPHA, 32bpp) DDS. Header is 32 little-endian int32s
 // followed by width*height*4 bytes of pixel data.
@@ -100,7 +100,7 @@ describe("util/image/graphicsloader (headless)", function () {
 
 	before(function () {
 		_setImageWorkerPathForTest(
-			path.resolve(__dirname, "../util/image/imageworker.js"),
+			path.resolve(__dirname, "../util/image/imageWorker.js"),
 		);
 	});
 
