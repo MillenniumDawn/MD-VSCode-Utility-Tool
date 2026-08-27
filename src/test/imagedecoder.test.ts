@@ -6,6 +6,7 @@ import {
 	decodeImageToPngSync,
 	resolveWorkerPoolSize,
 	_setImageWorkerPathForTest,
+	_resetImageWorkerPathForTest,
 	_terminateImageWorkerForTest,
 	_getWorkerCountForTest,
 } from "../util/image/imagedecoder";
@@ -119,6 +120,7 @@ describe("util/image/imagedecoder", () => {
 
 		after(async () => {
 			await _terminateImageWorkerForTest();
+			_resetImageWorkerPathForTest();
 		});
 
 		it("round-trips a TGA decode through the worker, matching the sync result", async () => {
@@ -217,6 +219,7 @@ describe("util/image/imagedecoder", () => {
 
 		after(async () => {
 			await _terminateImageWorkerForTest();
+			_resetImageWorkerPathForTest();
 			console.error = originalConsoleError;
 		});
 

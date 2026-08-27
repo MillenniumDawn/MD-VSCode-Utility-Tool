@@ -9,6 +9,7 @@ import {
 } from "../util/image/imagecache";
 import {
 	_setImageWorkerPathForTest,
+	_resetImageWorkerPathForTest,
 	_terminateImageWorkerForTest,
 } from "../util/image/imagedecoder";
 import { clearDlcZipCache } from "../util/fileloader";
@@ -62,6 +63,20 @@ function makePng(width: number, height: number): Buffer {
 	return PNG.sync.write(png);
 }
 
+function spyConsoleError(): { calls: unknown[][]; restore: () => void } {
+	const original = console.error;
+	const calls: unknown[][] = [];
+	console.error = (...args: unknown[]) => {
+		calls.push(args);
+	};
+	return {
+		calls,
+		restore: () => {
+			console.error = original;
+		},
+	};
+}
+
 function assertValidPng(
 	pngBuffer: Buffer,
 	width: number,
@@ -91,6 +106,7 @@ describe("util/image/graphicsloader (headless)", function () {
 
 	after(async function () {
 		await _terminateImageWorkerForTest();
+		_resetImageWorkerPathForTest();
 	});
 
 	beforeEach(function () {
@@ -196,14 +212,50 @@ describe("util/image/graphicsloader (headless)", function () {
 		});
 	});
 
-	it("returns undefined for a missing texture", async function () {
-		const originalConsoleError = console.error;
-		console.error = () => undefined;
+	it("returns undefined for a missing texture and does not log it to console.error", async function () {
+		const spy = spyConsoleError();
 		try {
 			const image = await getImageByPath("gfx/interface/goals/missing.dds");
 			assert.strictEqual(image, undefined);
+			assert.strictEqual(
+				spy.calls.length,
+				0,
+				"a missing file is an expected UserError and should not be dumped to console.error",
+			);
 		} finally {
-			console.error = originalConsoleError;
+			spy.restore();
+		}
+	});
+
+	it("returns undefined for an unsupported image type and does not log it to console.error", async function () {
+		files["gfx/interface/goals/qux.bmp"] = Buffer.from("not a real image");
+		const spy = spyConsoleError();
+		try {
+			const image = await getImageByPath("gfx/interface/goals/qux.bmp");
+			assert.strictEqual(image, undefined);
+			assert.strictEqual(
+				spy.calls.length,
+				0,
+				"an unsupported image type is an expected UserError and should not be dumped to console.error",
+			);
+		} finally {
+			spy.restore();
+		}
+	});
+
+	it("logs a genuine decode failure to console.error", async function () {
+		// Too short to hold a TGA header, so the tga library throws a plain RangeError rather than a UserError.
+		files["gfx/interface/goals/corrupt.tga"] = Buffer.alloc(4);
+		const spy = spyConsoleError();
+		try {
+			const image = await getImageByPath("gfx/interface/goals/corrupt.tga");
+			assert.strictEqual(image, undefined);
+			assert.ok(
+				spy.calls.length > 0,
+				"a real decode failure should still be logged to console.error",
+			);
+		} finally {
+			spy.restore();
 		}
 	});
 });
