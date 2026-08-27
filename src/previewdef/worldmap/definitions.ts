@@ -2,265 +2,298 @@ import { Token } from "../../hoiformat/hoiparser";
 import { Warning } from "../../util/common";
 
 export interface WorldMapData {
-    width: number;
-    height: number;
-    provinces: (Province | undefined | null)[]; // count of provinces
-    states: (State | undefined | null)[];
-    countries: Country[];
-    strategicRegions: (StrategicRegion | undefined | null)[];
-    supplyAreas: (SupplyArea | undefined | null)[];
-    railways: (Railway | undefined | null)[];
-    supplyNodes: (SupplyNode | undefined | null)[];
-    provincesCount: number;
-    statesCount: number;
-    countriesCount: number;
-    strategicRegionsCount: number;
-    supplyAreasCount: number;
-    railwaysCount: number;
-    supplyNodesCount: number;
-    badProvincesCount: number; // non-negative count of synthetic "bad" provinces (ids -1 .. -N), 0 when none
-    badStatesCount: number; // non-negative count of synthetic "bad" states (ids -1 .. -N), 0 when none
-    badStrategicRegionsCount: number; // non-negative count of synthetic "bad" strategic regions (ids -1 .. -N), 0 when none
-    badSupplyAreasCount: number; // non-negative count of synthetic "bad" supply areas (ids -1 .. -N), 0 when none
-    continents: string[];
-    terrains: Terrain[];
-    resources: Resource[];
-    rivers: River[];
-    warnings: WorldMapWarning[];
+	width: number;
+	height: number;
+	provinces: (Province | undefined | null)[]; // count of provinces
+	states: (State | undefined | null)[];
+	countries: Country[];
+	strategicRegions: (StrategicRegion | undefined | null)[];
+	supplyAreas: (SupplyArea | undefined | null)[];
+	railways: (Railway | undefined | null)[];
+	supplyNodes: (SupplyNode | undefined | null)[];
+	provincesCount: number;
+	statesCount: number;
+	countriesCount: number;
+	strategicRegionsCount: number;
+	supplyAreasCount: number;
+	railwaysCount: number;
+	supplyNodesCount: number;
+	badProvincesCount: number; // non-negative count of synthetic "bad" provinces (ids -1 .. -N), 0 when none
+	badStatesCount: number; // non-negative count of synthetic "bad" states (ids -1 .. -N), 0 when none
+	badStrategicRegionsCount: number; // non-negative count of synthetic "bad" strategic regions (ids -1 .. -N), 0 when none
+	badSupplyAreasCount: number; // non-negative count of synthetic "bad" supply areas (ids -1 .. -N), 0 when none
+	continents: string[];
+	terrains: Terrain[];
+	resources: Resource[];
+	rivers: River[];
+	warnings: WorldMapWarning[];
 }
 
 export interface ProvinceBmp {
-    width: number;
-    height: number;
-    colorByPosition: Uint32Array; // width * height
-    colorToProvince: Record<number, ProvinceGraph>;
-    provinces: ProvinceGraph[];
+	width: number;
+	height: number;
+	colorByPosition: Uint32Array; // width * height
+	colorToProvince: Record<number, ProvinceGraph>;
+	provinces: ProvinceGraph[];
 }
 
 export interface ProvinceMap {
-    width: number;
-    height: number;
-    colorByPosition: Uint32Array; // width * height
-    provinces: (Province | undefined | null)[]; // count of provinces
-    badProvincesCount: number; // non-negative count of synthetic "bad" provinces (ids -1 .. -N), 0 when none
-    continents: string[];
-    terrains: Terrain[];
-    rivers: River[];
+	width: number;
+	height: number;
+	colorByPosition: Uint32Array; // width * height
+	provinces: (Province | undefined | null)[]; // count of provinces
+	badProvincesCount: number; // non-negative count of synthetic "bad" provinces (ids -1 .. -N), 0 when none
+	continents: string[];
+	terrains: Terrain[];
+	rivers: River[];
 }
 
 export interface ProvinceGraph extends Region {
-    color: number;
-    coverZones: Zone[];
-    edges: ProvinceEdgeGraph[];
+	color: number;
+	coverZones: Zone[];
+	edges: ProvinceEdgeGraph[];
 }
 
 export interface ProvinceDefinition {
-    id: number;
-    color: number;
-    type: string;
-    coastal: boolean;
-    terrain: string;
-    continent: number;
+	id: number;
+	color: number;
+	type: string;
+	coastal: boolean;
+	terrain: string;
+	continent: number;
 }
 
-export type Province = Omit<ProvinceGraph & ProvinceDefinition, 'edges'> & {
-    edges: ProvinceEdge[];
+export type Province = Omit<ProvinceGraph & ProvinceDefinition, "edges"> & {
+	edges: ProvinceEdge[];
 };
 
 export interface ProvinceEdgeGraph {
-    toColor: number;
-    path: Point[][];
+	toColor: number;
+	path: Point[][];
 }
 
 export interface ProvinceEdgeAdjacency {
-    from: number;
-    to: number;
-    through?: number;
-    type: 'impassable' | string;
-    start?: Point;
-    stop?: Point;
-    rule?: string;
-    row: string[];
+	from: number;
+	to: number;
+	through?: number;
+	type: "impassable" | string;
+	start?: Point;
+	stop?: Point;
+	rule?: string;
+	row: string[];
 }
 
-export type ProvinceEdge = Omit<ProvinceEdgeGraph & ProvinceEdgeAdjacency, 'from' | 'row' | 'toColor'>;
+export type ProvinceEdge = Omit<
+	ProvinceEdgeGraph & ProvinceEdgeAdjacency,
+	"from" | "row" | "toColor"
+>;
 
 export interface State extends Region, TokenInFile {
-    id: number;
-    name: string;
-    manpower: number;
-    category: string;
-    owner: string | undefined;
-    provinces: number[];
-    cores: string[];
-    impassable: boolean;
-    impassableIgnoredLinks: number[];
-    victoryPoints: Record<number, number | undefined>;
-    resources: Record<string, number | undefined>;
+	id: number;
+	name: string;
+	manpower: number;
+	category: string;
+	owner: string | undefined;
+	provinces: number[];
+	cores: string[];
+	impassable: boolean;
+	impassableIgnoredLinks: number[];
+	victoryPoints: Record<number, number | undefined>;
+	resources: Record<string, number | undefined>;
 }
 
 export interface Railway {
-    provinces: number[];
-    level: number;
+	provinces: number[];
+	level: number;
 }
 
 export interface SupplyNode {
-    province: number;
-    level: number;
+	province: number;
+	level: number;
 }
 
 export interface WorldMapWarning extends Warning<WorldMapWarningSource[]> {
-    relatedFiles: string[];
+	relatedFiles: string[];
 }
 
-export type WorldMapWarningSource = WarningSourceProvince | WarningSourceIdOnly | WarningSourceName | WarningRiver;
+export type WorldMapWarningSource =
+	| WarningSourceProvince
+	| WarningSourceIdOnly
+	| WarningSourceName
+	| WarningRiver;
 
 interface WarningSourceBase {
-    type: string;
+	type: string;
 }
 
 interface WarningSourceProvince extends WarningSourceBase {
-    type: 'province';
-    id: number | null;
-    color: number;
+	type: "province";
+	id: number | null;
+	color: number;
 }
 
 interface WarningSourceIdOnly extends WarningSourceBase {
-    type: 'state' | 'strategicregion' | 'supplyarea' | 'railway' | 'supplynode';
-    id: number;
+	type: "state" | "strategicregion" | "supplyarea" | "railway" | "supplynode";
+	id: number;
 }
 
 interface WarningSourceName extends WarningSourceBase {
-    type: 'statecategory';
-    name: string;
+	type: "statecategory";
+	name: string;
 }
 
 interface WarningRiver extends WarningSourceBase {
-    type: 'river';
-    name: string;
-    index: number;
+	type: "river";
+	name: string;
+	index: number;
 }
 
 export interface Country {
-    tag: string;
-    color: number;
+	tag: string;
+	color: number;
 }
 
 export interface Terrain {
-    name: string;
-    color: number;
-    isNaval: boolean;
-    file: string;
+	name: string;
+	color: number;
+	isNaval: boolean;
+	file: string;
 }
 
 export interface Resource {
-    name: string;
-    iconFrame: number;
-    imageUri: string;
-    file: string;
+	name: string;
+	iconFrame: number;
+	imageUri: string;
+	file: string;
 }
 
 export interface StrategicRegion extends Region, TokenInFile {
-    id: number;
-    name: string;
-    provinces: number[];
-    navalTerrain: string | null;
+	id: number;
+	name: string;
+	provinces: number[];
+	navalTerrain: string | null;
 }
 
 export interface SupplyArea extends Region, TokenInFile {
-    id: number;
-    name: string;
-    value: number;
-    states: number[];
+	id: number;
+	name: string;
+	value: number;
+	states: number[];
 }
 
 export interface StateCategory {
-    name: string;
-    color: number;
-    file: string;
+	name: string;
+	color: number;
+	file: string;
 }
 
 export interface RiverBmp {
-    width: number;
-    height: number;
-    rivers: River[];
+	width: number;
+	height: number;
+	rivers: River[];
 }
 
 export interface River {
-    colors: Record<number, number>;
-    ends: number[];
-    boundingBox: Zone;
+	colors: Record<number, number>;
+	ends: number[];
+	boundingBox: Zone;
 }
 
 export interface Point {
-    x: number;
-    y: number;
+	x: number;
+	y: number;
 }
 
 export interface Zone {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
+	x: number;
+	y: number;
+	w: number;
+	h: number;
 }
 
 export interface Region {
-    boundingBox: Zone;
-    centerOfMass: Point;
-    mass: number;
+	boundingBox: Zone;
+	centerOfMass: Point;
+	mass: number;
 }
 
 interface TokenInFile {
-    file: string;
-    token: Token | null;
+	file: string;
+	token: Token | null;
 }
 
-export type WorldMapMessage = LoadedMessage | RequestMapItemMessage | MapItemMessage | ErrorMessage | ProgressMessage | ProvinceMapSummaryMessage | OpenFileMessage | ExportMapMessage;
+export type WorldMapMessage =
+	| LoadedMessage
+	| RequestMapItemMessage
+	| MapItemMessage
+	| ErrorMessage
+	| ProgressMessage
+	| ProvinceMapSummaryMessage
+	| OpenFileMessage
+	| ExportMapMessage;
 
 interface LoadedMessage {
-    command: 'loaded';
-    force: boolean;
+	command: "loaded";
+	force: boolean;
 }
 
 export interface RequestMapItemMessage {
-    command: 'requestprovinces' | 'requeststates' | 'requestcountries' | 'requeststrategicregions' | 'requestsupplyareas' | 'requestrailways' | 'requestsupplynodes';
-    start: number;
-    end: number;
+	command:
+		| "requestprovinces"
+		| "requeststates"
+		| "requestcountries"
+		| "requeststrategicregions"
+		| "requestsupplyareas"
+		| "requestrailways"
+		| "requestsupplynodes";
+	start: number;
+	end: number;
 }
 
 export interface MapItemMessage {
-    command: 'provinces' | 'states' | 'countries' | 'warnings' | 'continents' | 'terrains' | 'strategicregions' | 'supplyareas' | 'railways' | 'supplynodes' | 'resources';
-    data: string;
-    start: number;
-    end: number;
+	command:
+		| "provinces"
+		| "states"
+		| "countries"
+		| "warnings"
+		| "continents"
+		| "terrains"
+		| "strategicregions"
+		| "supplyareas"
+		| "railways"
+		| "supplynodes"
+		| "resources";
+	data: string;
+	start: number;
+	end: number;
 }
 
 interface ErrorMessage {
-    command: 'error';
-    data: string;
+	command: "error";
+	data: string;
 }
 
 interface ProgressMessage {
-    command: 'progress';
-    data: string;
+	command: "progress";
+	data: string;
 }
 
 interface ProvinceMapSummaryMessage {
-    command: 'provincemapsummary';
-    data: WorldMapData;
+	command: "provincemapsummary";
+	data: WorldMapData;
 }
 
 interface OpenFileMessage {
-    command: 'openfile';
-    type: 'state' | 'strategicregion' | 'supplyarea';
-    file: string;
-    start: number | undefined;
-    end: number | undefined;
+	command: "openfile";
+	type: "state" | "strategicregion" | "supplyarea";
+	file: string;
+	start: number | undefined;
+	end: number | undefined;
 }
 
 interface ExportMapMessage {
-    command: 'exportmap' | 'requestexportmap';
-    dataUrl?: string;
+	command: "exportmap" | "requestexportmap";
+	dataUrl?: string;
 }
 
 export type ProgressReporter = (progress: string) => Promise<void>;

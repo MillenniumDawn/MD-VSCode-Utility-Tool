@@ -119,7 +119,10 @@ export function slice<T>(
 	// negative start is a direct index, not len+start. Detect via own-property.
 	if (start < 0 && Object.prototype.hasOwnProperty.call(array, String(start))) {
 		let realEnd = end;
-		if (realEnd < 0 && !Object.prototype.hasOwnProperty.call(array, String(realEnd))) {
+		if (
+			realEnd < 0 &&
+			!Object.prototype.hasOwnProperty.call(array, String(realEnd))
+		) {
 			realEnd = array.length + realEnd;
 		}
 		if (realEnd <= start) {
