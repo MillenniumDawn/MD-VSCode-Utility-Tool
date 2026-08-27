@@ -423,7 +423,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		// webpack bundle layout) so decode failures are reported normally instead of via a worker
 		// spawn crash, whose exit event can otherwise still be settling after this test returns.
 		_setImageWorkerPathForTest(
-			path.resolve(__dirname, "../util/image/imageworker.js"),
+			path.resolve(__dirname, "../util/image/imageWorker.js"),
 		);
 		const { restore } = captureConsoleError();
 		try {

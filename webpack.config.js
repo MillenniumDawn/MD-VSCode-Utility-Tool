@@ -77,7 +77,7 @@ const imageWorkerConfig = {
   name: 'imageWorker',
   target: 'node', // runs as a worker_threads worker in the desktop extension host
 
-  entry: './src/util/image/imageworker.ts',
+  entry: './src/util/image/imageWorker.ts',
   output: {
     // emitted next to extension.js so the bundle resolves it via path.join(__dirname, 'imageWorker.js')
     path: path.resolve(__dirname, 'dist'),
