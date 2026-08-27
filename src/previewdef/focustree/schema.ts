@@ -9,7 +9,7 @@ import {
 	isSymbolNode,
 } from "../../hoiformat/schema";
 import { normalizeNumberLike } from "../../util/hoi4gui/common";
-import { flatten, chain } from "lodash";
+import { flatten, chain, groupBy } from "lodash";
 import {
 	ConditionItem,
 	ConditionComplexExpr,
@@ -293,7 +293,7 @@ export function getFocusTreeWithFocusFile(
 			constants,
 		);
 
-		runLayoutValidation(focuses, warnings, filePath, false);
+		runLayoutValidation(focuses, warnings, false);
 
 		const sharedFocusTree = {
 			id: localize("focustree.sharedfocuses", "<Shared focuses>"),
@@ -321,7 +321,7 @@ export function getFocusTreeWithFocusFile(
 			constants,
 		);
 
-		runLayoutValidation(focuses, warnings, filePath, false);
+		runLayoutValidation(focuses, warnings, false);
 
 		focusTrees.push({
 			id: getJointFocusTreeId(filePath),
@@ -362,7 +362,7 @@ export function getFocusTreeWithFocusFile(
 			}
 		}
 
-		runLayoutValidation(focuses, warnings, filePath, true);
+		runLayoutValidation(focuses, warnings, true);
 
 		focusTrees.push({
 			id:
@@ -762,9 +762,9 @@ function addSharedFocus(
 	}
 
 	// Warnings about a focus itself (a missing id, an id defined twice) follow it into this tree,
-	// but layout warnings describe the donor's grid. This tree lays the focus out on its own grid,
-	// which its own validateFocusLayout already checked, and only part of an offending group may
-	// have been merged, so replaying those would duplicate a line or name a focus that isn't here.
+	// but layout warnings describe the donor's grid. This tree runs validateFocusLayout over the
+	// focuses it actually merged, on its own grid, so replaying the donor's would duplicate a line
+	// or name a focus that never came across.
 	for (const warning of sharedFocusTree.warnings) {
 		if (!warning.layout && warning.source in focuses) {
 			warnings.push(warning);
@@ -838,7 +838,6 @@ function resolveFocusPosition(
 function runLayoutValidation(
 	focuses: Record<string, Focus>,
 	warnings: FocusWarning[],
-	filePath: string,
 	reportMissingRelativePositionTarget: boolean,
 ) {
 	const layoutWarnings: FocusWarning[] = [];
@@ -847,7 +846,7 @@ function runLayoutValidation(
 		layoutWarnings,
 		reportMissingRelativePositionTarget,
 	);
-	validateFocusLayout(focuses, layoutWarnings, filePath);
+	validateFocusLayout(focuses, layoutWarnings);
 	for (const warning of layoutWarnings) {
 		warnings.push({ ...warning, layout: true });
 	}
@@ -860,21 +859,35 @@ function runLayoutValidation(
  * grid units apart on the same row (the sprites are two units wide, so they overlap). Positions are
  * resolved through relative_position_id chains like the preview does; condition-dependent offsets
  * are ignored.
+ *
+ * Checked one defining file at a time, so a country tree flags the shared and joint focuses merged
+ * into it instead of only its own. The two sets are never compared against each other: a merged
+ * focus is placed by offset blocks that pick a position per country, and this check ignores those,
+ * so a cross-boundary pair reads as a collision that the game never draws.
  */
 function validateFocusLayout(
 	focuses: Record<string, Focus>,
 	warnings: FocusWarning[],
-	filePath: string,
 ) {
-	// Only focuses defined in the tree's own file participate. Shared focuses merged in via
-	// addSharedFocus live in other files and their stored x/y is the shared_focus block's
-	// (defaulting to 0,0), so comparing them against real focuses would raise false positives.
-	const entries = Object.values(focuses)
-		.filter((focus) => focus.file === filePath)
-		.map((focus) => ({
-			focus,
-			position: resolveFocusPosition(focus, focuses),
-		}));
+	for (const [filePath, fileFocuses] of Object.entries(
+		groupBy(Object.values(focuses), "file"),
+	)) {
+		validateFocusLayoutOfFile(focuses, warnings, filePath, fileFocuses);
+	}
+}
+
+function validateFocusLayoutOfFile(
+	focuses: Record<string, Focus>,
+	warnings: FocusWarning[],
+	filePath: string,
+	fileFocuses: Focus[],
+) {
+	// Resolved against the whole tree, so a shared focus anchored to one of the host tree's own
+	// focuses lands where the preview draws it.
+	const entries = fileFocuses.map((focus) => ({
+		focus,
+		position: resolveFocusPosition(focus, focuses),
+	}));
 	const positions = new Map(
 		entries.map((entry) => [entry.focus.id, entry.position] as const),
 	);
