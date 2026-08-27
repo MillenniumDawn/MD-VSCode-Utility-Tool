@@ -60,7 +60,10 @@ describe("previewdef/worldmap/worldmapchanges", () => {
 		it(`rejects delta updates when ${key} changes`, () => {
 			const changed = map();
 			changed[key] += 1;
-			assert.strictEqual(buildWorldMapChangeMessages(map(), changed), undefined);
+			assert.strictEqual(
+				buildWorldMapChangeMessages(map(), changed),
+				undefined,
+			);
 		});
 	}
 
@@ -92,5 +95,49 @@ describe("previewdef/worldmap/worldmapchanges", () => {
 			start: 0,
 			end: 1,
 		});
+	});
+
+	it("sends a changed bad province at its negative id", () => {
+		const cached = map({ badProvincesCount: 1 });
+		const changed = map({ badProvincesCount: 1 });
+		const cachedProvinces = cached.provinces as unknown as Record<
+			number,
+			unknown
+		>;
+		const changedProvinces = changed.provinces as unknown as Record<
+			number,
+			unknown
+		>;
+		cachedProvinces[-1] = { id: -1, name: "before" };
+		changedProvinces[-1] = { id: -1, name: "after" };
+
+		assert.deepStrictEqual(buildWorldMapChangeMessages(cached, changed), [
+			{
+				command: "provinces",
+				data: JSON.stringify([changedProvinces[-1]]),
+				start: -1,
+				end: 0,
+			},
+		]);
+	});
+
+	it("rejects changes that need more than 30 messages", () => {
+		const countries = Array.from({ length: 61 }, (_, index) => ({
+			tag: `C${index}`,
+			color: index,
+		}));
+		const changedCountries = countries.map((country, index) =>
+			index % 2 === 0 ? { ...country, color: index + 100 } : country,
+		);
+		const cached = map({
+			countries,
+			countriesCount: countries.length,
+		});
+		const changed = map({
+			countries: changedCountries,
+			countriesCount: changedCountries.length,
+		});
+
+		assert.strictEqual(buildWorldMapChangeMessages(cached, changed), undefined);
 	});
 });
