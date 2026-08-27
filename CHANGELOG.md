@@ -1,3 +1,20 @@
+v1.1.30
+
+  Functionality:
+
+- [ CI ] Ask extension questions in the issue templates instead of mod questions.
+- Flag misplaced shared and joint focuses in the tree that merges them in. Issue #146.
+- workflow.
+- Update task.yml.
+- Changing workspace folders now waits for any in-progress preview build to finish before resetting and rebuilding, so the old build can no longer overwrite the fresh one. Issue #100.
+- [ World Map ] Address remaining pi-lens findings in worldmap loaders. Issue #98.
+- Expected image lookup failures, such as a missing file or an unsupported image type, no longer log full error objects to the console. Only genuine errors are still reported at error level. Issue #103.
+- [ Testing ] Restore image decoder worker state in test after() hooks. Issue #102.
+- Fix image worker filename case so the tsc test build can spawn the worker. Issue #101.
+- [ Testing ] Remove unused eslint-disable directive in miooverlap.test.ts. Issue #84.
+- [ Build ] Cover webview code in c8 reports.
+- Cover shipped webview entrypoints and world map loading paths.
+
 v1.1.29
 
   Functionality:
