@@ -23,6 +23,7 @@
 	},
 	"include": [
 		"src/def.d.ts",
-		"src/test/webview/**/*.ts"
+		"src/test/webview/**/*.ts",
+		"webviewsrc/**/*.ts"
 	]
 }

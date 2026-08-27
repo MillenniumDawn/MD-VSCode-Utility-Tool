@@ -105,6 +105,13 @@ describe("util/image/imagedecoder", () => {
 			assertValidPng(result.pngBuffer, 4, 4);
 		});
 
+		it("preserves uncompressed DDS pixel channels", () => {
+			const result = decodeImageToPngSync(makeDds(1, 1), "dds");
+			const decoded = PNG.sync.read(result.pngBuffer);
+
+			assert.deepStrictEqual(Array.from(decoded.data), [74, 37, 0, 111]);
+		});
+
 		it("throws for a malformed DDS buffer (behavior preserved for getImage catch)", () => {
 			assert.throws(() => decodeImageToPngSync(Buffer.alloc(8), "dds"));
 		});
