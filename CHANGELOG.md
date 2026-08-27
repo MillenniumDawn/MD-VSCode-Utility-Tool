@@ -1,3 +1,12 @@
+v1.1.30
+
+  Functionality:
+
+- [ CI ] Ask extension questions in the issue templates instead of mod questions.
+- Flag misplaced shared and joint focuses in the tree that merges them in. Issue #146.
+- workflow.
+- Update task.yml.
+
 v1.1.29
 
   Functionality:
