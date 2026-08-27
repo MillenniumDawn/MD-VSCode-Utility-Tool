@@ -8,6 +8,7 @@ v1.1.30
 - Update task.yml.
 - Changing workspace folders now waits for any in-progress preview build to finish before resetting and rebuilding, so the old build can no longer overwrite the fresh one. Issue #100.
 - [ World Map ] Address remaining pi-lens findings in worldmap loaders. Issue #98.
+- Expected image lookup failures, such as a missing file or an unsupported image type, no longer log full error objects to the console. Only genuine errors are still reported at error level. Issue #103.
 
 v1.1.29
 
