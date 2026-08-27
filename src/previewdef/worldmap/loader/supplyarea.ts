@@ -8,6 +8,7 @@ import {
 	sortItems,
 	mergeRegion,
 	LoadResultOD,
+	shouldReloadDependencies,
 } from "./common";
 import {
 	WorldMapWarning,
@@ -68,8 +69,10 @@ export class SupplyAreasLoader extends FolderLoader<
 	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		return (
 			(await super.shouldReloadImpl(session)) ||
-			(await this.defaultMapLoader.shouldReload(session)) ||
-			(await this.statesLoader.shouldReload(session))
+			(await shouldReloadDependencies(session, [
+				this.defaultMapLoader,
+				this.statesLoader,
+			]))
 		);
 	}
 
@@ -419,7 +422,11 @@ function checkStatesContiguous(
 	accessedStates[firstState.id] = true;
 
 	while (stack.length) {
-		const currentState = stack.pop()!;
+		const currentState = stack.pop();
+		if (!currentState) {
+			continue;
+		}
+
 		for (const state of states) {
 			if (accessedStates[state.id]) {
 				continue;

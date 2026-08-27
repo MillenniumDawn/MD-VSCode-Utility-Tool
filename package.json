@@ -276,6 +276,7 @@
 		"compile-ts": "tsc -d -p ./ --module commonjs",
 		"compile-test": "tsc -p ./tsconfig.test.json",
 		"lint": "eslint src webviewsrc --ext ts",
+		"dupes": "jscpd",
 		"bench": "npm run compile-test && node scripts/bench.js",
 		"watch": "tsc -watch -p ./",
 		"compile-test-webview": "tsc -p ./tsconfig.webview.test.json",
@@ -295,9 +296,17 @@
 		"package:major": "npm version major --no-git-tag-version && vsce package"
 	},
 	"c8": {
-		"include": ["out-test/src/**/*.js"],
-		"exclude": ["out-test/src/test/**", "out-test-webview/**"],
-		"reporter": ["text", "lcov"],
+		"include": [
+			"out-test/src/**/*.js"
+		],
+		"exclude": [
+			"out-test/src/test/**",
+			"out-test-webview/**"
+		],
+		"reporter": [
+			"text",
+			"lcov"
+		],
 		"reports-dir": "coverage",
 		"check-coverage": true,
 		"lines": 55,
@@ -319,6 +328,7 @@
 		"c8": "^10.1.3",
 		"copy-webpack-plugin": "^14.0.0",
 		"eslint": "^10.1.0",
+		"jscpd": "^5.0.16",
 		"jsdom": "^29.1.1",
 		"mocha": "^11.1.0",
 		"raw-loader": "^4.0.1",

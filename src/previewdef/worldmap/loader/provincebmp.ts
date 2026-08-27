@@ -27,9 +27,9 @@ export class ProvinceBmpLoader extends FileLoader<ProvinceBmp> {
 		};
 	}
 
-	protected extraMesurements(result: LoadResult<ProvinceBmp>) {
+	protected extraMeasurements(result: LoadResult<ProvinceBmp>) {
 		return {
-			...super.extraMesurements(result),
+			...super.extraMeasurements(result),
 			width: result.result.width,
 			height: result.result.height,
 			provinceCount: result.result.provinces.length,

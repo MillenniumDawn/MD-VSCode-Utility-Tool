@@ -2,6 +2,7 @@ import {
 	WorldMapMessage,
 	Province,
 	WorldMapData,
+	MapItemMessage,
 	RequestMapItemMessage,
 	State,
 	Country,
@@ -125,7 +126,9 @@ export class Loader extends Subscriber {
 		super();
 		this.worldMap = new FEWorldMapClass();
 		this.load();
-		this.worldMap$.subscribe((wm) => ((window as any)["worldMap"] = wm));
+		this.worldMap$.subscribe((wm) => {
+			(window as Window & { worldMap?: FEWorldMap }).worldMap = wm;
+		});
 	}
 
 	public refresh() {
@@ -154,71 +157,16 @@ export class Loader extends Subscriber {
 						this.loadingProvinceMap.strategicRegions = new Array(
 							this.loadingProvinceMap.strategicRegionsCount,
 						);
-						console.log(message.data);
 						this.startLoading();
 						break;
 					case "provinces":
-						this.receiveData(
-							this.loadingProvinceMap?.provinces,
-							message.start,
-							message.end,
-							message.data,
-						);
-						this.loadNext();
-						break;
 					case "states":
-						this.receiveData(
-							this.loadingProvinceMap?.states,
-							message.start,
-							message.end,
-							message.data,
-						);
-						this.loadNext();
-						break;
 					case "countries":
-						this.receiveData(
-							this.loadingProvinceMap?.countries,
-							message.start,
-							message.end,
-							message.data,
-						);
-						this.loadNext();
-						break;
 					case "strategicregions":
-						this.receiveData(
-							this.loadingProvinceMap?.strategicRegions,
-							message.start,
-							message.end,
-							message.data,
-						);
-						this.loadNext();
-						break;
 					case "supplyareas":
-						this.receiveData(
-							this.loadingProvinceMap?.supplyAreas,
-							message.start,
-							message.end,
-							message.data,
-						);
-						this.loadNext();
-						break;
 					case "railways":
-						this.receiveData(
-							this.loadingProvinceMap?.railways,
-							message.start,
-							message.end,
-							message.data,
-						);
-						this.loadNext();
-						break;
 					case "supplynodes":
-						this.receiveData(
-							this.loadingProvinceMap?.supplyNodes,
-							message.start,
-							message.end,
-							message.data,
-						);
-						this.loadNext();
+						this.receiveRequestedData(message);
 						break;
 					case "warnings":
 						if (this.loadingProvinceMap) {
@@ -274,6 +222,8 @@ export class Loader extends Subscriber {
 							progress: this.progress,
 						});
 						this.loading$.next(false);
+						break;
+					default:
 						break;
 				}
 			}),
@@ -370,22 +320,18 @@ export class Loader extends Subscriber {
 		}
 	}
 
-	private loadNext(updateMap: boolean = true) {
+	private loadNext() {
 		this.progress = 1 - this.loadingQueue.length / this.loadingQueueStartLength;
 
 		if (this.loadingQueue.length === 0) {
 			// Final emit is synchronous against the now-complete arrays: guarantees the last frame is
 			// never a partial one and covers hidden panels, where the rAF path never fires.
-			if (updateMap) {
-				this.emitWorldMap();
-			}
+			this.emitWorldMap();
 			this.loading$.next(false);
 		} else {
 			// Keep the request pump immediate; only the map emit is rAF-coalesced.
 			vscode.postMessage(this.loadingQueue.shift());
-			if (updateMap) {
-				this.scheduleWorldMapEmit();
-			}
+			this.scheduleWorldMapEmit();
 		}
 
 		this.writableProgress$.next({
@@ -409,8 +355,44 @@ export class Loader extends Subscriber {
 
 	private emitWorldMap(): void {
 		this.pendingEmit = false;
-		this.worldMap = new FEWorldMapClass(this.loadingProvinceMap!);
+		if (!this.loadingProvinceMap) {
+			return;
+		}
+
+		this.worldMap = new FEWorldMapClass(this.loadingProvinceMap);
 		this.writableWorldMap$.next(this.worldMap);
+	}
+
+	private receiveRequestedData(message: MapItemMessage): void {
+		let arr: unknown[] | undefined;
+		switch (message.command) {
+			case "provinces":
+				arr = this.loadingProvinceMap?.provinces;
+				break;
+			case "states":
+				arr = this.loadingProvinceMap?.states;
+				break;
+			case "countries":
+				arr = this.loadingProvinceMap?.countries;
+				break;
+			case "strategicregions":
+				arr = this.loadingProvinceMap?.strategicRegions;
+				break;
+			case "supplyareas":
+				arr = this.loadingProvinceMap?.supplyAreas;
+				break;
+			case "railways":
+				arr = this.loadingProvinceMap?.railways;
+				break;
+			case "supplynodes":
+				arr = this.loadingProvinceMap?.supplyNodes;
+				break;
+			default:
+				return;
+		}
+
+		this.receiveData(arr, message.start, message.end, message.data);
+		this.loadNext();
 	}
 
 	private receiveData<T>(
