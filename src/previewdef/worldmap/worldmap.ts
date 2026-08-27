@@ -16,8 +16,7 @@ import { writeFile, getConfiguration } from "../../util/vsccommon";
 import { slice, debounceByInput, forceError } from "../../util/common";
 import { openOrCopyHoiFile } from "../../util/previewfileopener";
 import { WorldMapLoader } from "./loader/worldmaploader";
-import { isEqual } from "lodash";
-import { diffItemList, defaultHashItem } from "./worldmapdiff";
+import { buildWorldMapChangeMessages } from "./worldmapchanges";
 import { LoaderSession } from "../../util/loader/loader";
 import { TelemetryMessage, sendByMessage } from "../../util/telemetry";
 
@@ -172,7 +171,7 @@ export class WorldMap {
 					await this.openFile(msg.file, msg.type, msg.start, msg.end);
 					break;
 				case "telemetry":
-					await sendByMessage(msg);
+					sendByMessage(msg);
 					break;
 				case "requestexportmap":
 					await this.requestExportMap();
@@ -302,204 +301,31 @@ export class WorldMap {
 		await this.progressReporter(
 			localize("worldmap.progress.comparing", "Comparing changes..."),
 		);
-		const changeMessages: WorldMapMessage[] = [];
-
-		if (
-			(
-				[
-					"width",
-					"height",
-					"provincesCount",
-					"statesCount",
-					"countriesCount",
-					"strategicRegionsCount",
-					"supplyAreasCount",
-					"railwaysCount",
-					"supplyNodesCount",
-					"badProvincesCount",
-					"badStatesCount",
-					"badStrategicRegionsCount",
-					"badSupplyAreasCount",
-				] as (keyof WorldMapData)[]
-			).some((k) => !isEqual(cachedWorldMap[k], worldMap[k]))
-		) {
-			return false;
-		}
-
-		if (!isEqual(cachedWorldMap.warnings, worldMap.warnings)) {
-			changeMessages.push({
-				command: "warnings",
-				data: JSON.stringify(worldMap.warnings),
-				start: 0,
-				end: 0,
-			});
-		}
-
-		if (!isEqual(cachedWorldMap.continents, worldMap.continents)) {
-			changeMessages.push({
-				command: "continents",
-				data: JSON.stringify(worldMap.continents),
-				start: 0,
-				end: 0,
-			});
-		}
-
-		if (!isEqual(cachedWorldMap.terrains, worldMap.terrains)) {
-			changeMessages.push({
-				command: "terrains",
-				data: JSON.stringify(worldMap.terrains),
-				start: 0,
-				end: 0,
-			});
-		}
-
-		if (!isEqual(cachedWorldMap.resources, worldMap.resources)) {
-			changeMessages.push({
-				command: "resources",
-				data: JSON.stringify(worldMap.resources),
-				start: 0,
-				end: 0,
-			});
-		}
-
-		if (
-			!this.fillMessageForItem(
-				changeMessages,
-				worldMap.provinces,
-				cachedWorldMap.provinces,
-				"provinces",
-				-worldMap.badProvincesCount,
-				worldMap.provincesCount,
-			)
-		) {
-			return false;
-		}
-
-		if (
-			!this.fillMessageForItem(
-				changeMessages,
-				worldMap.states,
-				cachedWorldMap.states,
-				"states",
-				-worldMap.badStatesCount,
-				worldMap.statesCount,
-			)
-		) {
-			return false;
-		}
-
-		if (
-			!this.fillMessageForItem(
-				changeMessages,
-				worldMap.countries,
-				cachedWorldMap.countries,
-				"countries",
-				0,
-				worldMap.countriesCount,
-			)
-		) {
-			return false;
-		}
-
-		if (
-			!this.fillMessageForItem(
-				changeMessages,
-				worldMap.strategicRegions,
-				cachedWorldMap.strategicRegions,
-				"strategicregions",
-				-worldMap.badStrategicRegionsCount,
-				worldMap.strategicRegionsCount,
-			)
-		) {
-			return false;
-		}
-
-		if (
-			!this.fillMessageForItem(
-				changeMessages,
-				worldMap.supplyAreas,
-				cachedWorldMap.supplyAreas,
-				"supplyareas",
-				-worldMap.badSupplyAreasCount,
-				worldMap.supplyAreasCount,
-			)
-		) {
-			return false;
-		}
-
-		if (
-			!this.fillMessageForItem(
-				changeMessages,
-				worldMap.railways,
-				cachedWorldMap.railways,
-				"railways",
-				0,
-				worldMap.railwaysCount,
-			)
-		) {
-			return false;
-		}
-
-		if (
-			!this.fillMessageForItem(
-				changeMessages,
-				worldMap.supplyNodes,
-				cachedWorldMap.supplyNodes,
-				"supplynodes",
-				0,
-				worldMap.supplyNodesCount,
-			)
-		) {
+		const changeMessages = buildWorldMapChangeMessages(
+			cachedWorldMap,
+			worldMap,
+		);
+		if (changeMessages === undefined) {
 			return false;
 		}
 
 		await this.progressReporter(
 			localize("worldmap.progress.applying", "Applying changes..."),
 		);
-
-		for (const message of changeMessages) {
-			await this.postMessageToWebview(message);
-		}
-
+		await changeMessages.reduce(
+			(posted, message) =>
+				posted
+					.then(() => this.postMessageToWebview(message))
+					.then(() => undefined),
+			Promise.resolve(),
+		);
 		await this.progressReporter("");
 		return true;
 	}
 
-	private fillMessageForItem(
-		changeMessages: WorldMapMessage[],
-		list: unknown[],
-		cachedList: unknown[],
-		command: MapItemMessage["command"],
-		listStart: number,
-		listEnd: number,
-	): boolean {
-		const ranges = diffItemList(
-			list,
-			cachedList,
-			listStart,
-			listEnd,
-			defaultHashItem,
-			30 - changeMessages.length,
-		);
-		if (ranges === undefined) {
-			return false;
-		}
-
-		for (const { start, end } of ranges) {
-			changeMessages.push({
-				command,
-				data: JSON.stringify(slice(list, start, end)),
-				start,
-				end,
-			});
-		}
-
-		return true;
-	}
-
-	private async postMessageToWebview(message: WorldMapMessage) {
+	private postMessageToWebview(message: WorldMapMessage): Thenable<boolean> {
 		if (!this.panel) {
-			return false;
+			return Promise.resolve(false);
 		}
 
 		return this.panel.webview.postMessage(message);
