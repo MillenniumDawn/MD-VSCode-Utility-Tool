@@ -297,11 +297,12 @@
 	},
 	"c8": {
 		"include": [
-			"out-test/src/**/*.js"
+			"out-test/src/**/*.js",
+			"out-test-webview/webviewsrc/**/*.js"
 		],
 		"exclude": [
 			"out-test/src/test/**",
-			"out-test-webview/**"
+			"out-test-webview/src/test/**"
 		],
 		"reporter": [
 			"text",
