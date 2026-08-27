@@ -12,6 +12,7 @@ v1.1.30
 - [ Testing ] Restore image decoder worker state in test after() hooks. Issue #102.
 - Fix image worker filename case so the tsc test build can spawn the worker. Issue #101.
 - [ Testing ] Remove unused eslint-disable directive in miooverlap.test.ts. Issue #84.
+- [ Build ] Cover webview code in c8 reports.
 
 v1.1.29
 
