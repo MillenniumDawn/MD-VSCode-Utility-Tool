@@ -7,6 +7,7 @@ v1.1.30
 - workflow.
 - Update task.yml.
 - Changing workspace folders now waits for any in-progress preview build to finish before resetting and rebuilding, so the old build can no longer overwrite the fresh one. Issue #100.
+- [ World Map ] Address remaining pi-lens findings in worldmap loaders. Issue #98.
 
 v1.1.29
 
