@@ -95,12 +95,14 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 			return;
 		}
 
-		spec.rebuildWorkspace.reset();
-
 		const folderChangeSize: [number] = [0];
-		const task = withIndexProgress(spec.rebuildWorkspace.message, (progress) =>
-			spec.rebuildWorkspace.build(folderChangeSize, progress),
-		);
+		// Reset only after the current build; occupy the gate now so events wait.
+		const task = gate.followOn(() => {
+			spec.rebuildWorkspace.reset();
+			return withIndexProgress(spec.rebuildWorkspace.message, (progress) =>
+				spec.rebuildWorkspace.build(folderChangeSize, progress),
+			);
+		});
 		attachTaskWithErrorLogging(
 			task,
 			() => {
