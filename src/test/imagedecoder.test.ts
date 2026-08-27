@@ -11,7 +11,7 @@ import {
 } from "../util/image/imagedecoder";
 // Imported only so tsc emits the worker file into this test's outDir; it is import-safe on the main
 // thread (its message handler attaches only when actually run as a worker_threads worker).
-import "../util/image/imageworker";
+import "../util/image/imageWorker";
 
 const TGA = require("tga") as typeof import("tga");
 
@@ -113,7 +113,7 @@ describe("util/image/imagedecoder", () => {
 		before(() => {
 			// Point the decoder at the worker file compiled into this test's outDir.
 			_setImageWorkerPathForTest(
-				path.resolve(__dirname, "../util/image/imageworker.js"),
+				path.resolve(__dirname, "../util/image/imageWorker.js"),
 			);
 		});
 
