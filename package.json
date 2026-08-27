@@ -296,6 +296,7 @@
 		"package:major": "npm version major --no-git-tag-version && vsce package"
 	},
 	"c8": {
+		"all": true,
 		"include": [
 			"out-test/src/**/*.js",
 			"out-test-webview/webviewsrc/**/*.js"

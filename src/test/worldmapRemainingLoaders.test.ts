@@ -3,22 +3,6 @@ import * as vscode from "vscode";
 import { LoaderSession } from "../util/loader/loader";
 import { UserError } from "../util/common";
 
-async function withMockedFile(
-	content: string,
-	fn: () => Promise<void>,
-): Promise<void> {
-	const fileloader: any = await import("../util/fileloader");
-	const orig = fileloader.readFileFromModOrHOI4;
-	fileloader.readFileFromModOrHOI4 = async () => [
-		Buffer.from(content),
-		vscode.Uri.file("/tmp/map/test.txt"),
-	];
-	try {
-		await fn();
-	} finally {
-		fileloader.readFileFromModOrHOI4 = orig;
-	}
-}
 async function withMockedJson(
 	jsonFn: (path: string) => any,
 	fn: () => Promise<void>,
@@ -34,41 +18,85 @@ async function withMockedJson(
 }
 
 describe("previewdef/worldmap/loader continents", () => {
-	it("handles empty continents file", async () => {
-		await withMockedFile("", async () => {
-			const { ContinentsLoader } = await import(
-				"../previewdef/worldmap/loader/continents"
-			);
-			const loader = new ContinentsLoader("map/continent.txt");
-			const result = await loader.load(new LoaderSession(false));
-			assert.ok(result);
-		});
+	it("returns the empty continent at index zero", async () => {
+		await withMockedJson(
+			async () => ({ continents: { _values: [] } }) as any,
+			async () => {
+				const { ContinentsLoader } = await import(
+					"../previewdef/worldmap/loader/continents"
+				);
+				const loader = new ContinentsLoader("map/continent.txt");
+				const result = await loader.load(new LoaderSession(true));
+				assert.deepStrictEqual(result.result, [""]);
+				assert.deepStrictEqual(result.dependencies, ["map/continent.txt"]);
+			},
+		);
 	});
 
-	it("parses continents with entries", async () => {
-		await withMockedFile("0 = { id = 0 }\n1 = { id = 1 }", async () => {
-			const { ContinentsLoader } = await import(
-				"../previewdef/worldmap/loader/continents"
-			);
-			const loader = new ContinentsLoader("map/continent.txt");
-			const result = await loader.load(new LoaderSession(false));
-			assert.ok(result);
-		});
+	it("preserves continent order after the empty index", async () => {
+		await withMockedJson(
+			async () => ({ continents: { _values: ["europe", "asia"] } }) as any,
+			async () => {
+				const { ContinentsLoader } = await import(
+					"../previewdef/worldmap/loader/continents"
+				);
+				const loader = new ContinentsLoader("map/continent.txt");
+				const result = await loader.load(new LoaderSession(true));
+				assert.deepStrictEqual(result.result, ["", "europe", "asia"]);
+			},
+		);
 	});
 });
 
 describe("previewdef/worldmap/loader river", () => {
-	it("module loads and exports RiverLoader", async () => {
-		const mod: any = await import("../previewdef/worldmap/loader/river");
-		assert.ok(mod.RiverLoader);
+	it("rejects an unreadable river image", async () => {
+		const fileloader: any = await import("../util/fileloader");
+		const original = fileloader.readFileFromModOrHOI4;
+		fileloader.readFileFromModOrHOI4 = async () => [
+			Buffer.alloc(0),
+			vscode.Uri.file("/tmp/map/rivers.bmp"),
+		];
+		try {
+			const { RiverLoader } = await import(
+				"../previewdef/worldmap/loader/river"
+			);
+			const loader = new RiverLoader("map/rivers.bmp");
+			await assert.rejects(loader.load(new LoaderSession(true)), Error);
+		} finally {
+			fileloader.readFileFromModOrHOI4 = original;
+		}
 	});
 });
 
 describe("previewdef/worldmap/loader railway", () => {
-	it("module loads and exports RailwayLoader", async () => {
-		const mod: any = await import("../previewdef/worldmap/loader/railway");
-		assert.ok(mod.RailwayLoader);
-		assert.ok(mod.SupplyNodeLoader);
+	it("parses railway lines and warns about unknown provinces", async () => {
+		const fileloader: any = await import("../util/fileloader");
+		const original = fileloader.readFileFromModOrHOI4;
+		fileloader.readFileFromModOrHOI4 = async () => [
+			Buffer.from("3 2 1 99\n"),
+			vscode.Uri.file("/tmp/map/railways.txt"),
+		];
+		try {
+			const { RailwayLoader } = await import(
+				"../previewdef/worldmap/loader/railway"
+			);
+			const defaultMapLoader = {
+				load: async () => ({
+					result: { provinces: [undefined, { id: 1, edges: [] }] },
+					warnings: [],
+					dependencies: [],
+				}),
+			};
+			const loader = new RailwayLoader(defaultMapLoader as any);
+			const result = await loader.load(new LoaderSession(true));
+			assert.deepStrictEqual(result.result.railways, [
+				{ level: 3, provinces: [1, 99] },
+			]);
+			assert.strictEqual(result.warnings.length, 1);
+			assert.strictEqual(result.warnings[0]?.source[1]?.type, "province");
+		} finally {
+			fileloader.readFileFromModOrHOI4 = original;
+		}
 	});
 });
 

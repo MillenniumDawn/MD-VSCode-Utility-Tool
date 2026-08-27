@@ -1,6 +1,8 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { convertColor, sortItems } from "../previewdef/worldmap/loader/common";
+import { concatEdges } from "../previewdef/worldmap/loader/provincebmp";
+import type { Point } from "../previewdef/worldmap/definitions";
 import { LoaderSession } from "../util/loader/loader";
 import { UserError } from "../util/common";
 
@@ -211,16 +213,22 @@ describe("previewdef/worldmap/loader states schema", () => {
 });
 
 describe("previewdef/worldmap/loader provincemap helpers", () => {
-	it("provincebmp edge cases are covered elsewhere, but loader common helpers hold", () => {
-		// Sanity: ensure provincebmp helpers are importable
-		const { concatEdges } = (() => {
-			try {
-				return require("../previewdef/worldmap/loader/provincebmp");
-			} catch {
-				return { concatEdges: () => [] };
-			}
-		})();
-		assert.ok(typeof concatEdges === "function");
+	it("joins adjacent province edges into one path", () => {
+		const edges = [
+			[
+				{ x: 0, y: 0 },
+				{ x: 1, y: 0 },
+			],
+			[
+				{ x: 1, y: 0 },
+				{ x: 1, y: 1 },
+			],
+		] as [Point, Point][];
+		assert.deepStrictEqual(concatEdges(edges), [[
+			{ x: 0, y: 0 },
+			{ x: 1, y: 0 },
+			{ x: 1, y: 1 },
+		]]);
 	});
 });
 
