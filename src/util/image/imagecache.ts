@@ -15,7 +15,7 @@ import { PromiseCache } from "../cache";
 import { decodeImageToPng } from "./imagedecoder";
 import { Sprite, Image, CorneredTileSprite } from "./sprite";
 import { localize } from "../i18n";
-import { error } from "../debug";
+import { debug, error } from "../debug";
 import { UserError } from "../common";
 import { getGfxContainerFile } from "../gfxindex";
 import { gfxIndex } from "../featureflags";
@@ -207,8 +207,10 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
 	} catch (e) {
 		if (!(e instanceof UserError)) {
 			error("Failed to get image " + relativePath);
+			error(e);
+		} else {
+			debug(e);
 		}
-		error(e);
 
 		if (relativePath.length <= 4 || relativePath.endsWith(".dds")) {
 			return undefined;
@@ -254,8 +256,10 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
 	} catch (e) {
 		if (!(e instanceof UserError)) {
 			error("Failed to get image " + relativePath);
+			error(e);
+		} else {
+			debug(e);
 		}
-		error(e);
 		return undefined;
 	}
 }
