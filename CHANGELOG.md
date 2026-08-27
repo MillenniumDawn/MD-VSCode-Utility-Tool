@@ -6,6 +6,7 @@ v1.1.30
 - Flag misplaced shared and joint focuses in the tree that merges them in. Issue #146.
 - workflow.
 - Update task.yml.
+- Changing workspace folders now waits for any in-progress preview build to finish before resetting and rebuilding, so the old build can no longer overwrite the fresh one. Issue #100.
 
 v1.1.29
 
