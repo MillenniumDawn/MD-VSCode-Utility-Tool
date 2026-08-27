@@ -13,6 +13,7 @@ v1.1.30
 - Fix image worker filename case so the tsc test build can spawn the worker. Issue #101.
 - [ Testing ] Remove unused eslint-disable directive in miooverlap.test.ts. Issue #84.
 - [ Build ] Cover webview code in c8 reports.
+- Cover shipped webview entrypoints and world map loading paths.
 
 v1.1.29
 
