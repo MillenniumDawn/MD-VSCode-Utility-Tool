@@ -9,6 +9,7 @@ import {
 } from "../util/image/imagecache";
 import {
 	_setImageWorkerPathForTest,
+	_resetImageWorkerPathForTest,
 	_terminateImageWorkerForTest,
 } from "../util/image/imagedecoder";
 import { clearDlcZipCache } from "../util/fileloader";
@@ -91,6 +92,7 @@ describe("util/image/graphicsloader (headless)", function () {
 
 	after(async function () {
 		await _terminateImageWorkerForTest();
+		_resetImageWorkerPathForTest();
 	});
 
 	beforeEach(function () {
