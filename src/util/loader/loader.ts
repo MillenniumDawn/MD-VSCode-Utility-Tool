@@ -134,7 +134,7 @@ export abstract class Loader<T, E = {}> {
 				sendEvent(
 					"loader.loaddone",
 					{ loaderType: this.constructor.name },
-					{ timeElapsed, ...this.extraMesurements(this.cachedValue) },
+					{ timeElapsed, ...this.extraMeasurements(this.cachedValue) },
 				);
 			}
 		}
@@ -175,7 +175,7 @@ export abstract class Loader<T, E = {}> {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 	}
 
-	protected extraMesurements(
+	protected extraMeasurements(
 		_result: LoadResult<T, E>,
 	): Record<string, number> {
 		return {};
@@ -274,8 +274,8 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 		return this.mergeFiles(await Promise.all(fileResultPromises), session);
 	}
 
-	protected extraMesurements(result: LoadResult<T, E>) {
-		return { ...super.extraMesurements(result), fileCount: this.fileCount };
+	protected extraMeasurements(result: LoadResult<T, E>) {
+		return { ...super.extraMeasurements(result), fileCount: this.fileCount };
 	}
 
 	protected abstract mergeFiles(
@@ -476,4 +476,3 @@ function checkLoaderSessionLoadingFile(session: LoaderSession, file: string) {
 		}
 	}
 }
-

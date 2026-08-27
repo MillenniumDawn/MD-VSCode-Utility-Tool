@@ -42,6 +42,47 @@ function warningTexts(content: string): string[] {
 	return warningsOf(content).map((w) => w.text);
 }
 
+// Builds a shared focus file, then a tree in another file that pulls focuses out of it. The merge
+// only looks at sharedFocusTrees, so this drives the same path the loader does. Each reference
+// becomes one `shared_focus = <ref>` line, so the block form `{ SH_a SH_b }` works as a reference.
+function mergeSharedFocuses(
+	sharedContent: string,
+	sharedFocusRefs: string[],
+	...focuses: string[]
+): { donor: FocusTree; host: FocusTree } {
+	const donors = getFocusTreeWithFocusFile(
+		convertFocusFileNodeToJson(parseHoi4File(sharedContent), {}),
+		[],
+		"common/national_focus/shared.txt",
+		{},
+	);
+
+	const flags = require("../util/featureflags") as {
+		useConditionInFocus: boolean;
+	};
+	flags.useConditionInFocus = true;
+	try {
+		const references = sharedFocusRefs
+			.map((ref) => `\n    shared_focus = ${ref}`)
+			.join("");
+		const content = treeWithFocuses(...focuses).replace(
+			"id = test_tree",
+			`id = test_tree${references}`,
+		);
+		const trees = getFocusTreeWithFocusFile(
+			convertFocusFileNodeToJson(parseHoi4File(content), {}),
+			donors,
+			filePath,
+			{},
+		);
+		const host = trees.find((t) => t.id === "test_tree");
+		assert.ok(host, "the merging tree must exist");
+		return { donor: donors[0], host };
+	} finally {
+		flags.useConditionInFocus = false;
+	}
+}
+
 describe("previewdef/focustree layout warnings", () => {
 	it("parses a prerequisite block with multiple focuses as one OR group", () => {
 		const trees = treesOf(
@@ -536,107 +577,62 @@ shared_focus = {
 		);
 	});
 
-	it("skips shared focuses merged into the tree from another file", () => {
-		const sharedFile = convertFocusFileNodeToJson(
-			parseHoi4File(`shared_focus = {
+	it("checks shared focuses merged in from another file against each other", () => {
+		const { host } = mergeSharedFocuses(
+			`shared_focus = {
     id = SH_a
     focus = { id = sh_a1 x = 0 y = 0 }
-}`),
-			{},
+    focus = { id = sh_a2 x = 1 y = 0 }
+}`,
+			["sh_a1", "sh_a2"],
+			focusBlock("m1", 10, 0),
 		);
-		const sharedTrees = getFocusTreeWithFocusFile(
-			sharedFile,
-			[],
-			"common/national_focus/shared.txt",
-			{},
+		assert.ok(host.focuses["sh_a2"], "both shared focuses must be merged");
+		assert.deepStrictEqual(
+			host.warnings.map((w) => w.text),
+			[
+				"Focuses sh_a1 and sh_a2 are less than 2 apart on the same row, so their icons overlap.",
+			],
 		);
+	});
 
-		const flags = require("../util/featureflags") as {
-			useConditionInFocus: boolean;
-		};
-		flags.useConditionInFocus = true;
-		try {
-			const mainContent = treeWithFocuses(
-				focusBlock("m1", 0, 0),
-				focusBlock("m2", 0, 1),
-			).replace("id = test_tree", "id = test_tree\n    shared_focus = sh_a1");
-			// The merge only looks at sharedFocusTrees, so drive it through the same path the loader uses.
-			const mainFile = convertFocusFileNodeToJson(
-				parseHoi4File(mainContent),
-				{},
-			);
-			const merged = getFocusTreeWithFocusFile(
-				mainFile,
-				sharedTrees,
-				filePath,
-				{},
-			);
-			const main = merged.find((t) => t.id === "test_tree");
-			assert.ok(
-				main?.focuses["sh_a1"],
-				"shared focus must be merged for this test to be meaningful",
-			);
-			// sh_a1 sits at (0,0) like m1, but it lives in another file, so no overlap warning.
-			assert.deepStrictEqual(
-				(main?.warnings ?? []).map((w) => w.text),
-				[],
-			);
-		} finally {
-			flags.useConditionInFocus = false;
-		}
+	it("does not check a merged shared focus against the tree's own focuses", () => {
+		// sh_a1 sits at (0,0) like m1, but an offset block places a shared focus per country and
+		// this check ignores those, so the pair is left alone.
+		const { host } = mergeSharedFocuses(
+			`shared_focus = {
+    id = SH_a
+    focus = { id = sh_a1 x = 0 y = 0 }
+}`,
+			["sh_a1"],
+			focusBlock("m1", 0, 0),
+			focusBlock("m2", 0, 1),
+		);
+		assert.ok(host.focuses["sh_a1"], "the shared focus must be merged");
+		assert.deepStrictEqual(host.warnings, []);
 	});
 
 	it("does not replay a shared tree's layout warnings into the tree that merges from it", () => {
-		const sharedPath = "common/national_focus/shared.txt";
-		const sharedFile = convertFocusFileNodeToJson(
-			parseHoi4File(`shared_focus = {
+		const { donor, host } = mergeSharedFocuses(
+			`shared_focus = {
     id = SH_a
     focus = { id = sh_a1 x = 0 y = 0 }
 }
 shared_focus = {
     id = SH_b
     focus = { id = sh_b1 x = 0 y = 0 }
-}`),
-			{},
+}`,
+			["sh_a1"],
+			focusBlock("m1", 0, 0),
+			focusBlock("m2", 0, 2),
 		);
-		const sharedTrees = getFocusTreeWithFocusFile(sharedFile, [], sharedPath, {});
 		assert.deepStrictEqual(
-			sharedTrees[0].warnings.map((w) => w.text),
+			donor.warnings.map((w) => w.text),
 			["Focuses sh_a1, sh_b1 share the same position, so their icons overlap."],
 		);
-
-		const flags = require("../util/featureflags") as {
-			useConditionInFocus: boolean;
-		};
-		flags.useConditionInFocus = true;
-		try {
-			const mainContent = treeWithFocuses(
-				focusBlock("m1", 0, 0),
-				focusBlock("m2", 0, 2),
-			).replace("id = test_tree", "id = test_tree\n    shared_focus = sh_a1");
-			const mainFile = convertFocusFileNodeToJson(
-				parseHoi4File(mainContent),
-				{},
-			);
-			const merged = getFocusTreeWithFocusFile(
-				mainFile,
-				sharedTrees,
-				filePath,
-				{},
-			);
-			const main = merged.find((t) => t.id === "test_tree");
-			assert.ok(
-				main?.focuses["sh_a1"],
-				"shared focus must be merged for this test to be meaningful",
-			);
-			// Only sh_a1 came across, so the stack the shared file reports doesn't exist here.
-			assert.deepStrictEqual(
-				(main?.warnings ?? []).map((w) => w.text),
-				[],
-			);
-		} finally {
-			flags.useConditionInFocus = false;
-		}
+		assert.ok(host.focuses["sh_a1"], "the shared focus must be merged");
+		// Only sh_a1 came across, so the stack the shared file reports doesn't exist here.
+		assert.deepStrictEqual(host.warnings, []);
 	});
 
 	it("flattens nested focus entries inside a shared_focus block into their real ids and positions", () => {
@@ -727,8 +723,8 @@ joint_focus = {
 	});
 
 	it("merges shared focuses referenced via block-form shared_focus = { A B }", () => {
-		const sharedFile = convertFocusFileNodeToJson(
-			parseHoi4File(`shared_focus = {
+		const { host } = mergeSharedFocuses(
+			`shared_focus = {
     id = SH_a
     x = 0
     y = 0
@@ -737,40 +733,11 @@ shared_focus = {
     id = SH_b
     x = 0
     y = 1
-}`),
-			{},
+}`,
+			["{ SH_a SH_b }"],
+			focusBlock("m1", 0, 0),
 		);
-		const sharedTrees = getFocusTreeWithFocusFile(
-			sharedFile,
-			[],
-			"common/national_focus/shared.txt",
-			{},
-		);
-
-		const flags = require("../util/featureflags") as {
-			useConditionInFocus: boolean;
-		};
-		flags.useConditionInFocus = true;
-		try {
-			const mainContent = treeWithFocuses(focusBlock("m1", 0, 0)).replace(
-				"id = test_tree",
-				"id = test_tree\n    shared_focus = { SH_a SH_b }",
-			);
-			const mainFile = convertFocusFileNodeToJson(
-				parseHoi4File(mainContent),
-				{},
-			);
-			const merged = getFocusTreeWithFocusFile(
-				mainFile,
-				sharedTrees,
-				filePath,
-				{},
-			);
-			const main = merged.find((t) => t.id === "test_tree");
-			assert.ok(main?.focuses["SH_a"], "SH_a must be merged in");
-			assert.ok(main?.focuses["SH_b"], "SH_b must be merged in");
-		} finally {
-			flags.useConditionInFocus = false;
-		}
+		assert.ok(host.focuses["SH_a"], "SH_a must be merged in");
+		assert.ok(host.focuses["SH_b"], "SH_b must be merged in");
 	});
 });

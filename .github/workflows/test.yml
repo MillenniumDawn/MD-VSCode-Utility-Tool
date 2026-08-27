@@ -31,6 +31,10 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
+      # Fails only above the threshold in .jscpd.json, so the number can be walked down over time
+      # instead of blocking every branch that touches a file already carrying a clone.
+      - name: Duplication
+        run: npm run dupes
       - name: Compile tests
         run: npm run pretest
       - name: Test with coverage
