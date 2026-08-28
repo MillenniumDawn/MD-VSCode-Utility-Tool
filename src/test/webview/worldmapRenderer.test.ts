@@ -17,7 +17,10 @@ import {
 	renderAllOffsets,
 	RenderContext,
 } from "../../../webviewsrc/worldmap/renderContext";
-import { getResourcesSize } from "../../../webviewsrc/worldmap/stateLayer";
+import {
+	getResourcesSize,
+	renderMapLabels,
+} from "../../../webviewsrc/worldmap/stateLayer";
 import { renderAllEdges } from "../../../webviewsrc/worldmap/provinceLayer";
 import {
 	renderHoverSelectionByViewMode,
@@ -197,20 +200,22 @@ function drewStroke(
 	x1: number,
 	y1: number,
 ) {
-	return calls.some(
-		(call) =>
-			call.method === "moveTo" &&
-			call.strokeStyle === style &&
-			call.args[0] === x0 &&
-			call.args[1] === y0,
-	) &&
+	return (
+		calls.some(
+			(call) =>
+				call.method === "moveTo" &&
+				call.strokeStyle === style &&
+				call.args[0] === x0 &&
+				call.args[1] === y0,
+		) &&
 		calls.some(
 			(call) =>
 				call.method === "lineTo" &&
 				call.strokeStyle === style &&
 				call.args[0] === x1 &&
 				call.args[1] === y1,
-		);
+		)
+	);
 }
 
 function paintEdges(
@@ -462,6 +467,63 @@ describe("webview/worldmap/stateLayer", function () {
 			{ width: 34, height: 24 },
 		);
 	});
+
+	it("writes each province id in province view", function () {
+		const p = province({ id: 1, centerOfMass: { x: 1, y: 1 } });
+		const { canvasContext, calls } = recordingContext();
+		renderMapLabels(
+			context({
+				viewPoint: identityViewPoint(),
+				renderedProvincesByOffset: { 0: [p] },
+			}),
+			emptyMap({ provinces: [undefined, p], provincesCount: 2 }),
+			canvasContext,
+			0,
+		);
+		assert.ok(
+			calls.some(
+				(call) =>
+					call.method === "fillText" &&
+					call.args[0] === "1" &&
+					call.args[1] === 1 &&
+					call.args[2] === 1,
+			),
+		);
+	});
+
+	it("writes a state id once for every province in that state", function () {
+		const p1 = province({ id: 1 });
+		const p2 = province({ id: 2 });
+		const { canvasContext, calls } = recordingContext();
+		renderMapLabels(
+			context({
+				viewPoint: identityViewPoint(),
+				topBar: {
+					viewMode$: { value: "state" },
+					colorSet$: { value: "provinceid" },
+					display: { selectedValues$: { value: [] } },
+				} as unknown as TopBar,
+				provinceToState: { 1: 1, 2: 1 },
+				renderedProvincesByOffset: { 0: [p1, p2] },
+			}),
+			emptyMap({
+				provinces: [undefined, p1, p2],
+				provincesCount: 3,
+				states: [
+					undefined,
+					{ id: 1, provinces: [1, 2], centerOfMass: { x: 5, y: 6 } },
+				],
+				statesCount: 2,
+			}),
+			canvasContext,
+			0,
+		);
+		const labels = calls.filter(
+			(call) => call.method === "fillText" && call.args[0] === "1",
+		);
+		assert.strictEqual(labels.length, 1);
+		assert.deepStrictEqual(labels[0]?.args.slice(1), [5, 6]);
+	});
 });
 
 describe("webview/worldmap/Renderer.renderMapImpl", function () {
@@ -519,6 +581,37 @@ describe("webview/worldmap/Renderer.renderMapImpl", function () {
 				call.args[3] === 4,
 		);
 		assert.ok(provinceFill);
+	});
+
+	it("strokes edges when the display list includes edge", function () {
+		const { a, b } = sharedEdge();
+		const { canvasContext, calls } = recordingContext();
+		const canvasPrototype = (window as any).HTMLCanvasElement.prototype;
+		const originalGetContext = canvasPrototype.getContext;
+		canvasPrototype.getContext = () => canvasContext;
+		const canvas = document.createElement("canvas");
+		canvas.width = 8;
+		canvas.height = 8;
+		try {
+			Renderer.renderMapImpl(
+				canvas,
+				{
+					viewMode$: { value: "province" },
+					colorSet$: { value: "provinceid" },
+					warningFilter: { selectedValues$: { value: [] } },
+					display: { selectedValues$: { value: ["edge"] } },
+				} as unknown as TopBar,
+				identityViewPoint(),
+				emptyMap({
+					provinces: [undefined, a, b],
+					provincesCount: 3,
+				}),
+				{ preciseEdge: true, overwriteRenderPrecision: 1 },
+			);
+		} finally {
+			canvasPrototype.getContext = originalGetContext;
+		}
+		assert.ok(drewStroke(calls, "black", 2, 0, 2, 2));
 	});
 });
 
@@ -582,7 +675,14 @@ describe("webview/worldmap/provinceLayer edges", function () {
 	});
 
 	it("still draws an impassable intra-state edge in red", function () {
-		const calls = paintEdges("state", { 1: 1, 2: 1 }, { 1: 1, 2: 1 }, {}, {}, "impassable");
+		const calls = paintEdges(
+			"state",
+			{ 1: 1, 2: 1 },
+			{ 1: 1, 2: 1 },
+			{},
+			{},
+			"impassable",
+		);
 		assert.ok(drewStroke(calls, "red", 2, 0, 2, 2));
 		assert.ok(!drewStroke(calls, "black", 2, 0, 2, 2));
 	});
@@ -904,14 +1004,52 @@ describe("webview/worldmap/overlayLayer", function () {
 		assert.strictEqual(green.length, 2);
 	});
 
+	it("fills adjacent provinces at a lower alpha when hovering", function () {
+		const neighbour = province({
+			id: 1,
+			coverZones: [{ x: 0, y: 0, w: 2, h: 2 }],
+		});
+		const hovered = province({
+			id: 2,
+			coverZones: [{ x: 4, y: 0, w: 2, h: 2 }],
+			boundingBox: { x: 4, y: 0, w: 2, h: 2 },
+			edges: [{ to: 1, type: "", path: [] } as any],
+		});
+		const { canvasContext, calls } = recordingContext();
+		renderHoverSelectionByViewMode({
+			backCanvasContext: canvasContext,
+			viewPoint: identityViewPoint(),
+			topBar: {
+				viewMode$: { value: "province" },
+				selectedProvinceId$: { value: undefined },
+				hoverProvinceId$: { value: 2 },
+				display: { selectedValues$: { value: ["mousehighlight"] } },
+			} as unknown as TopBar,
+			worldMap: emptyMap({
+				width: 8,
+				provinces: [undefined, neighbour, hovered],
+				provincesCount: 3,
+			}),
+			cursorX: 10,
+			cursorY: 10,
+			canvasWidth: 400,
+			canvasHeight: 400,
+		});
+		assert.ok(
+			calls.some(
+				(call) =>
+					call.method === "fillRect" &&
+					call.fillStyle === "rgba(255, 255, 255, 0.3)",
+			),
+		);
+	});
+
 	it("paints loading text below the top bar", function () {
 		const { canvasContext, calls } = recordingContext();
 		renderLoadingText(canvasContext, "Loading");
 		assert.ok(
 			calls.some(
-				(call) =>
-					call.method === "fillRect" &&
-					call.args[1] === topBarHeight,
+				(call) => call.method === "fillRect" && call.args[1] === topBarHeight,
 			),
 		);
 		assert.ok(
