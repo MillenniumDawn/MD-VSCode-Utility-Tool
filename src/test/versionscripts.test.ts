@@ -14,6 +14,7 @@ const selectBullets = require('../../../scripts/select-bullets');
 const releasePrBody = require('../../../scripts/release-pr-body');
 const rewriteBullets = require('../../../scripts/rewrite-bullets');
 const mergeChangelog = require('../../../scripts/merge-changelog');
+const issueVersionTriage = require('../../../scripts/issue-version-triage');
 
 describe('scripts/bump-version', function () {
     describe('nextVersion', function () {
@@ -1268,6 +1269,89 @@ describe('scripts/rewrite-bullets', function () {
         it('reads the flags the workflow passes', function () {
             assert.strictEqual(rewriteBullets.parseArgs(['--bullets-file', 'a.json']).file, 'a.json');
             assert.strictEqual(rewriteBullets.parseArgs(['--check']).check, true);
+        });
+    });
+});
+
+describe('scripts/issue-version-triage', function () {
+    function bodyWithVersion(version: string | undefined): string {
+        const versionSection = version === undefined ? '' : `### Extension version\n\n${version}\n\n`;
+        return '### Which utility\n\nFocus tree preview\n\n### What happens\n\nIt crashes.\n\n'
+            + versionSection + '### VSCode version\n\n1.96.2\n';
+    }
+
+    describe('extractVersion', function () {
+        it('reads the value out of the rendered form section', function () {
+            assert.strictEqual(issueVersionTriage.extractVersion(bodyWithVersion('1.1.20')), '1.1.20');
+        });
+
+        it('returns nothing when the section is missing entirely', function () {
+            assert.strictEqual(issueVersionTriage.extractVersion(bodyWithVersion(undefined)), undefined);
+        });
+
+        it('returns nothing for a hand-written issue with no form sections at all', function () {
+            assert.strictEqual(issueVersionTriage.extractVersion('Just a plain description of the bug.'), undefined);
+        });
+
+        it('returns nothing when the field was left empty', function () {
+            assert.strictEqual(issueVersionTriage.extractVersion(bodyWithVersion('')), undefined);
+        });
+
+        it('is read out from anywhere among the other sections', function () {
+            const body = '### Extension version\n\n1.1.20\n\n### Platform\n\nLinux\n';
+            assert.strictEqual(issueVersionTriage.extractVersion(body), '1.1.20');
+        });
+    });
+
+    describe('evaluate', function () {
+        it('flags a report filed against an older version', function () {
+            const result = issueVersionTriage.evaluate({ body: bodyWithVersion('1.1.20'), currentVersion: '1.1.30' });
+            assert.strictEqual(result.action, 'flag');
+            assert.strictEqual(result.reported, '1.1.20');
+            assert.strictEqual(result.current, '1.1.30');
+            assert.match(result.comment, /1\.1\.20/);
+            assert.match(result.comment, /1\.1\.30/);
+        });
+
+        it('does nothing for a report on the current version', function () {
+            const result = issueVersionTriage.evaluate({ body: bodyWithVersion('1.1.30'), currentVersion: '1.1.30' });
+            assert.strictEqual(result.action, 'none');
+        });
+
+        it('does nothing for a report on a newer version', function () {
+            const result = issueVersionTriage.evaluate({ body: bodyWithVersion('1.2.0'), currentVersion: '1.1.30' });
+            assert.strictEqual(result.action, 'none');
+        });
+
+        it('leaves a hand-written issue with no version field alone', function () {
+            const result = issueVersionTriage.evaluate({ body: 'No form here.', currentVersion: '1.1.30' });
+            assert.strictEqual(result.action, 'none');
+            assert.strictEqual(result.reason, 'no version field');
+        });
+
+        it('leaves a malformed version alone instead of erroring', function () {
+            for (const value of ['latest', 'v1.1.x', '']) {
+                const result = issueVersionTriage.evaluate({ body: bodyWithVersion(value), currentVersion: '1.1.30' });
+                assert.strictEqual(result.action, 'none', value);
+            }
+        });
+
+        it('does not comment again once the label is already there', function () {
+            const result = issueVersionTriage.evaluate({
+                body: bodyWithVersion('1.1.20'),
+                currentVersion: '1.1.30',
+                labels: ['bug', issueVersionTriage.label],
+            });
+            assert.strictEqual(result.action, 'none');
+            assert.strictEqual(result.reason, 'already labelled');
+        });
+    });
+
+    describe('commentBody', function () {
+        it('says only which version they are on and which is current', function () {
+            const comment = issueVersionTriage.commentBody('1.1.20', '1.1.30');
+            assert.strictEqual(comment, "You're on `1.1.20`, and `1.1.30` is current. "
+                + 'Please update and let us know if this still happens on the current version.');
         });
     });
 });
