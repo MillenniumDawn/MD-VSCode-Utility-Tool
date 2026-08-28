@@ -61,9 +61,7 @@ export function renderMapBackground(
 					province,
 					toProvince,
 				);
-				if (
-					renderContext.viewPoint.lineInView(startPoint, endPoint, xOffset)
-				) {
+				if (renderContext.viewPoint.lineInView(startPoint, endPoint, xOffset)) {
 					if (!(province.id in renderedProvincesById)) {
 						renderedProvinces.push(province);
 						renderedProvincesById[province.id] = province;
@@ -134,9 +132,7 @@ export function renderProvince(
 			? Math.pow(
 					2,
 					Math.floor(Math.log2(1 / scale)) +
-						(overwriteRenderPrecision !== undefined
-							? 0
-							: renderPrecisionBase),
+						(overwriteRenderPrecision !== undefined ? 0 : renderPrecisionBase),
 				)
 			: (overwriteRenderPrecision ??
 				(scale <= renderPrecisionBase

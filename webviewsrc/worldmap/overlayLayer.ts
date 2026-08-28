@@ -334,7 +334,9 @@ function renderProvinceHoverSelection(
 	session: OverlaySession,
 	worldMap: FEWorldMap,
 ) {
-	let province = worldMap.getProvinceById(session.topBar.selectedProvinceId$.value);
+	let province = worldMap.getProvinceById(
+		session.topBar.selectedProvinceId$.value,
+	);
 	if (province) {
 		renderSelectedProvince(session, province, worldMap);
 	}
@@ -436,11 +438,7 @@ function renderHoverSelection(
 		}
 	}
 
-	if (
-		hover &&
-		isMouseHighlightVisible(session.topBar) &&
-		hover !== selected
-	) {
+	if (hover && isMouseHighlightVisible(session.topBar) && hover !== selected) {
 		for (const provinceId of hover.provinces) {
 			const province = worldMap.getProvinceById(provinceId);
 			if (province) {
@@ -592,8 +590,7 @@ function renderTooltip(
 
 	backCanvasContext.font = `${fontSize}px sans-serif`;
 	backCanvasContext.textAlign = "start";
-	let width =
-		max(text.map((t) => backCanvasContext.measureText(t).width)) ?? 0;
+	let width = max(text.map((t) => backCanvasContext.measureText(t).width)) ?? 0;
 	let height = fontSize * text.length + linePadding * (text.length - 1);
 
 	if (cursorX + toolTipOffsetX + width + 2 * marginX > session.canvasWidth) {

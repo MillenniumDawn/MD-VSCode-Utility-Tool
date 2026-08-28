@@ -230,9 +230,7 @@ function highestContinent(worldMap: FEWorldMap): number {
 function highestManpower(worldMap: FEWorldMap): number {
 	let result = 0;
 	worldMap.forEachState(
-		(state) => (
-			state.manpower > result ? (result = state.manpower) : 0, false
-		),
+		(state) => (state.manpower > result ? (result = state.manpower) : 0, false),
 	);
 	return result;
 }
