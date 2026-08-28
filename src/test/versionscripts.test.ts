@@ -15,6 +15,7 @@ const releasePrBody = require('../../../scripts/release-pr-body');
 const rewriteBullets = require('../../../scripts/rewrite-bullets');
 const mergeChangelog = require('../../../scripts/merge-changelog');
 const issueVersionTriage = require('../../../scripts/issue-version-triage');
+const closeFixedIssues = require('../../../scripts/close-fixed-issues');
 
 describe('scripts/bump-version', function () {
     describe('nextVersion', function () {
@@ -1352,6 +1353,228 @@ describe('scripts/issue-version-triage', function () {
             const comment = issueVersionTriage.commentBody('1.1.20', '1.1.30');
             assert.strictEqual(comment, "You're on `1.1.20`, and `1.1.30` is current. "
                 + 'Please update and let us know if this still happens on the current version.');
+        });
+    });
+});
+
+describe('scripts/close-fixed-issues', function () {
+    describe('extractReportedVersion', function () {
+        it('reads the version out of the bug report template field', function () {
+            assert.strictEqual(
+                closeFixedIssues.extractReportedVersion('### Extension version\n\n1.1.24\n\n### VSCode version\n\n1.96.2\n'),
+                '1.1.24');
+        });
+
+        it('takes the version out of surrounding text', function () {
+            assert.strictEqual(
+                closeFixedIssues.extractReportedVersion('### Extension version\n\nv1.1.24 (from the marketplace)\n'),
+                '1.1.24');
+        });
+
+        it('returns nothing when the field is missing or unreadable', function () {
+            assert.strictEqual(closeFixedIssues.extractReportedVersion('### What happens\n\nIt breaks.\n'), undefined);
+            assert.strictEqual(closeFixedIssues.extractReportedVersion('### Extension version\n\nlatest\n'), undefined);
+            assert.strictEqual(closeFixedIssues.extractReportedVersion(undefined), undefined);
+        });
+    });
+
+    describe('allSections', function () {
+        it('splits the changelog into its version sections', function () {
+            const result = closeFixedIssues.allSections(
+                'v1.1.25\n\n  Functionality:\n\n- New.\n\nv1.1.24\n\n  Bugfixes:\n\n- Old.\n');
+            assert.deepStrictEqual(result.map((section: { version: string }) => section.version), ['1.1.25', '1.1.24']);
+            assert.ok(result[0].text.startsWith('v1.1.25'));
+            assert.ok(result[0].text.includes('- New.'));
+        });
+
+        it('returns nothing for a changelog with no version heading', function () {
+            assert.deepStrictEqual(closeFixedIssues.allSections('Some prose\n'), []);
+            assert.deepStrictEqual(closeFixedIssues.allSections(''), []);
+        });
+    });
+
+    describe('changelogSince', function () {
+        const changelog = 'v1.1.25\n\n  Functionality:\n\n- Newest. Issue #9.\n'
+            + '\nv1.1.24\n\n  Bugfixes:\n\n- Middle. Issue #7.\n'
+            + '\nv1.1.23\n\n  Functionality:\n\n- Oldest.\n';
+
+        it('collects only what shipped after the reported version, oldest first', function () {
+            const result = closeFixedIssues.changelogSince(changelog, '1.1.23');
+            assert.deepStrictEqual(result.versions, ['1.1.24', '1.1.25']);
+            assert.ok(result.text.indexOf('Middle') < result.text.indexOf('Newest'));
+            assert.ok(!result.text.includes('Oldest'));
+        });
+
+        it('returns nothing when the reported version is already current', function () {
+            assert.deepStrictEqual(closeFixedIssues.changelogSince(changelog, '1.1.25'), { versions: [], text: '' });
+        });
+
+        it('returns nothing for an unreadable reported version', function () {
+            assert.deepStrictEqual(closeFixedIssues.changelogSince(changelog, 'latest'), { versions: [], text: '' });
+            assert.deepStrictEqual(closeFixedIssues.changelogSince(changelog, undefined), { versions: [], text: '' });
+        });
+    });
+
+    describe('describeIssue', function () {
+        it('carries the report and the changelog range into the prompt', function () {
+            const prompt = closeFixedIssues.describeIssue({
+                number: 12,
+                title: 'The tree flickers',
+                body: 'It flickers on load.',
+                reportedVersion: '1.1.23',
+                changesText: '- Stop the flicker on load. Issue #12.',
+            });
+            assert.ok(prompt.includes('Issue #12'));
+            assert.ok(prompt.includes('Title: The tree flickers'));
+            assert.ok(prompt.includes('Reported on version 1.1.23'));
+            assert.ok(prompt.includes('It flickers on load.'));
+            assert.ok(prompt.includes('Stop the flicker on load. Issue #12.'));
+        });
+
+        it('says so when nothing shipped', function () {
+            const prompt = closeFixedIssues.describeIssue({
+                number: 1, title: 'A bug', body: '', reportedVersion: '1.1.23', changesText: '',
+            });
+            assert.ok(prompt.includes('(none)'));
+        });
+    });
+
+    describe('parseVerdict', function () {
+        it('reads a clean structured reply', function () {
+            assert.deepStrictEqual(
+                closeFixedIssues.parseVerdict(JSON.stringify({ verdict: 'fixed', version: '1.1.24', reasoning: 'Fixed there.' })),
+                { verdict: 'fixed', version: '1.1.24', reasoning: 'Fixed there.' });
+        });
+
+        it('takes the reply out of a code fence', function () {
+            const content = '```json\n' + JSON.stringify({ verdict: 'unsure', version: '', reasoning: 'Not clear.' }) + '\n```';
+            assert.strictEqual(closeFixedIssues.parseVerdict(content).verdict, 'unsure');
+        });
+
+        it('treats unparseable content as not fixed', function () {
+            assert.strictEqual(closeFixedIssues.parseVerdict('not json at all').verdict, 'not fixed');
+        });
+
+        it('treats an unknown verdict value as not fixed', function () {
+            const content = JSON.stringify({ verdict: 'maybe', version: '1.1.24', reasoning: 'Hmm.' });
+            assert.strictEqual(closeFixedIssues.parseVerdict(content).verdict, 'not fixed');
+        });
+
+        it('falls back to a placeholder reason when the reply gives none', function () {
+            const content = JSON.stringify({ verdict: 'fixed', version: '1.1.24', reasoning: '' });
+            assert.strictEqual(closeFixedIssues.parseVerdict(content).reasoning, 'The model gave no reasoning.');
+        });
+    });
+
+    describe('decideAction', function () {
+        it('closes on a confident fixed verdict naming a version it was shown', function () {
+            assert.deepStrictEqual(
+                closeFixedIssues.decideAction({ verdict: 'fixed', version: '1.1.24', reasoning: '' }, ['1.1.24', '1.1.25']),
+                { close: true, version: '1.1.24' });
+        });
+
+        it('never closes on not fixed or unsure', function () {
+            assert.strictEqual(
+                closeFixedIssues.decideAction({ verdict: 'not fixed', version: '1.1.24', reasoning: '' }, ['1.1.24']).close, false);
+            assert.strictEqual(
+                closeFixedIssues.decideAction({ verdict: 'unsure', version: '1.1.24', reasoning: '' }, ['1.1.24']).close, false);
+        });
+
+        it('never closes on a version it was not shown', function () {
+            assert.strictEqual(
+                closeFixedIssues.decideAction({ verdict: 'fixed', version: '1.1.99', reasoning: '' }, ['1.1.24']).close, false);
+            assert.strictEqual(
+                closeFixedIssues.decideAction({ verdict: 'fixed', version: '', reasoning: '' }, ['1.1.24']).close, false);
+        });
+    });
+
+    describe('commentFor', function () {
+        it('names the version and carries the marker', function () {
+            const comment = closeFixedIssues.commentFor('1.1.24');
+            assert.ok(comment.includes(closeFixedIssues.marker));
+            assert.ok(comment.includes('v1.1.24'));
+        });
+    });
+
+    describe('hasLabel', function () {
+        it('matches a label object array', function () {
+            assert.ok(closeFixedIssues.hasLabel([{ name: 'outdated version' }], 'outdated version'));
+            assert.ok(!closeFixedIssues.hasLabel([{ name: 'bug' }], 'outdated version'));
+        });
+
+        it('handles missing labels', function () {
+            assert.ok(!closeFixedIssues.hasLabel(undefined, 'outdated version'));
+            assert.ok(!closeFixedIssues.hasLabel([], 'outdated version'));
+        });
+    });
+
+    describe('alreadyHandled', function () {
+        it('finds the marker among the comments', function () {
+            assert.ok(closeFixedIssues.alreadyHandled([{ body: `${closeFixedIssues.marker}\nClosed as fixed.` }]));
+            assert.ok(!closeFixedIssues.alreadyHandled([{ body: 'Any thoughts?' }]));
+        });
+
+        it('handles no comments at all', function () {
+            assert.ok(!closeFixedIssues.alreadyHandled(undefined));
+            assert.ok(!closeFixedIssues.alreadyHandled([]));
+        });
+    });
+
+    describe('judge', function () {
+        let originalWrite: typeof process.stdout.write;
+        let original: typeof globalThis.fetch;
+
+        beforeEach(function () {
+            originalWrite = process.stdout.write;
+            process.stdout.write = ((chunk: string | Uint8Array) =>
+                /^::(warning|notice)::/.test(String(chunk)) ? true : originalWrite.call(process.stdout, chunk)
+            ) as typeof process.stdout.write;
+            original = globalThis.fetch;
+        });
+
+        afterEach(function () {
+            process.stdout.write = originalWrite;
+            globalThis.fetch = original;
+        });
+
+        it('sends the report and the changelog range and reads the structured verdict back', async function () {
+            let sentBody = '';
+            globalThis.fetch = (async (_url: string, init: { body: string }) => {
+                sentBody = init.body;
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        choices: [{ message: { content: JSON.stringify({ verdict: 'fixed', version: '1.1.24', reasoning: 'Named there.' }) } }],
+                    }),
+                };
+            }) as unknown as typeof globalThis.fetch;
+
+            const verdict = await closeFixedIssues.judge(
+                { number: 5, title: 'A bug', body: 'It breaks.', reportedVersion: '1.1.23', changesText: '- Fixed it. Issue #5.' },
+                'key');
+
+            assert.deepStrictEqual(verdict, { verdict: 'fixed', version: '1.1.24', reasoning: 'Named there.' });
+            assert.ok(sentBody.includes('Issue #5'));
+            assert.ok(sentBody.includes('Fixed it. Issue #5.'));
+        });
+
+        it('propagates a failed request rather than guessing a verdict', async function () {
+            globalThis.fetch = (async () => ({
+                ok: false,
+                status: 500,
+                text: async () => 'down',
+            })) as unknown as typeof globalThis.fetch;
+
+            await assert.rejects(() => closeFixedIssues.judge(
+                { number: 5, title: 'A bug', body: '', reportedVersion: '1.1.23', changesText: '' }, 'key'));
+        });
+    });
+
+    describe('parseArgs', function () {
+        it('reads --dry-run', function () {
+            assert.strictEqual(closeFixedIssues.parseArgs([]).dryRun, false);
+            assert.strictEqual(closeFixedIssues.parseArgs(['--dry-run']).dryRun, true);
         });
     });
 });
