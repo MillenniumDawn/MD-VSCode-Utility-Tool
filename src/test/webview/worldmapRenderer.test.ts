@@ -687,6 +687,68 @@ describe("webview/worldmap/provinceLayer edges", function () {
 		assert.ok(!drewStroke(calls, "black", 2, 0, 2, 2));
 	});
 
+	it("skips interior points on a dense edge when preciseEdge is off", function () {
+		const points = [];
+		for (let y = 0; y <= 10; y++) {
+			points.push({ x: 2, y });
+		}
+		const { a, b } = sharedEdge("", [points]);
+		const { canvasContext, calls } = recordingContext();
+		renderAllEdges(
+			context({
+				viewPoint: identityViewPoint(),
+				renderedProvincesByOffset: { 0: [a, b] },
+				renderedProvinces: [a, b],
+				preciseEdge: false,
+			}),
+			emptyMap({ provinces: [undefined, a, b], provincesCount: 3 }),
+			canvasContext,
+			0,
+		);
+		assert.deepStrictEqual(
+			calls
+				.filter(
+					(call) => call.method === "lineTo" && call.strokeStyle === "black",
+				)
+				.map((call) => call.args[1]),
+			[0, 5, 10],
+		);
+	});
+
+	it("keeps a sharp bend even when preciseEdge is off", function () {
+		const { a, b } = sharedEdge("", [
+			[
+				{ x: 2, y: 0 },
+				{ x: 2, y: 1 },
+				{ x: 10, y: 5 },
+				{ x: 2, y: 9 },
+				{ x: 2, y: 10 },
+			],
+		]);
+		const { canvasContext, calls } = recordingContext();
+		renderAllEdges(
+			context({
+				viewPoint: identityViewPoint(),
+				renderedProvincesByOffset: { 0: [a, b] },
+				renderedProvinces: [a, b],
+				preciseEdge: false,
+			}),
+			emptyMap({ provinces: [undefined, a, b], provincesCount: 3 }),
+			canvasContext,
+			0,
+		);
+		assert.ok(drewStroke(calls, "black", 2, 0, 10, 5));
+		assert.ok(
+			calls.some(
+				(call) =>
+					call.method === "lineTo" &&
+					call.strokeStyle === "black" &&
+					call.args[0] === 2 &&
+					call.args[1] === 10,
+			),
+		);
+	});
+
 	it("paints an empty-path adjacency in red between start and stop", function () {
 		const a = province({ id: 1, edges: [] });
 		const b = province({
@@ -1145,6 +1207,181 @@ describe("webview/worldmap/colors extra sets", function () {
 				context(),
 			),
 			0,
+		);
+	});
+
+	it("maps max manpower to red and zero manpower to green", function () {
+		const hot = province({ id: 1, type: "land" });
+		const cold = province({ id: 2, type: "land" });
+		const map = emptyMap({
+			states: [
+				undefined,
+				{ id: 1, provinces: [1], manpower: 32 },
+				{ id: 2, provinces: [2], manpower: 0 },
+			],
+			statesCount: 3,
+		});
+		const renderContext = context({ provinceToState: { 1: 1, 2: 2 } });
+		assert.strictEqual(
+			getColorByColorSet("manpower", hot, map, renderContext),
+			0xff0000,
+		);
+		assert.strictEqual(
+			getColorByColorSet("manpower", cold, map, renderContext),
+			0x00ff00,
+		);
+	});
+
+	it("maps mid manpower through the yellow GYR stop", function () {
+		const mid = province({ id: 2, type: "land" });
+		const map = emptyMap({
+			states: [
+				undefined,
+				{ id: 1, provinces: [1], manpower: 32 },
+				{ id: 2, provinces: [2], manpower: 1 },
+			],
+			statesCount: 3,
+		});
+		assert.strictEqual(
+			getColorByColorSet(
+				"manpower",
+				mid,
+				map,
+				context({ provinceToState: { 1: 1, 2: 2 } }),
+			),
+			0xffff00,
+		);
+	});
+
+	it("treats negative manpower as zero on the GYR scale", function () {
+		const negative = province({ id: 2, type: "land" });
+		const map = emptyMap({
+			states: [
+				undefined,
+				{ id: 1, provinces: [1], manpower: 32 },
+				{ id: 2, provinces: [2], manpower: -5 },
+			],
+			statesCount: 3,
+		});
+		assert.strictEqual(
+			getColorByColorSet(
+				"manpower",
+				negative,
+				map,
+				context({ provinceToState: { 1: 1, 2: 2 } }),
+			),
+			0x00ff00,
+		);
+	});
+
+	it("maps the highest victory point to white and a missing one to near-black", function () {
+		const scored = province({ id: 1 });
+		const blank = province({ id: 2 });
+		const map = emptyMap({
+			states: [
+				undefined,
+				{ id: 1, provinces: [1, 2], victoryPoints: { 1: 100 } },
+			],
+			statesCount: 2,
+		});
+		const renderContext = context({ provinceToState: { 1: 1, 2: 1 } });
+		assert.strictEqual(
+			getColorByColorSet("victorypoint", scored, map, renderContext),
+			0xffffff,
+		);
+		assert.strictEqual(
+			getColorByColorSet("victorypoint", blank, map, renderContext),
+			0x080808,
+		);
+	});
+
+	it("maps max resources to red and none to green", function () {
+		const rich = province({ id: 1, type: "land" });
+		const poor = province({ id: 2, type: "land" });
+		const map = emptyMap({
+			states: [
+				undefined,
+				{ id: 1, provinces: [1], resources: { steel: 32 } },
+				{ id: 2, provinces: [2], resources: {} },
+			],
+			statesCount: 3,
+		});
+		const renderContext = context({ provinceToState: { 1: 1, 2: 2 } });
+		assert.strictEqual(
+			getColorByColorSet("resources", rich, map, renderContext),
+			0xff0000,
+		);
+		assert.strictEqual(
+			getColorByColorSet("resources", poor, map, renderContext),
+			0x00ff00,
+		);
+	});
+
+	it("keeps a sea province on the water default under resources", function () {
+		assert.strictEqual(
+			getColorByColorSet(
+				"resources",
+				province({ type: "sea" }),
+				emptyMap({
+					states: [undefined, { id: 1, provinces: [1], resources: { steel: 8 } }],
+					statesCount: 2,
+				}),
+				context({ provinceToState: { 1: 1 } }),
+			),
+			0x1010b0,
+		);
+	});
+
+	it("maps supply value linearly onto the GYR scale", function () {
+		const full = province({ id: 1, type: "land" });
+		const half = province({ id: 2, type: "land" });
+		const empty = province({ id: 3, type: "land" });
+		const map = emptyMap({
+			states: [
+				undefined,
+				{ id: 1, provinces: [1] },
+				{ id: 2, provinces: [2] },
+				{ id: 3, provinces: [3] },
+			],
+			statesCount: 4,
+			supplyAreas: [
+				undefined,
+				{ id: 1, states: [1], value: 10 },
+				{ id: 2, states: [2], value: 5 },
+				{ id: 3, states: [3], value: 0 },
+			],
+			supplyAreasCount: 4,
+		});
+		const renderContext = context({
+			provinceToState: { 1: 1, 2: 2, 3: 3 },
+			stateToSupplyArea: { 1: 1, 2: 2, 3: 3 },
+		});
+		assert.strictEqual(
+			getColorByColorSet("supplyvalue", full, map, renderContext),
+			0xff0000,
+		);
+		assert.strictEqual(
+			getColorByColorSet("supplyvalue", half, map, renderContext),
+			0xffff00,
+		);
+		assert.strictEqual(
+			getColorByColorSet("supplyvalue", empty, map, renderContext),
+			0x00ff00,
+		);
+	});
+
+	it("keeps a sea province on the water default under supply value", function () {
+		assert.strictEqual(
+			getColorByColorSet(
+				"supplyvalue",
+				province({ type: "sea" }),
+				emptyMap({
+					supplyAreas: [undefined, { id: 1, states: [1], value: 10 }],
+					supplyAreasCount: 2,
+				}),
+				context(),
+			),
+			0x1010b0,
 		);
 	});
 });
