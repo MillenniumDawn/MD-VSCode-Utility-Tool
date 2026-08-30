@@ -1,7 +1,14 @@
 import { ConditionComplexExpr, ConditionItem, extractConditionValue } from "../../hoiformat/condition";
-import { Node, NodeValue, Token, SymbolNode } from "../../hoiformat/hoiparser";
+import { Node, Token } from "../../hoiformat/hoiparser";
 import { Scope } from "../../hoiformat/scope";
-import { Enum, Raw, SchemaDef, convertNodeToJson, isSymbolNode } from "../../hoiformat/schema";
+import { Enum, Raw, SchemaDef, convertNodeToJson } from "../../hoiformat/schema";
+import {
+	childNodes,
+	hasContent,
+	readBoolean,
+	readModifierPairs,
+	readScalar,
+} from "../../hoiformat/rawblock";
 
 // An ideas file is `ideas = { <category> = { <idea key> = { ... } } }`: two nested levels of keys
 // the mod author chooses, wrapping a block whose own keys are fixed. The outer two levels are
@@ -264,34 +271,9 @@ function getIdea(
 
 // ---------- raw block readers ----------
 
-// Keys that sit inside a `modifier` block without being modifiers: they name a localisation key to
-// print, and rendering them as "Custom Modifier Tooltip: some_tt_key" would be noise on every card
-// that has one -- which in Millennium Dawn is hundreds of them.
-const notModifiers = new Set(["custom_modifier_tooltip", "custom_effect_tooltip"]);
-
-function readModifierPairs(raw: Raw | undefined): ModifierPair[] {
-	const result: ModifierPair[] = [];
-	if (!raw || !Array.isArray(raw._raw.value)) {
-		return result;
-	}
-
-	for (const child of raw._raw.value) {
-		// A nested block inside `modifier` has no value to render, so it is dropped rather than
-		// shown empty.
-		if (!child.name || Array.isArray(child.value)) {
-			continue;
-		}
-		if (notModifiers.has(child.name.toLowerCase())) {
-			continue;
-		}
-		const value = readScalar(child.value);
-		if (value !== undefined) {
-			result.push({ key: child.name, value });
-		}
-	}
-
-	return result;
-}
+// childNodes, readScalar, readBoolean, readModifierPairs and hasContent live in
+// hoiformat/rawblock.ts: the decision schema wants exactly the same five, and the character schema
+// makes three.
 
 function readTargetedModifier(raw: Raw): TargetedModifier | undefined {
 	if (!Array.isArray(raw._raw.value)) {
@@ -356,38 +338,6 @@ function readEquipmentBonuses(raw: Raw | undefined): EquipmentBonusGroup[] {
 }
 
 // ---------- node helpers ----------
-
-function childNodes(node: Node): Node[] {
-	return Array.isArray(node.value) ? node.value : [];
-}
-
-function readScalar(value: NodeValue): number | string | boolean | undefined {
-	if (typeof value === "number" || typeof value === "string") {
-		return value;
-	}
-	if (isSymbolNode(value)) {
-		const name = (value as SymbolNode).name;
-		if (name === "yes") {
-			return true;
-		}
-		if (name === "no") {
-			return false;
-		}
-		// A `@constant` or a variable reference: keep the token so the reader at least sees which
-		// one was written, rather than the line disappearing.
-		return name;
-	}
-	return undefined;
-}
-
-function readBoolean(value: NodeValue): boolean | undefined {
-	const scalar = readScalar(value);
-	return typeof scalar === "boolean" ? scalar : undefined;
-}
-
-function hasContent(raw: Raw | undefined): boolean {
-	return raw !== undefined && Array.isArray(raw._raw.value) && raw._raw.value.length > 0;
-}
 
 function isDefined<T>(value: T | undefined): value is T {
 	return value !== undefined;

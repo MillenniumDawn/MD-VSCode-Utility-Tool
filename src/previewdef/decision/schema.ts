@@ -10,9 +10,10 @@ import {
 	findGuardedEffectItems,
 	projectEffects,
 } from "../../hoiformat/effect";
-import { Node, NodeValue, SymbolNode, Token } from "../../hoiformat/hoiparser";
+import { Node, NodeValue, Token } from "../../hoiformat/hoiparser";
 import { Scope } from "../../hoiformat/scope";
-import { HOIPartial, Raw, SchemaDef, convertNodeToJson, isSymbolNode } from "../../hoiformat/schema";
+import { HOIPartial, Raw, SchemaDef, convertNodeToJson } from "../../hoiformat/schema";
+import { childNodes, readModifierPairs, readScalar } from "../../hoiformat/rawblock";
 import { EffectTreeNode, ModifierPair } from "../sharedpayload";
 
 // A decisions file is `<category> = { <decision> = { ... } }`. There is no wrapper key -- unlike an
@@ -425,33 +426,10 @@ function readTargets(def: HOIPartial<DecisionDef>): DecisionTargets {
 	};
 }
 
-// Keys that sit inside a `modifier` block without being modifiers: they name a localisation key to
-// print, and rendering them as "Custom Effect Tooltip: some_tt_key" would be noise.
-const notModifiers = new Set(["custom_modifier_tooltip", "custom_effect_tooltip"]);
-
-function readModifierPairs(raw: Raw | undefined): ModifierPair[] {
-	const result: ModifierPair[] = [];
-	if (!raw || !Array.isArray(raw._raw.value)) {
-		return result;
-	}
-
-	for (const child of raw._raw.value) {
-		if (!child.name || Array.isArray(child.value)) {
-			continue;
-		}
-		if (notModifiers.has(child.name.toLowerCase())) {
-			continue;
-		}
-		const value = readScalar(child.value);
-		if (value !== undefined) {
-			result.push({ key: child.name, value });
-		}
-	}
-
-	return result;
-}
-
 // ---------- node helpers ----------
+
+// readModifierPairs, readScalar and childNodes live in hoiformat/rawblock.ts, shared with the idea
+// and character schemas.
 
 // `activate_mission = X`, and the block form `activate_mission = { ... }` that a few effects use.
 // Only the first names a decision; the second has nothing to point an arrow at.
@@ -460,33 +438,10 @@ function readTarget(value: NodeValue): string | undefined {
 	return typeof scalar === "string" ? scalar : undefined;
 }
 
-function childNodes(node: Node): Node[] {
-	return Array.isArray(node.value) ? node.value : [];
-}
-
 function readRawScalar(raw: Raw | undefined): number | string | undefined {
 	if (!raw) {
 		return undefined;
 	}
 	const scalar = readScalar(raw._raw.value);
 	return typeof scalar === "boolean" ? undefined : scalar;
-}
-
-function readScalar(value: NodeValue): number | string | boolean | undefined {
-	if (typeof value === "number" || typeof value === "string") {
-		return value;
-	}
-	if (isSymbolNode(value)) {
-		const name = (value as SymbolNode).name;
-		if (name === "yes") {
-			return true;
-		}
-		if (name === "no") {
-			return false;
-		}
-		// A `@constant` or a variable reference: keep the token so the reader at least sees which
-		// one was written, rather than the line disappearing.
-		return name;
-	}
-	return undefined;
 }

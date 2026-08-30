@@ -10,6 +10,8 @@
     "hoi4modutilities.eventTreePreview.desc": "이벤트 트리 미리보기 기능을 활성화합니다. 변경 후 다시 로드해야 합니다.",
     "hoi4modutilities.ideaPreview.title": "이념 미리보기",
     "hoi4modutilities.ideaPreview.desc": "이념 미리보기 기능을 활성화합니다. 변경 후 다시 로드해야 합니다.",
+    "hoi4modutilities.characterPreview.title": "인물 미리보기",
+    "hoi4modutilities.characterPreview.desc": "인물 미리보기 기능을 활성화합니다. 변경 후 다시 로드해야 합니다.",
     "hoi4modutilities.ideaSwapIndex.title": "이념 교체 색인",
     "hoi4modutilities.ideaSwapIndex.desc": "이념 미리보기에서 이념 연쇄를 표시할 수 있도록 common과 events에서 swap_ideas를 검색합니다. 처음 만들 때 많은 파일을 읽습니다. 변경 후 다시 로드해야 합니다.",
     "hoi4modutilities.sharedFocusIndex.title": "공유 중점 인덱스",

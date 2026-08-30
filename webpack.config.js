@@ -218,6 +218,7 @@ const webviewJsConfig = {
     miopreview: './webviewsrc/miopreview.ts',
     ideapreview: './webviewsrc/ideapreview.ts',
     decisiontree: './webviewsrc/decisiontree.ts',
+    characterpreview: './webviewsrc/characterpreview.ts',
   },
   
   output: {
