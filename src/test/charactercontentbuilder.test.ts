@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { renderCharacterFile } from "../previewdef/character/contentbuilder";
 import { serializeUpdate, LoaderRenderResult } from "../previewdef/loaderpreview";
 import { CharacterPreviewPayload } from "../previewdef/character/payload";
+import { toolbarFlagsOf } from "../previewdef/character/build";
 import { getCharactersFromFile } from "../previewdef/character/schema";
 import { CharacterTraits, readTraitFile } from "../util/characterTraits";
 import { parseHoi4File } from "../hoiformat/hoiparser";
@@ -129,10 +130,10 @@ describe("previewdef/character renderCharacterFile in-place update", () => {
 		assert.deepStrictEqual(
 			payloadOf(rendered).cards.map((c) => c.cardId),
 			[
-				"AFG_ahmed_shah_massoud:field_marshal",
-				"AFG_ahmed_shah_massoud:country_leader",
-				"AFG_ahmed_shah_massoud:advisor",
-				"AFG_plain:corps_commander",
+				"AFG_ahmed_shah_massoud:field_marshal:0",
+				"AFG_ahmed_shah_massoud:country_leader:1",
+				"AFG_ahmed_shah_massoud:advisor:2",
+				"AFG_plain:corps_commander:0",
 			],
 		);
 	});
@@ -209,6 +210,31 @@ describe("previewdef/character renderCharacterFile in-place update", () => {
 		}
 	});
 
+	it("forces the loader session when a dependency changed rather than this file", async () => {
+		// A trait file was edited, not the character file. The loader decides whether to reload by
+		// hashing the character file, which has not moved, so nothing short of a forced session gets
+		// the new traits onto the card.
+		const forced: boolean[] = [];
+		const loader = {
+			load: async (session: { force: boolean }) => {
+				forced.push(session.force);
+				return await loaderFor(massoud).load();
+			},
+		} as any;
+
+		await renderCharacterFile(loader, uri, webview, {
+			partial: true,
+			dependencyChanged: true,
+		});
+		await renderCharacterFile(loader, uri, webview, {
+			partial: true,
+			dependencyChanged: false,
+		});
+		await renderCharacterFile(loader, uri, webview);
+
+		assert.deepStrictEqual(forced, [true, false, false]);
+	});
+
 	it("renders an error page rather than throwing when the loader fails", async () => {
 		const failing = {
 			load: async () => {
@@ -236,18 +262,79 @@ describe("previewdef/character payload groups", () => {
 		const payload = await payloadFor(massoud);
 		const advisors = payload.groups.find((g) => g.kind === "advisor");
 
-		assert.deepStrictEqual(advisors?.cardIds, ["AFG_ahmed_shah_massoud:advisor"]);
+		assert.deepStrictEqual(advisors?.cardIds, ["AFG_ahmed_shah_massoud:advisor:2"]);
 	});
 
 	it("tells each card which other roles the same character has", async () => {
 		const payload = await payloadFor(massoud);
 		const advisor = payload.cards.find(
-			(c) => c.cardId === "AFG_ahmed_shah_massoud:advisor",
+			(c) => c.cardId === "AFG_ahmed_shah_massoud:advisor:2",
 		);
-		const plain = payload.cards.find((c) => c.cardId === "AFG_plain:corps_commander");
+		const plain = payload.cards.find((c) => c.cardId === "AFG_plain:corps_commander:0");
 
 		assert.deepStrictEqual(advisor?.otherRoles, ["field_marshal", "country_leader"]);
 		assert.deepStrictEqual(plain?.otherRoles, []);
+	});
+
+	it("keeps every slot of a character who writes the same role several times", async () => {
+		// Millennium Dawn's VER gives one character three separate advisor blocks. Keyed on the role
+		// kind alone all three cards would share an id, and the webview's id->card map would hold only
+		// the last of them and draw it once per slot -- three identical cards where the file wrote
+		// three different jobs.
+		const payload = await payloadFor(
+			`
+                characters = {
+                    VER_x = {
+                        advisor = { slot = army_chief idea_token = x_army traits = { a } }
+                        advisor = { slot = navy_chief idea_token = x_navy traits = { b } }
+                        advisor = { slot = air_chief idea_token = x_air traits = { c } }
+                    }
+                }
+            `,
+			{
+				traits: `leader_traits = {
+                    a = { modifier = { army_morale_factor = 0.1 } }
+                    b = { modifier = { navy_max_range_factor = 0.1 } }
+                    c = { modifier = { air_accidents_factor = -0.1 } }
+                } `,
+			},
+		);
+		const advisors = payload.groups.find((g) => g.kind === "advisor");
+
+		assert.deepStrictEqual(advisors?.cardIds, [
+			"VER_x:advisor:0",
+			"VER_x:advisor:1",
+			"VER_x:advisor:2",
+		]);
+		assert.deepStrictEqual(
+			payload.cards.map((c) => c.badges[0]),
+			["army_chief", "navy_chief", "air_chief"],
+		);
+		assert.deepStrictEqual(
+			payload.cards.map((c) => c.traits.map((t) => t.id).join()),
+			["a", "b", "c"],
+		);
+		// The ids the group lists are the ids the cards carry: nothing in the roster resolves to the
+		// same card twice.
+		assert.deepStrictEqual(
+			advisors?.cardIds,
+			payload.cards.map((c) => c.cardId),
+		);
+	});
+
+	it("names each other role once on a character who repeats one of them", async () => {
+		const payload = await payloadFor(`
+            characters = {
+                VER_y = {
+                    country_leader = { ideology = neutrality }
+                    advisor = { slot = army_chief }
+                    advisor = { slot = navy_chief }
+                }
+            }
+        `);
+		const leader = payload.cards.find((c) => c.roleKind === "country_leader");
+
+		assert.deepStrictEqual(leader?.otherRoles, ["advisor"]);
 	});
 
 	it("still shows a character that carries no role at all", async () => {
@@ -261,14 +348,14 @@ describe("previewdef/character payload groups", () => {
 		);
 		assert.deepStrictEqual(
 			payload.cards.map((c) => c.cardId),
-			["AFG_halfwritten:none"],
+			["AFG_halfwritten:none:0"],
 		);
 	});
 
 	it("puts the role's own facts on the card as badges", async () => {
 		const payload = await payloadFor(massoud);
 		const advisor = payload.cards.find(
-			(c) => c.cardId === "AFG_ahmed_shah_massoud:advisor",
+			(c) => c.cardId === "AFG_ahmed_shah_massoud:advisor:2",
 		);
 
 		assert.deepStrictEqual(advisor?.badges, [
@@ -281,7 +368,7 @@ describe("previewdef/character payload groups", () => {
 	it("formats a commander's skills", async () => {
 		const payload = await payloadFor(massoud);
 		const marshal = payload.cards.find(
-			(c) => c.cardId === "AFG_ahmed_shah_massoud:field_marshal",
+			(c) => c.cardId === "AFG_ahmed_shah_massoud:field_marshal:0",
 		);
 
 		assert.deepStrictEqual(
@@ -295,7 +382,7 @@ describe("previewdef/character payload traits", () => {
 	it("carries the modifiers the named trait grants", async () => {
 		const payload = await payloadFor(massoud, { traits: traitFile });
 		const advisor = payload.cards.find(
-			(c) => c.cardId === "AFG_ahmed_shah_massoud:advisor",
+			(c) => c.cardId === "AFG_ahmed_shah_massoud:advisor:2",
 		);
 		const trait = advisor?.traits[0];
 
@@ -327,7 +414,7 @@ describe("previewdef/character payload traits", () => {
 	it("marks a trait that is defined but grants nothing as having no detail", async () => {
 		const payload = await payloadFor(massoud, { traits: traitFile });
 		const leader = payload.cards.find(
-			(c) => c.cardId === "AFG_ahmed_shah_massoud:country_leader",
+			(c) => c.cardId === "AFG_ahmed_shah_massoud:country_leader:1",
 		);
 
 		assert.strictEqual(leader?.traits[0]?.id, "guerrilla_leader");
@@ -385,6 +472,37 @@ describe("previewdef/character toolbar flags", () => {
 		assert.strictEqual(payload.toolbarFlags.hasTraitDetail, true);
 		assert.strictEqual(payload.toolbarFlags.hasMultiRole, true);
 		assert.strictEqual(payload.toolbarFlags.hasUnknownTraits, false);
+	});
+
+	it("offers the description control for a file whose only description is a trait's", () => {
+		// The same toggle draws both, so reading only the character's description hid the control on
+		// every file that localises its traits and not its people.
+		const loc = (key: string, text: string) => ({ key, text });
+		const cardWith = (desc: { key: string; text: string }, traitDesc: { key: string; text: string }) =>
+			({
+				name: loc("x", "x"),
+				desc,
+				portrait: undefined,
+				portraitMissing: false,
+				otherRoles: [],
+				skills: [],
+				traits: [{ desc: traitDesc, hasDetail: false }],
+				hasUnknownTrait: false,
+				allowed: true,
+				available: true,
+				visible: true,
+			}) as never;
+
+		assert.strictEqual(
+			toolbarFlagsOf([cardWith(loc("a_desc", "a_desc"), loc("t_desc", "Steady hand"))])
+				.hasDescriptions,
+			true,
+		);
+		assert.strictEqual(
+			toolbarFlagsOf([cardWith(loc("a_desc", "a_desc"), loc("t_desc", "t_desc"))])
+				.hasDescriptions,
+			false,
+		);
 	});
 
 	it("offers the condition control once a role is gated", async () => {

@@ -323,7 +323,11 @@ export function traitToDom(trait: TraitCard): HTMLDivElement {
 			if (mouse.ctrlKey || mouse.metaKey) {
 				return;
 			}
-			e.stopPropagation();
+			// stopImmediatePropagation, not stopPropagation: subscribeNavigators puts its listener on
+			// this same pill, and stopping the bubble does nothing about a second listener on the
+			// element the event is already at. This one is registered while the card is built, before
+			// subscribeNavigators runs, so it is first and does get to cancel the rest.
+			e.stopImmediatePropagation();
 			detail.hidden = !detail.hidden;
 			pill.setAttribute("aria-expanded", String(!detail.hidden));
 		}),

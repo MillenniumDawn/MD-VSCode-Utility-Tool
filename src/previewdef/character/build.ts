@@ -61,8 +61,15 @@ export async function buildCharacterPreviewPayload(
 		const roles: (HOICharacterRole | undefined)[] =
 			character.roles.length > 0 ? character.roles : [undefined];
 
-		for (const role of roles) {
-			const card = await buildCard(character, role, roleKinds, portrait, loadResult);
+		for (const [occurrence, role] of roles.entries()) {
+			const card = await buildCard(
+				character,
+				role,
+				occurrence,
+				roleKinds,
+				portrait,
+				loadResult,
+			);
 			cards.push(card);
 			const key: CharacterGroupKind = role?.kind ?? noRole;
 			const list = cardIdsByGroup.get(key);
@@ -93,6 +100,11 @@ export async function buildCharacterPreviewPayload(
 async function buildCard(
 	character: HOICharacter,
 	role: HOICharacterRole | undefined,
+	// Which of the character's role blocks this card is, in file order. Part of the card id because
+	// the game lets a character write the same role twice -- VER gives one character three separate
+	// `advisor` blocks -- and an id built from the kind alone would collide, leaving the webview's
+	// id->card map holding only the last of them and drawing it once per slot.
+	occurrence: number,
 	roleKinds: CharacterRoleKind[],
 	portrait: ResolvedPortrait,
 	loadResult: CharactersLoaderResult,
@@ -114,7 +126,7 @@ async function buildCard(
 	]);
 
 	return {
-		cardId: `${character.id}:${kind}`,
+		cardId: `${character.id}:${kind}:${occurrence}`,
 		characterId: character.id,
 		roleKind: kind,
 		name,
@@ -122,7 +134,9 @@ async function buildCard(
 		portrait: portrait.portrait,
 		portraitPath: portrait.path,
 		portraitMissing: portrait.missing,
-		otherRoles: roleKinds.filter((other) => other !== role?.kind),
+		// Deduplicated: the badge names the other kinds this person turns up under, and a character
+		// with two advisor blocks and a country_leader would otherwise read "Also: advisor, advisor".
+		otherRoles: [...new Set(roleKinds.filter((other) => other !== role?.kind))],
 		badges: badgesOf(role),
 		skills,
 		traits,
@@ -353,7 +367,13 @@ export function toolbarFlagsOf(cards: CharacterCard[]): CharacterToolbarFlags {
 		// With the localisation index off every LocText has text === key, so the toggle would swap a
 		// string for itself.
 		hasLocalisation: cards.some((c) => c.name.text !== c.name.key),
-		hasDescriptions: cards.some((c) => c.desc.text !== c.desc.key),
+		// The same toggle draws the trait descriptions, so a file whose only localised description
+		// belongs to a trait still has something to show.
+		hasDescriptions: cards.some(
+			(c) =>
+				c.desc.text !== c.desc.key ||
+				c.traits.some((t) => t.desc.text !== t.desc.key),
+		),
 		hasPortraits: cards.some((c) => c.portrait !== undefined),
 		hasSkills: cards.some((c) => c.skills.length > 0),
 		hasTraitDetail: cards.some((c) => c.traits.some((t) => t.hasDetail)),

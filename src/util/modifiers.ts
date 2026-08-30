@@ -92,6 +92,24 @@ const lowerIsBetterKeys = new Set([
 ]);
 
 /**
+ * The `common/modifier_definitions` files loadModifierDefinitions reads, as paths. Exported so a
+ * preview built on them can report them as dependencies and refresh when one is edited; the
+ * directory listing is cached, so asking for the list beside the load costs nothing.
+ */
+export async function listModifierDefinitionFiles(): Promise<string[]> {
+	try {
+		return (await listFilesFromModOrHOI4(modifierDefinitionsDir))
+			.filter((file) => file.toLowerCase().endsWith(".txt"))
+			.map((file) => `${modifierDefinitionsDir}/${file}`);
+	} catch (e) {
+		// A workspace with no modifier_definitions folder at all is normal, not an error: every
+		// modifier then falls back to the heuristic.
+		debug("No modifier definitions to read", e);
+		return [];
+	}
+}
+
+/**
  * Reads every `common/modifier_definitions` file the mod and the game between them provide. A mod
  * file with the same modifier as the game's wins, because listFilesFromModOrHOI4 lists the mod's
  * copy and the later assignment overwrites.
@@ -99,27 +117,13 @@ const lowerIsBetterKeys = new Set([
 export async function loadModifierDefinitions(): Promise<ModifierDefinitions> {
 	const result: ModifierDefinitions = {};
 
-	let files: string[];
-	try {
-		files = await listFilesFromModOrHOI4(modifierDefinitionsDir);
-	} catch (e) {
-		// A workspace with no modifier_definitions folder at all is normal, not an error: every
-		// modifier then falls back to the heuristic.
-		debug("No modifier definitions to read", e);
-		return result;
-	}
-
-	for (const file of files) {
-		if (!file.toLowerCase().endsWith(".txt")) {
-			continue;
-		}
-
+	for (const path of await listModifierDefinitionFiles()) {
 		try {
-			const node = await parseHoi4FileCached(`${modifierDefinitionsDir}/${file}`);
+			const node = await parseHoi4FileCached(path);
 			Object.assign(result, readModifierDefinitions(node));
 		} catch (e) {
 			// One unparseable file must not cost the preview every other definition.
-			debug(`Failed to read modifier definitions from ${file}`, e);
+			debug(`Failed to read modifier definitions from ${path}`, e);
 		}
 	}
 

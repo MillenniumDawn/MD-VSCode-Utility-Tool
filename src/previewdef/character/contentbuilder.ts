@@ -7,7 +7,7 @@ import { localize, i18nTableAsScript } from "../../util/i18n";
 import { StyleTable } from "../../util/styletable";
 import { jsonForScript } from "../../util/common";
 import { buildCharacterPreviewPayload } from "./build";
-import { LoaderRender } from "../loaderpreview";
+import { LoaderRender, RenderContentOptions } from "../loaderpreview";
 
 // Height of the fixed toolbar strip. The roster is offset by it so it never renders underneath.
 // webviewsrc/characterpreview.ts and resource/characterpreview.css carry the same constant -- the
@@ -18,9 +18,13 @@ export async function renderCharacterFile(
 	loader: CharactersLoader,
 	uri: vscode.Uri,
 	webview: vscode.Webview,
+	options?: RenderContentOptions,
 ): Promise<LoaderRender> {
 	try {
-		const session = new LoaderSession(false);
+		// A dependency change is a trait file or a modifier definition being edited, not this file.
+		// The loader decides whether to reload by hashing this file's content, which has not moved, so
+		// without forcing the session it would hand back the traits it read before the edit.
+		const session = new LoaderSession(options?.dependencyChanged ?? false);
 		const loadResult = await loader.load(session);
 		debug("Loader session character preview", session.loadedLoaderNames());
 

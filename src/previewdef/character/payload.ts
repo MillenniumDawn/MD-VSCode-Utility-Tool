@@ -58,7 +58,9 @@ export interface TraitCard {
 // own facts (name, portrait) repeat across them, which costs nothing: the portrait is a style key,
 // so the image is written into the stylesheet once however many cards point at it.
 export interface CharacterCard {
-	// `<character id>:<role kind>`, unique across the whole payload.
+	// `<character id>:<role kind>:<occurrence>`, unique across the whole payload. The occurrence is
+	// the role block's index in file order, and it is what keeps the id unique when a character
+	// writes the same role twice -- three `advisor` blocks on one person is real.
 	cardId: string;
 	characterId: string;
 	roleKind: CharacterGroupKind;

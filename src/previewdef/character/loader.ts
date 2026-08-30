@@ -10,7 +10,11 @@ import { localize } from "../../util/i18n";
 import { uniq } from "lodash";
 import { getGfxContainerFiles } from "../../util/gfxindex";
 import { getLanguageIdInYml } from "../../util/vsccommon";
-import { ModifierDefinitions, loadModifierDefinitions } from "../../util/modifiers";
+import {
+	ModifierDefinitions,
+	listModifierDefinitionFiles,
+	loadModifierDefinitions,
+} from "../../util/modifiers";
 import { CharacterTraits, loadCharacterTraits } from "../../util/characterTraits";
 
 export interface CharactersLoaderResult {
@@ -64,11 +68,13 @@ export class CharactersLoader extends ContentLoader<CharactersLoaderResult> {
 				.filter(isSpriteName),
 		);
 
-		const [gfxContainers, modifierDefinitions, traits] = await Promise.all([
-			getGfxContainerFiles(spriteNames),
-			loadModifierDefinitions(),
-			loadCharacterTraits(),
-		]);
+		const [gfxContainers, modifierDefinitions, definitionFiles, traits] =
+			await Promise.all([
+				getGfxContainerFiles(spriteNames),
+				loadModifierDefinitions(),
+				listModifierDefinitionFiles(),
+				loadCharacterTraits(),
+			]);
 
 		const gfxFiles = uniq([
 			...dependencies.filter((d) => d.type === "gfx").map((d) => d.path),
@@ -76,8 +82,18 @@ export class CharactersLoader extends ContentLoader<CharactersLoaderResult> {
 		]);
 
 		return {
-			result: { characters, gfxFiles, modifierDefinitions, traits },
-			dependencies: [this.file],
+			result: {
+				characters,
+				gfxFiles,
+				modifierDefinitions,
+				traits: traits.traits,
+			},
+			// The trait and modifier-definition files are where everything a card says about what a
+			// character grants comes from, so an edit to one of them has to bring the preview back.
+			// Reporting them here is what subscribes this preview to them; renderCharacterFile then
+			// forces the session on a dependency change, since the character file's own hash has not
+			// moved and the loader would otherwise hand back its cached traits.
+			dependencies: uniq([this.file, ...traits.files, ...definitionFiles]),
 		};
 	}
 

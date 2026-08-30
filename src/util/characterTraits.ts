@@ -1,5 +1,8 @@
 import { Node, Token } from "../hoiformat/hoiparser";
-import { listFilesFromModOrHOI4, parseHoi4FileCached } from "./fileloader";
+import {
+	listFilesFromModOrHOI4,
+	parseAndResolveHoi4FileCached,
+} from "./fileloader";
 import { childNodes, readModifierPairsFromNode, readScalar } from "../hoiformat/rawblock";
 import { ModifierPair } from "../previewdef/sharedpayload";
 import { debug } from "./debug";
@@ -71,6 +74,17 @@ const traitDirectories: { path: string; source: TraitSource }[] = [
 // the flat-scalar sweep -- most importantly `ai_will_do` and `new_commander_weight`, which contain
 // `modifier = { factor = 3 ... }` blocks that are weights on an AI decision, not effects on a
 // country.
+//
+// This list is a denylist over a sweep that calls everything else a modifier, so it is only right if
+// it names every metadata scalar the real files write. Audit it rather than guess -- enumerate the
+// flat scalars the mod actually writes at trait level and read the ones that are not modifiers:
+//
+//   grep -rhP "^\t\t[A-Za-z_][A-Za-z0-9_]* *= *[^{ ]" common/unit_leader/*.txt \
+//     | sed -E 's/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*) *=.*/\1/' | sort | uniq -c | sort -rn
+//
+// (one tab shallower for common/scientist_traits, which has no `leader_traits` wrapper). Run over
+// Millennium Dawn that turns up nothing here but the advisor metadata below and the `*_skill*`
+// fields, which have their own home.
 const structuralKeys = new Set([
 	"modifier",
 	"non_shared_modifier",
@@ -106,6 +120,13 @@ const structuralKeys = new Set([
 	"parent",
 	"mutually_exclusive",
 	"enable_ability",
+	// The advisor system a commander trait hangs off: which high command slot it fills, and the three
+	// country_leader traits it upgrades into. They name other things rather than granting anything,
+	// so without them `hunter_killer` reports a "Slot: high_command" line the game never applies.
+	"slot",
+	"specialist_advisor_trait",
+	"expert_advisor_trait",
+	"genius_advisor_trait",
 	"show_in_combat",
 	"gain_xp_on_spotting",
 	"override_effect_tooltip",
@@ -126,17 +147,29 @@ const groupBlocks = [
 // they would be looked up under a MODIFIER_ key that does not exist.
 const skillSuffixes = ["_skill", "_skill_factor"];
 
+export interface CharacterTraitsResult {
+	traits: CharacterTraits;
+	// The files the traits were read out of, so the preview can report them as dependencies and
+	// refresh when one of them is edited.
+	files: string[];
+}
+
 /**
  * Every trait the mod and the game between them define, by id. A mod file redefining a trait the
  * game ships wins, because listFilesFromModOrHOI4 lists the mod's copy and the later assignment
  * overwrites.
  *
- * Nothing is memoised here beyond what parseHoi4FileCached already holds, so a trait file the user
- * edits is picked up by the next render with no cache to invalidate. That is the same bargain
+ * Read through parseAndResolveHoi4FileCached rather than the plain one: Millennium Dawn writes
+ * `@tier1 = 5` at the top of its advisor trait files and `command_cap_increase = @tier1` inside
+ * them, and without the resolving pass the card shows the reader `@tier1` instead of the number.
+ *
+ * Nothing is memoised here beyond what that cache already holds, so a trait file the user edits is
+ * picked up by the next render with no cache to invalidate. That is the same bargain
  * loadModifierDefinitions makes on every idea preview.
  */
-export async function loadCharacterTraits(): Promise<CharacterTraits> {
+export async function loadCharacterTraits(): Promise<CharacterTraitsResult> {
 	const result: CharacterTraits = {};
+	const readFiles: string[] = [];
 
 	for (const directory of traitDirectories) {
 		let files: string[];
@@ -155,8 +188,11 @@ export async function loadCharacterTraits(): Promise<CharacterTraits> {
 			}
 
 			const path = `${directory.path}/${file}`;
+			// Listed whether or not it parses: a file that fails today is still one an edit should
+			// bring the preview back for.
+			readFiles.push(path);
 			try {
-				const node = await parseHoi4FileCached(path);
+				const node = await parseAndResolveHoi4FileCached(path);
 				Object.assign(result, readTraitFile(node, directory.source, path));
 			} catch (e) {
 				// One unparseable file must not cost the preview every other trait.
@@ -165,7 +201,7 @@ export async function loadCharacterTraits(): Promise<CharacterTraits> {
 		}
 	}
 
-	return result;
+	return { traits: result, files: readFiles };
 }
 
 /**
@@ -267,6 +303,19 @@ function readTrait(
 						(pair) => pair.key.toLowerCase() !== "instant",
 					),
 				);
+			}
+			continue;
+		}
+
+		if (name === "sub_unit_modifiers") {
+			// One group per sub-unit, so `destroyer_leader`'s naval damage and torpedo bonuses say
+			// which hulls they land on. The `units = { }` adjuster list inside each block is a nested
+			// block and readModifierPairsFromNode drops it for us.
+			for (const subUnit of childNodes(child)) {
+				if (!subUnit.name || !Array.isArray(subUnit.value)) {
+					continue;
+				}
+				pushGroup(trait.groups, subUnit.name, readModifierPairsFromNode(subUnit));
 			}
 			continue;
 		}

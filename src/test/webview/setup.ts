@@ -9,10 +9,21 @@ const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
 (global as any).window = dom.window;
 (global as any).document = dom.window.document;
 
+// Everything the webview posted back to the host, newest last. A test that cares what a click did
+// -- whether it asked the editor to navigate, say -- reads and clears this instead of stubbing the
+// api again after the module under test has already taken its handle.
+export const postedMessages: any[] = [];
+
+export function takePostedMessages(): any[] {
+    return postedMessages.splice(0, postedMessages.length);
+}
+
 // Mock acquireVsCodeApi for webview tests
 const state: Record<string, any> = {};
 (global as any).acquireVsCodeApi = () => ({
-    postMessage: () => {},
+    postMessage: (message: any) => {
+        postedMessages.push(message);
+    },
     getState: () => state,
     setState: (s: Record<string, any>) => {
         Object.assign(state, s);

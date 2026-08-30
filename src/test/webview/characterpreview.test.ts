@@ -1,4 +1,6 @@
-import "./setup";
+// The side effect matters as much as the import: ./setup installs the jsdom globals and the
+// acquireVsCodeApi mock the module under test takes its handle from at import time.
+import { takePostedMessages } from "./setup";
 import * as assert from "assert";
 import {
 	CharacterCard,
@@ -30,17 +32,17 @@ const integrationPayload: CharacterPreviewPayload = {
 		{
 			kind: "country_leader",
 			title: "Country leaders",
-			cardIds: [`${massoud}:country_leader`],
+			cardIds: [`${massoud}:country_leader:0`],
 		},
 		{
 			kind: "field_marshal",
 			title: "Field marshals",
-			cardIds: [`${massoud}:field_marshal`],
+			cardIds: [`${massoud}:field_marshal:0`],
 		},
 		{
 			kind: "advisor",
 			title: "Advisors",
-			cardIds: [`${massoud}:advisor`, "AFG_typo:advisor", "AFG_faceless:advisor"],
+			cardIds: [`${massoud}:advisor:0`, "AFG_typo:advisor:0", "AFG_faceless:advisor:0"],
 		},
 	],
 	cards: [
@@ -131,7 +133,7 @@ function card(
 	extra: Partial<CharacterCard> = {},
 ): CharacterCard {
 	return {
-		cardId: `${characterId}:${roleKind}`,
+		cardId: `${characterId}:${roleKind}:0`,
 		characterId,
 		roleKind,
 		name: { key: characterId, text: characterId },
@@ -219,26 +221,26 @@ describe("webview/characterpreview matchesFilters", () => {
 	});
 
 	it("matches each filter against the property it names", () => {
-		assert.strictEqual(matchesFilters(byId(`${massoud}:advisor`), ["multirole"]), true);
-		assert.strictEqual(matchesFilters(byId("AFG_typo:advisor"), ["multirole"]), false);
+		assert.strictEqual(matchesFilters(byId(`${massoud}:advisor:0`), ["multirole"]), true);
+		assert.strictEqual(matchesFilters(byId("AFG_typo:advisor:0"), ["multirole"]), false);
 
-		assert.strictEqual(matchesFilters(byId("AFG_typo:advisor"), ["unknowntrait"]), true);
+		assert.strictEqual(matchesFilters(byId("AFG_typo:advisor:0"), ["unknowntrait"]), true);
 		assert.strictEqual(
-			matchesFilters(byId(`${massoud}:advisor`), ["unknowntrait"]),
+			matchesFilters(byId(`${massoud}:advisor:0`), ["unknowntrait"]),
 			false,
 		);
 
-		assert.strictEqual(matchesFilters(byId("AFG_faceless:advisor"), ["noportrait"]), true);
-		assert.strictEqual(matchesFilters(byId("AFG_faceless:advisor"), ["conditions"]), true);
-		assert.strictEqual(matchesFilters(byId(`${massoud}:advisor`), ["traits"]), true);
-		assert.strictEqual(matchesFilters(byId("AFG_faceless:advisor"), ["traits"]), false);
+		assert.strictEqual(matchesFilters(byId("AFG_faceless:advisor:0"), ["noportrait"]), true);
+		assert.strictEqual(matchesFilters(byId("AFG_faceless:advisor:0"), ["conditions"]), true);
+		assert.strictEqual(matchesFilters(byId(`${massoud}:advisor:0`), ["traits"]), true);
+		assert.strictEqual(matchesFilters(byId("AFG_faceless:advisor:0"), ["traits"]), false);
 	});
 
 	// Each entry answers the same question -- which characters belong in the roster -- so several
 	// widen rather than narrow each other.
 	it("treats several selected filters as an or", () => {
 		assert.strictEqual(
-			matchesFilters(byId("AFG_typo:advisor"), ["multirole", "unknowntrait"]),
+			matchesFilters(byId("AFG_typo:advisor:0"), ["multirole", "unknowntrait"]),
 			true,
 		);
 	});
@@ -246,41 +248,41 @@ describe("webview/characterpreview matchesFilters", () => {
 
 describe("webview/characterpreview matchesQuery", () => {
 	it("never matches on an empty query", () => {
-		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor`), ""), false);
+		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor:0`), ""), false);
 	});
 
 	it("matches the character id and the localised name", () => {
-		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor`), "massoud"), true);
-		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor`), "ahmad shah"), true);
+		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor:0`), "massoud"), true);
+		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor:0`), "ahmad shah"), true);
 	});
 
 	// The advisor slot and the idea token ride in the badges, and they are what a reader hunting
 	// for "every army chief in this file" actually types.
 	it("matches a badge", () => {
-		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor`), "army_chief"), true);
-		assert.strictEqual(matchesQuery(byId(`${massoud}:country_leader`), "muslim"), true);
+		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor:0`), "army_chief"), true);
+		assert.strictEqual(matchesQuery(byId(`${massoud}:country_leader:0`), "muslim"), true);
 	});
 
 	it("matches a trait by its id", () => {
-		assert.strictEqual(matchesQuery(byId(`${massoud}:field_marshal`), "trickster"), true);
+		assert.strictEqual(matchesQuery(byId(`${massoud}:field_marshal:0`), "trickster"), true);
 	});
 
 	// The whole point of resolving the traits: a modifier a character grants is findable even
 	// though the character file never mentions it.
 	it("matches a modifier a trait grants, by token and by name", () => {
 		assert.strictEqual(
-			matchesQuery(byId(`${massoud}:field_marshal`), "recon_factor"),
+			matchesQuery(byId(`${massoud}:field_marshal:0`), "recon_factor"),
 			true,
 		);
-		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor`), "planning speed"), true);
+		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor:0`), "planning speed"), true);
 	});
 
 	it("matches a modifier inside a trait's group", () => {
-		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor`), "planning_skill"), true);
+		assert.strictEqual(matchesQuery(byId(`${massoud}:advisor:0`), "planning_skill"), true);
 	});
 
 	it("does not match a character that has nothing to do with the query", () => {
-		assert.strictEqual(matchesQuery(byId("AFG_faceless:advisor"), "trickster"), false);
+		assert.strictEqual(matchesQuery(byId("AFG_faceless:advisor:0"), "trickster"), false);
 	});
 });
 
@@ -511,5 +513,71 @@ describe("webview/characterpreview rendering", () => {
 		for (const detail of Array.from(details)) {
 			assert.strictEqual((detail as HTMLElement).hidden, true);
 		}
+	});
+
+	// These run against the roster as it is actually wired -- built, then handed to
+	// subscribeNavigators -- because that second listener is the whole problem. A trait pill with a
+	// nav target carries two click listeners: its own, and the navigator's. Nothing traitToDom is
+	// tested with on its own can see that.
+	describe("a trait pill that is also a navigator", () => {
+		function navigablePill(): { pill: HTMLElement; detail: HTMLElement } {
+			const box = Array.from(content().querySelectorAll(".char-trait-box")).find(
+				(b) => b.querySelector(".char-trait.navigator"),
+			);
+			assert.ok(box, "expected a trait pill carrying a nav target");
+			return {
+				pill: box!.querySelector(".char-trait") as HTMLElement,
+				detail: box!.querySelector(".char-trait-mods") as HTMLElement,
+			};
+		}
+
+		beforeEach(() => {
+			takePostedMessages();
+		});
+
+		it("expands on a plain click and does not also open the trait's file", () => {
+			const { pill, detail } = navigablePill();
+			const wasHidden = detail.hidden;
+
+			pill.dispatchEvent(new (window as any).MouseEvent("click", { bubbles: true }));
+
+			assert.strictEqual(detail.hidden, !wasHidden);
+			assert.deepStrictEqual(
+				takePostedMessages().filter((m) => m.command === "navigate"),
+				[],
+			);
+		});
+
+		it("opens the trait's file on a ctrl-click, and leaves it closed", () => {
+			const { pill, detail } = navigablePill();
+			const wasHidden = detail.hidden;
+
+			pill.dispatchEvent(
+				new (window as any).MouseEvent("click", { bubbles: true, ctrlKey: true }),
+			);
+
+			assert.strictEqual(detail.hidden, wasHidden);
+			// Every webview module imported into this test process wires its own navigators over the
+			// shared document, so the count is a property of the harness rather than of the preview.
+			// What the pill owes the reader is that a ctrl-click reaches the trait, and reaches
+			// nothing else.
+			const navigations = takePostedMessages().filter((m) => m.command === "navigate");
+			assert.ok(navigations.length > 0);
+			for (const navigation of navigations) {
+				assert.strictEqual(navigation.file, "common/country_leader/01_army.txt");
+				assert.strictEqual(navigation.start, 8);
+			}
+		});
+
+		it("does not carry the click up to the card underneath", () => {
+			const { pill } = navigablePill();
+
+			pill.dispatchEvent(new (window as any).MouseEvent("click", { bubbles: true }));
+
+			assert.deepStrictEqual(
+				takePostedMessages().filter((m) => m.command === "navigate"),
+				[],
+			);
+		});
 	});
 });

@@ -258,12 +258,33 @@ function convertBoolean(node: Node): HOIPartial<boolean> {
 		: undefined;
 }
 
+/**
+ * An entry in a braced list, as the value it names.
+ *
+ * The parser keeps a node's name as the raw token, so a quoted entry arrives with its quotes still
+ * on it: `traits = { "trickster" }` reads as `"trickster"`, which then matches nothing anywhere it
+ * is looked up -- a trait the character preview would call undefined, an idea trait, a MIO
+ * `remove_trait`, a technology `xor`, a world map province id `parseInt` cannot read. Both spellings
+ * mean the same thing to the game, so both read the same here, unescaped the way parseNodeValue
+ * already unescapes a quoted *value*.
+ */
+function unquoteEnumValue(value: string): string {
+	if (value.length < 2 || !value.startsWith('"') || !value.endsWith('"')) {
+		return value;
+	}
+	return value
+		.substring(1, value.length - 1)
+		.replace(/\\"/g, '"')
+		.replace(/\\\\/g, "\\");
+}
+
 function convertEnum(node: Node): HOIPartial<Enum> {
 	return Array.isArray(node.value)
 		? {
 				_values: node.value
 					.map((v) => v.name)
-					.filter((v): v is string => v !== null),
+					.filter((v): v is string => v !== null)
+					.map(unquoteEnumValue),
 				_token: undefined,
 			}
 		: { _values: [], _token: undefined };

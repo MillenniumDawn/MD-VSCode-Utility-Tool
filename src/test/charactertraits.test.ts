@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { parseHoi4File } from "../hoiformat/hoiparser";
+import { parseHoi4File, resolveScriptVariables } from "../hoiformat/hoiparser";
 import { CharacterTrait, TraitSource, readTraitFile } from "../util/characterTraits";
 
 // The blocks below are transcribed from Millennium Dawn's common/country_leader,
@@ -243,6 +243,129 @@ describe("util/characterTraits modifiers", () => {
 		);
 
 		assert.deepStrictEqual(found.groups, []);
+	});
+});
+
+describe("util/characterTraits metadata and nested blocks", () => {
+	// Transcribed from Millennium Dawn's common/unit_leader/02_navy_leader_traits.txt.
+	const hunterKiller = `
+        leader_traits = {
+            hunter_killer = {
+                type = navy
+
+                modifier = {
+                    navy_submarine_detection_factor = 0.2
+                }
+
+                slot = high_command
+                specialist_advisor_trait = navy_anti_submarine_1
+                expert_advisor_trait = navy_anti_submarine_2
+                genius_advisor_trait = navy_anti_submarine_3
+
+                ai_will_do = { factor = 1 }
+
+                gui_row = 7
+                gui_column = 2
+
+                trait_type = assignable_trait
+                any_parent = { small_ship_captain }
+            }
+        }
+    `;
+
+	it("keeps a commander trait's advisor metadata off the card", () => {
+		// Every unrecognised flat scalar is read as a modifier, so a metadata field the denylist does
+		// not name turns into a grant the game never applies -- "Slot: high_command" and three more.
+		const found = trait(hunterKiller, "hunter_killer", "unit_leader");
+
+		assert.deepStrictEqual(found.modifiers, [
+			{ key: "navy_submarine_detection_factor", value: 0.2 },
+		]);
+		assert.deepStrictEqual(found.skillBonuses, []);
+		assert.deepStrictEqual(found.groups, []);
+		assert.strictEqual(found.traitType, "assignable_trait");
+	});
+
+	it("reads sub_unit_modifiers as one group per sub-unit", () => {
+		// destroyer_leader grants its damage and torpedo bonuses only through this block, so dropping
+		// it left the card claiming the trait grants nothing at all.
+		const found = trait(
+			`
+            leader_traits = {
+                destroyer_leader = {
+                    type = navy
+                    sub_unit_modifiers = {
+                        destroyer = {
+                            units = { destroyer_1 destroyer_2 }
+                            naval_damage_factor = 0.1
+                            naval_torpedo_hit_chance_factor = 0.1
+                        }
+                        stealth_destroyer = {
+                            naval_damage_factor = 0.1
+                            naval_torpedo_hit_chance_factor = 0.1
+                        }
+                    }
+                }
+            }
+        `,
+			"destroyer_leader",
+			"unit_leader",
+		);
+
+		assert.deepStrictEqual(found.groups, [
+			{
+				title: "destroyer",
+				modifiers: [
+					{ key: "naval_damage_factor", value: 0.1 },
+					{ key: "naval_torpedo_hit_chance_factor", value: 0.1 },
+				],
+			},
+			{
+				title: "stealth_destroyer",
+				modifiers: [
+					{ key: "naval_damage_factor", value: 0.1 },
+					{ key: "naval_torpedo_hit_chance_factor", value: 0.1 },
+				],
+			},
+		]);
+		// The `units` adjuster list is a nested block, so it never reaches the card as a modifier.
+		assert.deepStrictEqual(found.modifiers, []);
+	});
+
+	it("reads a modifier written as a constant defined in the same file", () => {
+		// MD writes `@tier1 = 5` at the top of every advisor trait file and
+		// `command_cap_increase = @tier1` inside it. loadCharacterTraits parses through
+		// parseAndResolveHoi4FileCached, which is this pass; without it the card shows `@tier1`.
+		const node = resolveScriptVariables(
+			parseHoi4File(`
+                @tier1 = 5
+                leader_traits = {
+                    army_chief_organizational_1 = {
+                        command_cap_increase = @tier1
+                        experience_gain_army = 0.05
+                    }
+                }
+            `),
+		);
+		const found = readTraitFile(node, "country_leader", "test.txt")[
+			"army_chief_organizational_1"
+		];
+
+		assert.deepStrictEqual(found?.modifiers, [
+			{ key: "command_cap_increase", value: 5 },
+			{ key: "experience_gain_army", value: 0.05 },
+		]);
+	});
+
+	it("leaves a constant it cannot resolve visible rather than dropping the line", () => {
+		const found = trait(
+			`leader_traits = { x = { command_cap_increase = @nowhere } }`,
+			"x",
+		);
+
+		assert.deepStrictEqual(found.modifiers, [
+			{ key: "command_cap_increase", value: "@nowhere" },
+		]);
 	});
 });
 

@@ -227,6 +227,20 @@ describe("previewdef/character/schema roles", () => {
 		assert.deepStrictEqual(leader.traits, ["guerrilla_leader", "likeable"]);
 	});
 
+	it("reads a trait whether it is quoted or bare", () => {
+		// The file is free to quote one; the game reads both the same way. Kept quoted, the id
+		// matched no trait file and the preview marked a perfectly good trait as undefined.
+		const leader = role(
+			character(
+				`characters = { CHE_x = { field_marshal = { traits = { "trickster" expert_improviser } } } }`,
+				"CHE_x",
+			),
+			"field_marshal",
+		);
+
+		assert.deepStrictEqual(leader.traits, ["trickster", "expert_improviser"]);
+	});
+
 	it("reads an expire date whether it is quoted or bare", () => {
 		const quoted = role(
 			character(
