@@ -1,0 +1,38 @@
+on:
+  issues:
+    types:
+      - opened
+
+name: Issue version triage
+
+permissions:
+  issues: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # The reported version is judged against what main ships, not whatever ref triggered
+          # this -- an issue is never opened from a branch.
+          ref: main
+      - name: Check the reported version
+        id: check
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: node scripts/issue-version-triage.js
+      # A bug filed against the current version, one with no version field, or a malformed value
+      # gets nothing: no comment, no label, and the issue is never closed.
+      - name: Comment and label the issue
+        if: ${{ steps.check.outputs.flag == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          gh label create "outdated version" --color FBCA04 \
+            --description "The extension version in the report predates the current release" \
+            2>/dev/null || true
+          gh issue comment "$ISSUE" --body-file issue-version-comment.md
+          gh issue edit "$ISSUE" --add-label "outdated version"
