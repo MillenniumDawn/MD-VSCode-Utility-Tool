@@ -1,0 +1,33 @@
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+name: Close outdated-version issues that are fixed
+
+# One run at a time -- a schedule and a release publish landing together would otherwise both try
+# to close the same issue.
+concurrency:
+  group: close-fixed-issues
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Optional: with no key set, scripts/close-fixed-issues.js looks at nothing and exits 0.
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Close open "outdated version" issues the changelog already fixed
+        run: node scripts/close-fixed-issues.js
