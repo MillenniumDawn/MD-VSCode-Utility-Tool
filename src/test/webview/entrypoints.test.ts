@@ -361,11 +361,23 @@ describe("webview entrypoints", () => {
 	it("starts the world-map loader and hides supply-area controls when disabled", () => {
 		installWorldMapShell();
 		(window as any).__enableSupplyArea = false;
+		const paints: string[] = [];
 		const context = {
-			fillRect: () => undefined,
-			drawImage: () => undefined,
+			fillStyle: "",
+			strokeStyle: "",
+			font: "",
+			textAlign: "",
+			textBaseline: "",
+			lineWidth: 0,
+			fillRect: () => paints.push("fillRect"),
+			drawImage: () => paints.push("drawImage"),
 			measureText: () => ({ width: 0 }),
 			fillText: () => undefined,
+			beginPath: () => undefined,
+			moveTo: () => undefined,
+			lineTo: () => undefined,
+			stroke: () => undefined,
+			strokeRect: () => undefined,
 		};
 		const canvasPrototype = (window as any).HTMLCanvasElement.prototype;
 		const originalGetContext = canvasPrototype.getContext;
@@ -392,6 +404,8 @@ describe("webview entrypoints", () => {
 				document.querySelectorAll('[enablesupplyarea="true"]').length,
 				0,
 			);
+			assert.ok(paints.includes("fillRect"));
+			assert.ok(paints.includes("drawImage"));
 		} finally {
 			canvasPrototype.getContext = originalGetContext;
 			(globalThis as any).requestAnimationFrame = originalRequestAnimationFrame;
