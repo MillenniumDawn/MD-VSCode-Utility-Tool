@@ -194,6 +194,23 @@ input[type=checkbox]:checked + div.checkbox-container-out div.checkbox, div.chec
     overflow: auto hidden;
 }
 
+/* A dropdown and a row of toggles do not fit a narrow editor pane, so the strip scrolls. The
+   scrollbar is laid out inside the strip's own fixed height, so it is kept thin and the height
+   accounts for it -- see toolbarHeight in each preview's contentbuilder.ts. Left at the browser
+   default it is taller than the room the strip has left and paints across the controls. */
+.toolbar-outer::-webkit-scrollbar {
+    height: 6px;
+}
+
+.toolbar-outer::-webkit-scrollbar-thumb {
+    border-radius: 3px;
+    background: var(--vscode-scrollbarSlider-background);
+}
+
+.toolbar-outer::-webkit-scrollbar-thumb:hover {
+    background: var(--vscode-scrollbarSlider-hoverBackground);
+}
+
 .toolbar {
     display: flex;
 }

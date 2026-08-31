@@ -1,4 +1,5 @@
-import { getState, setState, arrayToMap, subscribeNavigators, scrollToState, tryRun, enableZoom, initCommon } from "./util/common";
+import { getState, setState, arrayToMap, subscribeNavigators, scrollToState, tryRun, enableZoom, initCommon, previewOption, setPreviewOption } from "./util/common";
+import { toggleBinder } from "./util/toolbar";
 import { DivDropdown } from "./util/dropdown";
 import { minBy, maxBy } from "lodash";
 import { renderGridBoxCommon, GridBoxItem, GridBoxConnection } from "../src/util/hoi4gui/gridboxcommon";
@@ -15,9 +16,11 @@ let mios: Mio[] = (window as any).mios;
 
 let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
 let selectedMioIndex: number = Math.min(mios.length - 1, getState().selectedMioIndex ?? 0);
-let showIncludedTraits: boolean = getState().showIncludedTraits ?? true;
-let showGrid: boolean = getState().showGrid ?? false;
-let showOverlaps: boolean = getState().showOverlaps ?? true;
+// The toggles are held by the host, not in this panel's state: the reader ticks "Show grid" once
+// and expects it on the next time they open a preview, and panel state does not outlive the panel.
+let showIncludedTraits: boolean = previewOption('mio.showIncludedTraits', true);
+let showGrid: boolean = previewOption('mio.showGrid', false);
+let showOverlaps: boolean = previewOption('mio.showOverlaps', true);
 let conditions: DivDropdown | undefined = undefined;
 
 initCommon();
@@ -453,42 +456,26 @@ window.addEventListener('load', tryRun(async function() {
         });
     }
 
-    // Zoom
+    // Zoom. The anchor is the toolbar strip's height, which the host owns.
     const contentElement = document.getElementById('miopreviewcontent') as HTMLDivElement;
-    enableZoom(contentElement, 0, 40);
+    enableZoom(contentElement, 0, (window as any).toolbarHeight ?? 52);
 
-    // Toggle inherited traits
-    const showIncludedTraitsCheckbox = document.getElementById('show-included-traits') as HTMLInputElement | null;
-    if (showIncludedTraitsCheckbox) {
-        showIncludedTraitsCheckbox.checked = showIncludedTraits;
-        showIncludedTraitsCheckbox.addEventListener('change', async () => {
-            showIncludedTraits = showIncludedTraitsCheckbox.checked;
-            setState({ showIncludedTraits });
-            await buildContent();
-        });
-    }
-
-    // Toggle column grid overlay
-    const showGridCheckbox = document.getElementById('show-grid') as HTMLInputElement | null;
-    if (showGridCheckbox) {
-        showGridCheckbox.checked = showGrid;
-        showGridCheckbox.addEventListener('change', async () => {
-            showGrid = showGridCheckbox.checked;
-            setState({ showGrid });
-            await buildContent();
-        });
-    }
-
-    // Toggle overlapping-trait markers
-    const showOverlapsCheckbox = document.getElementById('show-overlaps') as HTMLInputElement | null;
-    if (showOverlapsCheckbox) {
-        showOverlapsCheckbox.checked = showOverlaps;
-        showOverlapsCheckbox.addEventListener('change', async () => {
-            showOverlaps = showOverlapsCheckbox.checked;
-            setState({ showOverlaps });
-            await buildContent();
-        });
-    }
+    // The toolbar toggles. bindToggle puts each one in its restored position -- including the
+    // codicon widget over it, which enableCheckboxes already built from the unrestored value -- and
+    // sends every click to the host, which is what makes the position survive closing the panel.
+    const bindToggle = toggleBinder(() => { void buildContent(); });
+    bindToggle('show-included-traits', showIncludedTraits, value => {
+        showIncludedTraits = value;
+        setPreviewOption('mio.showIncludedTraits', value);
+    });
+    bindToggle('show-grid', showGrid, value => {
+        showGrid = value;
+        setPreviewOption('mio.showGrid', value);
+    });
+    bindToggle('show-overlaps', showOverlaps, value => {
+        showOverlaps = value;
+        setPreviewOption('mio.showOverlaps', value);
+    });
 
     updateSelectedMio(false);
     await buildContent();

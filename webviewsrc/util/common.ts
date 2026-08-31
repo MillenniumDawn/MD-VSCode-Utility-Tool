@@ -21,6 +21,20 @@ export function getState(): Record<string, any> {
 	return vscode.getState() || {};
 }
 
+// A toolbar toggle is the reader's preference, not this panel's scroll position, so it is kept by
+// the host rather than in the state above: `vscode.setState` dies with the panel, and the reader
+// opens a new panel every time they preview a file. The host renders whatever it has stored into
+// `window.previewOptions` and takes the writes back through `setPreviewOption`; the default stays
+// here, at the toggle, since a key nothing has been stored for is simply absent.
+export function previewOption(key: string, fallback: boolean): boolean {
+	const value = ((window as any).previewOptions ?? {})[key];
+	return typeof value === "boolean" ? value : fallback;
+}
+
+export function setPreviewOption(key: string, value: boolean): void {
+	vscode.postMessage({ command: "setPreviewOption", key, value });
+}
+
 export function scrollToState() {
 	const state = getState();
 	const xOffset = state.xOffset || 0;
