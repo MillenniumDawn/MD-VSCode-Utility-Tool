@@ -4,6 +4,7 @@ v1.1.31
 
 - Add a character preview showing portraits, roles and the modifiers each trait grants. Issue #8.
 - [ World Map ] Split the world map renderer into per-layer modules. Issue #53.
+- Tell a reporter when their bug is filed against an outdated extension version. Issue #149.
 
 v1.1.30
 
