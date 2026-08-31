@@ -78,3 +78,50 @@ you would want in the changelog, because it is the fallback whenever the model i
 unreachable and the starting point when it is not. And **label** the pull request
 `bug` or `enhancement`, or close an issue that carries one, because that is what
 decides whether the bullet lands under `Functionality:` or `Bugfixes:`.
+
+## Writing a preview — the checks a green suite does not make
+
+A preview is a loader, a payload and a webview, and the same handful of mistakes gets
+through a passing test suite every time, because a fixture written by hand is tidier
+than the mod. Before opening the pull request, walk this list against
+`c:/Millennium-Dawn` rather than against the fixtures.
+
+**The data.** Read the real files, not the documentation comment at the top of them —
+it is out of date wherever the game has moved on.
+
+- A block the game lets you **repeat** is repeated somewhere in the mod: three
+  `advisor` blocks on one character, two `army = { }` portrait blocks on another. Every
+  id the payload keys on has to survive that, occurrence index and all, or the webview's
+  `id -> card` map keeps only the last one and draws it once per slot.
+- A classifier of the form *"everything I do not recognise is a modifier, except these"*
+  is only as good as its exception list. Enumerate the keys the mod actually writes and
+  read the whole list:
+
+  ```
+  grep -rhP "^\t\t[A-Za-z_][A-Za-z0-9_]* *= *[^{ ]" common/unit_leader/*.txt \
+    | sed -E 's/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*) *=.*/\1/' | sort | uniq -c | sort -rn
+  ```
+
+  Then check the other direction: a key named in the exception list with no handler
+  behind it is a whole feature the preview silently drops.
+- Millennium Dawn writes `@constants` in `common/`, not only in scripted GUI. Anything
+  whose values reach the reader is parsed with `parseAndResolveHoi4FileCached`.
+- The mod's syntax is looser than the documentation: quoted where you expect bare,
+  `0.` where you expect `0.0`, a date in four parts. Feed the parser a real file and
+  count the failures before trusting it.
+
+**The loader.** If it reads files besides its own, it owes them both halves: report them
+in `dependencies`, *and* force the session on `dependencyChanged`. Reporting alone leaves
+the panel repainting cached numbers, because the reload decision hashes the preview's own
+document, which did not change.
+
+**The webview.** `subscribeNavigators()` puts its click listener on the same element
+`applyNav` marked, so an element with its own handler needs `stopImmediatePropagation()`;
+stopping the bubble does nothing about a listener already on the element. Click
+behaviour is only real in the wired page — test it in the `rendering` describe that
+dispatches `load`, and assert on what reached the host, never on a detached element the
+builder returned.
+
+**Test it as the reader meets it.** One character with the same role three times; one
+trait carrying the nested block, not just the flat one; one constant defined in the
+fixture's own file; one quoted identifier; one dependency edit.

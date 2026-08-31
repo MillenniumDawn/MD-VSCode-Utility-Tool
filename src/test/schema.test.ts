@@ -131,6 +131,16 @@ describe('hoiformat/schema', () => {
             assert.deepStrictEqual(result._values, ['A', 'B', 'C']);
         });
 
+        it('reads a quoted enum member as the value it names', () => {
+            // The parser keeps a node's name as the raw token, quotes and all. Both spellings mean
+            // the same thing to the game, so a `traits = { "trickster" }` must not read as a
+            // different trait from `traits = { trickster }` -- it looked up nothing and the
+            // character preview called the trait undefined.
+            const root = parseHoi4File('category = { "A" B "say \\"hi\\"" }');
+            const result = convertNodeToJson(child(root, 'category'), 'enum') as any;
+            assert.deepStrictEqual(result._values, ['A', 'B', 'say "hi"']);
+        });
+
         it('returns an empty enum list when the value is not a block', () => {
             const root = parseHoi4File('category = 1');
             const result = convertNodeToJson(child(root, 'category'), 'enum') as any;

@@ -156,7 +156,11 @@ const tokenRegexStrings: Record<HOITokenType, [string, number]> = {
 	// be read as the start of a value. `a >= 5` then failed to parse at all.
 	operator: [">=|<=|!=|[={}<>;,]", 10],
 	string: ['"(?:\\\\"|\\\\\\\\|[^"])*"', 10],
-	number: ["-?\\d*\\.\\d+|-?\\d+|0x\\d+", 50],
+	// The trailing dot is the game's own tolerance, not a nicety: Millennium Dawn writes
+	// `nationalist_drift = 0.` in common/country_leader/00_traits.txt, and without it the whole file
+	// -- every politician trait in the mod -- fails to tokenise. The full-fraction branch is still
+	// first, so `2030.1` in a date is unaffected.
+	number: ["-?\\d*\\.\\d+|-?\\d+\\.?|0x\\d+", 50],
 	unitnumber: ["(?:-?\\d*\\.\\d+|-?\\d+)(?:%%?)", 49],
 	eof: ["$", 1000],
 };

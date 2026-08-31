@@ -75,6 +75,23 @@ describe('parseHoi4File', () => {
         assert.strictEqual(child(root, 'ratio').value, 0.5);
     });
 
+    // The game tolerates a number whose fraction was never written, and Millennium Dawn writes one:
+    // `nationalist_drift = 0.` in common/country_leader/00_traits.txt. The trailing `.` used to be
+    // left over as its own token and threw "Invalid token", costing the whole file -- every
+    // politician trait in the mod -- rather than just that line.
+    it('parses a number written with a trailing dot and no fraction', () => {
+        const root = parseHoi4File('nationalist_drift = 0. army_attack_factor = 0.15');
+        assert.strictEqual(child(root, 'nationalist_drift').value, 0);
+        assert.strictEqual(child(root, 'army_attack_factor').value, 0.15);
+    });
+
+    // The full-fraction branch still comes first in the alternation, so a date keeps splitting the
+    // way every reader of one already expects.
+    it('still reads a date as a number and the fragments after it', () => {
+        const root = parseHoi4File('expire = 2030.1.1.1');
+        assert.strictEqual(child(root, 'expire').value, 2030.1);
+    });
+
     it('parses unescaped quotes inside a string', () => {
         const root = parseHoi4File('name = "hello world"');
         assert.strictEqual(child(root, 'name').value, 'hello world');

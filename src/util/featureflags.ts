@@ -11,6 +11,7 @@ export let useConditionInFocus = getConfiguration().useConditionInFocus;
 export let eventTreePreview = getConfiguration().eventTreePreview;
 export let ideaPreview = getConfiguration().ideaPreview;
 export let decisionPreview = getConfiguration().decisionPreview;
+export let characterPreview = getConfiguration().characterPreview;
 export let ideaSwapIndex = getConfiguration().ideaSwapIndex;
 export let sharedFocusIndex = getConfiguration().sharedFocusIndex;
 export let gfxIndex = getConfiguration().gfxIndex;
@@ -27,6 +28,7 @@ export function refreshFeatureFlags(): void {
     eventTreePreview = config.eventTreePreview;
     ideaPreview = config.ideaPreview;
     decisionPreview = config.decisionPreview;
+    characterPreview = config.characterPreview;
     ideaSwapIndex = config.ideaSwapIndex;
     sharedFocusIndex = config.sharedFocusIndex;
     gfxIndex = config.gfxIndex;

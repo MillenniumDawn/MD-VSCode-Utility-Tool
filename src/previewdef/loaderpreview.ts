@@ -1,5 +1,9 @@
 import * as vscode from "vscode";
-import { UpdateablePreviewBase, LoaderRender } from "./updateablepreview";
+import {
+	UpdateablePreviewBase,
+	LoaderRender,
+	RenderContentOptions,
+} from "./updateablepreview";
 import { Loader } from "../util/loader/loader";
 import { getRelativePathInWorkspace } from "../util/vsccommon";
 
@@ -40,10 +44,14 @@ export abstract class LoaderPreview<
 			file: string,
 			contentProvider: () => Promise<string>,
 		) => TLoader,
+		// `options` is passed on for the previews that need to know why the render ran -- a preview
+		// whose loader reads auxiliary files has to force its session when one of them changed, since
+		// its own document's hash has not moved. The rest ignore the argument.
 		private readonly render: (
 			loader: TLoader,
 			uri: vscode.Uri,
 			webview: vscode.Webview,
+			options?: RenderContentOptions,
 		) => Promise<LoaderRender>,
 	) {
 		super(uri, panel);
@@ -57,10 +65,11 @@ export abstract class LoaderPreview<
 		document: vscode.TextDocument,
 		uri: vscode.Uri,
 		webview: vscode.Webview,
+		options?: RenderContentOptions,
 	): Promise<LoaderRender> {
 		this.content = document.getText();
 		try {
-			return await this.render(this.loader, uri, webview);
+			return await this.render(this.loader, uri, webview, options);
 		} finally {
 			this.content = undefined;
 		}

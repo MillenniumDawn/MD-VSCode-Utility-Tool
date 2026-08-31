@@ -18,6 +18,7 @@ import { guiPreviewDef } from './gui';
 import { mioPreviewDef } from './mio';
 import { ideaPreviewDef } from './idea';
 import { decisionPreviewDef } from './decision';
+import { characterPreviewDef } from './character';
 
 export type PreviewProviderDef = PreviewProviderDefNormal | PreviewProviderDefAlternative;
 
@@ -46,6 +47,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         mioPreviewDef,
         ideaPreviewDef,
         decisionPreviewDef,
+        characterPreviewDef,
     ];
     private _previewProvidersMap: Record<string, PreviewProviderDef> = arrayToMap(this._previewProviders, 'type');
 
