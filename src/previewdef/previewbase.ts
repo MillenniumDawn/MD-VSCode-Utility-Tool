@@ -6,6 +6,7 @@ import { isEqual } from 'lodash';
 import { sendByMessage } from '../util/telemetry';
 import { loadingShellHtml } from '../util/html';
 import { openOrCopyHoiFile } from '../util/previewfileopener';
+import { setPreviewOption } from '../util/previewoptions';
 
 export abstract class PreviewBase {
     private cachedDependencies: string[] | undefined = undefined;
@@ -89,6 +90,13 @@ export abstract class PreviewBase {
                     break;
                 case 'reload':
                     this.reload();
+                    break;
+                // A toolbar toggle the reader flipped. Held on this side because the webview's own
+                // state dies with the panel; see previewoptions.ts.
+                case 'setPreviewOption':
+                    if (typeof msg.key === 'string') {
+                        setPreviewOption(msg.key, msg.value);
+                    }
                     break;
             }
         });

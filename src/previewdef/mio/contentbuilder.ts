@@ -15,6 +15,7 @@ import { localisationIndex } from "../../util/featureflags";
 import { LoaderRender } from '../loaderpreview';
 import { registerExclusiveLinkStyles } from '../../util/hoi4gui/exclusivelink';
 import { loadExclusiveLinkImages } from '../../util/hoi4gui/exclusivelinkimages';
+import { getPreviewOptions } from '../../util/previewoptions';
 
 const defaultTraitIcon = 'gfx/interface/goals/goal_unknown.dds';
 const traitEffectIconMap: Record<TraitEffect, string> = {
@@ -80,6 +81,16 @@ const topPadding = 50;
 const xGridSize = 87;
 const yGridSize = 117;
 
+// The toolbar strip, matching the other previews. It has to clear its own scrollbar as well as the
+// controls: the strip is `overflow: auto hidden`, so on a narrow pane the scrollbar is laid out
+// inside this height, and at 40px it was drawn across the dropdown. Shipped to the webview as
+// window.toolbarHeight so the zoom anchor cannot drift from it.
+const toolbarHeight = 52;
+
+// The toolbar toggles whose position is remembered between panels. Read on the host because that is
+// where they are stored; the defaults live with the toggles in miopreview.ts.
+const previewOptionKeys = ['mio.showIncludedTraits', 'mio.showGrid', 'mio.showOverlaps'];
+
 async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[], jsCodes: string[], styleNonce: string, file: string): Promise<{ baseContent: string; data: Record<string, unknown> }> {
 
     const gridBox: HOIPartial<GridBoxType> = {
@@ -108,7 +119,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
             left:0;
             top:0;
         `)}"></div>` +
-        `<div id="miopreviewcontent" class="${styleTable.style('miopreviewcontent', () => `top:40px;left:-20px;position:relative`)}">
+        `<div id="miopreviewcontent" class="${styleTable.style('miopreviewcontent', () => `top:${toolbarHeight}px;left:-20px;position:relative`)}">
             <div id="miopreviewplaceholder"></div>
         </div>` +
         await renderToolBar(mios, styleTable, mioOptionsHtml)
@@ -133,6 +144,8 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
     jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
+    jsCodes.push('window.toolbarHeight = ' + toolbarHeight);
+    jsCodes.push('window.previewOptions = ' + JSON.stringify(getPreviewOptions(previewOptionKeys)));
 
     return {
         baseContent,
@@ -183,7 +196,7 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml
         <label for="show-overlaps" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showOverlaps', 'Show overlapping traits')}</label>
         <input type="checkbox" id="show-overlaps" class="${styleTable.style('marginRight10', () => `margin-right:10px`)}">`;
 
-    return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 40px;`)}">
+    return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: ${toolbarHeight}px;`)}">
         <div class="toolbar">
             ${mioSelect}
             ${conditions}
