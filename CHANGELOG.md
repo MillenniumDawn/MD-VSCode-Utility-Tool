@@ -3,6 +3,7 @@ v1.1.31
   Functionality:
 
 - Add a character preview showing portraits, roles and the modifiers each trait grants. Issue #8.
+- [ World Map ] Split the world map renderer into per-layer modules. Issue #53.
 
 v1.1.30
 
