@@ -1,3 +1,9 @@
+v1.1.31
+
+  Functionality:
+
+- Add a character preview showing portraits, roles and the modifiers each trait grants. Issue #8.
+
 v1.1.30
 
   Functionality:
