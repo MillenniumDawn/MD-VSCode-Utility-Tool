@@ -134,9 +134,9 @@ function buildStub() {
         showInformationMessage: async () => undefined,
         showWarningMessage: async () => undefined,
         showQuickPick: async () => undefined,
-    showOpenDialog: async () => undefined,
+        showOpenDialog: async () => undefined,
         showWorkspaceFolderPick: async () => undefined,
-    setStatusBarMessage: () => disposable(),
+        setStatusBarMessage: () => disposable(),
         // Runs the task rather than ignoring it: an index build does all of its work inside this
         // callback, so a stub that dropped it would hang every build-triggering suite.
         withProgress: (_options: any, task: any) => task(
