@@ -263,11 +263,15 @@ describe("owner-guarded removal with duplicate GFX names", function () {
 		const bContent = Buffer.from('spriteTypes = { spriteType = { name = "GFX_dup" texturefile = "b.dds" } }');
 		const files = ["a.gfx", "b.gfx"];
 		(fileloader as any).listFileEntriesFromModOrHOI4 = async (_p: string, opts: any) => {
-			if (opts?.mod === false) return toEntries([]);
+			if (opts?.mod === false) {
+				return toEntries([]);
+			}
 			return toEntries(files);
 		};
 		(fileloader as any).readFileFromModOrHOI4 = async (rel: string) => {
-			if (rel.endsWith("a.gfx")) return [aContent, {} as unknown];
+			if (rel.endsWith("a.gfx")) {
+				return [aContent, {} as unknown];
+			}
 			return [bContent, {} as unknown];
 		};
 		try {
