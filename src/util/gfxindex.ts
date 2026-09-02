@@ -258,7 +258,9 @@ function removeWorkspaceGfxFile(relative: string): void {
 	}
 
 	for (const key of keys) {
-		delete workspaceGfxIndex[key];
+		if (workspaceGfxIndex[key]?.file === relative) {
+			delete workspaceGfxIndex[key];
+		}
 	}
 	workspaceGfxFileToKeys.delete(relative);
 }
