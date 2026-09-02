@@ -322,6 +322,32 @@ bad;row
 		}
 	});
 
+	it("keeps rows with empty type and rule columns (vanilla adjacencies)", async () => {
+		const fileloader: any = await import("../util/fileloader");
+		const orig = fileloader.readFileFromModOrHOI4;
+		const csv = `From;To;Type;Through;start_x;start_y;stop_x;stop_y;adjacency_rule_name
+1;2;;3;10;20;30;40;
+3;4;sea;5;-1;-1;-1;-1;
+5;6;;7;1;2;3;4;rule_with_value
+`;
+		fileloader.readFileFromModOrHOI4 = async () => [
+			Buffer.from(csv),
+			vscode.Uri.file("/tmp/map/adjacencies.csv"),
+		];
+		try {
+			const { AdjacenciesLoader } = await import(
+				"../previewdef/worldmap/loader/adjacencies"
+			);
+			const loader = new AdjacenciesLoader("map/adjacencies.csv");
+			const result = await loader.load(new LoaderSession(false));
+			assert.strictEqual(result.result.length, 3);
+			assert.strictEqual(result.result[0].rule, "");
+			assert.strictEqual(result.result[0].type, "");
+			assert.strictEqual(result.result[1].rule, "");
+		} finally {
+			fileloader.readFileFromModOrHOI4 = orig;
+		}
+	});
 	it("handles -1 ids as filtered", async () => {
 		const fileloader: any = await import("../util/fileloader");
 		const orig = fileloader.readFileFromModOrHOI4;

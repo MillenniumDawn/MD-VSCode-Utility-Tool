@@ -29,14 +29,14 @@ async function loadAdjacencies(adjacenciesFile: string, progressReporter: Progre
 function convertRowToAdjacencies(adjacency: string[], _warnings: WorldMapWarning[]): ProvinceEdgeAdjacency | undefined {
     const fromValue = adjacency[0];
     const toValue = adjacency[1];
-    const type = adjacency[2];
+    const type = adjacency[2] ?? '';
     const throughValue = adjacency[3];
-    const startXValue = adjacency[4];
-    const startYValue = adjacency[5];
-    const stopXValue = adjacency[6];
-    const stopYValue = adjacency[7];
-    const rule = adjacency[8];
-    if (!fromValue || !toValue || !type || !throughValue || !startXValue || !startYValue || !stopXValue || !stopYValue || !rule) {
+    const startXValue = adjacency[4] ?? '';
+    const startYValue = adjacency[5] ?? '';
+    const stopXValue = adjacency[6] ?? '';
+    const stopYValue = adjacency[7] ?? '';
+    const rule = adjacency[8] ?? '';
+    if (!fromValue || !toValue || !throughValue) {
         return undefined;
     }
     const from = parseInt(fromValue);
