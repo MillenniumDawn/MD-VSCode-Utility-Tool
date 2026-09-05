@@ -47,8 +47,6 @@ let showSkills: boolean = getState().characterShowSkills ?? true;
 let expandTraits: boolean = getState().characterExpandTraits ?? false;
 let showDescription: boolean = getState().characterShowDescription ?? false;
 let showConditions: boolean = getState().characterShowConditions ?? false;
-// Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
-let filters: CharacterFilter[] = readFilters(getState().characterFilters);
 
 //#region Filtering
 
@@ -97,6 +95,15 @@ const filterControl = new FilterControl<CharacterFilter>({
 export function readFilters(stored: unknown): CharacterFilter[] {
 	return readFilterList(characterFilters, stored);
 }
+
+// Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
+//
+// This has to stay below `characterFilters`, not up with the other restored toggles: `readFilters`
+// is hoisted but the list it reads is not, so calling it earlier throws on the const in its temporal
+// dead zone and takes the whole module -- and with it the roster -- down. The tests compile to
+// commonjs, where the same read is a property access that quietly answers `undefined`, so only the
+// bundled preview shows it.
+let filters: CharacterFilter[] = readFilters(getState().characterFilters);
 
 /**
  * Whether one card survives a selection. Selecting nothing shows everything, and selecting several
