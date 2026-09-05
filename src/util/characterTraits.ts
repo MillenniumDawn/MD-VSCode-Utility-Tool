@@ -57,6 +57,16 @@ export interface CharacterTrait {
 	skillBonuses: ModifierPair[];
 	groups: TraitModifierGroup[];
 	researchBonuses: ModifierPair[];
+	// The trait's medal, as the game names it. Three shapes, one per directory:
+	//
+	//   scientist_traits  `icon = GFX_scientist_trait_genius`, a sprite name outright.
+	//   country_leader    `sprite = 13`, a 1-based frame of the GFX_idea_traits_strip sheet.
+	//   unit_leader       neither -- the game looks up `GFX_trait_<id>` by convention.
+	//
+	// Both fields stay raw here; turning them into a sprite name is the character preview's job,
+	// because the convention case needs to know that the id came from common/unit_leader.
+	icon: string | undefined;
+	spriteFrame: number | undefined;
 	file: string;
 	token: Token | undefined;
 }
@@ -253,6 +263,8 @@ function readTrait(
 		skillBonuses: [],
 		groups: [],
 		researchBonuses: [],
+		icon: undefined,
+		spriteFrame: undefined,
 		file,
 		token: node.nameToken ?? undefined,
 	};
@@ -317,6 +329,26 @@ function readTrait(
 				}
 				pushGroup(trait.groups, subUnit.name, readModifierPairsFromNode(subUnit));
 			}
+			continue;
+		}
+
+		// Read for the medal rather than for what the trait grants, so both stay in structuralKeys
+		// below -- these two handlers are the only readers, and they run first.
+		if (name === "icon") {
+			const value = readScalar(child.value);
+			trait.icon = typeof value === "string" ? value : undefined;
+			continue;
+		}
+
+		if (name === "sprite") {
+			// Millennium Dawn writes `sprite = 13 #Needed since Uruguay uses this in an advisor.`, so
+			// this arrives as a number from a well-formed file and as anything at all from a
+			// mistyped one. A frame index that is not a positive integer is dropped rather than
+			// turned into frame NaN of a sprite sheet.
+			const value = readScalar(child.value);
+			const frame = typeof value === "number" ? value : Number(value);
+			trait.spriteFrame =
+				Number.isInteger(frame) && frame > 0 ? frame : undefined;
 			continue;
 		}
 

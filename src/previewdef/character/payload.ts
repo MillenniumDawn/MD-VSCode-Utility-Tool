@@ -25,8 +25,9 @@ export { CharacterRoleKind } from "./schema";
 // author needs to see -- so the roster needs one more key than the file has role kinds.
 export type CharacterGroupKind = CharacterRoleKind | "none";
 
-// The character's portrait, as a StyleTable class carrying the decoded image as a data URL, plus
-// the size it was decoded at.
+// An image the preview draws, as a StyleTable class carrying it as a data URL plus the size it was
+// decoded at. A character's portrait and a trait's medal are the same thing to the webview: a class
+// name to put on an empty element.
 export interface CharacterPortrait {
 	styleKey: string;
 	width: number;
@@ -42,6 +43,10 @@ export interface TraitCard {
 	name: LocText;
 	desc: LocText;
 	known: boolean;
+	// The trait's medal, when one resolves. Millennium Dawn ships no GFX_trait_* sprites of its own,
+	// so most of its commander traits have none -- which is why an absent medal is an empty slot on
+	// the pill rather than a placeholder icon or a warning.
+	icon: CharacterPortrait | undefined;
 	traitType: string | undefined;
 	modifiers: ModifierLine[];
 	groups: ModifierGroup[];

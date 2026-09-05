@@ -425,3 +425,60 @@ describe("util/characterTraits skills and types", () => {
 		assert.strictEqual(found.traitType, "status_trait");
 	});
 });
+
+// The medal. None of the three directories names it the same way, and none of the three names it
+// as a modifier -- these fields exist so the character preview can draw a trait's icon, and the
+// point of every case below is as much that the value did NOT land in `modifiers`.
+describe("util/characterTraits medals", () => {
+	it("reads the sprite name a scientist trait writes outright", () => {
+		const found = trait(
+			`scientist_trait_genius = { icon = GFX_scientist_trait_genius }`,
+			"scientist_trait_genius",
+			"scientist",
+		);
+
+		assert.strictEqual(found.icon, "GFX_scientist_trait_genius");
+		assert.strictEqual(found.spriteFrame, undefined);
+		assert.deepStrictEqual(found.modifiers, []);
+	});
+
+	it("reads the frame index an advisor trait writes, comment and all", () => {
+		// Transcribed from vanilla's common/country_leader/00_traits.txt, trailing comment included:
+		// this is the shape the real files write, not a tidied one.
+		const found = trait(
+			`leader_traits = {
+                conservative_grandee = {
+                    random = no
+                    sprite = 13 #Needed since Uruguay uses this traits in an advisor.
+                    political_power_factor = 0.05
+                }
+            }`,
+			"conservative_grandee",
+		);
+
+		assert.strictEqual(found.spriteFrame, 13);
+		assert.strictEqual(found.icon, undefined);
+		assert.deepStrictEqual(found.modifiers, [
+			{ key: "political_power_factor", value: 0.05 },
+		]);
+	});
+
+	it("drops a frame index that is not a positive whole number", () => {
+		// Frame NaN of a sprite sheet is not a medal, so a mistyped one is no medal at all.
+		const found = trait(`leader_traits = { x = { sprite = nope } }`, "x");
+
+		assert.strictEqual(found.spriteFrame, undefined);
+		assert.deepStrictEqual(found.modifiers, []);
+	});
+
+	it("leaves a commander trait naming neither, since the game looks its medal up by id", () => {
+		const found = trait(
+			`leader_traits = { war_hero = { type = land } }`,
+			"war_hero",
+			"unit_leader",
+		);
+
+		assert.strictEqual(found.icon, undefined);
+		assert.strictEqual(found.spriteFrame, undefined);
+	});
+});

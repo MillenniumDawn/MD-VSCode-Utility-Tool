@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
-import { CharactersLoader } from "../previewdef/character/loader";
+import { CharactersLoader, traitIconSprite } from "../previewdef/character/loader";
+import { CharacterTrait } from "../util/characterTraits";
 import { LoaderSession } from "../util/loader/loader";
 import { clearDlcZipCache } from "../util/fileloader";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
@@ -100,5 +101,70 @@ describe("previewdef/character/loader dependencies", function () {
 			result.result.characters.characters.map((c: any) => c.id),
 			["TST_someone"],
 		);
+	});
+});
+
+// Which sprite a trait's medal is. None of the three trait directories writes this the same way,
+// and the one that writes nothing at all -- common/unit_leader -- is the one the mod's own
+// commander traits live in, so it is also the one that will silently draw nothing if the
+// convention here is wrong.
+describe("previewdef/character/loader trait medals", function () {
+	function traitOf(over: Partial<CharacterTrait>): CharacterTrait {
+		return {
+			id: "x",
+			source: "country_leader",
+			types: [],
+			traitType: undefined,
+			modifiers: [],
+			skillBonuses: [],
+			groups: [],
+			researchBonuses: [],
+			icon: undefined,
+			spriteFrame: undefined,
+			file: "test.txt",
+			token: undefined,
+			...over,
+		};
+	}
+
+	it("takes the sprite name a trait writes outright", function () {
+		assert.deepStrictEqual(
+			traitIconSprite(traitOf({ icon: "GFX_scientist_trait_genius", source: "scientist" })),
+			{ name: "GFX_scientist_trait_genius", frame: 0 },
+		);
+	});
+
+	it("reads an advisor trait's sprite number as a 1-based frame of the traits strip", function () {
+		// `sprite = 1` is the sheet's first frame, so the index into it is one less. Getting this
+		// wrong draws every advisor the medal of the trait next to it, which nothing else catches.
+		assert.deepStrictEqual(traitIconSprite(traitOf({ spriteFrame: 1 })), {
+			name: "GFX_idea_traits_strip",
+			frame: 0,
+		});
+		assert.deepStrictEqual(traitIconSprite(traitOf({ spriteFrame: 13 })), {
+			name: "GFX_idea_traits_strip",
+			frame: 12,
+		});
+	});
+
+	it("builds a commander trait's sprite name from its id, literally", function () {
+		// The game's convention is GFX_trait_ + the whole id, so the base-game trait actually
+		// called `trait_engineer` looks up GFX_trait_trait_engineer. Stripping the prefix that
+		// looks redundant is exactly the bug to avoid.
+		assert.deepStrictEqual(
+			traitIconSprite(traitOf({ id: "war_hero", source: "unit_leader" })),
+			{ name: "GFX_trait_war_hero", frame: 0 },
+		);
+		assert.deepStrictEqual(
+			traitIconSprite(traitOf({ id: "trait_engineer", source: "unit_leader" })),
+			{ name: "GFX_trait_trait_engineer", frame: 0 },
+		);
+	});
+
+	it("has no medal for an advisor trait that names no sprite", function () {
+		// Only unit_leader traits get a name built for them; a country_leader trait without a
+		// `sprite` has nothing to look up, and guessing GFX_trait_<id> for it would find either
+		// nothing or the wrong picture.
+		assert.strictEqual(traitIconSprite(traitOf({ id: "guerrilla_leader" })), undefined);
 	});
 });
