@@ -1,3 +1,9 @@
+v1.1.32
+
+  Functionality:
+
+- Reject preview copy targets that escape the workspace through symlinks (#205). Issue #205.
+
 v1.1.31
 
   Functionality:
