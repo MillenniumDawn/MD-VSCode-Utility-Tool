@@ -4,6 +4,7 @@ v1.1.32
 
 - Reject preview copy targets that escape the workspace through symlinks (#205). Issue #205.
 - [ World Map ] Adjacency rows with an empty type or rule column are now kept instead of being discarded. The world map previously showed only a handful of adjacencies because most vanilla rows leave those columns empty. Issue #232.
+- Deleting a .gfx file no longer removes a GFX_* entry that another .gfx file still defines, so the preview keeps the correct sprite when two files declare the same name and one is deleted. Issue #234.
 
 v1.1.31
 
