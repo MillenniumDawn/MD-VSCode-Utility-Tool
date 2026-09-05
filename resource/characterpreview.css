@@ -109,8 +109,20 @@
 
 /* A pill that opens rather than a plain badge, so it reads as something to click. A <button> and
    not a <div>: this is the one interactive element on a card, and it has to be reachable by
-   keyboard. */
+   keyboard.
+
+   The `display`, `width` and `height` below are not defaults being restated. common.css styles the
+   bare `button` element for the codicon buttons in the preview toolbars, and that rule sets
+   `display: inline-block; width: 20px; height: 20px`. This is the only <button> any preview builds
+   inside card content, so it is the only one that has to say otherwise -- without these three the
+   pill is a 20px box and `overflow-wrap: anywhere` breaks the trait name after every letter, one
+   character per line down the card. Do not remove them as redundant. */
 .char-trait {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	width: auto;
+	height: auto;
 	align-self: flex-start;
 	max-width: 100%;
 	padding: 1px 8px;
@@ -134,6 +146,30 @@
 .char-trait[aria-expanded="true"] {
 	border-color: var(--ev-accent);
 	color: var(--ev-fg);
+}
+
+/* The same common.css `button` rule scales an icon button on press and drops the focus ring. A
+   press that jumps a text pill sideways reads as a glitch on a card full of them, and a pill that
+   cannot be seen to have keyboard focus is unusable by keyboard -- which is the reason it is a
+   <button> in the first place. */
+.char-trait:active {
+	transform: none;
+}
+
+.char-trait:focus-visible {
+	outline: 1px solid var(--ev-accent);
+	outline-offset: 1px;
+}
+
+/* Drawn whether or not a medal resolved: the slot is what keeps the names in a column on a card
+   mixing vanilla traits, which have a sprite, with the mod's own, which have none. */
+.char-trait-icon {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
 }
 
 /* The typo case: the file names a trait no trait file defines. Not clickable, because there is

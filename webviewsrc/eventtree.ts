@@ -111,8 +111,6 @@ let showEdgeConditions: boolean = getState().showEdgeConditions ?? true;
 let showEventConditions: boolean = getState().showEventConditions ?? true;
 let showPicture: boolean = getState().showPicture ?? true;
 let showEffects: boolean = getState().showEffects ?? true;
-// Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
-let filters: EventFilter[] = readFilters(getState().eventFilters);
 
 //#region Filtering
 
@@ -142,6 +140,15 @@ export const eventFilters: readonly EventFilter[] = [
 export function readFilters(stored: unknown): EventFilter[] {
 	return readFilterList(eventFilters, stored);
 }
+
+// Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
+//
+// This has to stay below `eventFilters`, not up with the other restored toggles: `readFilters` is
+// hoisted but the list it reads is not, so calling it earlier throws on the const in its temporal
+// dead zone and takes the whole module -- and with it the canvas -- down. The tests compile to
+// commonjs, where the same read is a property access that quietly answers `undefined`, so only the
+// bundled preview shows it.
+let filters: EventFilter[] = readFilters(getState().eventFilters);
 
 // One option is emitted as a node once per scope situation it is reached in, so it can have several
 // structural parents. Treating this as a single id would silently drop chain links.

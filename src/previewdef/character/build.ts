@@ -12,7 +12,7 @@ import {
 	PortraitRef,
 	characterRoleKinds,
 } from "./schema";
-import { CharactersLoaderResult, isSpriteName } from "./loader";
+import { CharactersLoaderResult, isSpriteName, traitIconSprite } from "./loader";
 import {
 	CharacterCard,
 	CharacterGroupKind,
@@ -69,6 +69,7 @@ export async function buildCharacterPreviewPayload(
 				roleKinds,
 				portrait,
 				loadResult,
+				styleTable,
 			);
 			cards.push(card);
 			const key: CharacterGroupKind = role?.kind ?? noRole;
@@ -108,6 +109,7 @@ async function buildCard(
 	roleKinds: CharacterRoleKind[],
 	portrait: ResolvedPortrait,
 	loadResult: CharactersLoaderResult,
+	styleTable: StyleTable,
 ): Promise<CharacterCard> {
 	const definitions = loadResult.modifierDefinitions;
 	const kind: CharacterGroupKind = role?.kind ?? noRole;
@@ -116,7 +118,7 @@ async function buildCard(
 		buildName(character),
 		localise(character.descKey),
 		Promise.all(
-			(role?.traits ?? []).map((id) => buildTrait(id, loadResult)),
+			(role?.traits ?? []).map((id) => buildTrait(id, loadResult, styleTable)),
 		),
 		// A skill is a count of points, not a modifier: it has no MODIFIER_ key and no percentage
 		// to it, so the definitions are deliberately not consulted.
@@ -173,6 +175,7 @@ async function buildName(character: HOICharacter): Promise<CharacterCard["name"]
 async function buildTrait(
 	id: string,
 	loadResult: CharactersLoaderResult,
+	styleTable: StyleTable,
 ): Promise<TraitCard> {
 	const definition: CharacterTrait | undefined = loadResult.traits[id];
 	const definitions = loadResult.modifierDefinitions;
@@ -185,6 +188,7 @@ async function buildTrait(
 			name,
 			desc,
 			known: false,
+			icon: undefined,
 			traitType: undefined,
 			modifiers: [],
 			groups: [],
@@ -193,7 +197,8 @@ async function buildTrait(
 		};
 	}
 
-	const [modifiers, skills, research, groups] = await Promise.all([
+	const [icon, modifiers, skills, research, groups] = await Promise.all([
+		buildTraitIcon(definition, loadResult, styleTable),
 		formatModifiers(definition.modifiers, definitions),
 		formatModifiers(definition.skillBonuses, {}),
 		formatResearchBonuses(definition.researchBonuses),
@@ -225,6 +230,7 @@ async function buildTrait(
 		name,
 		desc,
 		known: true,
+		icon,
 		traitType: definition.traitType,
 		modifiers,
 		groups: allGroups,
@@ -234,6 +240,47 @@ async function buildTrait(
 			desc.text !== desc.key,
 		nav: navOf(definition.token, definition.file),
 	};
+}
+
+// The trait's medal, or undefined when nothing draws one.
+//
+// Undefined is the ordinary answer rather than a failure: Millennium Dawn ships no GFX_trait_*
+// sprites, so every commander trait it adds itself lands here, and the card draws an empty slot the
+// same width as a medal so the pills still line up.
+async function buildTraitIcon(
+	definition: CharacterTrait,
+	loadResult: CharactersLoaderResult,
+	styleTable: StyleTable,
+): Promise<CharacterPortrait | undefined> {
+	const wanted = traitIconSprite(definition);
+	if (wanted === undefined) {
+		return undefined;
+	}
+
+	const sprite = await getSpriteByGfxName(wanted.name, loadResult.gfxFiles);
+	if (!sprite) {
+		return undefined;
+	}
+
+	// Sprite.frames slices a strip into per-frame images with their own data URLs, so a frame is
+	// drawn with the same background-image rule as a whole sprite and needs no background-position
+	// arithmetic. A frame index the sheet does not have falls back to the whole image rather than
+	// dropping the medal: a trait written with `sprite = 40` is still a trait.
+	const image = sprite.frames[wanted.frame] ?? sprite.image;
+
+	// Keyed on the sprite and frame rather than the trait, so the forty advisors sharing frame 13 of
+	// the strip share one rule instead of writing the same data URL forty times.
+	const styleKey = styleTable.style(
+		"char-trait-icon-" + normalizeForStyle(`${wanted.name}-${wanted.frame}`),
+		() => `
+            background-image: url(${image.uri});
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        `,
+	);
+
+	return { styleKey, width: image.width, height: image.height };
 }
 
 interface ResolvedPortrait {

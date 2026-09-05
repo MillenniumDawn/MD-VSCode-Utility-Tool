@@ -87,8 +87,6 @@ let showEffects: boolean = getState().decShowEffects ?? true;
 // Off by default: a game window is much larger than a card, and a reader opening a decisions file
 // is usually after the decisions rather than the tab they sit in.
 let showScriptedGui: boolean = getState().decShowScriptedGui ?? false;
-// Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
-let filters: DecisionFilter[] = readFilters(getState().decisionFilters);
 
 //#region Filtering
 
@@ -115,6 +113,15 @@ export const decisionFilters: readonly DecisionFilter[] = [
 export function readFilters(stored: unknown): DecisionFilter[] {
 	return readFilterList(decisionFilters, stored);
 }
+
+// Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
+//
+// This has to stay below `decisionFilters`, not up with the other restored toggles: `readFilters` is
+// hoisted but the list it reads is not, so calling it earlier throws on the const in its temporal
+// dead zone and takes the whole module -- and with it the canvas -- down. The tests compile to
+// commonjs, where the same read is a property access that quietly answers `undefined`, so only the
+// bundled preview shows it.
+let filters: DecisionFilter[] = readFilters(getState().decisionFilters);
 
 export interface VisibleGraph {
 	nodes: DecisionGraphNode[];
