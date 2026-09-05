@@ -89,22 +89,6 @@ body.vscode-high-contrast-light {
 	margin-right: 12px;
 }
 
-/* A search box and a row of toggles do not fit a narrow editor pane, so the strip scrolls. The
-   scrollbar sits inside the fixed 52px strip, so it is kept thin and the height accounts for it --
-   see toolbarHeight in each preview's contentbuilder.ts. */
-.toolbar-outer::-webkit-scrollbar {
-	height: 6px;
-}
-
-.toolbar-outer::-webkit-scrollbar-thumb {
-	border-radius: 3px;
-	background: var(--vscode-scrollbarSlider-background);
-}
-
-.toolbar-outer::-webkit-scrollbar-thumb:hover {
-	background: var(--vscode-scrollbarSlider-hoverBackground);
-}
-
 /* ---------- The card ---------- */
 
 /* The lift is a flat gradient rather than a second element, so it stays part of the card's own

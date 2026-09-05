@@ -59,4 +59,23 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
             assert.ok(styleCss.includes(`.${content} {`));
         }
     });
+
+    // The strip is `overflow: auto hidden`, so its scrollbar is laid out inside this height. It has
+    // to clear the 20px controls and that scrollbar both, and the canvas has to start where the
+    // strip ends -- one constant, so the two can't drift and leave a gap or a covered dropdown.
+    it('gives the toolbar and the canvas offset the same height', async () => {
+        const rendered = await renderMioFile(loaderFor(1), uri, webview) as LoaderRenderResult;
+        const styleCss = rendered.update!.styleCss!;
+
+        assert.ok(/\.st-toolbar-height \{[^}]*height: 52px;/.test(styleCss), styleCss);
+        assert.ok(/\.st-miopreviewcontent \{[^}]*top:52px/.test(styleCss), styleCss);
+        assert.ok(rendered.html.includes('window.toolbarHeight = 52'));
+    });
+
+    // The toolbar toggles are stored by the host, because the webview's own state dies with the
+    // panel. The page cannot read globalState, so it is rendered in.
+    it('hands the page the stored toolbar options', async () => {
+        const rendered = await renderMioFile(loaderFor(1), uri, webview) as LoaderRenderResult;
+        assert.ok(rendered.html.includes('window.previewOptions = '));
+    });
 });

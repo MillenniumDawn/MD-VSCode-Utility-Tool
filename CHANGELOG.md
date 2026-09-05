@@ -1,3 +1,15 @@
+v1.1.31
+
+  Functionality:
+
+- Add a character preview showing portraits, roles and the modifiers each trait grants. Issue #8.
+- [ World Map ] Split the world map renderer into per-layer modules. Issue #53.
+- Tell a reporter when their bug is filed against an outdated extension version. Issue #149.
+- [ Testing ] Cover the world map sub-loaders' merge and validation paths. Issue #88.
+- [ Build ] Update @types/mocha to ^10 and move rxjs to 7. Issue #47.
+- The MIO preview's toolbar no longer has its scrollbar drawn across the dropdown, and it remembers the show grid toggle.
+- Close outdated-version bug reports whose fix already shipped, judged by a model. Issue #150.
+
 v1.1.30
 
   Functionality:
