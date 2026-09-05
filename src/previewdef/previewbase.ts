@@ -28,9 +28,16 @@ export abstract class PreviewBase {
     }
 
     public async onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
+        if (this.isDisposed) {
+            return;
+        }
         try {
             if (!this.panelInitialized) {
-                this.panel.webview.html = await this.getContent(document);
+                const html = await this.getContent(document);
+                if (this.isDisposed) {
+                    return;
+                }
+                this.panel.webview.html = html;
                 this.panelInitialized = true;
             } else {
                 await this.sendPartialUpdate(document, dependencyChanged);
@@ -41,7 +48,14 @@ export abstract class PreviewBase {
     }
 
     protected async sendPartialUpdate(document: vscode.TextDocument, _dependencyChanged = false): Promise<void> {
-        this.panel.webview.html = await this.getContent(document);
+        if (this.isDisposed) {
+            return;
+        }
+        const html = await this.getContent(document);
+        if (this.isDisposed) {
+            return;
+        }
+        this.panel.webview.html = html;
     }
     
     public dispose(): void {
@@ -56,6 +70,9 @@ export abstract class PreviewBase {
     }
 
     public async initializePanelContent(document: vscode.TextDocument): Promise<void> {
+        if (this.isDisposed) {
+            return;
+        }
         this.panelInitialized = false;
         this.panel.webview.html = this.getLoadingShellHtml();
         await this.onDocumentChange(document);
