@@ -3,6 +3,7 @@ v1.1.32
   Functionality:
 
 - Reject preview copy targets that escape the workspace through symlinks (#205). Issue #205.
+- [ World Map ] Adjacency rows with an empty type or rule column are now kept instead of being discarded. The world map previously showed only a handful of adjacencies because most vanilla rows leave those columns empty. Issue #232.
 
 v1.1.31
 
