@@ -29,6 +29,10 @@ describe('previewdef/updateablepreview extension points', () => {
             this.queue.push(...results);
         }
 
+        // Set by the disposed-guard tests: dispose the preview mid-flight, the way closing the
+        // panel during the 1000 ms debounce does.
+        public disposeOnRender = false;
+
         public run(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
             return this.sendPartialUpdate(document, dependencyChanged);
         }
@@ -48,6 +52,9 @@ describe('previewdef/updateablepreview extension points', () => {
             options: RenderContentOptions,
         ): Promise<LoaderRender | null> {
             this.lastOptions = options;
+            if (this.disposeOnRender) {
+                this.dispose();
+            }
             return Promise.resolve(this.queue.shift() ?? null);
         }
 
@@ -64,7 +71,7 @@ describe('previewdef/updateablepreview extension points', () => {
     // Shared with beforeRenderAssign so the test can assert the hook runs BEFORE the write.
     let htmlSetCount = 0;
 
-    function makePreview(visible: boolean) {
+    function makePreview(visible: boolean, onPost?: () => void) {
         htmlSetCount = 0;
         let postCount = 0;
         let postDelivered = true;
@@ -74,6 +81,9 @@ describe('previewdef/updateablepreview extension points', () => {
             postMessage: (msg: any) => {
                 postCount++;
                 posted.push(msg);
+                if (onPost) {
+                    onPost();
+                }
                 return Promise.resolve(postDelivered);
             },
             get html() { return lastAssignedHtml ?? ''; },
@@ -212,6 +222,47 @@ describe('previewdef/updateablepreview extension points', () => {
         assert.strictEqual(h.postCount, 1);
         assert.strictEqual(h.htmlSetCount, 1);
         assert.deepStrictEqual(h.preview.applied, [{ assigned: true, sideChanged: false }]);
+    });
+
+    it('does not fall back to an html assign when the post to a disposed panel is dropped', async () => {
+        let preview: TestPreview | undefined;
+        const h = makePreview(true, () => preview?.dispose());
+        preview = h.preview;
+        h.preview.queueRender(updateRender('S1'), updateRender('S2'));
+        await h.preview.runFull(document);
+        h.preview.applied.length = 0;
+        h.dropPosts();
+
+        await h.preview.run(document);
+        // postMessage returning false is what a disposed webview reports; disposing right there
+        // mirrors the panel closing while the post was in flight. The fallback assign must not
+        // write html on the disposed panel.
+        assert.strictEqual(h.postCount, 1);
+        assert.strictEqual(h.htmlSetCount, 0);
+    });
+
+    it('writes nothing when the preview is disposed during a full render', async () => {
+        const h = makePreview(true);
+        h.preview.queueRender(updateRender('S1'));
+        h.preview.disposeOnRender = true;
+
+        await h.preview.onDocumentChange(document);
+        assert.strictEqual(h.htmlSetCount, 0);
+        assert.deepStrictEqual(h.preview.applied, []);
+        assert.deepStrictEqual(h.preview.beforeAssignAt, []);
+    });
+
+    it('posts nothing when the preview is disposed during a partial update', async () => {
+        const h = makePreview(true);
+        h.preview.queueRender(updateRender('S1'), updateRender('S2'));
+        await h.preview.runFull(document);
+        h.preview.applied.length = 0;
+        h.preview.disposeOnRender = true;
+
+        await h.preview.run(document);
+        assert.strictEqual(h.postCount, 0);
+        assert.strictEqual(h.htmlSetCount, 0);
+        assert.deepStrictEqual(h.preview.applied, []);
     });
 
     it('keeps the current html when a full render declines to render', async () => {

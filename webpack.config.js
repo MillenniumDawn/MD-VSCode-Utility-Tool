@@ -146,6 +146,10 @@ const mainWebConfig = {
     // support reading TypeScript and JavaScript files, 📖 -> https://github.com/TypeStrong/ts-loader
     extensions: ['.ts', '.js'],
     fallback: {
+      // previewfileopener's copy-target symlink check needs node's fs, but only runs for
+      // file-scheme URIs, which the web extension never sees. An empty module keeps the bundle
+      // resolving; a stray call would throw into the caller's error handling.
+      fs: false,
       assert: require.resolve('assert/'),
       buffer: require.resolve('buffer/'),
       path: require.resolve('path-browserify'),

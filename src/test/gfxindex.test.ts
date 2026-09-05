@@ -254,4 +254,44 @@ describe("util/gfxindex lazy build", function () {
 			assert.strictEqual(result, undefined);
 		});
 	});
+
+describe("owner-guarded removal with duplicate GFX names", function () {
+	it("keeps the winner when the losing file is deleted", async function () {
+		const origList = fileloader.listFileEntriesFromModOrHOI4;
+		const origRead = fileloader.readFileFromModOrHOI4;
+		const aContent = Buffer.from('spriteTypes = { spriteType = { name = "GFX_dup" texturefile = "a.dds" } }');
+		const bContent = Buffer.from('spriteTypes = { spriteType = { name = "GFX_dup" texturefile = "b.dds" } }');
+		const files = ["a.gfx", "b.gfx"];
+		(fileloader as any).listFileEntriesFromModOrHOI4 = async (_p: string, opts: any) => {
+			if (opts?.mod === false) {
+				return toEntries([]);
+			}
+			return toEntries(files);
+		};
+		(fileloader as any).readFileFromModOrHOI4 = async (rel: string) => {
+			if (rel.endsWith("a.gfx")) {
+				return [aContent, {} as unknown];
+			}
+			return [bContent, {} as unknown];
+		};
+		try {
+			__resetGfxIndexForTests();
+			const first = await getGfxContainerFile("GFX_dup");
+			assert.strictEqual(first, "interface/b.gfx");
+			__testHandlers.onDeleteFiles({ files: [gfxFileUri("interface/a.gfx")] });
+			await waitForAsyncTasks();
+			const afterLosingDelete = await getGfxContainerFile("GFX_dup");
+			assert.strictEqual(afterLosingDelete, "interface/b.gfx");
+			__testHandlers.onDeleteFiles({ files: [gfxFileUri("interface/b.gfx")] });
+			await waitForAsyncTasks();
+			const afterWinnerDelete = await getGfxContainerFile("GFX_dup");
+			assert.strictEqual(afterWinnerDelete, undefined);
+		} finally {
+			(fileloader as any).listFileEntriesFromModOrHOI4 = origList;
+			(fileloader as any).readFileFromModOrHOI4 = origRead;
+			__resetGfxIndexForTests();
+		}
+	});
+});
+
 });
