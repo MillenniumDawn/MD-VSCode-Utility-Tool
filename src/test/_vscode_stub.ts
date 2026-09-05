@@ -23,15 +23,57 @@ function buildStub() {
     const Uri = {
         file(p: string) {
             const fsPath = String(p);
-            return { fsPath, path: '/' + fsPath.replace(/\\/g, '/'), scheme: 'file', toString: () => 'file://' + fsPath };
+            return {
+                fsPath,
+                path: '/' + fsPath.replace(/\\/g, '/'),
+                scheme: 'file',
+                fragment: '',
+                toString: () => 'file://' + fsPath,
+                with(change: any) {
+                    const newPath = change?.path ?? this.path;
+                    const newFragment = change?.fragment ?? this.fragment;
+                    const newFsPath = change?.path ? newPath.replace(/^\//, '') : this.fsPath;
+                    return {
+                        ...this,
+                        path: newPath,
+                        fsPath: newFsPath,
+                        fragment: newFragment,
+                        toString: () => 'file://' + newFsPath + (newFragment ? '#' + newFragment : ''),
+                        with: this.with,
+                    };
+                },
+            };
         },
         parse(v: string) {
-            return { fsPath: v, path: v, scheme: 'file', toString: () => v };
+            const match = /^([a-zA-Z0-9+.-]+):\/\/(.*)$/.exec(v);
+            const scheme = match ? match[1] : (v.startsWith('hoi4:/') ? 'hoi4' : 'file');
+            return {
+                fsPath: v,
+                path: v,
+                scheme,
+                fragment: '',
+                toString: () => v,
+                with(change: any) {
+                    return { ...this, ...change };
+                },
+            };
         },
         joinPath(base: any, ...pathSegments: string[]) {
-            const basePath = (base && base.fsPath) || '';
-            const fsPath = [basePath, ...pathSegments].join('/').replace(/\\/g, '/');
-            return { fsPath, path: '/' + fsPath, scheme: 'file', toString: () => 'file://' + fsPath };
+            const basePath = (base && (base.scheme === 'file' ? base.fsPath : base.path)) || '';
+            const joined = [basePath, ...pathSegments].join('/').replace(/\\/g, '/');
+            if (base && base.scheme && base.scheme !== 'file') {
+                return {
+                    scheme: base.scheme,
+                    path: joined,
+                    fsPath: joined,
+                    fragment: '',
+                    toString: () => joined,
+                    with(change: any) {
+                        return { ...this, ...change };
+                    },
+                };
+            }
+            return Uri.file(joined);
         },
     };
 
@@ -93,6 +135,7 @@ function buildStub() {
         showWarningMessage: async () => undefined,
         showQuickPick: async () => undefined,
         showOpenDialog: async () => undefined,
+        showWorkspaceFolderPick: async () => undefined,
         setStatusBarMessage: () => disposable(),
         // Runs the task rather than ignoring it: an index build does all of its work inside this
         // callback, so a stub that dropped it would hang every build-triggering suite.
@@ -223,10 +266,13 @@ const pristine = {
     stat: stub.workspace.fs.stat,
     readDirectory: stub.workspace.fs.readDirectory,
     readFile: stub.workspace.fs.readFile,
+    writeFile: stub.workspace.fs.writeFile,
+    createDirectory: stub.workspace.fs.createDirectory,
     getWorkspaceFolder: stub.workspace.getWorkspaceFolder,
     openTextDocument: stub.workspace.openTextDocument,
     textDocuments: stub.workspace.textDocuments as unknown,
     showErrorMessage: stub.window.showErrorMessage,
+    showWorkspaceFolderPick: stub.window.showWorkspaceFolderPick,
     createWebviewPanel: stub.window.createWebviewPanel,
     registerWebviewPanelSerializer: stub.window.registerWebviewPanelSerializer,
     withProgress: stub.window.withProgress,
@@ -247,11 +293,14 @@ export interface VscodeStubOverrides {
     stat?: (uri: any) => Promise<any>;
     readDirectory?: (uri: any) => Promise<[string, number][]>;
     readFile?: (uri: any) => Promise<Uint8Array>;
+    writeFile?: (uri: any, content: Uint8Array) => Promise<void>;
+    createDirectory?: (uri: any) => Promise<void>;
     getWorkspaceFolder?: (uri: any) => any;
     openTextDocument?: (uri: any) => Promise<any>;
     /** Replaces `workspace.textDocuments`, for suites driving `getDocumentByUri` lookups. */
     textDocuments?: readonly any[];
     showErrorMessage?: (...args: any[]) => Promise<any>;
+    showWorkspaceFolderPick?: () => Promise<any>;
     createWebviewPanel?: (viewType: string, title: string, showOptions: any, options: any) => any;
     /** Captures the serializer a suite's `register()` call installs, e.g. to drive it directly. */
     registerWebviewPanelSerializer?: (viewType: string, serializer: any) => { dispose(): void };
@@ -301,6 +350,12 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.readFile !== undefined) {
         fs.readFile = overrides.readFile;
     }
+    if (overrides.writeFile !== undefined) {
+        fs.writeFile = overrides.writeFile;
+    }
+    if (overrides.createDirectory !== undefined) {
+        fs.createDirectory = overrides.createDirectory;
+    }
     if (overrides.getWorkspaceFolder !== undefined) {
         workspace.getWorkspaceFolder = overrides.getWorkspaceFolder;
     }
@@ -312,6 +367,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     }
     if (overrides.showErrorMessage !== undefined) {
         window.showErrorMessage = overrides.showErrorMessage;
+    }
+    if (overrides.showWorkspaceFolderPick !== undefined) {
+        window.showWorkspaceFolderPick = overrides.showWorkspaceFolderPick;
     }
     if (overrides.createWebviewPanel !== undefined) {
         window.createWebviewPanel = overrides.createWebviewPanel;
@@ -339,10 +397,13 @@ export function restoreVscodeStubs(): void {
     fs.stat = pristine.stat;
     fs.readDirectory = pristine.readDirectory;
     fs.readFile = pristine.readFile;
+    fs.writeFile = pristine.writeFile;
+    fs.createDirectory = pristine.createDirectory;
     workspace.getWorkspaceFolder = pristine.getWorkspaceFolder;
     workspace.openTextDocument = pristine.openTextDocument;
     workspace.textDocuments = pristine.textDocuments;
     window.showErrorMessage = pristine.showErrorMessage;
+    window.showWorkspaceFolderPick = pristine.showWorkspaceFolderPick;
     window.createWebviewPanel = pristine.createWebviewPanel;
     window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
     window.withProgress = pristine.withProgress;

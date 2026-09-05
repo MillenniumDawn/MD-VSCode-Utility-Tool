@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 import { dirUri, getDocumentByUri, mkdirs, writeFile } from "./vsccommon";
 import {
 	getFilePathFromMod,
@@ -12,6 +14,42 @@ export interface OpenOrCopyHoiFileOptions {
 	mustOpenFolderMessage: string;
 	selectFolderMessage: string;
 	failedToOpenMessage: (errorMessage: string) => string;
+}
+
+async function ensureCopyTargetIsInsideWorkspace(
+	targetPath: vscode.Uri,
+	workspaceRoot: vscode.Uri,
+): Promise<void> {
+	if (targetPath.scheme !== "file" || workspaceRoot.scheme !== "file") {
+		return;
+	}
+
+	const resolvedRoot = await new Promise<string>((resolve, reject) =>
+		fs.realpath(workspaceRoot.fsPath, (error, resolved) => error ? reject(error) : resolve(resolved)),
+	);
+	let existingPath = targetPath.fsPath;
+	while (true) {
+		try {
+			existingPath = await new Promise<string>((resolve, reject) =>
+				fs.realpath(existingPath, (error, resolved) => error ? reject(error) : resolve(resolved)),
+			);
+			break;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+				throw error;
+			}
+			const parent = path.dirname(existingPath);
+			if (parent === existingPath) {
+				break;
+			}
+			existingPath = parent;
+		}
+	}
+
+	const relative = path.relative(resolvedRoot, existingPath);
+	if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+		throw new Error("Copy target resolves outside the workspace");
+	}
 }
 
 async function openDocumentAtRange(
@@ -69,6 +107,7 @@ export async function openOrCopyHoiFile(
 	try {
 		const [buffer] = await readFileFromModOrHOI4(file);
 		const targetPath = vscode.Uri.joinPath(targetFolderUri, file);
+		await ensureCopyTargetIsInsideWorkspace(targetPath, targetFolderUri);
 		await mkdirs(dirUri(targetPath));
 		await writeFile(targetPath, buffer);
 
