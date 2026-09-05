@@ -444,6 +444,18 @@ describe("previewdef/character payload traits", () => {
 			["Skill bonuses", "non_shared_modifier"],
 		);
 	});
+
+	it("carries no medal when nothing defines the sprite it would need", async () => {
+		// The ordinary case in Millennium Dawn, not a failure: the mod ships no GFX_trait_* sprites,
+		// so its own commander traits have no medal to find. The card draws an empty slot, which is
+		// why this is undefined rather than a placeholder the reader would take for a real icon.
+		const payload = await payloadFor(
+			`characters = { AFG_x = { corps_commander = { traits = { old_guard } } } }`,
+			{ traits: `leader_traits = { old_guard = { attack_skill = 1 } }` },
+		);
+
+		assert.strictEqual(payload.cards[0]?.traits[0]?.icon, undefined);
+	});
 });
 
 describe("previewdef/character toolbar flags", () => {

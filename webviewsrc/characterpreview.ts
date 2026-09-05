@@ -47,8 +47,6 @@ let showSkills: boolean = getState().characterShowSkills ?? true;
 let expandTraits: boolean = getState().characterExpandTraits ?? false;
 let showDescription: boolean = getState().characterShowDescription ?? false;
 let showConditions: boolean = getState().characterShowConditions ?? false;
-// Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
-let filters: CharacterFilter[] = readFilters(getState().characterFilters);
 
 //#region Filtering
 
@@ -97,6 +95,15 @@ const filterControl = new FilterControl<CharacterFilter>({
 export function readFilters(stored: unknown): CharacterFilter[] {
 	return readFilterList(characterFilters, stored);
 }
+
+// Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
+//
+// This has to stay below `characterFilters`, not up with the other restored toggles: `readFilters`
+// is hoisted but the list it reads is not, so calling it earlier throws on the const in its temporal
+// dead zone and takes the whole module -- and with it the roster -- down. The tests compile to
+// commonjs, where the same read is a property access that quietly answers `undefined`, so only the
+// bundled preview shows it.
+let filters: CharacterFilter[] = readFilters(getState().characterFilters);
 
 /**
  * Whether one card survives a selection. Selecting nothing shows everything, and selecting several
@@ -269,7 +276,20 @@ export function traitToDom(trait: TraitCard): HTMLDivElement {
 	const pill = document.createElement("button");
 	pill.type = "button";
 	pill.className = "char-trait" + (trait.known ? "" : " char-trait-unknown");
-	pill.textContent = textFor(trait.name);
+
+	// The medal, and the slot it sits in. The slot is drawn whether or not a medal resolved, so a
+	// card mixing vanilla traits with the mod's own -- which have no sprite to find -- still reads as
+	// one column of names rather than a ragged edge. An unknown trait gets one too, for the same
+	// reason.
+	const icon = document.createElement("span");
+	icon.className = "char-trait-icon" + (trait.icon ? " " + trait.icon.styleKey : "");
+	pill.appendChild(icon);
+
+	// A child span rather than pill.textContent, which would take the icon with it.
+	const label = document.createElement("span");
+	label.className = "char-trait-name";
+	label.textContent = textFor(trait.name);
+	pill.appendChild(label);
 
 	if (!trait.known) {
 		// The single most useful thing this preview says: the file names a trait nothing defines,

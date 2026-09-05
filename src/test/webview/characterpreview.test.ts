@@ -118,6 +118,7 @@ function trait(id: string, extra: Partial<TraitCard> = {}): TraitCard {
 		name: { key: id, text: id },
 		desc: { key: `${id}_desc`, text: `${id}_desc` },
 		known: true,
+		icon: undefined,
 		traitType: undefined,
 		modifiers: [],
 		groups: [],
@@ -390,6 +391,43 @@ describe("webview/characterpreview traitToDom", () => {
 		assert.ok(pill.classList.contains("char-trait-unknown"));
 		assert.strictEqual(box.querySelector(".char-trait-mods"), null);
 		assert.ok(pill.title.includes("army_chief_planing_3"));
+	});
+
+	it("draws the medal on the pill, beside the name", () => {
+		const box = traitToDom(
+			trait("war_hero", {
+				icon: { styleKey: "s1", width: 40, height: 40 },
+			}),
+		);
+		const pill = box.querySelector(".char-trait") as HTMLElement;
+		const icon = pill.querySelector(".char-trait-icon") as HTMLElement;
+
+		assert.ok(icon, "expected a medal slot on the pill");
+		assert.ok(icon.classList.contains("s1"));
+		// The name is a child element rather than the pill's own text, because setting
+		// pill.textContent would take the medal with it.
+		assert.strictEqual(pill.querySelector(".char-trait-name")?.textContent, "war_hero");
+	});
+
+	it("keeps the slot when there is no medal, so the names still line up", () => {
+		// Millennium Dawn defines no sprite for its own commander traits, so a card mixing them
+		// with base-game ones is the normal case rather than the odd one.
+		const icon = traitToDom(trait("MD_own_trait")).querySelector(
+			".char-trait-icon",
+		) as HTMLElement;
+
+		assert.ok(icon, "expected an empty medal slot");
+		assert.deepStrictEqual([...icon.classList], ["char-trait-icon"]);
+	});
+
+	it("gives a trait nothing defines a slot too", () => {
+		const box = traitToDom(trait("army_chief_planing_3", { known: false }));
+
+		assert.ok(box.querySelector(".char-trait-icon"));
+		assert.strictEqual(
+			box.querySelector(".char-trait-name")?.textContent,
+			"army_chief_planing_3",
+		);
 	});
 
 	it("makes a trait pill jump to where the trait is defined", () => {

@@ -235,6 +235,56 @@ function installWorldMapShell(): void {
 	);
 }
 
+// The four card previews restore their filter selection at module scope, from a list declared
+// further down the same file. In the bundler's ESM output that read lands in the list's temporal
+// dead zone and the entry throws before it registers anything, so the reader gets the
+// host-rendered toolbar over an empty canvas and nothing else. These tests compile to commonjs,
+// where the same read is a property access that answers `undefined` rather than throwing -- which
+// is why a green suite shipped it. What reaches the failure here is a selection already being
+// stored: readFilterList then calls `.filter` on the list it was handed.
+type CardEntrypoint =
+	| "ideapreview"
+	| "eventtree"
+	| "characterpreview"
+	| "decisiontree";
+
+// The state key each one remembers its selection under, with a value that is one of its filters.
+const cardEntrypointState: Record<CardEntrypoint, Record<string, unknown>> = {
+	ideapreview: { ideaFilters: ["laws"] },
+	eventtree: { eventFilters: ["mtth"] },
+	characterpreview: { characterFilters: ["traits"] },
+	decisiontree: { decisionFilters: ["missions"] },
+};
+
+// Re-evaluates one entry's module body. Each of these is already required at file scope by its own
+// test file, so without dropping the cache entry the require below would hand back the instance
+// that was built when nothing was stored and evaluate nothing at all.
+function reloadCardEntrypoint(name: CardEntrypoint): void {
+	const paths: Record<CardEntrypoint, string> = {
+		ideapreview: require.resolve("../../../webviewsrc/ideapreview"),
+		eventtree: require.resolve("../../../webviewsrc/eventtree"),
+		characterpreview: require.resolve("../../../webviewsrc/characterpreview"),
+		decisiontree: require.resolve("../../../webviewsrc/decisiontree"),
+	};
+	delete require.cache[paths[name]];
+	withoutWindowListeners(() => {
+		switch (name) {
+			case "ideapreview":
+				require("../../../webviewsrc/ideapreview");
+				break;
+			case "eventtree":
+				require("../../../webviewsrc/eventtree");
+				break;
+			case "characterpreview":
+				require("../../../webviewsrc/characterpreview");
+				break;
+			case "decisiontree":
+				require("../../../webviewsrc/decisiontree");
+				break;
+		}
+	});
+}
+
 clearState();
 const gfx = captureEntrypoint("gfx");
 const techtree = captureEntrypoint("techtree");
@@ -411,4 +461,19 @@ describe("webview entrypoints", () => {
 			(globalThis as any).requestAnimationFrame = originalRequestAnimationFrame;
 		}
 	});
+});
+
+describe("webview card entrypoints", () => {
+	beforeEach(() => {
+		clearState();
+		document.body.replaceChildren();
+	});
+
+	for (const name of Object.keys(cardEntrypointState) as CardEntrypoint[]) {
+		it(`${name} evaluates with a stored filter selection`, () => {
+			vscode.setState(cardEntrypointState[name]);
+
+			assert.doesNotThrow(() => reloadCardEntrypoint(name));
+		});
+	}
 });

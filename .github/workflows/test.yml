@@ -48,6 +48,12 @@ jobs:
           retention-days: 5
       - name: Package VSIX
         run: npm run package
+      # The unit tests compile webviewsrc to commonjs, where an exported const read before its
+      # declaration answers `undefined` instead of throwing. What ships is ESM, where the same read
+      # throws and the preview draws its toolbar over an empty canvas, so the bundles are evaluated
+      # here -- against the production build `npm run package` just wrote.
+      - name: Smoke test webview bundles
+        run: npm run smoke:webviews
       - name: Upload VSIX
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
