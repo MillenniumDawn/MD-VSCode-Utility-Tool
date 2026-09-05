@@ -204,6 +204,9 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		// panel.webview.html on show. In-place updates don't touch that property, so flush the latest
 		// html into it when the panel goes hidden to keep the next show current.
 		this.panel.onDidChangeViewState(() => {
+			if (this.isDisposed) {
+				return;
+			}
 			if (
 				!this.panel.visible &&
 				this.htmlPropertyStale &&
@@ -260,18 +263,27 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 	}
 
 	private assignHtml(html: string): void {
+		if (this.isDisposed) {
+			return;
+		}
 		this.beforeRenderAssign();
 		this.latestUpdateMessage = undefined;
 		this.panel.webview.html = html;
 	}
 
 	protected async getContent(document: vscode.TextDocument): Promise<string> {
+		if (this.isDisposed) {
+			return this.latestHtml ?? this.getLoadingShellHtml();
+		}
 		const result = await this.renderContent(
 			document,
 			document.uri,
 			this.panel.webview,
 			{ partial: false, dependencyChanged: false },
 		);
+		if (this.isDisposed) {
+			return this.latestHtml ?? this.getLoadingShellHtml();
+		}
 		if (result === null) {
 			// A full render must not decline: there is no page to keep. Fall back to what is already
 			// on screen rather than blanking the panel.
@@ -296,12 +308,18 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		document: vscode.TextDocument,
 		dependencyChanged = false,
 	): Promise<void> {
+		if (this.isDisposed) {
+			return;
+		}
 		const result = await this.renderContent(
 			document,
 			document.uri,
 			this.panel.webview,
 			{ partial: true, dependencyChanged },
 		);
+		if (this.isDisposed) {
+			return;
+		}
 		if (result === null) {
 			return;
 		}
