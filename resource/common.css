@@ -253,6 +253,38 @@ button[disabled]:active {
     transform: none;
 }
 
+/* The zoom overlay enableZoom appends to <body>. It floats over the canvas rather than sitting in
+   the toolbar so it is in the same corner in every preview and costs the strip no width.
+
+   The layer has to be named with a fallback: hoicard.css declares --ev-layer-*, but only the
+   decision, event, idea and character previews load it, and this has to clear the drag layer in the
+   focus tree, MIO and technology previews too. Clearing it is what keeps a press on a button from
+   starting a pan -- the dragger's listener is on the dragger itself, so an element above it never
+   hands it the press. */
+#zoom-controls {
+    position: fixed;
+    right: 12px;
+    bottom: 12px;
+    z-index: var(--ev-layer-toolbar, 3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+    background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+    user-select: none;
+}
+
+/* The readout is a number that changes width as it goes, so it is given a fixed box: without one
+   the two buttons shift sideways every time the zoom crosses a digit. */
+#zoom-level {
+    min-width: 3.5em;
+    text-align: center;
+    opacity: 0.8;
+}
+
 .navigator {
     cursor: pointer;
 }

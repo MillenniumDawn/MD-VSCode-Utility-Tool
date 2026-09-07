@@ -1285,11 +1285,13 @@ window.addEventListener(
 			}
 		}
 
-		// Zoom
+		// Zoom. The anchor is the toolbar strip's height, which is what #focustreecontent is offset
+		// by -- it was 40 here against a 52px strip, and the drift shows up as the view sliding as
+		// you zoom, now that a button zoom anchors on the middle of the canvas rather than a cursor.
 		const contentElement = document.getElementById(
 			"focustreecontent",
 		) as HTMLDivElement;
-		enableZoom(contentElement, 0, 40);
+		enableZoom(contentElement, 0, 52);
 
 		// Shift+click a focus to isolate its prerequisite lines
 		subscribeTracing();

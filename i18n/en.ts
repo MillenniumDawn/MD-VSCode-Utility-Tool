@@ -537,6 +537,8 @@ const internalTable = /* SOT Do not remove this comment */ {
 		"Terrain {0} is defined in two files: {1}, {2}.",
 	"worldmap.warnings.terrainnotdefined": 'Terrain "{0}" is not defined.',
 	"worldmap.warnings.xcrossing": "Map invalid X crossing at: ({0}, {1}).",
+	"zoom.in": "Zoom in (+)",
+	"zoom.out": "Zoom out (-)",
 }; /* EOT Do not remove this comment */
 
 export const __table = Object.assign(internalTable, {
