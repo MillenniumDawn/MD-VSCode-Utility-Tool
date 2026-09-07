@@ -112,7 +112,7 @@ export abstract class PreviewBase {
                 // state dies with the panel; see previewoptions.ts.
                 case 'setPreviewOption':
                     if (typeof msg.key === 'string') {
-                        setPreviewOption(msg.key, msg.value);
+                        void this.onPreviewOptionSet(msg.key, msg.value);
                     }
                     break;
             }
@@ -123,6 +123,15 @@ export abstract class PreviewBase {
         });
     }
     
+    /**
+     * Persists a toolbar option the page just changed. Most previews draw the option themselves and
+     * need nothing more; one whose content is rendered on this side overrides this to re-render
+     * after the write, which is why the write is awaited rather than fired and forgotten.
+     */
+    protected async onPreviewOptionSet(key: string, value: unknown): Promise<void> {
+        await setPreviewOption(key, value);
+    }
+
     protected updateDependencies(dependencies: string[]): void {
         if (this.cachedDependencies === undefined || !isEqual(this.cachedDependencies, dependencies)) {
             this.dependencyChangedEmitter.fire(dependencies);

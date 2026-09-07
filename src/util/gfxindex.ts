@@ -64,6 +64,24 @@ export async function getGfxContainerFile(
 	return (globalGfxIndex[gfxName] ?? workspaceGfxIndex[gfxName])?.file;
 }
 
+/**
+ * Every sprite name the index holds, from both halves. For a caller that has to look at the names
+ * themselves rather than resolve one it already knows -- listing which countries ship art for a
+ * technology means reading the whole namespace once, not probing every tag against every id.
+ * Empty when the index is off, like `getGfxContainerFile`.
+ */
+export async function getIndexedGfxNames(): Promise<string[]> {
+	if (!gfxIndex) {
+		return [];
+	}
+
+	await ensureIndexBuilt().catch(() => undefined);
+	return uniq([
+		...Object.keys(globalGfxIndex),
+		...Object.keys(workspaceGfxIndex),
+	]);
+}
+
 export async function getGfxContainerFiles(
 	gfxNames: (string | undefined)[],
 ): Promise<string[]> {

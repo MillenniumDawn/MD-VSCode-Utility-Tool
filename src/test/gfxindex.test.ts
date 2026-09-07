@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import * as featureflags from "../util/featureflags";
 import {
 	getGfxContainerFile,
+	getIndexedGfxNames,
 	registerGfxIndex,
 	__resetGfxIndexForTests,
 	__testHandlers,
@@ -140,6 +141,18 @@ describe("util/gfxindex lazy build", function () {
 
 		assert.strictEqual(result, undefined);
 		assert.strictEqual(listFilesCallCount, 0);
+	});
+
+	// Reading the names is how the technology preview finds out which countries ship their own icons:
+	// it has to look at the whole namespace, not resolve a name it already knows.
+	it("hands back the indexed sprite names, and nothing at all when the flag is off", async function () {
+		assert.deepStrictEqual(await getIndexedGfxNames(), ["GFX_my_sprite"]);
+		assert.strictEqual(listFilesCallCount, 2);
+
+		stubVscode({ getConfiguration: () => ({ gfxIndex: false }) });
+		featureflags.refreshFeatureFlags();
+
+		assert.deepStrictEqual(await getIndexedGfxNames(), []);
 	});
 
 	it("builds the index exactly once for concurrent first lookups, then serves later lookups from it", async function () {

@@ -31,6 +31,10 @@ export function getPreviewOptions(keys: string[]): Record<string, unknown> {
     return result;
 }
 
-export function setPreviewOption(key: string, value: unknown): void {
-    void contextContainer.current?.globalState.update(prefix + key, value);
+/**
+ * Returns the write, so a preview that re-renders from the stored value can wait for it and not read
+ * back what was there before. Callers that only persist a toggle can ignore the result.
+ */
+export function setPreviewOption(key: string, value: unknown): Thenable<void> {
+    return contextContainer.current?.globalState.update(prefix + key, value) ?? Promise.resolve();
 }

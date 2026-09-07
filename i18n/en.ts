@@ -319,6 +319,10 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"techtree.cantfindtechfolderin": "Can't find technology folder {0} in {1}.",
 	"techtree.cantfindtechitemin": 'Can\'t find containerwindowtype "{0}" in {1}',
 	"techtree.cantfindviewin": "Can't find {0} in {1}.",
+	"techtree.country": "Country",
+	"techtree.country.generic": "Generic",
+	"techtree.countrynoindex":
+		"GFX index is off — country icons can't be listed. Enable the GFX index setting to pick a country.",
 	"techtree.namemode": "Name",
 	"techtree.namemode.id": "Id",
 	"techtree.namemode.long": "Long name",

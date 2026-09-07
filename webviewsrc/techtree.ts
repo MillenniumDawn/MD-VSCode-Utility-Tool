@@ -3,6 +3,17 @@ import { vscode } from "./util/vscode";
 
 initCommon();
 
+interface CountryOption {
+    tag: string;
+    label: string;
+}
+
+// Which countries have their own technology icons, per technology folder, and which one the reader
+// picked. Both are rendered on the host: it owns the tree markup, so it is what redraws when the
+// country changes, and this side only has to keep the dropdown in step with the folder on screen.
+let countriesByFolder: Record<string, CountryOption[]> = (window as any).techCountries ?? {};
+let selectedCountry: string = (window as any).techCountry ?? '';
+
 function folderChange(folder: string) {
     const elements = document.getElementsByClassName('techfolder');
     setState({ folder: folder });
@@ -11,6 +22,48 @@ function folderChange(folder: string) {
         const element = elements[i] as HTMLDivElement;
         element.style.display = element.id === folder ? 'block' : 'none';
     }
+
+    updateCountryOptions(folder);
+}
+
+// Re-lists the country dropdown for the folder now on screen: only the countries that have their own
+// icons for a technology drawn there are worth offering. The selected country stays listed even when
+// this folder has no art for it, so switching folders never silently changes what the host renders.
+function updateCountryOptions(folder: string) {
+    const select = document.getElementById('tech-country') as HTMLSelectElement | null;
+    if (!select) {
+        return;
+    }
+
+    const options = countriesByFolder[folder.replace(/^techfolder_/, '')] ?? [];
+    const listed = options.some(o => o.tag === selectedCountry);
+    const all = selectedCountry !== '' && !listed
+        ? [...options, { tag: selectedCountry, label: labelForTag(selectedCountry) }]
+        : options;
+
+    while (select.options.length > 1) {
+        select.remove(1);
+    }
+    for (const option of all) {
+        const element = document.createElement('option');
+        element.value = option.tag;
+        element.textContent = option.label;
+        select.appendChild(element);
+    }
+
+    select.value = selectedCountry;
+}
+
+// The label the host resolved for a tag, wherever it appears; the bare tag when no folder lists it.
+function labelForTag(tag: string): string {
+    for (const folder of Object.keys(countriesByFolder)) {
+        const option = (countriesByFolder[folder] ?? []).find(o => o.tag === tag);
+        if (option) {
+            return option.label;
+        }
+    }
+
+    return tag;
 }
 
 // In-place update pushed by LoaderPreview when the previewed file changed: refresh the server-rendered
@@ -43,6 +96,12 @@ window.addEventListener('message', tryRun(function(event: MessageEvent) {
     const data = msg.data ?? {};
     const folders: string[] = Array.isArray(data.folders) ? data.folders : [];
 
+    // Before any folderChange below, so the re-list it does sees the new lists: an edit can add a
+    // technology whose country has art, or move one out of a folder.
+    if (data.countries) {
+        countriesByFolder = data.countries;
+    }
+
     // Refresh the folder <option> list and keep the current selection if that folder still exists;
     // otherwise fall back to the persisted folder, then the first option. The <select> element and
     // its change listener are untouched, so nothing rebinds.
@@ -57,6 +116,9 @@ window.addEventListener('message', tryRun(function(event: MessageEvent) {
         target = stateFolder && validValues.includes(stateFolder) ? stateFolder : (validValues[0] ?? '');
     }
     folderSelect.value = target;
+    // The folder may not have moved, in which case neither branch below calls folderChange, and the
+    // country lists still have to catch up with the ones this message carried.
+    updateCountryOptions(target);
 
     // Swap the INNER markup only. enableZoom captured this same element and holds the zoom on its
     // transform: scale(); the name-mode-* class also lives on the element (not its children). Both
@@ -112,6 +174,16 @@ window.addEventListener('load', tryRun(function() {
         nameMode.addEventListener('change', function() {
             setState({ nameMode: this.value });
             applyMode(this.value);
+        });
+    }
+
+    // Lives in the fixed toolbar, outside #techtreecontent, so the in-place swap never replaces it and
+    // this listener is bound exactly once. The host redraws the tree with the chosen country's icons.
+    const country = document.getElementById('tech-country') as HTMLSelectElement | null;
+    if (country) {
+        country.addEventListener('change', function() {
+            selectedCountry = this.value;
+            vscode.postMessage({ command: 'setPreviewOption', key: 'technology.country', value: this.value });
         });
     }
 
