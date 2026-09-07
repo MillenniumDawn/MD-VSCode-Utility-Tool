@@ -11,8 +11,16 @@ interface CountryOption {
 // Which countries have their own technology icons, per technology folder, and which one the reader
 // picked. Both are rendered on the host: it owns the tree markup, so it is what redraws when the
 // country changes, and this side only has to keep the dropdown in step with the folder on screen.
-let countriesByFolder: Record<string, CountryOption[]> = (window as any).techCountries ?? {};
-let selectedCountry: string = (window as any).techCountry ?? '';
+// They stay on window rather than being copied into module state, so an in-place update -- and the
+// re-render the host sends back after a country change -- has one place to write, the way miopreview
+// keeps window.mios.
+function countriesByFolder(): Record<string, CountryOption[]> {
+    return (window as any).techCountries ?? {};
+}
+
+function selectedCountry(): string {
+    return (window as any).techCountry ?? '';
+}
 
 function folderChange(folder: string) {
     const elements = document.getElementsByClassName('techfolder');
@@ -35,10 +43,11 @@ function updateCountryOptions(folder: string) {
         return;
     }
 
-    const options = countriesByFolder[folder.replace(/^techfolder_/, '')] ?? [];
-    const listed = options.some(o => o.tag === selectedCountry);
-    const all = selectedCountry !== '' && !listed
-        ? [...options, { tag: selectedCountry, label: labelForTag(selectedCountry) }]
+    const selected = selectedCountry();
+    const options = countriesByFolder()[folder.replace(/^techfolder_/, '')] ?? [];
+    const listed = options.some(o => o.tag === selected);
+    const all = selected !== '' && !listed
+        ? [...options, { tag: selected, label: labelForTag(selected) }]
         : options;
 
     while (select.options.length > 1) {
@@ -51,13 +60,14 @@ function updateCountryOptions(folder: string) {
         select.appendChild(element);
     }
 
-    select.value = selectedCountry;
+    select.value = selected;
 }
 
 // The label the host resolved for a tag, wherever it appears; the bare tag when no folder lists it.
 function labelForTag(tag: string): string {
-    for (const folder of Object.keys(countriesByFolder)) {
-        const option = (countriesByFolder[folder] ?? []).find(o => o.tag === tag);
+    const countries = countriesByFolder();
+    for (const folder of Object.keys(countries)) {
+        const option = (countries[folder] ?? []).find(o => o.tag === tag);
         if (option) {
             return option.label;
         }
@@ -99,7 +109,7 @@ window.addEventListener('message', tryRun(function(event: MessageEvent) {
     // Before any folderChange below, so the re-list it does sees the new lists: an edit can add a
     // technology whose country has art, or move one out of a folder.
     if (data.countries) {
-        countriesByFolder = data.countries;
+        (window as any).techCountries = data.countries;
     }
 
     // Refresh the folder <option> list and keep the current selection if that folder still exists;
@@ -182,7 +192,7 @@ window.addEventListener('load', tryRun(function() {
     const country = document.getElementById('tech-country') as HTMLSelectElement | null;
     if (country) {
         country.addEventListener('change', function() {
-            selectedCountry = this.value;
+            (window as any).techCountry = this.value;
             vscode.postMessage({ command: 'setPreviewOption', key: 'technology.country', value: this.value });
         });
     }

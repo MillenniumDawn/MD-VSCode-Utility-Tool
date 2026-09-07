@@ -145,7 +145,12 @@ function installGfxShell(): void {
 	document.body.append(filter, styles, list);
 }
 
-function installTechShell(): void {
+// `countries` and `country` are what the host injects for the country dropdown; leaving them out is
+// the country-icon setting being off, which is what every test but the country ones wants.
+function installTechShell(
+	countries: Record<string, { tag: string; label: string }[]> = {},
+	country = "",
+): void {
 	document.body.replaceChildren();
 	const folders = element("select", "folderSelector");
 	addSelectOption(folders, "techfolder_a", "A");
@@ -157,6 +162,23 @@ function installTechShell(): void {
 		content.append(element("div", id, "techfolder"));
 	}
 	document.body.append(folders, refresh, styles, content);
+	(window as any).techCountries = countries;
+	(window as any).techCountry = country;
+}
+
+function installTechCountryShell(
+	countries: Record<string, { tag: string; label: string }[]>,
+	country = "",
+): void {
+	installTechShell(countries, country);
+	const select = element("select", "tech-country");
+	addSelectOption(select, "", "Generic");
+	document.body.append(select);
+}
+
+function countryOptions(): string[] {
+	const select = document.getElementById("tech-country") as HTMLSelectElement;
+	return Array.from(select.options).map((o) => o.value);
 }
 
 function installGuiShell(): void {
@@ -371,6 +393,107 @@ describe("webview entrypoints", () => {
 			(document.getElementById("techfolder_b") as HTMLDivElement).style.display,
 			"block",
 		);
+	});
+
+	// The tree is drawn on the host, so the country dropdown is the one control here that cannot apply
+	// itself: it tells the host which country to draw and the host sends the markup back. These cover
+	// the page keeping that dropdown honest -- listing the countries with art for the folder on
+	// screen, never losing the reader's choice, and reporting it once.
+	const techCountries = {
+		a: [
+			{ tag: "GER", label: "Germany (GER)" },
+			{ tag: "USA", label: "United States (USA)" },
+		],
+		b: [{ tag: "SOV", label: "Soviet Union (SOV)" }],
+	};
+
+	it("lists the countries with art for the folder on screen, and restores the stored choice", () => {
+		installTechCountryShell(techCountries, "USA");
+		vscode.setState({ folder: "techfolder_a" });
+
+		withQuietScrolling(() => run(techtree, "load", new Event("load")));
+
+		assert.deepStrictEqual(countryOptions(), ["", "GER", "USA"]);
+		assert.strictEqual(
+			(document.getElementById("tech-country") as HTMLSelectElement).value,
+			"USA",
+		);
+	});
+
+	it("re-lists on a folder change, carrying a choice the new folder has no art for", () => {
+		installTechCountryShell(techCountries, "USA");
+		addSelectOption(
+			document.getElementById("folderSelector") as HTMLSelectElement,
+			"techfolder_b",
+			"B",
+		);
+		vscode.setState({ folder: "techfolder_a" });
+		withQuietScrolling(() => run(techtree, "load", new Event("load")));
+
+		const folders = document.getElementById(
+			"folderSelector",
+		) as HTMLSelectElement;
+		folders.value = "techfolder_b";
+		folders.dispatchEvent(new Event("change"));
+
+		// USA has no art in this folder, but dropping it would silently disagree with the host, which
+		// is still drawing the tree for USA.
+		assert.deepStrictEqual(countryOptions(), ["", "SOV", "USA"]);
+		assert.strictEqual(
+			(document.getElementById("tech-country") as HTMLSelectElement).value,
+			"USA",
+		);
+	});
+
+	it("tells the host once when the reader picks a country", () => {
+		installTechCountryShell(techCountries, "");
+		vscode.setState({ folder: "techfolder_a" });
+		withQuietScrolling(() => run(techtree, "load", new Event("load")));
+
+		withPosts((posts) => {
+			const country = document.getElementById(
+				"tech-country",
+			) as HTMLSelectElement;
+			country.value = "GER";
+			country.dispatchEvent(new Event("change"));
+
+			assert.deepStrictEqual(posts, [
+				{
+					command: "setPreviewOption",
+					key: "technology.country",
+					value: "GER",
+				},
+			]);
+		});
+	});
+
+	it("re-lists from an in-place update that carries new countries", () => {
+		installTechCountryShell(techCountries, "GER");
+		vscode.setState({ folder: "techfolder_a" });
+		withQuietScrolling(() => run(techtree, "load", new Event("load")));
+
+		withPosts((posts) => {
+			runMessage(techtree, {
+				type: "updateBody",
+				data: {
+					folders: ["a"],
+					countries: { a: [{ tag: "USA", label: "United States (USA)" }] },
+				},
+			});
+
+			assert.deepStrictEqual(countryOptions(), ["", "USA", "GER"]);
+			// The update is the host answering an edit, not the reader choosing again.
+			assert.deepStrictEqual(posts, []);
+		});
+	});
+
+	it("leaves the page alone when the country setting is off", () => {
+		installTechShell();
+		vscode.setState({ folder: "techfolder_a" });
+
+		withQuietScrolling(() => run(techtree, "load", new Event("load")));
+
+		assert.strictEqual(document.getElementById("tech-country"), null);
 	});
 
 	it("restores GUI visibility and persists child-window changes", () => {
