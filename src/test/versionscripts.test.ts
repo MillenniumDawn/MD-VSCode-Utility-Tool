@@ -242,6 +242,33 @@ describe('scripts/bump-version', function () {
         });
     });
 
+    describe('readVersion', function () {
+        it('returns a plain three-part version', function () {
+            assert.strictEqual(bumpVersion.readVersion('{"version": "1.1.22"}'), '1.1.22');
+        });
+
+        it('reports a package.json with no version string', function () {
+            assert.throws(() => bumpVersion.readVersion('{}'), /no "version" string/);
+            assert.throws(() => bumpVersion.readVersion('{"version": 1}'), /no "version" string/);
+        });
+
+        it('refuses a version carrying a newline, which would inject a $GITHUB_OUTPUT line', function () {
+            assert.throws(() => bumpVersion.readVersion('{"version": "1.1.22\\nrelease=true"}'),
+                /Not a plain three-part version/);
+        });
+
+        it('refuses a version carrying JS, which would run when spliced into a node -p expression', function () {
+            assert.throws(
+                () => bumpVersion.readVersion(JSON.stringify({ version: "1.1.22'),require('child_process').execSync('id'),('" })),
+                /Not a plain three-part version/);
+        });
+
+        it('refuses a padded or four-part version rather than normalising it', function () {
+            assert.throws(() => bumpVersion.readVersion('{"version": " 1.1.22 "}'), /Not a plain three-part version/);
+            assert.throws(() => bumpVersion.readVersion('{"version": "1.1.22.1"}'), /Not a plain three-part version/);
+        });
+    });
+
     describe('writeVersion', function () {
         it('replaces only the version and keeps the formatting', function () {
             const source = '{\n\t"name": "x",\n\t"version": "1.1.22",\n\t"other": "1.1.22"\n}\n';
