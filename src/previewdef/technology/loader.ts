@@ -7,7 +7,7 @@ import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
 import { flatMap, chain, uniq } from "lodash";
 import { GuiFileLoader } from "../gui/loader";
-import { listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
+import { hoiFilesExpiryToken, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
 import { getConfiguration } from "../../util/vsccommon";
 import { localisationIndex, technologyCountryIcons } from "../../util/featureflags";
 import { debug } from "../../util/debug";
@@ -113,10 +113,21 @@ interface EquipmentArchetypesResult {
 
 // A single tech-tree preview renders many technologies, and a workspace can hold many tech-tree
 // files; without caching, every render would re-walk and re-parse all `common/units/equipment`
-// files. A short TTL collapses those repeated parses while staying fresh enough that edits show up
-// within a couple of seconds, mirroring `fileListCache` in fileloader.ts.
+// files.
+//
+// `life` is a TTL since the last *access* and `get` pushes it forward on every hit, so on its own it
+// could never expire an entry a render reads every few seconds -- and the equipment files are
+// registered as preview dependencies, so an edit to one has to reach the next render. The expiry
+// token is what does that: every file this load read, each with its mtime, which for a file open in
+// the editor is Date.now() and so always looks changed.
 const equipmentArchetypeCache = new PromiseCache<EquipmentArchetypesResult>({
     factory: () => loadEquipmentArchetypesUncached(),
+    // The setting is a part of the token because with the localisation index off the load
+    // short-circuits to an empty result with no files, which nothing on disk could then invalidate.
+    expireWhenChange: (_key, cached) => cached.then(
+        async value => `${localisationIndex ? 'on' : 'off'}|${await hoiFilesExpiryToken(value.equipmentFiles)}`,
+        () => '',
+    ),
     life: 3 * 1000,
     maxSize: 1,
 });
