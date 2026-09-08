@@ -152,6 +152,38 @@ describe("util/fileloader getFilePathFromModOrHOI4", function () {
 		assert.strictEqual(malformed, undefined);
 		assert.strictEqual(statCalls, 0);
 	});
+
+	// The stat stub above answers "file" for anything, so a path that got as far as being joined
+	// onto the workspace folder would resolve. Asserting the stat count is 0 is what proves the
+	// escape was refused before the join rather than merely failing to find anything -- the vscode
+	// stub's joinPath, unlike the real one, does not collapse `..` itself.
+	[
+		"../../../../etc/passwd",
+		"common/../../x.txt",
+		"/etc/passwd",
+		"C:/Windows/win.ini",
+		"..\\..\\x.txt",
+		"//server/share/x.txt",
+	].forEach(function (escapingPath) {
+		it(`refuses to resolve ${escapingPath} without touching disk`, async function () {
+			assert.strictEqual(
+				await getFilePathFromModOrHOI4(escapingPath),
+				undefined,
+			);
+			assert.strictEqual(statCalls, 0);
+		});
+	});
+
+	it("still resolves an ordinary path inside the mod", async function () {
+		const resolved = await getFilePathFromModOrHOI4("common/ideas/example.txt");
+
+		assert.strictEqual(resolved!.toString(), "file:///ws/common/ideas/example.txt");
+	});
+
+	it("lists nothing for a directory that escapes the mod", async function () {
+		assert.deepStrictEqual(await listFilesFromModOrHOI4("../.."), []);
+		assert.strictEqual(statCalls, 0);
+	});
 });
 
 describe("util/fileloader listFilesFromModOrHOI4 cache key parsing", function () {
