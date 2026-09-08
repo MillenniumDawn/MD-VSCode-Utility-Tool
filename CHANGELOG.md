@@ -1,3 +1,9 @@
+v1.1.33
+
+  Functionality:
+
+- Pan the previews with the trackpad and zoom with buttons or the +/- keys. Issue #250.
+
 v1.1.32
 
   Functionality:
