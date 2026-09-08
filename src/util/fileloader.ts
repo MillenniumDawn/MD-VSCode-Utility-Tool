@@ -37,7 +37,7 @@ import {
 import { Logger } from "./logger";
 import { getInstallPathUri } from "./installpath";
 import { appendEntriesWithErrorLogging } from "./promiseUtils";
-import type * as AdmZip from "adm-zip";
+import type { ZipIndex } from "./nativezip";
 import { Hoi4FsSchema } from "../constants";
 import { trimStart } from "lodash";
 
@@ -61,57 +61,43 @@ const dlcPathsCache = new PromiseCache({
 });
 
 // Cached DLC zip that retains only a lightweight index (entryName -> isDirectory and directory ->
-// file basenames), never the zip buffer; reads reopen the archive transiently via readEntryData.
+// file basenames), never the zip buffer or an open handle. Reads go straight to the entry's bytes
+// through the ZipIndex, which seeks to them rather than re-reading the archive.
 export class DlcZip {
-	private nameIndex?: Map<string, { isDirectory: boolean }>;
-	private dirIndex?: Map<string, string[]>;
+	private readonly nameIndex = new Map<string, { isDirectory: boolean }>();
+	private readonly dirIndex = new Map<string, string[]>();
 
-	constructor(private readonly openZip: () => AdmZip) {}
+	constructor(private readonly zipIndex: ZipIndex) {
+		for (const entry of zipIndex.entries) {
+			this.nameIndex.set(entry.name, { isDirectory: entry.isDirectory });
+			if (!entry.isDirectory) {
+				const name = entry.name.replace(/^[\\/]/, "");
+				const dir = path.resolve(path.dirname(name)).toLowerCase();
+				const basenames = this.dirIndex.get(dir);
+				if (basenames) {
+					basenames.push(path.basename(name));
+				} else {
+					this.dirIndex.set(dir, [path.basename(name)]);
+				}
+			}
+		}
+	}
 
 	getEntry(name: string): { isDirectory: boolean } | null {
-		this.ensureIndex();
-		return this.nameIndex!.get(name) ?? null;
+		return this.nameIndex.get(name) ?? null;
 	}
 
 	// Basenames of the non-directory entries directly under relativePath, matched the same way the
 	// old getEntries loop did: leading slash/backslash stripped, path.resolve + lowercase compare.
 	listDir(relativePath: string): string[] {
-		this.ensureIndex();
-		return this.dirIndex!.get(path.resolve(relativePath).toLowerCase()) ?? [];
+		return this.dirIndex.get(path.resolve(relativePath).toLowerCase()) ?? [];
 	}
 
-	// Reopens the archive to read one entry's data. The index holds no buffers, so this pays a
-	// transient re-open; repeated reads are served upstream by fileContentCache.
-	async readEntryData(name: string): Promise<Buffer | null> {
-		const entry = this.openZip().getEntry(name);
-		if (!entry) {
-			return null;
-		}
-		return await new Promise<Buffer>((resolve) => entry.getDataAsync(resolve));
-	}
-
-	private ensureIndex(): void {
-		if (this.nameIndex !== undefined) {
-			return;
-		}
-		const nameIndex = new Map<string, { isDirectory: boolean }>();
-		const dirIndex = new Map<string, string[]>();
-		for (const entry of this.openZip().getEntries()) {
-			nameIndex.set(entry.entryName, { isDirectory: entry.isDirectory });
-			if (!entry.isDirectory) {
-				const dir = path
-					.resolve(path.dirname(entry.entryName.replace(/^[\\/]/, "")))
-					.toLowerCase();
-				const basenames = dirIndex.get(dir);
-				if (basenames) {
-					basenames.push(path.basename(entry.name));
-				} else {
-					dirIndex.set(dir, [path.basename(entry.name)]);
-				}
-			}
-		}
-		this.nameIndex = nameIndex;
-		this.dirIndex = dirIndex;
+	// One entry's data, read out of the archive without touching the rest of it. Null when the
+	// archive holds no such entry; anything else that goes wrong throws rather than resolving with a
+	// buffer the caller would mistake for the file.
+	readEntryData(name: string): Promise<Buffer | null> {
+		return this.zipIndex.readEntry(name);
 	}
 }
 
@@ -129,22 +115,23 @@ if (!IS_WEB_EXT) {
 let dlcZipCache: PromiseCache<DlcZip> | null = null;
 
 if (!IS_WEB_EXT) {
-	// adm-zip requires fs, which doesn't work on web.
-	function getDlcZip(dlcZipPath: string): Promise<DlcZip> {
-		const uri = vscode.Uri.parse(dlcZipPath);
+	// The zip reader requires fs, which doesn't work on web.
+	async function getDlcZip(dlcZipUri: string): Promise<DlcZip> {
+		const uri = vscode.Uri.parse(dlcZipUri);
+		let fsPath: string;
 		if (uri.scheme === Hoi4FsSchema) {
 			// Resolve through the shared install path so this gets the same normalization (and
-			// cache) as every hoi4installpath: lookup; adm-zip needs a real fs path.
+			// cache) as every hoi4installpath: lookup; the zip reader needs a real fs path.
 			const installPath = getInstallPathUri();
 			ensureFileScheme(installPath);
-			dlcZipPath = path.join(installPath.fsPath, trimStart(uri.path, "/"));
+			fsPath = path.join(installPath.fsPath, trimStart(uri.path, "/"));
 		} else {
 			ensureFileScheme(uri);
-			dlcZipPath = uri.fsPath;
+			fsPath = uri.fsPath;
 		}
 
-		const AdmZip = require("adm-zip");
-		return Promise.resolve(new DlcZip(() => new AdmZip(dlcZipPath)));
+		const nativeZip = require("./nativezip") as typeof import("./nativezip");
+		return new DlcZip(await nativeZip.openZipIndex(fsPath));
 	}
 
 	dlcZipCache = new PromiseCache({
