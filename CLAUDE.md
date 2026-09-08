@@ -1,21 +1,30 @@
 # Project: MD VSCode Utility Tool
 
-## Version & changelog — never by hand
+## Version & changelog — the version never by hand
 
-**Do not bump the version and do not add a CHANGELOG entry on a feature branch.**
-[package.json](package.json) and [CHANGELOG.md](CHANGELOG.md) stay untouched while
-you are fixing a bug or building a feature.
+**Do not bump the version on a feature branch.** [package.json](package.json) stays
+untouched while you are fixing a bug or building a feature, and so does every `vX.Y.Z`
+heading in [CHANGELOG.md](CHANGELOG.md).
+
+**Write your changelog bullet under the `Unreleased` heading at the top of
+[CHANGELOG.md](CHANGELOG.md).** That heading is the one part of the file a branch does
+touch: add a `- ` bullet under its `  Functionality:` or `  Bugfixes:` subheading, in the
+style below. It is a normal part of the change, reviewed with it, so nobody has to guess
+your wording later.
 
 Releasing happens after the merge, on its own:
 
 1. A push to `main` that changed anything outside documentation and CI makes
    [.github/workflows/version-bump.yml](.github/workflows/version-bump.yml) open a
    **release pull request** on branch `release/version-bump`.
-2. That pull request carries the +1 patch bump and a `vX.Y.Z` section with one bullet per
-   pull request merged since the last release tag. Each bullet arrives finished: the
-   `[ Component ]` prefix comes from the files that pull request touched, the
+2. That pull request carries the +1 patch bump and renames `Unreleased` to `vX.Y.Z`,
+   leaving a fresh empty `Unreleased` above it for the branches that come next. Any pull
+   request that shipped without writing its own bullet gets one seeded from its title:
+   the `[ Component ]` prefix comes from the files it touched, the
    `Functionality:` / `Bugfixes:` split from its `enhancement` / `bug` labels, and the
-   wording from a model called through OpenRouter, prompted with the style below.
+   wording from a model called through OpenRouter, prompted with the style below. A seeded
+   bullet is dropped when a hand-written one already covers the same change, matched on the
+   sentence and on the `Issue #NN` trailer.
 3. **It stays open and updates itself.** Every later merge into `main` is merged into it
    and adds its bullets, so five merges in an afternoon become one release, not five.
    A bullet is written once and never rewritten, so editing one there is safe.
@@ -33,9 +42,18 @@ The release pull request's wording always wins, and only bullets it does not alr
 carry come across, matched on the sentence and on the issue number so a reworded bullet
 and the raw title it came from are not both kept.
 
-Nothing else publishes. A branch that does bump `package.json` no longer ships the moment
-it is merged: the release pull request takes that version over and publishes it from
-there, so the batching holds either way.
+A branch that does bump `package.json` no longer ships the moment it is merged: the
+release pull request takes that version over and publishes it from there, so the batching
+holds either way.
+
+Only one other thing publishes, and it is not a release.
+[.github/workflows/pre-release.yml](.github/workflows/pre-release.yml) builds every push
+to `main` and publishes it to both registries on the **pre-release** channel, plus a
+GitHub prerelease with the `.vsix` attached. It touches nothing in the repository: the
+version it packages is written into its own checkout and thrown away, and `CHANGELOG.md`
+is never part of it. Pre-release versions take the odd minor above the stable line with
+the run number as the patch — `1.3.57` while stable is `1.1.x` — which is why a minor bump
+steps `1.1 -> 1.2 -> 1.4`, over the pre-release line rather than onto it.
 
 The version check on a pull request is advisory and quiet: leaving the version alone
 passes without a comment. It only speaks up when a branch touched the version and got it
@@ -68,16 +86,16 @@ when you use the extension.
 Anything longer belongs in the pull request description, not in the changelog.
 
 ### In implementation plans
-A plan that adds or changes functionality needs **no** version-bump or changelog
-step. The release pull request covers both. What belongs in the pull request
-description is the detail a reviewer needs; the changelog wording is drafted from
-the pull request title and body when the release pull request collects it.
+A plan that adds or changes functionality needs **no** version-bump step — the
+release pull request covers that. It does need a **changelog step**: one bullet
+under `Unreleased`, in the style above. What belongs in the pull request
+description is the detail a reviewer needs, not that bullet.
 
 Two things follow from that, for every branch. Write the **title** as the sentence
-you would want in the changelog, because it is the fallback whenever the model is
-unreachable and the starting point when it is not. And **label** the pull request
-`bug` or `enhancement`, or close an issue that carries one, because that is what
-decides whether the bullet lands under `Functionality:` or `Bugfixes:`.
+you would want in the changelog, because it is what a bullet is seeded from if you
+did not write one. And **label** the pull request `bug` or `enhancement`, or close
+an issue that carries one, because that is what decides whether a seeded bullet
+lands under `Functionality:` or `Bugfixes:`.
 
 ## Writing a preview — the checks a green suite does not make
 

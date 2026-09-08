@@ -15,6 +15,30 @@ Very big shoutout to my friend AngriestBird for helping this project!
 * `.gfx` file preview (sprites used by HOI4 are defined here)
 * `.dds`, `.tga` file preview (images files used by HOI4)
 
+## Releases and pre-releases
+
+The extension ships on two channels, and both are published by GitHub Actions rather than by anyone
+by hand.
+
+* **Stable** — what you get by default from the [VS Code Marketplace][marketplace] and
+  [Open VSX][openvsx]. A release goes out when the open release pull request is merged, so a run of
+  merges becomes one release rather than one release each.
+* **Pre-release** — built and published automatically from every push to `main`, minutes after a
+  change lands. Press **Switch to Pre-Release Version** on the extension's page in VS Code to follow
+  it, and **Switch to Release Version** to go back. VS Code updates it like any other extension.
+
+Pre-release versions use the odd minor above the stable line, with the build number as the patch —
+`1.3.57` while stable is on `1.1.x`. That is VS Code's own convention, and it is why a pre-release
+always sorts above the release it was built from. `CHANGELOG.md` describes stable releases only, so
+a pre-release build ships a changelog whose newest version heading is the last stable one.
+
+Every pre-release is also published as a [GitHub prerelease][releases] with the `.vsix` attached, for
+installing a specific build by hand (`Extensions: Install from VSIX...` in the command palette).
+
+[marketplace]: https://marketplace.visualstudio.com/items?itemName=MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026
+[openvsx]: https://open-vsx.org/extension/MilleniumDawnModTeam/hearts-of-iron-iv-utilities-2026
+[releases]: https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool/releases
+
 ## Steps to start
 
 1. Install and enable this extension in VSCode.
