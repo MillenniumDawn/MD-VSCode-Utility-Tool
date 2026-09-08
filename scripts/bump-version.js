@@ -22,8 +22,10 @@ const { newBullets } = require('./changelog-bullets');
 
 const releaseTypes = ['patch', 'minor', 'major'];
 
+const versionPattern = /^(\d+)\.(\d+)\.(\d+)$/;
+
 function parseVersion(value) {
-	const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(value ?? '').trim());
+	const match = versionPattern.exec(String(value ?? '').trim());
 	if (!match) {
 		throw new Error(`Not a plain three-part version: ${value}`);
 	}
@@ -331,10 +333,17 @@ function appendBullets(existing, version, bullets) {
 	return [...lines.slice(0, top.start), ...section, ...lines.slice(top.end)].join('\n');
 }
 
+// Every consumer of this value goes on to interpolate it into a shell command, a `node -p`
+// expression or a $GITHUB_OUTPUT line, so the shape is checked here rather than at each of them.
+// The raw string is tested, without trimming: whitespace and newlines are exactly what an injected
+// version carries, so they are refused rather than quietly normalised away.
 function readVersion(packageJsonText) {
 	const parsed = JSON.parse(packageJsonText);
 	if (typeof parsed.version !== 'string') {
 		throw new Error('package.json has no "version" string');
+	}
+	if (!versionPattern.test(parsed.version)) {
+		throw new Error(`Not a plain three-part version: ${JSON.stringify(parsed.version)}`);
 	}
 	return parsed.version;
 }
