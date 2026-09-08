@@ -3,6 +3,7 @@ v1.1.33
   Functionality:
 
 - Pan the previews with the trackpad and zoom with buttons or the +/- keys. Issue #250.
+- Read one DLC zip entry without reading the whole archive. Issue #172.
 
 v1.1.32
 
