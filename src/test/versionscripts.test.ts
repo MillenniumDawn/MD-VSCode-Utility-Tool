@@ -16,6 +16,7 @@ const rewriteBullets = require('../../../scripts/rewrite-bullets');
 const mergeChangelog = require('../../../scripts/merge-changelog');
 const issueVersionTriage = require('../../../scripts/issue-version-triage');
 const closeFixedIssues = require('../../../scripts/close-fixed-issues');
+const prereleaseVersion = require('../../../scripts/prerelease-version');
 
 describe('scripts/bump-version', function () {
     describe('nextVersion', function () {
@@ -25,6 +26,16 @@ describe('scripts/bump-version', function () {
 
         it('bumps minor and resets patch', function () {
             assert.strictEqual(bumpVersion.nextVersion('1.1.22', 'minor'), '1.2.0');
+        });
+
+        it('steps a minor bump over the pre-release line above the stable one', function () {
+            assert.strictEqual(bumpVersion.nextVersion('1.2.7', 'minor'), '1.4.0');
+            assert.strictEqual(bumpVersion.nextVersion('1.4.0', 'minor'), '1.6.0');
+        });
+
+        it('leaves patch and major on the stable line', function () {
+            assert.strictEqual(bumpVersion.nextVersion('1.2.7'), '1.2.8');
+            assert.strictEqual(bumpVersion.nextVersion('1.3.7', 'major'), '2.0.0');
         });
 
         it('bumps major and resets the rest', function () {
@@ -193,6 +204,54 @@ describe('scripts/bump-version', function () {
                 bumpVersion.appendBullets(bare, '1.1.24', [{ text: '- A fix.', section: 'Bugfixes' }]),
                 'v1.1.24\n\n- Written by hand.\n- A fix.\n');
         });
+
+        it('appends under an emptied Unreleased heading, not into it', function () {
+            const promoted = 'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Collected.\n';
+            assert.strictEqual(
+                bumpVersion.appendBullets(promoted, '1.1.24', ['- Another change.']),
+                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Collected.\n- Another change.\n');
+        });
+
+        it('drops a seeded bullet for a change a hand-written one already carries', function () {
+            const written = 'v1.1.24\n\n  Functionality:\n\n- [ MIO ] The grid toggle sticks. Issue #62.\n';
+            assert.strictEqual(
+                bumpVersion.appendBullets(written, '1.1.24', ['- Remember the show grid toggle. Issue #62.']),
+                written);
+        });
+    });
+
+    describe('collectingSection', function () {
+        function collecting(changelog: string): string | undefined {
+            const section = bumpVersion.collectingSection(changelog.split('\n'));
+            return section && (section.unreleased ? 'Unreleased' : `v${section.version}`);
+        }
+
+        it('collects into Unreleased while a branch has written something there', function () {
+            assert.strictEqual(collecting('Unreleased\n\n- Mine.\n\nv1.1.23\n\n- Shipped.\n'), 'Unreleased');
+        });
+
+        it('skips an Unreleased heading the release pull request already emptied', function () {
+            assert.strictEqual(collecting('Unreleased\n\nv1.1.24\n\n- Collected.\n\nv1.1.23\n'), 'v1.1.24');
+        });
+
+        it('takes the top section when there is no Unreleased heading at all', function () {
+            assert.strictEqual(collecting('v1.1.24\n\n- Collected.\n'), 'v1.1.24');
+            assert.strictEqual(collecting('Not a changelog\n'), undefined);
+        });
+    });
+
+    describe('promoteUnreleased', function () {
+        it('renames the heading and leaves a fresh empty one above it', function () {
+            assert.strictEqual(
+                bumpVersion.promoteUnreleased('Unreleased\n\n  Functionality:\n\n- Mine.\n\nv1.1.23\n', '1.1.24'),
+                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Mine.\n\nv1.1.23\n');
+        });
+
+        it('leaves a changelog with no Unreleased heading exactly as it is', function () {
+            const changelog = 'v1.1.24\n\n  Functionality:\n\n- Collected.\n';
+            assert.strictEqual(bumpVersion.promoteUnreleased(changelog, '1.1.25'), changelog);
+            assert.strictEqual(bumpVersion.promoteUnreleased('', '1.0.0'), '');
+        });
     });
 
     describe('topSectionEntries', function () {
@@ -232,6 +291,23 @@ describe('scripts/bump-version', function () {
             assert.strictEqual(
                 bumpVersion.combineChangelogs(ours, '', '1.1.25'),
                 ours.replace('v1.1.24', 'v1.1.25'));
+        });
+
+        it('takes what main wrote under Unreleased into the section we promoted', function () {
+            const promoted = 'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- [ MIO ] Ours. Issue #62.\n';
+            const onMain = 'Unreleased\n\n  Functionality:\n\n- Ours worded rawly. Issue #62.\n'
+                + '\n  Bugfixes:\n\n- Theirs alone.\n\nv1.1.23\n';
+
+            assert.strictEqual(
+                bumpVersion.combineChangelogs(promoted, onMain, '1.1.24'),
+                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- [ MIO ] Ours. Issue #62.\n'
+                + '\n  Bugfixes:\n\n- Theirs alone.\n');
+        });
+
+        it('promotes an Unreleased heading rather than overwriting it', function () {
+            assert.strictEqual(
+                bumpVersion.combineChangelogs('Unreleased\n\n  Functionality:\n\n- Ours.\n', '', '1.1.24'),
+                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Ours.\n');
         });
 
         it('takes everything when we have nothing yet', function () {
@@ -313,7 +389,32 @@ describe('scripts/bump-version', function () {
 
             assert.strictEqual(
                 fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
-                'v1.1.0\n\n  Functionality:\n\n- New preview.\n');
+                'v1.2.0\n\n  Functionality:\n\n- New preview.\n');
+        });
+
+        it('promotes what the branches wrote instead of opening a second section', function () {
+            fs.writeFileSync(path.join(dir, 'package.json'), '{\n\t"version": "1.1.23"\n}\n');
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'),
+                'Unreleased\n\n  Functionality:\n\n- Written on a branch.\n\nv1.1.23\n\n- Shipped.\n');
+
+            bumpVersion.applyBump({ cwd: dir, bullets: ['- Seeded from a title.'] });
+
+            assert.strictEqual(
+                fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
+                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Written on a branch.\n- Seeded from a title.\n'
+                + '\nv1.1.23\n\n- Shipped.\n');
+        });
+
+        it('adds nothing of its own to a promoted section when there is nothing to seed', function () {
+            fs.writeFileSync(path.join(dir, 'package.json'), '{\n\t"version": "1.1.23"\n}\n');
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'),
+                'Unreleased\n\n  Functionality:\n\n- Written on a branch.\n');
+
+            bumpVersion.applyBump({ cwd: dir, bullets: [] });
+
+            assert.strictEqual(
+                fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
+                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Written on a branch.\n');
         });
 
         it('writes a bullet per pull request when a list is given', function () {
@@ -400,6 +501,26 @@ describe('scripts/bump-version', function () {
         it('rejects a version that is not three plain parts', function () {
             assert.throws(() => bumpVersion.setVersion({ cwd: dir, version: 'latest' }), /three-part version/);
         });
+
+        it('renames the promoted section and never the Unreleased heading above it', function () {
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'),
+                'Unreleased\n\nv1.1.23\n\n  Functionality:\n\n- Collected.\n\nv1.1.22\n');
+
+            bumpVersion.setVersion({ cwd: dir, version: '1.1.24' });
+
+            assert.strictEqual(
+                fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
+                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Collected.\n\nv1.1.22\n');
+        });
+
+        it('leaves an Unreleased section that still has bullets for the release to promote', function () {
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), 'Unreleased\n\n- Not shipped yet.\n\nv1.1.23\n');
+
+            assert.strictEqual(bumpVersion.setVersion({ cwd: dir, version: '1.1.24' }).renamed, false);
+            assert.strictEqual(
+                fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
+                'Unreleased\n\n- Not shipped yet.\n\nv1.1.23\n');
+        });
     });
 
     describe('parseArgs', function () {
@@ -421,6 +542,128 @@ describe('scripts/bump-version', function () {
     });
 });
 
+describe('scripts/prerelease-version', function () {
+    describe('prereleaseIdentity', function () {
+        it('takes the odd minor above the stable line, with the run number as the patch', function () {
+            assert.deepStrictEqual(
+                prereleaseVersion.prereleaseIdentity({ version: '1.2.0', runNumber: '57' }),
+                { version: '1.3.57', tag: 'v1.3.57-pre.1', warning: undefined });
+        });
+
+        it('rounds an odd stable minor up rather than publishing onto the line above it', function () {
+            const identity = prereleaseVersion.prereleaseIdentity({ version: '1.1.32', runNumber: '57' });
+
+            assert.strictEqual(identity.version, '1.3.57');
+            assert.match(identity.warning, /odd minor/);
+        });
+
+        it('leaves the pre-release line where it is when stable moves onto 1.2.0', function () {
+            assert.strictEqual(
+                prereleaseVersion.prereleaseIdentity({ version: '1.1.32', runNumber: '57' }).version,
+                prereleaseVersion.prereleaseIdentity({ version: '1.2.0', runNumber: '57' }).version);
+        });
+
+        it('puts the rerun on the tag, never on the version the Marketplace sees', function () {
+            assert.deepStrictEqual(
+                prereleaseVersion.prereleaseIdentity({ version: '1.4.9', runNumber: '3', runAttempt: '2' }),
+                { version: '1.5.3', tag: 'v1.5.3-pre.2', warning: undefined });
+        });
+
+        it('is always ahead of the stable version it was built from', function () {
+            for (const stable of ['1.1.32', '1.2.0', '1.2.99', '1.4.9', '2.0.0']) {
+                const identity = prereleaseVersion.prereleaseIdentity({ version: stable, runNumber: '1' });
+                assert.strictEqual(bumpVersion.compareVersions(identity.version, stable), 1, stable);
+            }
+        });
+
+        it('refuses a run number or attempt that is not a positive whole number', function () {
+            for (const runNumber of ['0', '', 'x', '1.5', undefined]) {
+                assert.throws(
+                    () => prereleaseVersion.prereleaseIdentity({ version: '1.2.0', runNumber }),
+                    /run number/, String(runNumber));
+            }
+            assert.throws(
+                () => prereleaseVersion.prereleaseIdentity({ version: '1.2.0', runNumber: '1', runAttempt: '0' }),
+                /run attempt/);
+        });
+
+        it('refuses a version that is not three plain parts', function () {
+            assert.throws(
+                () => prereleaseVersion.prereleaseIdentity({ version: '1.2', runNumber: '1' }),
+                /three-part version/);
+        });
+    });
+
+    describe('evaluate', function () {
+        let dir: string;
+
+        beforeEach(function () {
+            dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prerelease-'));
+            fs.writeFileSync(path.join(dir, 'package.json'), '{\n\t"name": "x",\n\t"version": "1.2.0"\n}\n');
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), 'Unreleased\n\n- Mine.\n\nv1.2.0\n');
+        });
+
+        afterEach(function () {
+            fs.rmSync(dir, { recursive: true, force: true });
+        });
+
+        it('reports the identity without touching anything', function () {
+            const result = prereleaseVersion.evaluate({ cwd: dir, runNumber: '57' });
+
+            assert.strictEqual(result.version, '1.3.57');
+            assert.strictEqual(result.stable, '1.2.0');
+            assert.strictEqual(result.applied, false);
+            assert.strictEqual(
+                JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).version, '1.2.0');
+        });
+
+        it('writes only the version, and never the changelog', function () {
+            const changelog = fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8');
+
+            prereleaseVersion.evaluate({ cwd: dir, runNumber: '57', apply: true });
+
+            assert.strictEqual(
+                fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
+                '{\n\t"name": "x",\n\t"version": "1.3.57"\n}\n');
+            assert.strictEqual(fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'), changelog);
+        });
+    });
+
+    describe('parseArgs', function () {
+        // Assigning undefined to process.env writes the string "undefined", so an unset variable has
+        // to be deleted to stay unset.
+        function restore(name: string, value: string | undefined): void {
+            if (value === undefined) {
+                delete process.env[name];
+            } else {
+                process.env[name] = value;
+            }
+        }
+
+        it('reads the flags the workflow passes', function () {
+            const options = prereleaseVersion.parseArgs(['--apply', '--run-number', '57', '--run-attempt', '2']);
+            assert.strictEqual(options.apply, true);
+            assert.strictEqual(options.runNumber, '57');
+            assert.strictEqual(options.runAttempt, '2');
+        });
+
+        it('falls back to what Actions puts in the environment', function () {
+            const before = { number: process.env.GITHUB_RUN_NUMBER, attempt: process.env.GITHUB_RUN_ATTEMPT };
+            process.env.GITHUB_RUN_NUMBER = '12';
+            delete process.env.GITHUB_RUN_ATTEMPT;
+            try {
+                const options = prereleaseVersion.parseArgs([]);
+                assert.strictEqual(options.apply, false);
+                assert.strictEqual(options.runNumber, '12');
+                assert.strictEqual(options.runAttempt, '1');
+            } finally {
+                restore('GITHUB_RUN_NUMBER', before.number);
+                restore('GITHUB_RUN_ATTEMPT', before.attempt);
+            }
+        });
+    });
+});
+
 describe('scripts/check-version', function () {
     describe('isExempt', function () {
         it('exempts documentation and repository tooling', function () {
@@ -435,6 +678,20 @@ describe('scripts/check-version', function () {
                 'resource/eventtree.css', 'i18n/en.ts', 'scripts/bump-version.js']) {
                 assert.strictEqual(checkVersion.isExempt(file), false, file);
             }
+        });
+    });
+
+    describe('firstVersionHeading', function () {
+        it('looks past the Unreleased section to the newest version', function () {
+            assert.strictEqual(
+                checkVersion.firstVersionHeading('Unreleased\n\n  Functionality:\n\n- Mine.\n\nv1.1.24\n\n- Old.\n'),
+                'v1.1.24');
+        });
+
+        it('reads the top heading when there is no Unreleased section', function () {
+            assert.strictEqual(checkVersion.firstVersionHeading('v1.1.24\n\n- Old.\n'), 'v1.1.24');
+            assert.strictEqual(checkVersion.firstVersionHeading('Unreleased\n\n- Mine.\n'), '');
+            assert.strictEqual(checkVersion.firstVersionHeading(''), '');
         });
     });
 
@@ -533,6 +790,14 @@ describe('scripts/check-version', function () {
 
             assert.strictEqual(result.ok, false);
             assert.match(result.title, /does not match/);
+        });
+
+        it('is not confused by an Unreleased section sitting above the bump', function () {
+            write('1.1.23', 'Unreleased\n\n  Functionality:\n\n- Next time.\n'
+                + '\nv1.1.23\n\n  Functionality:\n\n- New.\n\nv1.1.22\n\n  Bugfixes:\n\n- Shipped.\n');
+            git('commit', '-qam', 'Bump by hand under an Unreleased section');
+
+            assert.strictEqual(checkVersion.evaluate({ baseRef: 'main' }).ok, true);
         });
 
         it('says nothing about documentation-only branches', function () {
@@ -638,6 +903,51 @@ describe('scripts/release-check', function () {
                 changedFiles: ['README.md'],
             });
             assert.strictEqual(result.bump, true);
+        });
+    });
+
+    describe('lastReleaseTag', function () {
+        // Tag globs are a git feature, so this drives the real thing through a throwaway repository
+        // rather than stubbing describe.
+        let dir: string;
+        let cwd: string;
+
+        function git(...args: string[]): string {
+            return require('child_process').execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+        }
+
+        beforeEach(function () {
+            dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lasttag-')));
+            git('init', '-q', '-b', 'main');
+            git('config', 'user.email', 'a@b.c');
+            git('config', 'user.name', 'Tester');
+            // Keeps the line-ending warnings out of the test output on Windows.
+            git('config', 'core.autocrlf', 'false');
+            fs.writeFileSync(path.join(dir, 'extension.ts'), 'source\n');
+            git('add', '-A');
+            git('commit', '-qm', 'Initial');
+            git('tag', 'v1.1.31');
+            cwd = process.cwd();
+            process.chdir(dir);
+        });
+
+        afterEach(function () {
+            process.chdir(cwd);
+            fs.rmSync(dir, { recursive: true, force: true });
+        });
+
+        it('skips the pre-release tags written on every push to main', function () {
+            fs.writeFileSync(path.join(dir, 'extension.ts'), 'source\nmore\n');
+            git('commit', '-qam', 'A change');
+            git('tag', 'v1.3.57-pre.1');
+
+            assert.strictEqual(releaseCheck.lastReleaseTag(), 'v1.1.31');
+        });
+
+        it('answers nothing when there is no release tag yet', function () {
+            git('tag', '-d', 'v1.1.31');
+
+            assert.strictEqual(releaseCheck.lastReleaseTag(), '');
         });
     });
 

@@ -9,6 +9,7 @@ v1.1.33
 - [ GFX ] Open large .gfx files without loading every texture at once or repeating a shared texture for each sprite. Issue #171.
 - Show the technology tree from a chosen country's point of view, with that country's own technology icons. Issue #256.
 - Escape mod-supplied ids before they reach the preview HTML. Issue #169.
+- There is now a pre-release channel. Every push to `main` is built and published to the Marketplace and Open VSX automatically, so "Switch to Pre-Release Version" in the extension view gets you the newest build without waiting for a release.
 
 v1.1.32
 

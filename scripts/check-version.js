@@ -18,7 +18,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const { compareVersions, nextVersion, readVersion } = require('./bump-version');
+const { compareVersions, nextVersion, readVersion, versionHeadingPattern } = require('./bump-version');
 
 // Paths that cannot change what the packaged extension does, so a change touching only these does
 // not need a version bump. scripts/release-check.js reads this same list to decide whether a push
@@ -43,6 +43,18 @@ function isExempt(file) {
 function firstHeading(changelogText) {
 	for (const line of String(changelogText ?? '').split(/\r?\n/)) {
 		if (line.trim()) {
+			return line.trim();
+		}
+	}
+	return '';
+}
+
+// The heading of the newest version section, skipping the Unreleased section above it. A branch
+// that carries its own bump renames Unreleased to that version, so this is the heading that has to
+// agree with package.json; the Unreleased heading itself never does.
+function firstVersionHeading(changelogText) {
+	for (const line of String(changelogText ?? '').split(/\r?\n/)) {
+		if (versionHeadingPattern.test(line.trim())) {
 			return line.trim();
 		}
 	}
@@ -141,7 +153,7 @@ function evaluate(options) {
 		};
 	}
 
-	const heading = firstHeading(fs.readFileSync(path.join(process.cwd(), 'CHANGELOG.md'), 'utf8'));
+	const heading = firstVersionHeading(fs.readFileSync(path.join(process.cwd(), 'CHANGELOG.md'), 'utf8'));
 	if (heading !== `v${head}`) {
 		return {
 			ok: false,
@@ -214,4 +226,12 @@ if (require.main === module) {
 	main();
 }
 
-module.exports = { compareVersions, evaluate, exemptPatterns, firstHeading, isExempt, parseArgs };
+module.exports = {
+	compareVersions,
+	evaluate,
+	exemptPatterns,
+	firstHeading,
+	firstVersionHeading,
+	isExempt,
+	parseArgs,
+};

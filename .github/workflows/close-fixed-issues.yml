@@ -17,6 +17,10 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # GitHub fires `published` for a prerelease too, and one of those goes out on every push to main.
+    # Without this the changelog would be read and the model called on every push instead of on every
+    # release. The schedule and dispatch paths carry no release at all, so they pass.
+    if: ${{ github.event.release.prerelease != true }}
     permissions:
       contents: read
       issues: write

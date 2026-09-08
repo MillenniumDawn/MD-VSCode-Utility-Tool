@@ -83,11 +83,14 @@ jobs:
           fi
           exit 1
         }
+    # extensionFile, not packagePath: packagePath is a directory the action packages itself, and
+    # pointing it at a .vsix made it read <file>.vsix/package.json and fail. Both registries now get
+    # the same bytes the Marketplace step published.
     - name: Publish to Open VSX Registry
       if: ${{ env.OPEN_VSX_TOKEN != '' }}
       uses: HaaLeo/publish-vscode-extension@ca5561daa085dee804bf9f37fe0165785a9b14db # v2
       with:
-        packagePath: ${{ steps.find_vsix.outputs.vsix }}
+        extensionFile: ${{ steps.find_vsix.outputs.vsix }}
         pat: ${{ env.OPEN_VSX_TOKEN }}
         registryUrl: https://open-vsx.org
     - name: Create GitHub Release
