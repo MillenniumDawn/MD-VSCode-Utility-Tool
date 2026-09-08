@@ -298,11 +298,31 @@ const getFilePathMemo = memoizeWithTtl(
 	{ ttl: 500, maxSize: 1000 },
 );
 
+/**
+ * Whether a normalized mod-relative path points outside the folder it is relative to. Such a path
+ * names a file inside the mod or the game install and nothing else, but it arrives verbatim from a
+ * webview message, off a `file=` attribute the mod's own data wrote, and `vscode.Uri.joinPath`
+ * resolves `..` -- so without this an `../../..` planted in a mod file resolves above the workspace
+ * folder and gets opened or read. A leading slash covers UNC too, because the normalization has
+ * already collapsed `//server/share` to `/server/share`.
+ */
+function escapesRelativeRoot(normalizedPath: string): boolean {
+	return (
+		normalizedPath.startsWith("/") ||
+		/^[a-zA-Z]:/.test(normalizedPath) ||
+		normalizedPath.split("/").includes("..")
+	);
+}
+
 export function getFilePathFromModOrHOI4(
 	relativePath: string,
 	options?: { mod?: boolean; hoi4?: boolean },
 ): Promise<vscode.Uri | undefined> {
 	const normalizedPath = relativePath.replace(/\/\/+|\\+/g, "/");
+	// Rejected before the memo so an escaping path never occupies one of its slots.
+	if (escapesRelativeRoot(normalizedPath)) {
+		return Promise.resolve(undefined);
+	}
 	return getFilePathMemo(
 		JSON.stringify([
 			normalizedPath,
@@ -317,6 +337,9 @@ async function getFilePathFromModOrHOI4Impl(
 	options?: { mod?: boolean; hoi4?: boolean },
 ): Promise<vscode.Uri | undefined> {
 	relativePath = relativePath.replace(/\/\/+|\\+/g, "/");
+	if (escapesRelativeRoot(relativePath)) {
+		return undefined;
+	}
 	let absolutePath: vscode.Uri | undefined = undefined;
 
 	if (options?.mod !== false) {
@@ -938,6 +961,9 @@ async function visitFileSources(
 	visitor: FileSourceVisitor,
 ): Promise<boolean> {
 	relativePath = relativePath.replace(/\/\/+|\\+/g, "/");
+	if (escapesRelativeRoot(relativePath)) {
+		return false;
+	}
 
 	if (options?.mod !== false) {
 		// Find in opened workspace folders

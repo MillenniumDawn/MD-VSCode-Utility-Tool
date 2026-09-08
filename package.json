@@ -40,7 +40,13 @@
 	"browser": "./dist/web-extension.js",
 	"capabilities": {
 		"untrustedWorkspaces": {
-			"supported": true
+			"supported": true,
+			"restrictedConfigurations": [
+				"mdHoi4Utilities.installPath",
+				"mdHoi4Utilities.modFile",
+				"mdHoi4Utilities.inlayWindowGfxRoots",
+				"mdHoi4Utilities.technologyGfxRoots"
+			]
 		}
 	},
 	"locale": "%hoi4modutilities.locale%",
