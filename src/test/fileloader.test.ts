@@ -223,17 +223,31 @@ describe("util/fileloader listFilesFromModOrHOI4 cache key parsing", function ()
 // those maps. These tests pin the normalization it must preserve from the old getEntry/getEntries
 // code: exact-name lookup, leading slash/backslash stripping, and skipping directory entries.
 describe("util/fileloader DlcZip", function () {
-	const AdmZip = require("adm-zip");
+	function makeIndex(files: [string, string][]) {
+		const data = new Map(files);
+		return {
+			entries: files.map(([name]) => ({
+				name,
+				isDirectory: name.endsWith("/") || name.endsWith("\\"),
+			})),
+			readEntry: async (name: string) => {
+				const content = data.get(name);
+				return content === undefined ? null : Buffer.from(content);
+			},
+		};
+	}
 
 	function makeZip(): DlcZip {
-		const zip = new AdmZip();
-		zip.addFile("gfx/interface/foo.dds", Buffer.from("foo"));
-		zip.addFile("gfx/interface/bar.dds", Buffer.from("bar"));
-		zip.addFile("/gfx/interface/slashfront.dds", Buffer.from("s")); // leading slash
-		zip.addFile("\\gfx/interface/backfront.dds", Buffer.from("b")); // leading backslash
-		zip.addFile("gfx/other.dds", Buffer.from("o"));
-		zip.addFile("gfx/interface/", Buffer.alloc(0)); // directory entry
-		return new DlcZip(() => zip);
+		return new DlcZip(
+			makeIndex([
+				["gfx/interface/foo.dds", "foo"],
+				["gfx/interface/bar.dds", "bar"],
+				["/gfx/interface/slashfront.dds", "s"], // leading slash
+				["\\gfx/interface/backfront.dds", "b"], // leading backslash
+				["gfx/other.dds", "o"],
+				["gfx/interface/", ""], // directory entry
+			]),
+		);
 	}
 
 	it("looks up an entry by its exact name and returns null otherwise", function () {
@@ -245,16 +259,14 @@ describe("util/fileloader DlcZip", function () {
 		assert.strictEqual(dlcZip.getEntry("gfx/interface/missing.dds"), null);
 	});
 
-	it("reopens the archive per read and resolves an entry's data via getDataAsync", async function () {
-		const fakeEntry = {
-			getDataAsync: (cb: (data: Buffer) => void) => cb(Buffer.from("payload")),
-		};
-		let opens = 0;
-		const dlcZip = new DlcZip(() => {
-			opens++;
-			return {
-				getEntry: (name: string) => (name === "a/b.dds" ? fakeEntry : null),
-			} as any;
+	it("hands each read to the index source and retains no buffer of its own", async function () {
+		let reads = 0;
+		const dlcZip = new DlcZip({
+			entries: [{ name: "a/b.dds", isDirectory: false }],
+			readEntry: async (name: string) => {
+				reads++;
+				return name === "a/b.dds" ? Buffer.from("payload") : null;
+			},
 		});
 
 		assert.strictEqual(
@@ -262,7 +274,35 @@ describe("util/fileloader DlcZip", function () {
 			"payload",
 		);
 		assert.strictEqual(await dlcZip.readEntryData("a/missing.dds"), null);
-		assert.strictEqual(opens, 2); // reopened per read, retaining no buffer
+		assert.strictEqual(reads, 2); // every read goes to the archive, none to a cached buffer
+	});
+
+	it("builds its listing index without reading any entry data", function () {
+		const dlcZip = new DlcZip({
+			entries: [
+				{ name: "gfx/interface/foo.dds", isDirectory: false },
+				{ name: "gfx/interface/", isDirectory: true },
+			],
+			readEntry: () => {
+				throw new Error("the index must not read entry data");
+			},
+		});
+
+		assert.strictEqual(dlcZip.getEntry("gfx/interface/")!.isDirectory, true);
+		assert.deepStrictEqual(dlcZip.listDir("gfx/interface"), ["foo.dds"]);
+	});
+
+	it("keeps both copies of a name the archive lists twice", function () {
+		const dlcZip = new DlcZip(
+			makeIndex([
+				["gfx/interface/foo.dds", "first"],
+				["gfx/interface/foo.dds", "second"],
+			]),
+		);
+		assert.deepStrictEqual(dlcZip.listDir("gfx/interface"), [
+			"foo.dds",
+			"foo.dds",
+		]);
 	});
 
 	it("reports a directory entry via isDirectory (the listing guard relies on it)", function () {

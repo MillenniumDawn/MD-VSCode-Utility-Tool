@@ -18,7 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { compareVersions } = require('./bump-version');
+const { compareVersions, readVersion } = require('./bump-version');
 
 const label = 'outdated version';
 const versionPattern = /^\d+\.\d+\.\d+$/;
@@ -85,8 +85,7 @@ function readCurrentVersion() {
 	if (process.env.CURRENT_VERSION) {
 		return process.env.CURRENT_VERSION;
 	}
-	const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
-	return packageJson.version;
+	return readVersion(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
 }
 
 function main() {
