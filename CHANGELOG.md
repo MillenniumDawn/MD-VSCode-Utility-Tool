@@ -1,5 +1,7 @@
 Unreleased
 
+v1.1.34
+
   Bugfixes:
 
 - [ CI ] Fail the build when the test sources do not type-check. The step that compiles them reported success no matter what the compiler said, so a broken build could be released. Issue #173.
