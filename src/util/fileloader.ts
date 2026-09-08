@@ -37,7 +37,7 @@ import {
 import { Logger } from "./logger";
 import { getInstallPathUri } from "./installpath";
 import { appendEntriesWithErrorLogging } from "./promiseUtils";
-import type * as AdmZip from "adm-zip";
+import type { ZipIndex } from "./nativezip";
 import { Hoi4FsSchema } from "../constants";
 import { trimStart } from "lodash";
 
@@ -61,57 +61,43 @@ const dlcPathsCache = new PromiseCache({
 });
 
 // Cached DLC zip that retains only a lightweight index (entryName -> isDirectory and directory ->
-// file basenames), never the zip buffer; reads reopen the archive transiently via readEntryData.
+// file basenames), never the zip buffer or an open handle. Reads go straight to the entry's bytes
+// through the ZipIndex, which seeks to them rather than re-reading the archive.
 export class DlcZip {
-	private nameIndex?: Map<string, { isDirectory: boolean }>;
-	private dirIndex?: Map<string, string[]>;
+	private readonly nameIndex = new Map<string, { isDirectory: boolean }>();
+	private readonly dirIndex = new Map<string, string[]>();
 
-	constructor(private readonly openZip: () => AdmZip) {}
+	constructor(private readonly zipIndex: ZipIndex) {
+		for (const entry of zipIndex.entries) {
+			this.nameIndex.set(entry.name, { isDirectory: entry.isDirectory });
+			if (!entry.isDirectory) {
+				const name = entry.name.replace(/^[\\/]/, "");
+				const dir = path.resolve(path.dirname(name)).toLowerCase();
+				const basenames = this.dirIndex.get(dir);
+				if (basenames) {
+					basenames.push(path.basename(name));
+				} else {
+					this.dirIndex.set(dir, [path.basename(name)]);
+				}
+			}
+		}
+	}
 
 	getEntry(name: string): { isDirectory: boolean } | null {
-		this.ensureIndex();
-		return this.nameIndex!.get(name) ?? null;
+		return this.nameIndex.get(name) ?? null;
 	}
 
 	// Basenames of the non-directory entries directly under relativePath, matched the same way the
 	// old getEntries loop did: leading slash/backslash stripped, path.resolve + lowercase compare.
 	listDir(relativePath: string): string[] {
-		this.ensureIndex();
-		return this.dirIndex!.get(path.resolve(relativePath).toLowerCase()) ?? [];
+		return this.dirIndex.get(path.resolve(relativePath).toLowerCase()) ?? [];
 	}
 
-	// Reopens the archive to read one entry's data. The index holds no buffers, so this pays a
-	// transient re-open; repeated reads are served upstream by fileContentCache.
-	async readEntryData(name: string): Promise<Buffer | null> {
-		const entry = this.openZip().getEntry(name);
-		if (!entry) {
-			return null;
-		}
-		return await new Promise<Buffer>((resolve) => entry.getDataAsync(resolve));
-	}
-
-	private ensureIndex(): void {
-		if (this.nameIndex !== undefined) {
-			return;
-		}
-		const nameIndex = new Map<string, { isDirectory: boolean }>();
-		const dirIndex = new Map<string, string[]>();
-		for (const entry of this.openZip().getEntries()) {
-			nameIndex.set(entry.entryName, { isDirectory: entry.isDirectory });
-			if (!entry.isDirectory) {
-				const dir = path
-					.resolve(path.dirname(entry.entryName.replace(/^[\\/]/, "")))
-					.toLowerCase();
-				const basenames = dirIndex.get(dir);
-				if (basenames) {
-					basenames.push(path.basename(entry.name));
-				} else {
-					dirIndex.set(dir, [path.basename(entry.name)]);
-				}
-			}
-		}
-		this.nameIndex = nameIndex;
-		this.dirIndex = dirIndex;
+	// One entry's data, read out of the archive without touching the rest of it. Null when the
+	// archive holds no such entry; anything else that goes wrong throws rather than resolving with a
+	// buffer the caller would mistake for the file.
+	readEntryData(name: string): Promise<Buffer | null> {
+		return this.zipIndex.readEntry(name);
 	}
 }
 
@@ -129,22 +115,23 @@ if (!IS_WEB_EXT) {
 let dlcZipCache: PromiseCache<DlcZip> | null = null;
 
 if (!IS_WEB_EXT) {
-	// adm-zip requires fs, which doesn't work on web.
-	function getDlcZip(dlcZipPath: string): Promise<DlcZip> {
-		const uri = vscode.Uri.parse(dlcZipPath);
+	// The zip reader requires fs, which doesn't work on web.
+	async function getDlcZip(dlcZipUri: string): Promise<DlcZip> {
+		const uri = vscode.Uri.parse(dlcZipUri);
+		let fsPath: string;
 		if (uri.scheme === Hoi4FsSchema) {
 			// Resolve through the shared install path so this gets the same normalization (and
-			// cache) as every hoi4installpath: lookup; adm-zip needs a real fs path.
+			// cache) as every hoi4installpath: lookup; the zip reader needs a real fs path.
 			const installPath = getInstallPathUri();
 			ensureFileScheme(installPath);
-			dlcZipPath = path.join(installPath.fsPath, trimStart(uri.path, "/"));
+			fsPath = path.join(installPath.fsPath, trimStart(uri.path, "/"));
 		} else {
 			ensureFileScheme(uri);
-			dlcZipPath = uri.fsPath;
+			fsPath = uri.fsPath;
 		}
 
-		const AdmZip = require("adm-zip");
-		return Promise.resolve(new DlcZip(() => new AdmZip(dlcZipPath)));
+		const nativeZip = require("./nativezip") as typeof import("./nativezip");
+		return new DlcZip(await nativeZip.openZipIndex(fsPath));
 	}
 
 	dlcZipCache = new PromiseCache({
@@ -298,11 +285,31 @@ const getFilePathMemo = memoizeWithTtl(
 	{ ttl: 500, maxSize: 1000 },
 );
 
+/**
+ * Whether a normalized mod-relative path points outside the folder it is relative to. Such a path
+ * names a file inside the mod or the game install and nothing else, but it arrives verbatim from a
+ * webview message, off a `file=` attribute the mod's own data wrote, and `vscode.Uri.joinPath`
+ * resolves `..` -- so without this an `../../..` planted in a mod file resolves above the workspace
+ * folder and gets opened or read. A leading slash covers UNC too, because the normalization has
+ * already collapsed `//server/share` to `/server/share`.
+ */
+function escapesRelativeRoot(normalizedPath: string): boolean {
+	return (
+		normalizedPath.startsWith("/") ||
+		/^[a-zA-Z]:/.test(normalizedPath) ||
+		normalizedPath.split("/").includes("..")
+	);
+}
+
 export function getFilePathFromModOrHOI4(
 	relativePath: string,
 	options?: { mod?: boolean; hoi4?: boolean },
 ): Promise<vscode.Uri | undefined> {
 	const normalizedPath = relativePath.replace(/\/\/+|\\+/g, "/");
+	// Rejected before the memo so an escaping path never occupies one of its slots.
+	if (escapesRelativeRoot(normalizedPath)) {
+		return Promise.resolve(undefined);
+	}
 	return getFilePathMemo(
 		JSON.stringify([
 			normalizedPath,
@@ -317,6 +324,9 @@ async function getFilePathFromModOrHOI4Impl(
 	options?: { mod?: boolean; hoi4?: boolean },
 ): Promise<vscode.Uri | undefined> {
 	relativePath = relativePath.replace(/\/\/+|\\+/g, "/");
+	if (escapesRelativeRoot(relativePath)) {
+		return undefined;
+	}
 	let absolutePath: vscode.Uri | undefined = undefined;
 
 	if (options?.mod !== false) {
@@ -938,6 +948,9 @@ async function visitFileSources(
 	visitor: FileSourceVisitor,
 ): Promise<boolean> {
 	relativePath = relativePath.replace(/\/\/+|\\+/g, "/");
+	if (escapesRelativeRoot(relativePath)) {
+		return false;
+	}
 
 	if (options?.mod !== false) {
 		// Find in opened workspace folders
