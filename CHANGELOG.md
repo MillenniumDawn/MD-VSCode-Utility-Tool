@@ -7,6 +7,7 @@ v1.1.33
 - [ CI ] Refuse a package.json version that is not a plain three-part number, so release automation cannot be made to run it as code. Issue #170.
 - Refuse mod-relative paths that escape the mod, and ignore path settings in untrusted workspaces. Issue #168.
 - [ GFX ] Open large .gfx files without loading every texture at once or repeating a shared texture for each sprite. Issue #171.
+- Show the technology tree from a chosen country's point of view, with that country's own technology icons. Issue #256.
 
 v1.1.32
 
