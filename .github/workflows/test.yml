@@ -2,17 +2,17 @@ on:
   pull_request:
     branches:
       - "*"
-  # The release pull request is opened and pushed to with GITHUB_TOKEN, and a pull request from
-  # that token starts no run by design. Dispatching is the exception to that rule, so
-  # version-bump.yml asks for a run against release/version-bump itself -- see the last step there.
+  # For re-running the suite against a branch by hand. The release pull request no longer needs it:
+  # it is opened by the release bot's App token, and a pull request from one of those starts a run
+  # like anyone else's.
   workflow_dispatch:
 
 name: Test
 
 # The release pull request is pushed to again on every merge into main, so without this a run would
 # be left going while its own commit is already outdated. A dispatched run has no pull request
-# number, so it groups by ref instead: refreshes of the same branch still supersede each other,
-# while dispatches on unrelated refs no longer cancel one another.
+# number, so it groups by ref instead: reruns of the same branch still supersede each other, while
+# dispatches on unrelated refs no longer cancel one another.
 concurrency:
   group: test-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true

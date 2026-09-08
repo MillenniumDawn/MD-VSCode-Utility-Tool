@@ -36,6 +36,25 @@ to the pull request title if the model is unreachable, so a release never waits 
 The two settings behind that are the `OPENROUTER_API_KEY` secret and the
 `OPENROUTER_MODEL` variable; neither is required.
 
+### The release bot
+
+Everything the automation publishes is published by **MD Utilities Release Bot**, a GitHub
+App owned by the `MillenniumDawn` organisation and installed on this repository: it opens
+and pushes the release pull request, and it authors the GitHub release and every
+pre-release. Its two secrets are **required** — `RELEASE_PR_APP_ID` and
+`RELEASE_PR_APP_PRIVATE_KEY` — and without them the release, pre-release and release
+pull request workflows fail at their first step. The App needs four repository
+permissions: Metadata read, Contents read & write, Pull requests read & write, and
+Workflows read & write. The last one is not optional: the release branch merges `main`,
+so its push carries any change to `.github/workflows/**`, and GitHub rejects such a push
+from an App without it.
+
+The point of the App, beyond one identity for everything MD publishes, is that a pull
+request opened by an App installation token starts workflow runs. A pull request opened
+with `GITHUB_TOKEN` starts none, which is why the release used to be the one thing nobody
+tested. The release pull request now runs the test and version checks against its own
+merge commit, like any other branch.
+
 When the release pull request's changelog conflicts with `main` — a branch that wrote its
 own section while it was open — the two are combined rather than left for a hand merge.
 The release pull request's wording always wins, and only bullets it does not already
