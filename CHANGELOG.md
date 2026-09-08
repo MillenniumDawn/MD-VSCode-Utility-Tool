@@ -10,6 +10,7 @@ v1.1.33
 - Show the technology tree from a chosen country's point of view, with that country's own technology icons. Issue #256.
 - Escape mod-supplied ids before they reach the preview HTML. Issue #169.
 - There is now a pre-release channel. Every push to `main` is built and published to the Marketplace and Open VSX automatically, so "Switch to Pre-Release Version" in the extension view gets you the newest build without waiting for a release.
+- [ CI ] Publish a pre-release build to both registries on every push to main.
 
 v1.1.32
 
