@@ -4,8 +4,14 @@ import { getSpriteTypes, SpriteType } from "../../hoiformat/spritetype";
 import { getImageByPath } from "../../util/image/imagecache";
 import { localize } from "../../util/i18n";
 import { escapeAttr, html, htmlEscape, previewedFileUriScript, errorPageContent } from "../../util/html";
-import { StyleTable } from "../../util/styletable";
+import { StyleTable, normalizeForStyle } from "../../util/styletable";
+import { mapLimit } from "../../util/common";
 import { LoaderRenderResult } from "../updateablepreview";
+
+// Caps how many sprite renders -- and therefore how many DDS/TGA decodes -- run at once. A single
+// interface/*.gfx routinely declares thousands of spriteTypes, so an unbounded fan-out read and
+// decoded every referenced texture simultaneously. Matches the focus tree's renderConcurrency.
+const renderConcurrency = 8;
 
 // Renders the .gfx preview as a full html doc plus an in-place update payload. The update carries the
 // sprite list markup (contentHtml) and the accumulated CSS (styleCss); the webview swaps only the
@@ -88,7 +94,9 @@ async function renderSpriteTypes(
 	styleTable: StyleTable,
 ): Promise<string> {
 	return (
-		await Promise.all(spriteTypes.map((st) => renderSpriteType(st, styleTable)))
+		await mapLimit(spriteTypes, renderConcurrency, (st) =>
+			renderSpriteType(st, styleTable),
+		)
 	).join("");
 }
 
@@ -97,6 +105,7 @@ async function renderSpriteType(
 	styleTable: StyleTable,
 ): Promise<string> {
 	const image = await getImageByPath(spriteType.texturefile);
+	const captionWidth = Math.max(image?.width || 100, 120);
 	return `<div
         id="${escapeAttr(spriteType.name)}"
         class="
@@ -123,8 +132,22 @@ async function renderSpriteType(
 				}\n${image ? image.path : localize("gfx.imagenotfound", "Image not found")}">
         ${
 					image
-						? `<img src="${image.uri}" />`
-						: `<div 
+						? // The texture is carried by a CSS rule keyed on its resolved path, not by an <img>
+							// src, so a texture named by many spriteTypes (an event picture shared by
+							// hundreds of them) contributes its base64 payload to the page exactly once
+							// instead of once per sprite. inline-block reproduces the <img>'s layout under
+							// the parent's text-align: center.
+							`<div class="${styleTable.style(
+								"gfx-texture-" + normalizeForStyle(image.path.toString()),
+								() => `
+                display: inline-block;
+                width: ${image.width}px;
+                height: ${image.height}px;
+                background-image: url(${image.uri});
+                background-size: ${image.width}px ${image.height}px;
+            `,
+							)}"></div>`
+						: `<div
             class="${styleTable.style(
 							"missingImageOuter",
 							() => `
@@ -150,10 +173,10 @@ async function renderSpriteType(
                 margin-top: 0
             `,
 						)}
-            ${styleTable.oneTimeStyle(
-							"imageName",
+            ${styleTable.style(
+							"imageName-w" + captionWidth,
 							() => `
-                max-width: ${Math.max(image?.width || 100, 120)}px;
+                max-width: ${captionWidth}px;
             `,
 						)}
         ">
