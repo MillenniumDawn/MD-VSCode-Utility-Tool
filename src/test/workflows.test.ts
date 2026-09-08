@@ -55,10 +55,6 @@ function steps(workflow: Workflow): Step[] {
     return Object.values(workflow.jobs ?? {}).flatMap((job) => job.steps ?? []);
 }
 
-function stepUsing(workflow: Workflow, action: string): Step | undefined {
-    return steps(workflow).find((step) => step.uses?.startsWith(`${action}@`));
-}
-
 function jobSteps(workflow: Workflow, job: string): Step[] {
     return workflow.jobs?.[job]?.steps ?? [];
 }
