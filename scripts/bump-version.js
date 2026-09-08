@@ -22,6 +22,14 @@ const { newBullets } = require('./changelog-bullets');
 
 const releaseTypes = ['patch', 'minor', 'major'];
 
+// VS Code's channel convention: stable takes the even minors and the pre-release channel takes the
+// odd minor directly above. This rounds an odd minor up to the even stable line it belongs to, so
+// 1.1.x and 1.2.x both sit on the 1.2 line. scripts/prerelease-version.js derives its own version
+// from the same function, which is what keeps the two lines from ever crossing.
+function stableMinor(minor) {
+	return minor % 2 === 0 ? minor : minor + 1;
+}
+
 const versionPattern = /^(\d+)\.(\d+)\.(\d+)$/;
 
 function parseVersion(value) {
@@ -40,8 +48,10 @@ function nextVersion(current, releaseType = 'patch') {
 	if (releaseType === 'major') {
 		return `${major + 1}.0.0`;
 	}
+	// The next even minor strictly above this one, so a minor release steps over the odd pre-release
+	// line sitting directly above the current stable one: 1.1 -> 1.2, but 1.2 -> 1.4.
 	if (releaseType === 'minor') {
-		return `${major}.${minor + 1}.0`;
+		return `${major}.${stableMinor(minor + 1)}.0`;
 	}
 	return `${major}.${minor}.${patch + 1}`;
 }
@@ -158,33 +168,81 @@ function prependChangelog(existing, version, titleOrBullets, issue) {
 	return rest ? `${section}\n${rest}` : section;
 }
 
-const headingPattern = /^v\d+\.\d+\.\d+$/;
+// The heading a branch writes its bullets under before anyone knows which version they will ship
+// in. The release pull request renames it to that version and leaves a fresh empty one behind, so
+// this heading is the only part of CHANGELOG.md a feature branch ever touches.
+const unreleasedHeading = 'Unreleased';
+const versionHeadingPattern = /^v\d+\.\d+\.\d+$/;
+const headingPattern = new RegExp(`^(?:v\\d+\\.\\d+\\.\\d+|${unreleasedHeading})$`);
+
+// Where the section starting at `from` ends: the next heading, or the end of the file.
+function sectionEnd(lines, from) {
+	for (let i = from + 1; i < lines.length; i++) {
+		if (headingPattern.test(lines[i].trim())) {
+			return i;
+		}
+	}
+	return lines.length;
+}
+
+function sectionAt(lines, start) {
+	const text = lines[start].trim();
+	const unreleased = text === unreleasedHeading;
+	return { start, end: sectionEnd(lines, start), unreleased, version: unreleased ? undefined : text.slice(1) };
+}
 
 // Where the section at the top of the changelog starts and ends, or undefined when the file does
-// not open with a version heading.
+// not open with a heading. The heading may be Unreleased, in which case `version` is undefined.
 function topSection(lines) {
 	const start = lines.findIndex((line) => line.trim());
 	if (start === -1 || !headingPattern.test(lines[start].trim())) {
 		return undefined;
 	}
 
-	let end = lines.length;
-	for (let i = start + 1; i < lines.length; i++) {
-		if (headingPattern.test(lines[i].trim())) {
-			end = i;
-			break;
-		}
-	}
-
-	return { start, end, version: lines[start].trim().slice(1) };
+	return sectionAt(lines, start);
 }
 
-// The bullets of the section at the top of a changelog, each with the subsection heading it sits
-// under. Used to carry the bullets a branch wrote on main over into the release pull request when
-// the two changelogs conflict, without moving a bugfix into Functionality on the way.
+function hasBullets(lines, section) {
+	return lines.slice(section.start + 1, section.end).some((line) => line.trim().startsWith('- '));
+}
+
+// The section a changelog is currently collecting into. That is the top one, unless the top one is
+// an Unreleased heading with nothing under it yet -- then it is the version section below.
+//
+// One rule that answers correctly on both sides of a merge. On main the Unreleased section holds
+// what branches have written and is the section being collected into; on release/version-bump it
+// has already been promoted, so the empty Unreleased left behind is skipped and the version section
+// under it is the one a refresh appends to.
+function collectingSection(lines) {
+	const top = topSection(lines);
+	if (!top || !top.unreleased || hasBullets(lines, top)) {
+		return top;
+	}
+
+	const next = lines.findIndex((line, index) => index >= top.end && line.trim());
+	return next === -1 ? top : sectionAt(lines, next);
+}
+
+// Renames the Unreleased heading to a version and leaves a fresh empty one above it, which is how a
+// release pull request takes over what the branches wrote. A changelog with no Unreleased section
+// is returned untouched, so the caller can fall back to prepending a section of its own.
+function promoteUnreleased(existing, version) {
+	const lines = String(existing ?? '').split(/\r?\n/);
+	const top = topSection(lines);
+	if (!top || !top.unreleased) {
+		return String(existing ?? '');
+	}
+
+	lines.splice(top.start, 1, unreleasedHeading, '', `v${version}`);
+	return lines.join('\n');
+}
+
+// The bullets of the section a changelog is collecting into, each with the subsection heading it
+// sits under. Used to carry the bullets a branch wrote on main over into the release pull request
+// when the two changelogs conflict, without moving a bugfix into Functionality on the way.
 function topSectionEntries(changelogText) {
 	const lines = String(changelogText ?? '').split(/\r?\n/);
-	const section = topSection(lines);
+	const section = collectingSection(lines);
 	if (!section) {
 		return [];
 	}
@@ -222,9 +280,14 @@ function combineChangelogs(oursText, theirsText, version) {
 	const missing = theirs.filter((entry) => fresh.has(entry.text));
 
 	// The heading has to agree with the version the release is going out as before anything is
-	// appended, or appendBullets sees a different version and starts a whole new section.
+	// appended, or appendBullets sees a different version and starts a whole new section. An
+	// Unreleased heading is promoted rather than overwritten, so the empty one it leaves behind is
+	// still there for the branches that merge after this.
 	const lines = String(oursText ?? '').split(/\r?\n/);
-	const top = topSection(lines);
+	const top = collectingSection(lines);
+	if (top?.unreleased && version) {
+		return appendBullets(promoteUnreleased(oursText, version), version, missing);
+	}
 	if (top && version && top.version !== version) {
 		lines[top.start] = `v${version}`;
 	}
@@ -305,20 +368,27 @@ function appendBullets(existing, version, bullets) {
 	}
 
 	const lines = String(existing ?? '').split(/\r?\n/);
-	const top = topSection(lines);
+	const top = collectingSection(lines);
 
 	if (!top || top.version !== version) {
 		return prependChangelog(existing, version, requested);
 	}
 
 	const section = lines.slice(top.start, top.end);
+	// The same union the changelog merge uses, rather than a line-for-line comparison: a bullet a
+	// branch wrote by hand under Unreleased and the bullet seeded from that pull request's title are
+	// the same change worded twice, and share an "Issue #NN." trailer even when nothing else matches.
+	const already = section.map((line) => line.trim()).filter((line) => line.startsWith('- '));
+	const fresh = new Set(newBullets(already, requested.map(normalizeBullet).filter(Boolean)));
+
 	const grouped = new Map();
 	let missing = 0;
 	for (const bullet of requested) {
 		const text = normalizeBullet(bullet);
-		if (!text || section.some((line) => line.trim() === text)) {
+		if (!text || !fresh.has(text)) {
 			continue;
 		}
+		fresh.delete(text);
 		const name = sectionOf(bullet);
 		grouped.set(name, [...(grouped.get(name) ?? []), text]);
 		missing++;
@@ -375,17 +445,34 @@ function applyBump(options = {}) {
 	const entry = Array.isArray(options.bullets) && options.bullets.length > 0 ? options.bullets : options.title;
 
 	fs.writeFileSync(packageJsonPath, writeVersion(packageJsonText, next));
-	fs.writeFileSync(changelogPath, prependChangelog(changelogText, next, entry, issue));
+	fs.writeFileSync(changelogPath, bumpedChangelog(changelogText, next, entry, issue));
 
 	return { previous, next, issue };
+}
+
+// What the changelog looks like once the version has moved. The bullets branches wrote under
+// Unreleased are what is shipping, so that heading becomes the version and the seeded bullets are
+// folded in beside them; a changelog with no Unreleased section still gets a section prepended, so
+// nothing about the older shape breaks.
+function bumpedChangelog(changelogText, version, titleOrBullets, issue) {
+	const promoted = promoteUnreleased(changelogText, version);
+	if (promoted === changelogText) {
+		return prependChangelog(changelogText, version, titleOrBullets, issue);
+	}
+	// A promoted section already says what shipped, so an empty seed adds nothing to it -- unlike a
+	// fresh section, which would rather carry a placeholder than stand there with no bullet at all.
+	const seeded = Array.isArray(titleOrBullets)
+		? titleOrBullets
+		: (String(titleOrBullets ?? '').trim() ? [bulletFor(titleOrBullets, issue)] : []);
+	return appendBullets(promoted, version, seeded);
 }
 
 // Puts the release pull request on a specific version instead of a computed one, and renames the
 // changelog section it is collecting into so the two agree.
 //
-// This assumes the section at the top of CHANGELOG.md is the unreleased one -- which it is on
-// release/version-bump, where the top section is exactly what the open release pull request is
-// gathering. Do not point this at a changelog whose top section has already shipped.
+// The section it renames is the one being collected into -- the top one, or the version section
+// under an Unreleased heading that has already been promoted. Do not point this at a changelog
+// whose collecting section has already shipped.
 function setVersion(options = {}) {
 	const root = options.cwd ?? process.cwd();
 	const packageJsonPath = path.join(root, 'package.json');
@@ -403,8 +490,8 @@ function setVersion(options = {}) {
 	if (fs.existsSync(changelogPath)) {
 		const changelogText = fs.readFileSync(changelogPath, 'utf8');
 		const lines = changelogText.split(/\r?\n/);
-		const top = topSection(lines);
-		if (top && top.version !== version) {
+		const top = collectingSection(lines);
+		if (top && !top.unreleased && top.version !== version) {
 			lines[top.start] = `v${version}`;
 			fs.writeFileSync(changelogPath, lines.join('\n'));
 			renamed = true;
@@ -520,6 +607,7 @@ module.exports = {
 	applyBump,
 	bulletFor,
 	changelogSection,
+	collectingSection,
 	combineChangelogs,
 	compareVersions,
 	higherVersion,
@@ -528,11 +616,15 @@ module.exports = {
 	parseArgs,
 	parseVersion,
 	prependChangelog,
+	promoteUnreleased,
 	readBulletsFile,
 	readVersion,
 	sections,
 	setVersion,
+	stableMinor,
 	topSectionBullets,
 	topSectionEntries,
+	unreleasedHeading,
+	versionHeadingPattern,
 	writeVersion,
 };

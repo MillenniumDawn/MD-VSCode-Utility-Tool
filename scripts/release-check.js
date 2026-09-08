@@ -89,9 +89,12 @@ function tagExists(tag) {
 // The last version that actually shipped. It is the tag itself in the ordinary case, but when a
 // branch bumped package.json by hand the tag for that version does not exist yet, and the changelog
 // bullets still have to be collected from the release before it.
+// Pre-release tags are excluded on purpose. They look like release tags -- v1.3.57-pre.1 matches
+// v[0-9]* -- but one is written on every push to main, so taking one as the last release would cut
+// the changelog down to whatever landed since that push.
 function lastReleaseTag() {
 	try {
-		return git(['describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*']);
+		return git(['describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*', '--exclude', '*-pre.*']);
 	} catch {
 		return '';
 	}
@@ -239,4 +242,4 @@ if (require.main === module) {
 	main();
 }
 
-module.exports = { decide, evaluate, parseArgs, pushSource, releaseBranch };
+module.exports = { decide, evaluate, lastReleaseTag, parseArgs, pushSource, releaseBranch };
