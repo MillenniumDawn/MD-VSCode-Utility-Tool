@@ -432,6 +432,26 @@ export async function hoiFileExpiryToken(
 	return await expiryToken(await getFilePathFromModOrHOI4(relativePath));
 }
 
+/**
+ * One token for the whole set of files a cached value was built by reading. It moves when any of
+ * them moves and -- because every part carries its own path -- when the set itself changes.
+ *
+ * A file deleted since the load that recorded it makes its resolve or stat throw. That is a change,
+ * not a failure, so it becomes a part of the token instead of an exception thrown out of a cache's
+ * expiry check.
+ */
+export async function hoiFilesExpiryToken(
+	relativePaths: string[],
+): Promise<string> {
+	return (
+		await Promise.all(
+			relativePaths.map((path) =>
+				hoiFileExpiryToken(path).catch(() => `${path}@gone`),
+			),
+		)
+	).join("|");
+}
+
 // Short-TTL memo over the filesystem stat used to build a file's on-disk expiry token. A single
 // preview render can resolve hundreds of icons, each re-checking its mtime; within EXPIRY_STAT_TTL
 // the memoized mtime is reused to one per file. Opened/dirty documents never reach this memo (they

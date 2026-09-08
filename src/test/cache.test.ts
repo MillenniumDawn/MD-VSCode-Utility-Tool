@@ -165,6 +165,23 @@ describe('Cache', () => {
         assert.deepStrictEqual(keys(cache), ['fresh']);
     });
 
+    it('serves a hot entry forever when only life guards it', () => {
+        // `life` is a TTL since the last *access*, and every get pushes that forward, so an entry read
+        // more often than once per life is never reached by tryClean. This is why anything that can go
+        // stale needs an expireWhenChange token rather than a short life.
+        let calls = 0;
+        const cache = track(new Cache<number>({ factory: () => ++calls, life: 1000, nonExpireLife: 0 }));
+
+        assert.strictEqual(cache.get('a'), 1);
+        (cache as any)._cache['a'].lastAccess = Date.now() - 10_000;
+        assert.strictEqual(cache.get('a'), 1);
+        assert.strictEqual(calls, 1);
+
+        // And the hit pushed lastAccess forward again, so the sweep will not take it either.
+        (cache as any).tryClean();
+        assert.deepStrictEqual(keys(cache), ['a']);
+    });
+
     it('evicts when either maxSize or maxBytes is exceeded', () => {
         // Both limits set; maxBytes is the binding one here.
         const cache = track(new Cache<string>({

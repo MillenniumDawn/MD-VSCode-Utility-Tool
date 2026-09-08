@@ -33,7 +33,7 @@ export abstract class PreviewBase {
         }
         try {
             if (!this.panelInitialized) {
-                const html = await this.getContent(document);
+                const html = await this.getContent(document, dependencyChanged);
                 if (this.isDisposed) {
                     return;
                 }
@@ -112,7 +112,7 @@ export abstract class PreviewBase {
                 // state dies with the panel; see previewoptions.ts.
                 case 'setPreviewOption':
                     if (typeof msg.key === 'string') {
-                        setPreviewOption(msg.key, msg.value);
+                        void this.onPreviewOptionSet(msg.key, msg.value);
                     }
                     break;
             }
@@ -123,6 +123,15 @@ export abstract class PreviewBase {
         });
     }
     
+    /**
+     * Persists a toolbar option the page just changed. Most previews draw the option themselves and
+     * need nothing more; one whose content is rendered on this side overrides this to re-render
+     * after the write, which is why the write is awaited rather than fired and forgotten.
+     */
+    protected async onPreviewOptionSet(key: string, value: unknown): Promise<void> {
+        await setPreviewOption(key, value);
+    }
+
     protected updateDependencies(dependencies: string[]): void {
         if (this.cachedDependencies === undefined || !isEqual(this.cachedDependencies, dependencies)) {
             this.dependencyChangedEmitter.fire(dependencies);
@@ -141,15 +150,18 @@ export abstract class PreviewBase {
         });
     }
 
-    protected reload() {
+    // `dependencyChanged` forces the loader session the re-render runs in. A reload triggered by
+    // something other than the document -- a setting change -- does not move the document's hash, so
+    // without it a loader answers from its cache and the page repaints exactly what it had.
+    protected reload(dependencyChanged = false) {
         const document = getDocumentByUri(this.uri);
         if (document === undefined) {
             return;
         }
 
         this.panelInitialized = false;
-        void this.onDocumentChange(document);
+        void this.onDocumentChange(document, dependencyChanged);
     }
 
-    protected abstract getContent(document: vscode.TextDocument): Promise<string>;
+    protected abstract getContent(document: vscode.TextDocument, dependencyChanged?: boolean): Promise<string>;
 }

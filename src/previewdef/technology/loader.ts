@@ -5,19 +5,24 @@ import { GuiFile } from "../../hoiformat/gui";
 import { ContentLoader, Dependency, LoadResultOD, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
-import { flatMap, chain } from "lodash";
+import { flatMap, chain, uniq } from "lodash";
 import { GuiFileLoader } from "../gui/loader";
-import { listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
+import { hoiFilesExpiryToken, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
 import { getConfiguration } from "../../util/vsccommon";
-import { localisationIndex } from "../../util/featureflags";
+import { localisationIndex, technologyCountryIcons } from "../../util/featureflags";
 import { debug } from "../../util/debug";
 import { PromiseCache } from "../../util/cache";
+import { getCountryTagsByFolder } from "./countryicons";
+import { loadCountryTags } from "../../util/countrytags";
 
 export interface TechnologyTreeLoaderResult {
     technologyTrees: TechnologyTree[];
     guiFiles: { file: string, data: HOIPartial<GuiFile> }[];
     gfxFiles: string[];
     equipmentArchetypes: Record<string, EquipmentArchetype>;
+    // Folder -> the country tags that ship their own icons for a technology in it. Empty when the
+    // country-icon setting is off, which is also when nothing renders a country selector.
+    countryTagsByFolder: Record<string, string[]>;
 }
 
 const equipmentFolder = 'common/units/equipment';
@@ -61,6 +66,7 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
         const guiDepFiles = await this.loaderDependencies.loadMultiple(guiDependencies, session, GuiFileLoader);
 
         const { equipmentArchetypes, equipmentFiles } = await loadEquipmentArchetypes();
+        const { countryTagsByFolder, countryTagFiles } = await loadCountryTagsByFolder(technologyTrees);
 
         return {
             result: {
@@ -68,14 +74,36 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
                 gfxFiles: chain(gfxDependencies).concat(extraGfxFiles, flatMap(guiDepFiles, r => r.result.gfxFiles)).uniq().value(),
                 guiFiles: chain(guiDepFiles).flatMap(r => r.result.guiFiles).uniq().value(),
                 equipmentArchetypes,
+                countryTagsByFolder,
             },
-            dependencies: chain([this.file]).concat(gfxDependencies, extraGfxFiles, guiDependencies, equipmentFiles, mergeInLoadResult(guiDepFiles, 'dependencies')).uniq().value(),
+            dependencies: chain([this.file]).concat(gfxDependencies, extraGfxFiles, guiDependencies, equipmentFiles, countryTagFiles, mergeInLoadResult(guiDepFiles, 'dependencies')).uniq().value(),
         };
     }
 
     public toString() {
         return `[TechnologyTreeLoader ${this.file}]`;
     }
+}
+
+interface CountryTagsByFolderResult {
+    countryTagsByFolder: Record<string, string[]>;
+    countryTagFiles: string[];
+}
+
+// Returns the country_tags files it read so they can be registered as preview dependencies: the
+// dropdown is built from them, so a tag added while the preview is open has to reach it.
+async function loadCountryTagsByFolder(technologyTrees: TechnologyTree[]): Promise<CountryTagsByFolderResult> {
+    if (!technologyCountryIcons) {
+        return { countryTagsByFolder: {}, countryTagFiles: [] };
+    }
+
+    const folders = uniq(technologyTrees.map(tt => tt.folder));
+    const [countryTagsByFolder, { files }] = await Promise.all([
+        getCountryTagsByFolder(technologyTrees, folders),
+        loadCountryTags(),
+    ]);
+
+    return { countryTagsByFolder, countryTagFiles: files };
 }
 
 interface EquipmentArchetypesResult {
@@ -85,10 +113,21 @@ interface EquipmentArchetypesResult {
 
 // A single tech-tree preview renders many technologies, and a workspace can hold many tech-tree
 // files; without caching, every render would re-walk and re-parse all `common/units/equipment`
-// files. A short TTL collapses those repeated parses while staying fresh enough that edits show up
-// within a couple of seconds, mirroring `fileListCache` in fileloader.ts.
+// files.
+//
+// `life` is a TTL since the last *access* and `get` pushes it forward on every hit, so on its own it
+// could never expire an entry a render reads every few seconds -- and the equipment files are
+// registered as preview dependencies, so an edit to one has to reach the next render. The expiry
+// token is what does that: every file this load read, each with its mtime, which for a file open in
+// the editor is Date.now() and so always looks changed.
 const equipmentArchetypeCache = new PromiseCache<EquipmentArchetypesResult>({
     factory: () => loadEquipmentArchetypesUncached(),
+    // The setting is a part of the token because with the localisation index off the load
+    // short-circuits to an empty result with no files, which nothing on disk could then invalidate.
+    expireWhenChange: (_key, cached) => cached.then(
+        async value => `${localisationIndex ? 'on' : 'off'}|${await hoiFilesExpiryToken(value.equipmentFiles)}`,
+        () => '',
+    ),
     life: 3 * 1000,
     maxSize: 1,
 });

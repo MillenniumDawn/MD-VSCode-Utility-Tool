@@ -114,7 +114,13 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Workspace/mod-relative root folders to scan recursively for .gfx files used by the technology tree preview (e.g. \"interface/technologies\")."
+						"description": "Workspace/mod-relative root folders to scan recursively for .gfx files used by the technology tree preview, including country-specific technology icons (e.g. \"interface/technologies\")."
+					},
+					"mdHoi4Utilities.technologyCountryIcons": {
+						"title": "Technology tree: country-specific icons",
+						"type": "boolean",
+						"default": false,
+						"description": "Add a country selector to the technology tree preview and prefer that country's icons (GFX_<TAG>_<technology>) over the generic ones, the way the game does. Needs the GFX index to list the countries."
 					},
 					"mdHoi4Utilities.worldMapRetainContextWhenHidden": {
 						"title": "World map: keep webview in memory when hidden",
