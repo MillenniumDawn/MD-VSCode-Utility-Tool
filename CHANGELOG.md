@@ -1,3 +1,10 @@
+Unreleased
+
+  Bugfixes:
+
+- [ CI ] Fail the build when the test sources do not type-check. The step that compiles them reported success no matter what the compiler said, so a broken build could be released. Issue #173.
+- [ CI ] Run the test suite on Windows. `npm test` found no test files there and stopped before the first one.
+
 v1.1.33
 
   Functionality:
