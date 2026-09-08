@@ -5,8 +5,8 @@ import * as yaml from 'js-yaml';
 
 // The workflows are the only part of the release machinery with no unit test behind it -- what they
 // do only happens on GitHub. These are the properties that would be silently wrong rather than
-// loudly broken: an unpinned action, a publish step that runs without its token, a pre-release build
-// that forgets it is one.
+// loudly broken: an unpinned action, a publish step that skips itself for want of a token, a
+// pre-release build that forgets it is one.
 
 const workflowDir = path.join(__dirname, '..', '..', '..', '.github', 'workflows');
 
@@ -20,6 +20,9 @@ interface Step {
 }
 
 interface Job {
+    name?: string;
+    needs?: string | string[];
+    if?: string;
     steps?: Step[];
     concurrency?: unknown;
     permissions?: unknown;
@@ -56,6 +59,18 @@ function stepUsing(workflow: Workflow, action: string): Step | undefined {
     return steps(workflow).find((step) => step.uses?.startsWith(`${action}@`));
 }
 
+function jobSteps(workflow: Workflow, job: string): Step[] {
+    return workflow.jobs?.[job]?.steps ?? [];
+}
+
+function usesIn(workflow: Workflow, job: string, action: string): Step | undefined {
+    return jobSteps(workflow, job).find((step) => step.uses?.startsWith(`${action}@`));
+}
+
+function runsIn(workflow: Workflow, job: string, fragment: string): Step | undefined {
+    return jobSteps(workflow, job).find((step) => step.run?.includes(fragment));
+}
+
 describe('.github/workflows', function () {
     it('parses every workflow', function () {
         const files = workflowFiles();
@@ -76,9 +91,21 @@ describe('.github/workflows', function () {
         }
     });
 
-    describe('pre-release.yml', function () {
-        const workflow = load('pre-release.yml');
-        const publish = workflow.jobs?.publish;
+    describe('release.yml', function () {
+        const workflow = load('release.yml');
+        const jobs = workflow.jobs ?? {};
+
+        const preReleaseTargets = ['pre-release-marketplace', 'pre-release-open-vsx', 'pre-release-github'];
+        const releaseTargets = ['release-marketplace', 'release-open-vsx', 'release-github'];
+
+        it('publishes both channels from one run', function () {
+            assert.ok(
+                !workflowFiles().includes('pre-release.yml'),
+                'pre-release.yml is back; a push to main should be one run, not two');
+            for (const job of ['check', 'verify', 'build-pre-release', 'build-release', ...preReleaseTargets, ...releaseTargets]) {
+                assert.ok(jobs[job], `${job} is missing`);
+            }
+        });
 
         it('runs on every push to main, and on demand', function () {
             const on = triggers(workflow);
@@ -86,52 +113,113 @@ describe('.github/workflows', function () {
             assert.ok('workflow_dispatch' in on);
         });
 
-        it('cancels a build the next push has already superseded', function () {
-            assert.strictEqual(workflow.concurrency?.group, 'pre-release');
-            assert.strictEqual(workflow.concurrency?.['cancel-in-progress'], true);
+        it('never cancels a run that may already be halfway through publishing', function () {
+            assert.strictEqual(workflow.concurrency?.group, 'publish');
+            assert.strictEqual(workflow.concurrency?.['cancel-in-progress'], false);
         });
 
-        it('packages and publishes as a pre-release, not as a release', function () {
-            const packaged = steps(workflow).find((step) => step.run?.includes('package:pre-release'));
-            assert.ok(packaged, 'nothing packages the VSIX with --pre-release');
-
-            const marketplace = steps(workflow).find((step) => step.run?.includes('vsce publish'));
-            assert.match(marketplace?.run ?? '', /--pre-release/);
-
-            assert.strictEqual(stepUsing(workflow, 'softprops/action-gh-release')?.with?.prerelease, true);
+        it('gives every publish target its own job, so a failing registry costs only itself', function () {
+            for (const job of [...preReleaseTargets, ...releaseTargets]) {
+                assert.ok(jobs[job]?.name, `${job} has no name to show in the Actions graph`);
+            }
+            // One registry must never be reachable only through the other.
+            assert.strictEqual(usesIn(workflow, 'release-marketplace', 'HaaLeo/publish-vscode-extension'), undefined);
+            assert.strictEqual(runsIn(workflow, 'release-open-vsx', 'vsce publish'), undefined);
         });
 
-        it('takes the version from the script rather than from package.json', function () {
-            const resolve = steps(workflow).find((step) => step.run?.includes('scripts/prerelease-version.js'));
+        it('skips the pre-release on the push that is a release', function () {
+            // The release commit carries a version and a changelog and nothing else, so publishing it
+            // to the pre-release channel as well would ship the same code twice.
+            assert.match(jobs['build-pre-release']?.if ?? '', /needs\.check\.outputs\.release != 'true'/);
+            assert.match(jobs['build-release']?.if ?? '', /needs\.check\.outputs\.release == 'true'/);
+        });
+
+        it('packages and publishes the pre-release as a pre-release, not as a release', function () {
+            assert.ok(
+                runsIn(workflow, 'build-pre-release', 'package:pre-release'),
+                'nothing packages the VSIX with --pre-release');
+            assert.match(runsIn(workflow, 'pre-release-marketplace', 'vsce publish')?.run ?? '', /--pre-release/);
+            assert.strictEqual(
+                usesIn(workflow, 'pre-release-github', 'softprops/action-gh-release')?.with?.prerelease, true);
+
+            // The release goes out as a release: no --pre-release anywhere on that side.
+            assert.doesNotMatch(runsIn(workflow, 'release-marketplace', 'vsce publish')?.run ?? '', /--pre-release/);
+            assert.strictEqual(
+                usesIn(workflow, 'release-github', 'softprops/action-gh-release')?.with?.prerelease, undefined);
+        });
+
+        it('takes the pre-release version from the script rather than from package.json', function () {
+            const resolve = runsIn(workflow, 'build-pre-release', 'scripts/prerelease-version.js');
             assert.strictEqual(resolve?.id, 'version');
             assert.match(resolve?.run ?? '', /--apply/);
         });
 
-        it('skips a registry it has no token for instead of failing', function () {
-            assert.strictEqual(publish?.env?.VSCE_PAT, '${{ secrets.VSCE_PAT }}');
-            assert.strictEqual(publish?.env?.OPEN_VSX_TOKEN, '${{ secrets.OPEN_VSX_TOKEN }}');
-
-            const marketplace = steps(workflow).find((step) => step.run?.includes('vsce publish'));
-            assert.match(marketplace?.if ?? '', /env\.VSCE_PAT != ''/);
-            assert.match(
-                stepUsing(workflow, 'HaaLeo/publish-vscode-extension')?.if ?? '',
-                /env\.OPEN_VSX_TOKEN != ''/);
+        it('fails when a registry token is missing instead of skipping and reporting success', function () {
+            // A missing OPEN_VSX_TOKEN used to skip the publish step and leave the job green, which is
+            // how the extension reached no one on Open VSX for months while every run said success.
+            for (const job of ['pre-release-marketplace', 'release-marketplace']) {
+                assert.strictEqual(jobs[job]?.env?.VSCE_PAT, '${{ secrets.VSCE_PAT }}');
+                assert.strictEqual(
+                    runsIn(workflow, job, 'vsce publish')?.if, undefined,
+                    `${job} still skips itself when VSCE_PAT is missing`);
+                assert.match(runsIn(workflow, job, '-z "$VSCE_PAT"')?.run ?? '', /exit 1/);
+            }
+            for (const job of ['pre-release-open-vsx', 'release-open-vsx']) {
+                assert.strictEqual(jobs[job]?.env?.OPEN_VSX_TOKEN, '${{ secrets.OPEN_VSX_TOKEN }}');
+                assert.strictEqual(
+                    usesIn(workflow, job, 'HaaLeo/publish-vscode-extension')?.if, undefined,
+                    `${job} still skips itself when OPEN_VSX_TOKEN is missing`);
+                assert.match(runsIn(workflow, job, '-z "$OPEN_VSX_TOKEN"')?.run ?? '', /exit 1/);
+            }
         });
 
-        it('hands Open VSX the VSIX that was built, not a directory to build again', function () {
-            const openVsx = stepUsing(workflow, 'HaaLeo/publish-vscode-extension');
-            assert.ok(openVsx?.with?.extensionFile, 'Open VSX needs extensionFile');
-            assert.strictEqual(openVsx?.with?.packagePath, undefined);
-        });
-    });
-
-    describe('release.yml', function () {
         it('hands Open VSX the VSIX that was built, not a directory to build again', function () {
             // packagePath is a directory the action packages itself; pointing it at a .vsix made it
             // read <file>.vsix/package.json and fail.
-            const openVsx = stepUsing(load('release.yml'), 'HaaLeo/publish-vscode-extension');
-            assert.ok(openVsx?.with?.extensionFile, 'Open VSX needs extensionFile');
-            assert.strictEqual(openVsx?.with?.packagePath, undefined);
+            for (const job of ['pre-release-open-vsx', 'release-open-vsx']) {
+                const openVsx = usesIn(workflow, job, 'HaaLeo/publish-vscode-extension');
+                assert.ok(openVsx?.with?.extensionFile, `${job}: Open VSX needs extensionFile`);
+                assert.strictEqual(openVsx?.with?.packagePath, undefined);
+            }
+        });
+
+        it('gives all three targets the same bytes, through an artifact', function () {
+            const chains: [string, string, string[]][] = [
+                ['build-pre-release', 'pre-release-vsix', preReleaseTargets],
+                ['build-release', 'release-vsix', releaseTargets],
+            ];
+            for (const [build, artifact, targets] of chains) {
+                assert.strictEqual(usesIn(workflow, build, 'actions/upload-artifact')?.with?.name, artifact);
+                for (const target of targets) {
+                    assert.strictEqual(
+                        usesIn(workflow, target, 'actions/download-artifact')?.with?.name, artifact,
+                        `${target} does not take the build from ${artifact}`);
+                }
+            }
+        });
+
+        it('opens a draft pull request on a branch when a release fails', function () {
+            const failed = jobs['release-failed'];
+            assert.ok(failed, 'nothing reacts to a failed release');
+
+            const watched = [failed.needs ?? []].flat();
+            for (const job of ['check', 'verify', 'build-release', ...releaseTargets]) {
+                assert.ok(watched.includes(job), `release-failed does not watch ${job}`);
+            }
+            // A pre-release runs on every push and the next one supersedes it, so it stays out.
+            for (const job of preReleaseTargets) {
+                assert.ok(!watched.includes(job), `release-failed should not watch ${job}`);
+            }
+
+            assert.match(failed.if ?? '', /always\(\)/);
+            assert.match(failed.if ?? '', /'failure'/);
+            // Never on a run someone stopped by hand -- that is not a problem to fix.
+            assert.doesNotMatch(failed.if ?? '', /cancelled/);
+
+            const open = runsIn(workflow, 'release-failed', 'gh pr create');
+            assert.match(open?.run ?? '', /--draft/);
+            // One empty commit, so there is nothing to delete before the fix can merge.
+            assert.match(open?.run ?? '', /commit --allow-empty/);
         });
     });
 });

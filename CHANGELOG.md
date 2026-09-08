@@ -1,3 +1,9 @@
+Unreleased
+
+  Bugfixes:
+
+- The extension is now actually published to Open VSX. Publishing there quietly skipped itself when its access token was missing, and the release still reported success, so nothing ever reached the registry.
+
 v1.1.33
 
   Functionality:
