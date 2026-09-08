@@ -16,6 +16,7 @@ import {
 	GridBoxConnection,
 } from "../src/util/hoi4gui/gridboxcommon";
 import { StyleTable, normalizeForStyle } from "../src/util/styletable";
+import { escapeAttr } from "../src/util/escape";
 import { FocusTree, Focus } from "../src/previewdef/focustree/schema";
 import {
 	warningBadgeClass,
@@ -651,7 +652,7 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 
 		if (allowBranches) {
 			allowBranches.select.innerHTML = `<span class="value"></span>
-                ${focusTree.allowBranchOptions.map((option) => `<div class="option" value="inbranch_${option}">${option}</div>`).join("")}`;
+                ${focusTree.allowBranchOptions.map((option) => `<div class="option" value="inbranch_${escapeAttr(option)}">${escapeAttr(option)}</div>`).join("")}`;
 			allowBranches.selectAll();
 		}
 	}
@@ -668,7 +669,7 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 	}
 	if (inlayWindowsElement) {
 		inlayWindowsElement.innerHTML = focusTree.inlayWindows
-			.map((inlay) => `<option value="${inlay.id}">${inlay.id}</option>`)
+			.map((inlay) => `<option value="${escapeAttr(inlay.id)}">${escapeAttr(inlay.id)}</option>`)
 			.join("");
 		const selectedInlayWindowId = getSelectedInlayWindowId(focusTree);
 		if (selectedInlayWindowId) {

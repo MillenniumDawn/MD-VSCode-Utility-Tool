@@ -289,6 +289,60 @@ describe("util/hoi4gui/gridboxcommon", () => {
 			assert.ok(html.includes("data-cell-x="));
 		});
 
+		it("escapes ids containing a quote", async () => {
+			const st = makeStyleTable();
+			const gridBox: any = {
+				position: { x: toNumberLike(0), y: toNumberLike(0) },
+				size: { width: toNumberLike(200), height: toNumberLike(200) },
+				slotsize: { width: toNumberLike(50), height: toNumberLike(50) },
+				format: { _name: "up" },
+			};
+			const parentInfo = {
+				size: { width: 1920, height: 1080 },
+				orientation: "upper_left" as const,
+			};
+			const evilId = 'a" onclick="alert(1)';
+			const html = await renderGridBoxCommon(gridBox, parentInfo, {
+				styleTable: st,
+				id: evilId,
+				items: {
+					[evilId]: {
+						id: evilId,
+						htmlId: "focus_" + evilId,
+						gridX: 0,
+						gridY: 0,
+						connections: [
+							{ target: "b", targetType: "child", style: "1px solid black" },
+						],
+					},
+					b: { id: "b", gridX: 1, gridY: 0, connections: [] },
+				},
+			});
+			assert.ok(!html.includes('onclick="alert(1)"'));
+			assert.ok(html.includes('data-gridbox-item="a&quot; onclick=&quot;alert(1)"'));
+			assert.ok(html.includes('id="focus_a&quot; onclick=&quot;alert(1)"'));
+			assert.ok(html.includes('data-conn-from="a&quot; onclick=&quot;alert(1)"'));
+		});
+
+		it("escapes a quote in a connection target id", () => {
+			const st = makeStyleTable();
+			const html = renderGridBoxConnection(
+				{ x: 0, y: 10 },
+				{ x: 100, y: 10 },
+				"1px solid red",
+				"child",
+				"up",
+				{ width: 50, height: 50 },
+				undefined,
+				st,
+				1.5,
+				"a",
+				'b" onclick="alert(1)',
+			);
+			assert.ok(!html.includes('onclick="alert(1)"'));
+			assert.ok(html.includes('data-conn-to="b&quot; onclick=&quot;alert(1)"'));
+		});
+
 		it("invokes onRenderItem", async () => {
 			const st = makeStyleTable();
 			const gridBox: any = {
