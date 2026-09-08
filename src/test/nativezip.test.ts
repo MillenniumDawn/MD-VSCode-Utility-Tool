@@ -3,7 +3,7 @@ import * as path from "path";
 import * as os from "os";
 import * as fs from "fs/promises";
 import * as zlib from "zlib";
-import { openZipIndex } from "../util/nativezip";
+import { crc32Table, openZipIndex } from "../util/nativezip";
 
 // The reader runs on node's own fs against real archives, so it is tested against real files. Two
 // fixture builders, because they cover different ground: adm-zip writes archives shaped the way the
@@ -40,6 +40,16 @@ interface BuildZipOptions {
 	comment?: Buffer;
 	/** Bytes written before the first local header, as a self-extracting stub would be. */
 	prepend?: Buffer;
+	/**
+	 * Bytes written between the central directory and the end record, as an archive extra data or
+	 * digital signature record would be. Every offset stays correct; only the gap is new.
+	 */
+	gapBeforeEocd?: Buffer;
+	/**
+	 * Write the 0xFFFFFFFF sentinels into the plain end record's directory size and offset and emit
+	 * the zip64 record and locator, so only the zip64 record says where the directory is.
+	 */
+	zip64Eocd?: boolean;
 }
 
 function crc32(data: Buffer): number {
@@ -152,7 +162,12 @@ function buildZip(
 	parts.push(centralDirectory);
 	offset += centralDirectory.length;
 
-	if (anyZip64) {
+	if (options.gapBeforeEocd) {
+		parts.push(options.gapBeforeEocd);
+		offset += options.gapBeforeEocd.length;
+	}
+
+	if (anyZip64 || options.zip64Eocd) {
 		const record = Buffer.alloc(56);
 		record.writeUInt32LE(ZIP64_EOCD_SIGNATURE, 0);
 		record.writeBigUInt64LE(BigInt(44), 4);
@@ -175,13 +190,36 @@ function buildZip(
 	eocd.writeUInt32LE(EOCD_SIGNATURE, 0);
 	eocd.writeUInt16LE(entries.length & 0xffff, 8);
 	eocd.writeUInt16LE(entries.length & 0xffff, 10);
-	eocd.writeUInt32LE(centralDirectory.length, 12);
-	eocd.writeUInt32LE(centralDirectoryOffset, 16);
+	eocd.writeUInt32LE(
+		options.zip64Eocd ? 0xffffffff : centralDirectory.length,
+		12,
+	);
+	eocd.writeUInt32LE(
+		options.zip64Eocd ? 0xffffffff : centralDirectoryOffset,
+		16,
+	);
 	eocd.writeUInt16LE(comment.length, 20);
 	parts.push(eocd, comment);
 
 	return Buffer.concat([options.prepend ?? Buffer.alloc(0), ...parts]);
 }
+
+describe("util/nativezip crc32Table", function () {
+	// The reader prefers node's own zlib.crc32 and only falls back to this table on a node older
+	// than 20.15, which is not the one the tests run on. Checked here against a second
+	// implementation so a user on an older VS Code is not the one who finds it wrong.
+	it("agrees with an independent implementation, empty and binary input included", function () {
+		const cases = [
+			Buffer.alloc(0),
+			Buffer.from("a"),
+			Buffer.from("focus = { id = test }\n".repeat(100)),
+			Buffer.from(Array.from({ length: 512 }, (_, i) => i % 256)),
+		];
+		for (const data of cases) {
+			assert.strictEqual(crc32Table(data), crc32(data));
+		}
+	});
+});
 
 describe("util/nativezip openZipIndex", function () {
 	let root: string;
@@ -567,6 +605,82 @@ describe("util/nativezip openZipIndex", function () {
 
 	it("throws for a path that does not exist", async function () {
 		await assert.rejects(() => openZipIndex(path.join(root, "missing.zip")));
+	});
+
+	it("throws when the central directory offset points at bytes that are not a directory", async function () {
+		const raw = buildZip([{ name: "a.txt", data: Buffer.from("a") }]);
+		// Three bytes into the directory rather than at its start. The stub correction cannot paper
+		// over it -- the shift it computes is negative, so it stays zero -- and every record after
+		// the misalignment is gone, which used to read as an archive that simply holds nothing.
+		const offsetField = raw.length - 6;
+		raw.writeUInt32LE(raw.readUInt32LE(offsetField) + 3, offsetField);
+		const file = await write("misaligned.zip", raw);
+		await assert.rejects(
+			() => openZipIndex(file),
+			/no central directory record at 0/,
+		);
+	});
+
+	it("reads an archive with a record between the central directory and the end record", async function () {
+		const index = await openZipIndex(
+			await write(
+				"gap.zip",
+				buildZip([{ name: "a.txt", data: Buffer.from("after a gap") }], {
+					gapBeforeEocd: Buffer.alloc(64, 0x7a),
+				}),
+			),
+		);
+		assert.deepStrictEqual(
+			await index.readEntry("a.txt"),
+			Buffer.from("after a gap"),
+		);
+	});
+
+	it("throws when an entry claims more compressed bytes than the archive holds", async function () {
+		const raw = buildZip([{ name: "a.txt", data: Buffer.from("hello") }]);
+		// A size no allocation should ever be attempted for. The read that would have failed on it
+		// comes after the Buffer.alloc, so only a bounds check ahead of the read catches this before
+		// the extension host tries to zero four gigabytes.
+		const centralCompressedSize = raw.indexOf(Buffer.from("hello")) + 5 + 20;
+		raw.writeUInt32LE(0xf0000000, centralCompressedSize);
+		const index = await openZipIndex(await write("huge.zip", raw));
+		await assert.rejects(() => index.readEntry("a.txt"), /past the end/);
+	});
+
+	it("rejects a stored entry whose bytes no longer match their checksum", async function () {
+		const index = await openZipIndex(
+			await write(
+				"badcrc.zip",
+				buildZip([
+					{
+						name: "a.txt",
+						data: Buffer.from("x".repeat(200)),
+						method: 0,
+						corruptData: true,
+					},
+				]),
+			),
+		);
+		// Flipping the bytes of a stored entry keeps its length, so the unpacked-length check passes
+		// and only the checksum is left to notice.
+		await assert.rejects(() => index.readEntry("a.txt"), /checksum/);
+	});
+
+	it("reads an archive whose directory is only findable through the zip64 end record", async function () {
+		const payload = Buffer.from("found through the zip64 end record");
+		const index = await openZipIndex(
+			await write(
+				"zip64eocd.zip",
+				buildZip([{ name: "a.txt", data: payload, method: 8 }], {
+					zip64Eocd: true,
+				}),
+			),
+		);
+		assert.deepStrictEqual(
+			index.entries.map((e) => e.name),
+			["a.txt"],
+		);
+		assert.deepStrictEqual(await index.readEntry("a.txt"), payload);
 	});
 
 	it("throws when the central directory is past the end of the file", async function () {

@@ -61,13 +61,14 @@ export interface ZipIndex {
 }
 
 interface ZipEntryRecord {
-	isDirectory: boolean;
 	/** Kept raw so the encryption check happens per read: one bad entry costs that entry, not the zip. */
 	flags: number;
 	compressionMethod: number;
 	compressedSize: number;
 	uncompressedSize: number;
 	localHeaderOffset: number;
+	/** The directory's checksum of the unpacked bytes. Zero when the writer left the field out. */
+	crc32: number;
 }
 
 interface CentralDirectoryLocation {
@@ -154,6 +155,18 @@ async function readEntry(
 	const handle = await fs.open(fsPath, "r");
 	let compressed: Buffer;
 	try {
+		const { size } = await handle.stat();
+		// Both reads below are bounds-checked before they happen, because a length taken from the
+		// directory reaches Buffer.alloc before the read that would have failed on it: a corrupt size
+		// field is then a multi-gigabyte zero-fill on the extension host's only thread rather than an
+		// error.
+		requireWithinFile(
+			record.localHeaderOffset,
+			LOCAL_HEADER_SIZE,
+			size,
+			name,
+			fsPath,
+		);
 		const localHeader = await readExact(
 			handle,
 			record.localHeaderOffset,
@@ -175,6 +188,7 @@ async function readEntry(
 			LOCAL_HEADER_SIZE +
 			localHeader.readUInt16LE(26) +
 			localHeader.readUInt16LE(28);
+		requireWithinFile(dataOffset, record.compressedSize, size, name, fsPath);
 		compressed = await readExact(
 			handle,
 			dataOffset,
@@ -201,7 +215,72 @@ async function readEntry(
 			`Entry ${name} in ${fsPath} unpacked to ${data.length} bytes, not the ${record.uncompressedSize} its directory entry claims.`,
 		);
 	}
+	// The length alone does not catch corruption that kept it: a stored entry whose bytes were
+	// flipped in place unpacks to exactly the promised size. A zero checksum is a writer that left
+	// the field out rather than data that really hashes to zero, so it is not compared.
+	if (record.uncompressedSize > 0 && record.crc32 !== 0) {
+		const actual = crc32(data);
+		if (actual !== record.crc32) {
+			throw new Error(
+				`Entry ${name} in ${fsPath} has checksum ${hex32(actual)}, not the ${hex32(record.crc32)} its directory entry claims.`,
+			);
+		}
+	}
 	return data;
+}
+
+function hex32(value: number): string {
+	return `0x${value.toString(16).padStart(8, "0")}`;
+}
+
+/**
+ * CRC-32 of `data`, through node's own implementation where the running version has one and a table
+ * of our own where it does not -- `zlib.crc32` only arrived in node 20.15, and the extension host
+ * runs whatever node the user's VS Code was built against.
+ */
+const nativeCrc32 = (zlib as { crc32?: (data: Buffer) => number }).crc32;
+
+function crc32(data: Buffer): number {
+	return nativeCrc32 !== undefined ? nativeCrc32(data) : crc32Table(data);
+}
+
+let crcTable: Uint32Array | undefined;
+
+/**
+ * Exported only so it can be tested: on a node that has `zlib.crc32` this never runs, and a version
+ * of it that is quietly wrong would first be noticed by a user on an older VS Code.
+ */
+export function crc32Table(data: Buffer): number {
+	if (crcTable === undefined) {
+		crcTable = new Uint32Array(256);
+		for (let i = 0; i < 256; i++) {
+			let value = i;
+			for (let bit = 0; bit < 8; bit++) {
+				value = value & 1 ? (value >>> 1) ^ 0xedb88320 : value >>> 1;
+			}
+			crcTable[i] = value >>> 0;
+		}
+	}
+	let crc = 0xffffffff;
+	for (let i = 0; i < data.length; i++) {
+		crc = crcTable[(crc ^ data[i]!) & 0xff]! ^ (crc >>> 8);
+	}
+	return (crc ^ 0xffffffff) >>> 0;
+}
+
+/** Guards a positioned read whose length came out of the archive, before it becomes an allocation. */
+function requireWithinFile(
+	position: number,
+	length: number,
+	size: number,
+	name: string,
+	fsPath: string,
+): void {
+	if (position < 0 || position + length > size) {
+		throw new Error(
+			`Entry ${name} in ${fsPath} points at ${length} bytes at ${position}, past the end of a ${size} byte file.`,
+		);
+	}
 }
 
 function inflateRaw(compressed: Buffer): Promise<Buffer> {
@@ -252,7 +331,36 @@ async function readCentralDirectoryLocation(
 	// records by the stub's length. The directory ends where the record describing it begins, so the
 	// shift is the difference between that and the offset the archive claims.
 	const delta = Math.max(0, eocdOffset - cdSize - offset);
+	// That arithmetic also comes out non-zero for an archive that is not shifted at all: a zip may
+	// legally carry an archive extra data or digital signature record between the directory and the
+	// end record, and the gap looks exactly like a stub. So the correction is a fallback, used only
+	// when the offset the archive declares does not hold a directory record.
+	if (
+		delta === 0 ||
+		cdSize === 0 ||
+		(await hasCentralSignature(handle, offset, size, fsPath))
+	) {
+		return { offset, size: cdSize, delta: 0 };
+	}
 	return { offset: offset + delta, size: cdSize, delta };
+}
+
+/** Whether a central directory record starts at `offset`; false rather than throwing if it cannot look. */
+async function hasCentralSignature(
+	handle: import("node:fs/promises").FileHandle,
+	offset: number,
+	size: number,
+	fsPath: string,
+): Promise<boolean> {
+	if (offset < 0 || offset + 4 > size) {
+		return false;
+	}
+	try {
+		const probe = await readExact(handle, offset, 4, fsPath);
+		return probe.readUInt32LE(0) === CENTRAL_HEADER_SIGNATURE;
+	} catch {
+		return false;
+	}
 }
 
 /**
@@ -382,13 +490,12 @@ function readCentralDirectory(
 			fsPath,
 		);
 
-		const isDirectory = isDirectoryName(name);
 		onEntry(
-			{ name, isDirectory },
+			{ name, isDirectory: isDirectoryName(name) },
 			{
-				isDirectory,
 				flags: centralDirectory.readUInt16LE(cursor + 8),
 				compressionMethod: centralDirectory.readUInt16LE(cursor + 10),
+				crc32: centralDirectory.readUInt32LE(cursor + 16),
 				compressedSize: sizes.compressedSize,
 				uncompressedSize: sizes.uncompressedSize,
 				localHeaderOffset: sizes.localHeaderOffset + delta,
@@ -396,6 +503,16 @@ function readCentralDirectory(
 		);
 
 		cursor = recordEnd;
+	}
+
+	// A correct walk ends on the last byte of the directory, and an archive with no entries has no
+	// directory to walk. Anything else means the bytes read are not the directory the end record
+	// pointed at, and stopping quietly here is how a wrong offset turns into an empty index that
+	// every DLC lookup then misses for as long as the index is cached.
+	if (cursor !== centralDirectory.length) {
+		throw new Error(
+			`${fsPath} has no central directory record at ${cursor} of the ${centralDirectory.length} bytes its end record points at.`,
+		);
 	}
 }
 
