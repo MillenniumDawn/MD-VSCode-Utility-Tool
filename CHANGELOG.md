@@ -8,6 +8,7 @@ v1.1.33
 - Refuse mod-relative paths that escape the mod, and ignore path settings in untrusted workspaces. Issue #168.
 - [ GFX ] Open large .gfx files without loading every texture at once or repeating a shared texture for each sprite. Issue #171.
 - Show the technology tree from a chosen country's point of view, with that country's own technology icons. Issue #256.
+- Escape mod-supplied ids before they reach the preview HTML. Issue #169.
 
 v1.1.32
 
