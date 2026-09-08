@@ -1,7 +1,8 @@
 import { TechnologyTree } from "./schema";
-import { getIndexedGfxNames } from "../../util/gfxindex";
-import { loadCountryTags } from "../../util/countrytags";
+import { getGfxIndexVersion, getIndexedGfxNames } from "../../util/gfxindex";
+import { countryTagsExpiryToken, loadCountryTags } from "../../util/countrytags";
 import { PromiseCache } from "../../util/cache";
+import { gfxIndex } from "../../util/featureflags";
 
 // The game draws a technology with the icon its country ships when there is one, falling back to
 // the generic icon otherwise. The preview offers that as a country dropdown, so it has to answer
@@ -80,12 +81,25 @@ export function buildTechnologyTagMap(
 	return result;
 }
 
+/**
+ * The map is built from two independent sources, so its expiry token has a part for each -- the same
+ * shape as `spriteCacheExpiryToken` composing a gfx file with the image behind it.
+ *
+ * The sprite namespace has no file to stat, so it reports a version counter instead. The setting is
+ * a part of the token in its own right: turning the index off makes `getIndexedGfxNames` answer `[]`
+ * without any mutation moving that counter.
+ */
+export async function technologyTagMapExpiryToken(): Promise<string> {
+	return `${gfxIndex ? getGfxIndexVersion() : "off"}|${await countryTagsExpiryToken()}`;
+}
+
 // Reads the whole sprite namespace, so it is empty when the gfx index is off -- which is also when
 // the country icons themselves would not resolve, since that is where getSpriteByGfxName looks them
 // up. One tech-tree render asks per folder and a workspace holds many previews; without a cache each
-// of them would walk the namespace again. A short life collapses those walks while staying fresh
-// enough that a new icon shows up within a couple of seconds, mirroring `equipmentArchetypeCache`
-// in loader.ts.
+// of them would walk the namespace again.
+//
+// `life` is a TTL since the last *access*, so on its own it could never expire an entry a render
+// reads every few seconds; the token above is what makes an edit reach the dropdown.
 const technologyTagMapCache = new PromiseCache<Record<string, string[]>>({
 	factory: async () => {
 		const [{ tags }, names] = await Promise.all([
@@ -94,6 +108,7 @@ const technologyTagMapCache = new PromiseCache<Record<string, string[]>>({
 		]);
 		return buildTechnologyTagMap(tags, names);
 	},
+	expireWhenChange: () => technologyTagMapExpiryToken(),
 	life: 3 * 1000,
 	maxSize: 1,
 });

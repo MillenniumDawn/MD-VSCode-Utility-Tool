@@ -33,7 +33,7 @@ export abstract class PreviewBase {
         }
         try {
             if (!this.panelInitialized) {
-                const html = await this.getContent(document);
+                const html = await this.getContent(document, dependencyChanged);
                 if (this.isDisposed) {
                     return;
                 }
@@ -150,15 +150,18 @@ export abstract class PreviewBase {
         });
     }
 
-    protected reload() {
+    // `dependencyChanged` forces the loader session the re-render runs in. A reload triggered by
+    // something other than the document -- a setting change -- does not move the document's hash, so
+    // without it a loader answers from its cache and the page repaints exactly what it had.
+    protected reload(dependencyChanged = false) {
         const document = getDocumentByUri(this.uri);
         if (document === undefined) {
             return;
         }
 
         this.panelInitialized = false;
-        void this.onDocumentChange(document);
+        void this.onDocumentChange(document, dependencyChanged);
     }
 
-    protected abstract getContent(document: vscode.TextDocument): Promise<string>;
+    protected abstract getContent(document: vscode.TextDocument, dependencyChanged?: boolean): Promise<string>;
 }

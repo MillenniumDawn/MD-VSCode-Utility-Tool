@@ -1,9 +1,24 @@
 import * as assert from "assert";
+import * as featureflags from "../util/featureflags";
 import {
 	buildTechnologyTagMap,
+	getCountryTagsByFolder,
+	technologyTagMapExpiryToken,
 	technologyTagsByFolder,
 } from "../previewdef/technology/countryicons";
 import { TechnologyTree } from "../previewdef/technology/schema";
+import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
+
+// The modules countryicons reads through. Patching the module object is how the compiled named
+// imports are intercepted, the same way gfxindex.test.ts patches fileloader.
+const gfxindex = require("../util/gfxindex") as {
+	getIndexedGfxNames: () => Promise<string[]>;
+	getGfxIndexVersion: () => number;
+};
+const countrytags = require("../util/countrytags") as {
+	loadCountryTags: () => Promise<{ tags: Set<string>; files: string[] }>;
+	countryTagsExpiryToken: () => Promise<string>;
+};
 
 // The country dropdown is built by reading the whole sprite namespace and asking which names are a
 // country's version of a technology icon. Everything that can go wrong there is a misreading of a
@@ -129,6 +144,99 @@ describe("previewdef/technology technologyTagsByFolder", () => {
 
 		assert.deepStrictEqual(technologyTagsByFolder(trees, ["armor"], tagMap), {
 			armor: [],
+		});
+	});
+});
+
+// The map is read on every tech-tree render, so `life` alone can never expire it: the token is what
+// makes an edited country_tags file or a new sprite reach the dropdown at all.
+describe("previewdef/technology technologyTagMapExpiryToken", () => {
+	const original = {
+		getIndexedGfxNames: gfxindex.getIndexedGfxNames,
+		getGfxIndexVersion: gfxindex.getGfxIndexVersion,
+		loadCountryTags: countrytags.loadCountryTags,
+		countryTagsExpiryToken: countrytags.countryTagsExpiryToken,
+	};
+
+	let version: number;
+	let tagsToken: string;
+	let names: string[];
+	let tags: Set<string>;
+
+	beforeEach(() => {
+		version = 1;
+		tagsToken = "common/country_tags/00_countries.txt@1";
+		names = ["GFX_USA_APC_1"];
+		tags = new Set(["USA", "GER"]);
+		gfxindex.getGfxIndexVersion = () => version;
+		gfxindex.getIndexedGfxNames = async () => names;
+		countrytags.countryTagsExpiryToken = async () => tagsToken;
+		countrytags.loadCountryTags = async () => ({ tags, files: [] });
+		stubVscode({
+			getConfiguration: () => ({ gfxIndex: true, technologyCountryIcons: true }),
+		});
+		featureflags.refreshFeatureFlags();
+	});
+
+	afterEach(() => {
+		Object.assign(gfxindex, {
+			getIndexedGfxNames: original.getIndexedGfxNames,
+			getGfxIndexVersion: original.getGfxIndexVersion,
+		});
+		Object.assign(countrytags, {
+			loadCountryTags: original.loadCountryTags,
+			countryTagsExpiryToken: original.countryTagsExpiryToken,
+		});
+		restoreVscodeStubs();
+		featureflags.refreshFeatureFlags();
+	});
+
+	it("moves when the sprite namespace was mutated", async () => {
+		const before = await technologyTagMapExpiryToken();
+		version = 2;
+
+		assert.notStrictEqual(await technologyTagMapExpiryToken(), before);
+	});
+
+	it("moves when a country_tags file changed", async () => {
+		const before = await technologyTagMapExpiryToken();
+		tagsToken = "common/country_tags/00_countries.txt@2";
+
+		assert.notStrictEqual(await technologyTagMapExpiryToken(), before);
+	});
+
+	it("moves when the gfx index setting is turned off", async () => {
+		// Nothing mutates the index when the setting flips, so the version stands still; without the
+		// flag in the token the map would keep answering from what it read while it was on.
+		const before = await technologyTagMapExpiryToken();
+		stubVscode({
+			getConfiguration: () => ({ gfxIndex: false, technologyCountryIcons: true }),
+		});
+		featureflags.refreshFeatureFlags();
+
+		assert.notStrictEqual(await technologyTagMapExpiryToken(), before);
+	});
+
+	it("stands still when neither source moved", async () => {
+		assert.strictEqual(
+			await technologyTagMapExpiryToken(),
+			await technologyTagMapExpiryToken(),
+		);
+	});
+
+	it("re-reads the namespace once the token moved", async () => {
+		const trees = [tree("armor", [["APC_1", ["armor"]]])];
+		assert.deepStrictEqual(await getCountryTagsByFolder(trees, ["armor"]), {
+			armor: ["USA"],
+		});
+
+		names = ["GFX_USA_APC_1", "GFX_GER_APC_1"];
+		version = 2;
+		// Past nonExpireLife (200ms) and well short of the 3s life, so a refetch can only be the token.
+		await new Promise((resolve) => setTimeout(resolve, 250));
+
+		assert.deepStrictEqual(await getCountryTagsByFolder(trees, ["armor"]), {
+			armor: ["GER", "USA"],
 		});
 	});
 });
