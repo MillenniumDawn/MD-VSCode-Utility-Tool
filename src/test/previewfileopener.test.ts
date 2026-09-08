@@ -65,4 +65,48 @@ describe("util/previewfileopener", () => {
 
 		assert.deepStrictEqual(messages, ["Open a folder first"]);
 	});
+
+	// The click target is a `file=` attribute the mod's own data wrote, so a hostile mod can point
+	// it above the workspace. Every stub here says yes -- the file exists, the folder is picked --
+	// so the only thing that can stop it is the resolver refusing the path.
+	it("neither opens nor copies a file whose path escapes the workspace", async () => {
+		const errors: string[] = [];
+		const opened: string[] = [];
+		const written: string[] = [];
+		const vscode = await import("vscode");
+		stubVscode({
+			configuration: { modFile: "", loadDlcContents: false },
+			workspaceFolders: [{ uri: vscode.Uri.file("/ws") }],
+			stat: async () => ({
+				type: vscode.FileType.File,
+				mtime: 1,
+				ctime: 0,
+				size: 10,
+			}),
+			readFile: async () => Buffer.from("secret"),
+			writeFile: async (uri: any) => {
+				written.push(String(uri.path ?? uri.fsPath ?? ""));
+			},
+			openTextDocument: async (uri: any) => {
+				opened.push(String(uri.path ?? uri.fsPath ?? uri));
+				return { uri, getText: () => "", positionAt: () => ({}) };
+			},
+			showWorkspaceFolderPick: async () => ({ uri: vscode.Uri.file("/ws") }),
+			showErrorMessage: async (message: string) => {
+				errors.push(message);
+				return undefined;
+			},
+		});
+
+		await openOrCopyHoiFile("../../../../etc/passwd", 0, 1, {
+			mustOpenFolderMessage: "Open a folder first",
+			selectFolderMessage: "Choose a folder",
+			failedToOpenMessage: (error) => `Failed: ${error}`,
+		});
+
+		assert.deepStrictEqual(opened, []);
+		assert.deepStrictEqual(written, []);
+		assert.strictEqual(errors.length, 1);
+		assert.match(errors[0], /Can't find file/);
+	});
 });

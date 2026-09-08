@@ -109,7 +109,7 @@ jobs:
             node scripts/bump-version.js --type "$RELEASE_TYPE" --bullets-file "$RUNNER_TEMP/bullets.json" >> "$GITHUB_OUTPUT"
           fi
           git add package.json CHANGELOG.md
-          version=$(node -p "require('./package.json').version")
+          version=$(node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync('package.json', 'utf8'))")
           if git diff --cached --quiet; then
             # Adopting a version can leave nothing to commit, when the branch that bumped already
             # wrote every bullet by hand. The pull request still has to exist for that version to
@@ -143,12 +143,17 @@ jobs:
           PRS: ${{ steps.bullets.outputs.prs }}
         run: |
           git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
-          ours=$(node -p "require('./package.json').version")
-          theirs=$(git show origin/main:package.json | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
+          # readVersion refuses anything but a plain three-part version, so neither of these can
+          # carry a payload into the expressions and shell commands below.
+          ours=$(node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync('package.json', 'utf8'))")
+          theirs=$(git show origin/main:package.json | node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync(0, 'utf8'))")
           # Before the merge, and not inside the conflict branch where it is used: a conflicted
           # package.json holds merge markers, and node refuses to load any module from a directory
           # whose package.json will not parse.
-          higher=$(node -p "require('./scripts/bump-version').higherVersion('$ours', '$theirs')")
+          #
+          # Through the environment rather than interpolated into the expression: a version spliced
+          # into JS source is compiled, not read.
+          higher=$(OURS="$ours" THEIRS="$theirs" node -p "require('./scripts/bump-version').higherVersion(process.env.OURS, process.env.THEIRS)")
 
           if ! git merge --no-edit origin/main; then
             # A branch that wrote its own changelog section on main collides with the section this
@@ -195,7 +200,7 @@ jobs:
           git push origin "HEAD:$RELEASE_BRANCH"
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
-          next=$(node -p "require('./package.json').version")
+          next=$(node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync('package.json', 'utf8'))")
           gh pr edit "$PR" --title "Release v$next - collects every merge until you merge it"
 
           gh pr view "$PR" --json body --jq .body > "$RUNNER_TEMP/current-body.md"
