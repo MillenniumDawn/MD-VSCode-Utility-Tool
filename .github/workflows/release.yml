@@ -41,13 +41,23 @@ jobs:
     needs: check
     if: ${{ needs.check.outputs.release == 'true' }}
     runs-on: ubuntu-latest
+    # The release itself is created with the bot's token, so nothing here writes as the workflow.
     permissions:
-      contents: write
+      contents: read
     env:
       OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
       VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
     steps:
+    # The release and its tag are published by the MD Utilities Release Bot. Unlike GITHUB_TOKEN an
+    # App token does fire `release: published`, so close-fixed-issues.yml finally runs on a release
+    # -- its own guard keeps the pre-release builds out of that.
+    - name: Mint the release bot token
+      id: app-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ secrets.RELEASE_PR_APP_ID }}
+        private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         fetch-depth: 0
@@ -96,6 +106,7 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
       with:
+        token: ${{ steps.app-token.outputs.token }}
         tag_name: ${{ needs.check.outputs.tag }}
         name: ${{ needs.check.outputs.tag }}
         generate_release_notes: true

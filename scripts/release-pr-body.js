@@ -37,7 +37,7 @@ function pullRequestList(entries) {
 	return [openMarker, ...(listed.length > 0 ? listed : ['- None yet.']), closeMarker].join('\n');
 }
 
-function intro(version, hasBumpToken) {
+function intro(version) {
 	const lines = [
 		'**This pull request stays open and updates itself.** Every merge into `main` adds its changes here, '
 			+ 'so a run of merges becomes one release instead of one release each. Nothing is published until you merge this.',
@@ -50,14 +50,6 @@ function intro(version, hasBumpToken) {
 			+ 'adds bullets for pull requests not already listed below, so an edit of yours is never overwritten.',
 		'',
 	];
-
-	if (!hasBumpToken) {
-		lines.push(
-			'No `BUMP_TOKEN` secret is set, so a push to this branch starts no run by itself. The test workflow '
-				+ 'is started against the branch instead, on every refresh, and its result is on the commit -- '
-				+ 'read it before you merge. Only the advisory version check is missing.',
-			'');
-	}
 
 	// The list ends every entry with its own blank line, and the heading that follows needs one more
 	// in front of it or Markdown runs the two together.
@@ -72,11 +64,11 @@ function trailer(entries) {
 }
 
 function render(options) {
-	const { version, entries, hasBumpToken, existing } = options;
+	const { version, entries, existing } = options;
 	const list = pullRequestList(entries);
 
 	if (!existing) {
-		return `${intro(version, hasBumpToken)}${heading}\n\n${list}\n\n${trailer(entries)}`;
+		return `${intro(version)}${heading}\n\n${list}\n\n${trailer(entries)}`;
 	}
 
 	let body = String(existing);
@@ -118,7 +110,7 @@ function readEntries(file) {
 }
 
 function parseArgs(argv) {
-	const options = { version: '', file: '', existing: '', output: '', hasBumpToken: process.env.HAS_BUMP_TOKEN === 'true' };
+	const options = { version: '', file: '', existing: '', output: '' };
 	for (let i = 0; i < argv.length; i++) {
 		const value = argv[i + 1];
 		switch (argv[i]) {
@@ -150,7 +142,6 @@ function main() {
 	const body = render({
 		version: options.version,
 		entries: readEntries(options.file),
-		hasBumpToken: options.hasBumpToken,
 		existing: options.existing && fs.existsSync(options.existing)
 			? fs.readFileSync(options.existing, 'utf8')
 			: '',
