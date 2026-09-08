@@ -275,7 +275,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
         "
         start="${trait.token?.start}"
         end="${trait.token?.end}"
-        ${file === trait.file ? '' : `file="${trait.file}"`}
+        ${file === trait.file ? '' : `file="${escapeAttr(trait.file)}"`}
         title="${escapeAttr(trait.id)}${localisationIndex ? `\n${await getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
             <div class="
                 ${styleTable.style('effect-host', () => `

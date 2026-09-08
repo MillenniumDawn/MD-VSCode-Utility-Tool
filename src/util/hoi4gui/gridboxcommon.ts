@@ -2,6 +2,7 @@ import { HOIPartial } from "../../hoiformat/schema";
 import { ParentInfo, calculateBBox, normalizeNumberLike, RenderCommonOptions, getWidth, getHeight } from "./common";
 import { NumberSize, NumberPosition } from "../common";
 import { StyleTable } from '../styletable';
+import { escapeAttr } from '../escape';
 import { GridBoxType, Format, Background } from "../../hoiformat/gui";
 import { map, flatMap } from "lodash";
 
@@ -103,8 +104,8 @@ export async function renderGridBoxCommon(
         const children = options.onRenderItem ? await options.onRenderItem(item, childrenParentInfo) : '';
         const position = getLeftUpPosition(item.gridX, item.gridY, format, slotSize, size);
         return `<div
-            data-gridbox-item="${item.id}" data-gridbox-x="${item.gridX}" data-gridbox-y="${item.gridY}"
-            ${item.htmlId ? `id="${item.htmlId}"` : ''}
+            data-gridbox-item="${escapeAttr(item.id)}" data-gridbox-x="${item.gridX}" data-gridbox-y="${item.gridY}"
+            ${item.htmlId ? `id="${escapeAttr(item.htmlId)}"` : ''}
             class="
                 ${item.classNames ? item.classNames : ''}
                 ${options.styleTable.style('positionAbsolute', () => `position: absolute;`)}
@@ -124,7 +125,7 @@ export async function renderGridBoxCommon(
         await renderControlConnections(options.items, format, slotSize, size, options.onRenderLineBox, options.styleTable, childrenParentInfo);
 
     return `<div
-    ${options.id ? `id="${options.id}"` : ''}
+    ${options.id ? `id="${escapeAttr(options.id)}"` : ''}
     start="${gridBox._token?.start}"
     end="${gridBox._token?.end}"
     class="
@@ -185,7 +186,7 @@ function renderConnectionBox(
 }
 
 export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, style: string, type: GridBoxConnectionType, format: Format['_name'], gridSize: NumberSize, classNames: string | undefined, styleTable: StyleTable, cornerPosition: number = 1.5, fromId: string = '', toId: string = ''): string {
-    const diag = ` data-conn-from="${fromId}" data-conn-to="${toId}" data-conn-type="${type}" data-conn-style="${style.replace(/"/g, '&quot;')}"`;
+    const diag = ` data-conn-from="${escapeAttr(fromId)}" data-conn-to="${escapeAttr(toId)}" data-conn-type="${type}" data-conn-style="${style.replace(/"/g, '&quot;')}"`;
     if (a.y === b.y) {
         return renderConnectionBox(
             diag, classNames, styleTable,

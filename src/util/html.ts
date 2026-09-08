@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { contextContainer } from '../context';
 import { StyleTable } from './styletable';
 import { forceError, randomString } from './common';
+import { htmlEscape } from './escape';
 import { localize } from './i18n';
 
 export interface DynamicScript {
@@ -177,31 +178,4 @@ export function errorPage(webview: vscode.Webview, uri: vscode.Uri, cause: unkno
     return html(webview, errorPageContent(cause), [previewedFileUriScript(uri)], []);
 }
 
-// One pass with a lookup table rather than a chain of seven .replace() calls, each of which
-// scanned the whole string and built another one. Escaping the ampersand first mattered when the
-// replacements ran in sequence -- otherwise a '<' turned into '&lt;' and its '&' was then escaped
-// again -- and a single pass removes the ordering hazard along with the six extra scans.
-const htmlEscapes: Record<string, string> = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;",
-    "\n": "&#10;",
-    " ": "&nbsp;",
-};
-const htmlEscapePattern = /[&<>"'\n ]/g;
-
-export function htmlEscape(unsafe: string): string {
-    return unsafe.replace(htmlEscapePattern, c => htmlEscapes[c] as string);
-}
-
-// Attribute-context escape for mod-supplied identifiers in preview HTML. Unlike
-// htmlEscape it leaves spaces intact so in-page filter / id matching keeps
-// working, while still neutralising a "-breakout from a crafted identifier.
-// Centralised here so every contentbuilder shares the same escaping.
-const attrEscapePattern = /[&"<>]/g;
-
-export function escapeAttr(value: string): string {
-    return value.replace(attrEscapePattern, c => htmlEscapes[c] as string);
-}
+export { htmlEscape, escapeAttr } from './escape';

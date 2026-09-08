@@ -311,7 +311,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
         <label for="focuses" class="${styleTable.style('focusesLabel', () => `margin-right:5px`)}">${localize('focustree.focustree', 'Focus tree: ')}</label>
         <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
             <select id="focuses" class="select multiple-select" tabindex="0" role="combobox">
-                ${focusTrees.map((focus, i) => `<option value="${i}">${focus.id}</option>`).join('')}
+                ${focusTrees.map((focus, i) => `<option value="${i}">${htmlEscape(focus.id)}</option>`).join('')}
             </select>
         </div>`;
 
@@ -520,7 +520,7 @@ async function renderInlayWindow(inlay: FocusTree["inlayWindows"][number], style
         left: ${inlay.position.x}px;
         top: ${inlay.position.y}px;
         z-index: 5;
-    `)}" start="${inlay.token?.start}" end="${inlay.token?.end}" file="${inlay.file}">${content}</div>`;
+    `)}" start="${inlay.token?.start}" end="${inlay.token?.end}" file="${escapeAttr(inlay.file)}">${content}</div>`;
 }
 
 async function renderInlayOverrideChild<T extends keyof RenderChildTypeMap>(
@@ -637,7 +637,7 @@ async function renderFocus(
         `
     );
 
-    let textContent = focus.id;
+    let textContent = htmlEscape(focus.id);
     if (localisationIndex){
         let localizedText = await getLocalisedTextQuick(focus.id);
         if (localizedText === focus.id || !localizedText){
@@ -665,7 +665,7 @@ async function renderFocus(
     "
     start="${focus.token?.start}"
     end="${focus.token?.end}"
-    ${file === focus.file ? '' : `file="${focus.file}"`}
+    ${file === focus.file ? '' : `file="${escapeAttr(focus.file)}"`}
     title="${escapeAttr(focus.id)}\n({{position}})\n${escapeAttr(localize('focustree.tracehint', 'Shift+click: show only this focus\'s prerequisite lines'))}">
         <div
         class="{{iconClass}} ${styleTable.style('focus-icon-layer', () => `
