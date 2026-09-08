@@ -1284,33 +1284,20 @@ describe('scripts/release-pr-body', function () {
 
     describe('render', function () {
         it('writes a body a human and the refresh step can both read', function () {
-            const body = releasePrBody.render({ version: '1.1.24', entries, hasBumpToken: true });
+            const body = releasePrBody.render({ version: '1.1.24', entries });
             assert.ok(body.includes('Merging it publishes `v1.1.24`.'));
             assert.ok(body.includes('### Pull requests in this release'));
             assert.ok(body.includes('- #109 Always log focus parse failures'));
             assert.ok(body.includes('Included pull requests: 109,110'));
-            assert.ok(!body.includes('BUMP_TOKEN'));
         });
 
-        it('explains the missing token only when there is none', function () {
-            const body = releasePrBody.render({ version: '1.1.24', entries, hasBumpToken: false });
-            assert.ok(body.includes('No `BUMP_TOKEN` secret is set'));
-            // The tests do run without the token -- the workflow starts them itself -- so the
-            // note has to say that rather than send the reader off to reopen the pull request.
-            assert.ok(body.includes('test workflow is started against the branch'));
-            assert.ok(!body.includes('Close and reopen'));
-        });
-
-        it('leaves a blank line before the heading, with the warning and without', function () {
-            for (const hasBumpToken of [true, false]) {
-                const body = releasePrBody.render({ version: '1.1.24', entries, hasBumpToken });
-                assert.ok(body.includes('\n\n### Pull requests in this release\n\n'),
-                    `run the two together without a token: ${hasBumpToken}`);
-            }
+        it('leaves a blank line before the heading', function () {
+            const body = releasePrBody.render({ version: '1.1.24', entries });
+            assert.ok(body.includes('\n\n### Pull requests in this release\n\n'));
         });
 
         it('replaces only the list when refreshing, keeping hand-written prose', function () {
-            const existing = releasePrBody.render({ version: '1.1.24', entries, hasBumpToken: true })
+            const existing = releasePrBody.render({ version: '1.1.24', entries })
                 + '\nA note someone typed here.\n';
             const refreshed = releasePrBody.render({
                 version: '1.1.25',
@@ -1325,7 +1312,7 @@ describe('scripts/release-pr-body', function () {
         });
 
         it('moves the version the body promises, so it agrees with the title', function () {
-            const existing = releasePrBody.render({ version: '1.1.24', entries, hasBumpToken: true });
+            const existing = releasePrBody.render({ version: '1.1.24', entries });
             const refreshed = releasePrBody.render({ version: '1.1.25', entries, existing });
 
             assert.ok(refreshed.includes('Merging it publishes `v1.1.25`.'));

@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- Releases and pre-releases on GitHub are now published by the Millennium Dawn release bot rather than a generic actions account.
 - There is now a pre-release channel. Every push to `main` is built and published to the Marketplace and Open VSX automatically, so "Switch to Pre-Release Version" in the extension view gets you the newest build without waiting for a release.
 
 v1.1.32

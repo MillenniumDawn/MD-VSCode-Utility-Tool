@@ -27,17 +27,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      # Starting the Test workflow against the release branch, which is the only way the release
-      # pull request gets checked when there is no BUMP_TOKEN.
-      actions: write
 
     env:
-      # A personal access token makes the pull request run the test and version workflows itself,
-      # against the merge commit. A pull request opened with GITHUB_TOKEN triggers no workflow by
-      # design, so on the fallback the last step starts the tests against the branch instead --
-      # only the advisory version check is then missing, and the body says so.
-      GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
-      HAS_BUMP_TOKEN: ${{ secrets.BUMP_TOKEN != '' }}
       RELEASE_BRANCH: release/version-bump
       RELEASE_TYPE: ${{ inputs.release_type || 'patch' }}
       # Writes the changelog bullets in the wording CHANGELOG.md uses. Optional: without the key the
@@ -46,10 +37,27 @@ jobs:
       OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
 
     steps:
+      # Everything here is done as the MD Utilities Release Bot rather than as the workflow itself.
+      # A pull request opened with GITHUB_TOKEN starts no run by design, so the release used to
+      # reach the marketplace unchecked; a pull request opened with an App installation token does
+      # start one, against the merge commit, and unlike a personal access token it leaves no person
+      # as the author of the release.
+      - name: Mint the release bot token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.RELEASE_PR_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
+      # A job-level `env` cannot read the `steps` context, so the token every `gh` step below wants
+      # is exported once here instead. The action masks it, so it stays redacted in the log.
+      - name: Use the bot token for gh
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: echo "GH_TOKEN=$TOKEN" >> "$GITHUB_ENV"
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
-          token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
       - name: Decide whether a release pull request is needed
         id: state
         run: node scripts/release-check.js ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
@@ -79,11 +87,16 @@ jobs:
         run: |
           number=$(gh pr list --head "$RELEASE_BRANCH" --state open --json number --jq '.[0].number // ""')
           echo "number=$number" >> "$GITHUB_OUTPUT"
+      # The bot's own account, read from the token that was just minted rather than written out
+      # here, so renaming the App moves the commit author with it.
       - name: Configure git
         if: ${{ steps.state.outputs.bump == 'true' }}
+        env:
+          SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          id=$(gh api "users/$SLUG%5Bbot%5D" --jq .id)
+          git config user.name "$SLUG[bot]"
+          git config user.email "$id+$SLUG[bot]@users.noreply.github.com"
 
       # --- No release pull request yet: bump, seed the changelog, open one. ---
       - name: Bump the version and seed the changelog
@@ -209,15 +222,6 @@ jobs:
           gh pr edit "$PR" --body-file "$RUNNER_TEMP/updated-body.md"
           gh pr comment "$PR" --body "Caught up with \`main\`, now releasing \`v$next\`. Included pull requests: $PRS"
 
-      # --- Whichever path ran, test what it pushed. ---
-      - name: Run the tests on the release branch
-        # The release is what nobody has tested: every branch in it was green on its own, but the
-        # collection of them never runs anywhere. A pull request opened and pushed with
-        # GITHUB_TOKEN starts no run by design, so this one reached the marketplace with no check
-        # on it at all. Dispatching is the exception to that rule and works with the default
-        # token, so the tests stop depending on a personal access token being configured.
-        #
-        # With BUMP_TOKEN set the push already starts a run, and against the merge commit rather
-        # than the branch head, which is the better test -- so this only fills in for the fallback.
-        if: ${{ env.HAS_BUMP_TOKEN != 'true' && (steps.bump.outputs.pushed == 'true' || steps.refresh.outputs.pushed == 'true') }}
-        run: gh workflow run test.yml --ref "$RELEASE_BRANCH"
+      # Nothing dispatches the tests any more: the release is what nobody has tested -- every branch
+      # in it was green on its own, but the collection of them runs nowhere else -- and the bot's
+      # push starts the Test and Version workflows against the merge commit by itself.
