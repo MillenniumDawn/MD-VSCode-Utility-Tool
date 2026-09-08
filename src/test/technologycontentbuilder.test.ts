@@ -9,6 +9,7 @@ import {
 	LoaderRenderResult,
 } from "../previewdef/loaderpreview";
 import * as featureflags from "../util/featureflags";
+import { contextContainer } from "../context";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
 // renderTechnologyFile returns the in-place update parts { html, update } on success and a plain html
@@ -23,10 +24,14 @@ const webview = {
 } as unknown as vscode.Webview;
 const uri = vscode.Uri.file("/tmp/common/technologies/test.txt");
 
-function loaderFor(folders: string[]): any {
+function loaderFor(
+	folders: string[],
+	countryTagsByFolder?: Record<string, string[]>,
+): any {
 	return {
 		load: async () => ({
 			result: {
+				countryTagsByFolder,
 				technologyTrees: folders.map((folder) => ({
 					startTechnology: `${folder}_start`,
 					folder,
@@ -285,11 +290,30 @@ describe("previewdef/technology country selector", () => {
 	afterEach(() => {
 		restoreVscodeStubs();
 		featureflags.refreshFeatureFlags();
+		contextContainer.current = null;
 	});
 
 	function withCountryIcons(on: boolean): void {
 		stubVscode({ getConfiguration: () => ({ technologyCountryIcons: on }) });
 		featureflags.refreshFeatureFlags();
+	}
+
+	// The picked country lives in globalState, which is where getSelectedCountry reads it back from.
+	function withStoredCountry(tag: string): void {
+		const store: Record<string, unknown> = { "previewOption.technology.country": tag };
+		contextContainer.current = {
+			globalState: {
+				get: (key: string) => store[key],
+				update: (key: string, value: unknown) => {
+					store[key] = value;
+					return Promise.resolve();
+				},
+			},
+		} as unknown as vscode.ExtensionContext;
+	}
+
+	function countryOf(rendered: LoaderRenderResult): unknown {
+		return (rendered.update!.data as { country: unknown }).country;
 	}
 
 	it("is left out of the toolbar when the setting is off", async () => {
@@ -329,5 +353,56 @@ describe("previewdef/technology country selector", () => {
 		assert.ok(rendered.html.includes("window.techCountries = "));
 		assert.ok(rendered.html.includes("window.techCountry = "));
 		assert.ok((rendered.update!.data as { countries: unknown }).countries);
+	});
+
+	// The full html injects window.techCountry, so an in-place update that leaves it out lets the page
+	// keep listing a country the host stopped drawing for.
+	it("carries the country the tree was drawn for in the update", async () => {
+		withCountryIcons(true);
+		withStoredCountry("USA");
+		const rendered = (await renderTechnologyFile(
+			loaderFor(["artillery"], { artillery: ["GER", "USA"] }),
+			uri,
+			webview,
+		)) as LoaderRenderResult;
+
+		assert.strictEqual(countryOf(rendered), "USA");
+	});
+
+	it("reports the generic tree when the stored country was dropped", async () => {
+		withCountryIcons(true);
+		withStoredCountry("USA");
+		// No folder in this file has USA art, so the tree is drawn generic; the page has to hear that or
+		// its selector goes on saying USA.
+		const rendered = (await renderTechnologyFile(
+			loaderFor(["artillery"], { artillery: ["GER"] }),
+			uri,
+			webview,
+		)) as LoaderRenderResult;
+
+		assert.strictEqual(countryOf(rendered), "");
+	});
+
+	it("serializeUpdate differs when only the country changed", async () => {
+		// Otherwise the payload hashes equal and the in-place update is skipped, leaving the dropdown
+		// moved and the tree not.
+		withCountryIcons(true);
+		const tags = { artillery: ["GER", "USA"] };
+
+		withStoredCountry("USA");
+		const a = (await renderTechnologyFile(
+			loaderFor(["artillery"], tags),
+			uri,
+			webview,
+		)) as LoaderRenderResult;
+
+		withStoredCountry("GER");
+		const b = (await renderTechnologyFile(
+			loaderFor(["artillery"], tags),
+			uri,
+			webview,
+		)) as LoaderRenderResult;
+
+		assert.notStrictEqual(serializeUpdate(a.update!), serializeUpdate(b.update!));
 	});
 });

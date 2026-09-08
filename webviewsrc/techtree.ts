@@ -112,6 +112,13 @@ window.addEventListener('message', tryRun(function(event: MessageEvent) {
         (window as any).techCountries = data.countries;
     }
 
+    // The host decides which country the tree was drawn for, and it drops a stored tag this file has
+    // no art for; follow it rather than keep listing a country the tree no longer uses. Read with
+    // typeof, not truthiness: '' is a real value here -- the generic tree.
+    if (typeof data.country === 'string') {
+        (window as any).techCountry = data.country;
+    }
+
     // Refresh the folder <option> list and keep the current selection if that folder still exists;
     // otherwise fall back to the persisted folder, then the first option. The <select> element and
     // its change listener are untouched, so nothing rebinds.

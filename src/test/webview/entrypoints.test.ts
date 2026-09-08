@@ -487,6 +487,42 @@ describe("webview entrypoints", () => {
 		});
 	});
 
+	it("follows the country the host says it drew", () => {
+		// The host drops a stored tag no folder in the file has art for. Without hearing that, the page
+		// re-adds it and the selector claims a country the tree is drawn generic for.
+		installTechCountryShell(techCountries, "FRA");
+		vscode.setState({ folder: "techfolder_a" });
+		withQuietScrolling(() => run(techtree, "load", new Event("load")));
+		assert.deepStrictEqual(countryOptions(), ["", "GER", "USA", "FRA"]);
+
+		runMessage(techtree, {
+			type: "updateBody",
+			data: { folders: ["a"], countries: techCountries, country: "" },
+		});
+
+		assert.deepStrictEqual(countryOptions(), ["", "GER", "USA"]);
+		assert.strictEqual(
+			(document.getElementById("tech-country") as HTMLSelectElement).value,
+			"",
+		);
+	});
+
+	it("keeps the reader's choice when an update carries no country", () => {
+		installTechCountryShell(techCountries, "USA");
+		vscode.setState({ folder: "techfolder_a" });
+		withQuietScrolling(() => run(techtree, "load", new Event("load")));
+
+		runMessage(techtree, {
+			type: "updateBody",
+			data: { folders: ["a"], countries: techCountries },
+		});
+
+		assert.strictEqual(
+			(document.getElementById("tech-country") as HTMLSelectElement).value,
+			"USA",
+		);
+	});
+
 	it("leaves the page alone when the country setting is off", () => {
 		installTechShell();
 		vscode.setState({ folder: "techfolder_a" });

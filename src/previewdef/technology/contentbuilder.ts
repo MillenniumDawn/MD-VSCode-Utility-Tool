@@ -87,7 +87,12 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
         // unchanged edit hashes equal and the LoaderPreview skips.
         return {
             html: fullHtml,
-            update: { styleCss: styleTable.toRawCss(), data: { contentHtml, folderOptionsHtml, folders, countries } },
+            // `country` is the country the tree was actually drawn for, which is not always the
+            // stored one: getSelectedCountry drops a tag no folder in this file has art for. The page
+            // cannot know that on its own, and updateCountryOptions would re-add the dropped tag and
+            // leave the selector claiming a country the tree is not drawn for. Carrying it is also
+            // what keeps a country-only change from hashing equal and being skipped.
+            update: { styleCss: styleTable.toRawCss(), data: { contentHtml, folderOptionsHtml, folders, countries, country: country ?? '' } },
         };
 
     } catch (e) {
