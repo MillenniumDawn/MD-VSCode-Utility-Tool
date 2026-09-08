@@ -37,8 +37,8 @@ describe('previewdef/updateablepreview extension points', () => {
             return this.sendPartialUpdate(document, dependencyChanged);
         }
 
-        public runFull(document: vscode.TextDocument): Promise<string> {
-            return this.getContent(document);
+        public runFull(document: vscode.TextDocument, dependencyChanged = false): Promise<string> {
+            return this.getContent(document, dependencyChanged);
         }
 
         public repost(): void {
@@ -120,6 +120,15 @@ describe('previewdef/updateablepreview extension points', () => {
         assert.deepStrictEqual(h.preview.lastOptions, { partial: false, dependencyChanged: false });
         await h.preview.run(document, true);
         assert.deepStrictEqual(h.preview.lastOptions, { partial: true, dependencyChanged: true });
+    });
+
+    // A reload caused by something other than the document -- a setting change -- has to force the
+    // loader session too: the document's hash did not move, so an unforced load answers from cache.
+    it('lets a full render be forced', async () => {
+        const h = makePreview(true);
+        h.preview.queueRender(updateRender('S1'));
+        await h.preview.runFull(document, true);
+        assert.deepStrictEqual(h.preview.lastOptions, { partial: false, dependencyChanged: true });
     });
 
     it('skips a null render without touching the webview or the bookkeeping', async () => {

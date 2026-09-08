@@ -3,6 +3,8 @@ import * as vscode from "vscode";
 import * as featureflags from "../util/featureflags";
 import {
 	getGfxContainerFile,
+	getGfxIndexVersion,
+	getIndexedGfxNames,
 	registerGfxIndex,
 	__resetGfxIndexForTests,
 	__testHandlers,
@@ -142,6 +144,18 @@ describe("util/gfxindex lazy build", function () {
 		assert.strictEqual(listFilesCallCount, 0);
 	});
 
+	// Reading the names is how the technology preview finds out which countries ship their own icons:
+	// it has to look at the whole namespace, not resolve a name it already knows.
+	it("hands back the indexed sprite names, and nothing at all when the flag is off", async function () {
+		assert.deepStrictEqual(await getIndexedGfxNames(), ["GFX_my_sprite"]);
+		assert.strictEqual(listFilesCallCount, 2);
+
+		stubVscode({ getConfiguration: () => ({ gfxIndex: false }) });
+		featureflags.refreshFeatureFlags();
+
+		assert.deepStrictEqual(await getIndexedGfxNames(), []);
+	});
+
 	it("builds the index exactly once for concurrent first lookups, then serves later lookups from it", async function () {
 		const [first, second] = await Promise.all([
 			getGfxContainerFile("GFX_my_sprite"),
@@ -188,6 +202,73 @@ describe("util/gfxindex lazy build", function () {
 			"interface/sprite.gfx",
 		);
 		assert.strictEqual(listFilesCallCount, 4);
+	});
+
+	// The sprite namespace has no file to stat, so a cache built from it -- the technology preview's
+	// country list -- watches this counter instead. It has to move for every mutation, or that cache
+	// serves what it read before the edit forever.
+	describe("version counter", function () {
+		it("moves when the index is built and stands still for a lookup", async function () {
+			const before = getGfxIndexVersion();
+
+			assert.deepStrictEqual(await getIndexedGfxNames(), ["GFX_my_sprite"]);
+			const afterBuild = getGfxIndexVersion();
+			assert.ok(
+				afterBuild > before,
+				`expected the build to move the version, got ${before} -> ${afterBuild}`,
+			);
+
+			await getIndexedGfxNames();
+			assert.strictEqual(getGfxIndexVersion(), afterBuild);
+		});
+
+		it("moves when a file's sprites are removed", async function () {
+			await getIndexedGfxNames();
+			const afterBuild = getGfxIndexVersion();
+
+			__testHandlers.onDeleteFiles({
+				files: [gfxFileUri("interface/sprite.gfx")],
+			});
+			await waitForAsyncTasks();
+
+			// Both halves indexed the same file here, so the global copy of the name survives; what this
+			// pins is that the workspace removal is announced at all.
+			assert.ok(
+				getGfxIndexVersion() > afterBuild,
+				"expected a delete to move the version",
+			);
+		});
+
+		it("moves when an edited file is re-indexed", async function () {
+			await getIndexedGfxNames();
+			const afterBuild = getGfxIndexVersion();
+
+			(
+				fileloader as typeof fileloader & {
+					readFileFromModOrHOI4: FileloaderModule["readFileFromModOrHOI4"];
+				}
+			).readFileFromModOrHOI4 = async () => [
+				Buffer.from(`spriteTypes = {
+	spriteType = {
+		name = "GFX_my_other_sprite"
+		texturefile = "does-not-exist.dds"
+	}
+}`),
+				{} as unknown,
+			];
+
+			__testHandlers.onCreateFiles({
+				files: [gfxFileUri("interface/sprite.gfx")],
+			});
+			await waitForAsyncTasks();
+			await waitForAsyncTasks();
+
+			assert.ok(
+				getGfxIndexVersion() > afterBuild,
+				"expected a re-index to move the version",
+			);
+			assert.ok((await getIndexedGfxNames()).includes("GFX_my_other_sprite"));
+		});
 	});
 
 	describe("incremental events vs. an in-flight build", function () {

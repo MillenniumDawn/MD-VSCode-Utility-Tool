@@ -271,7 +271,10 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		this.panel.webview.html = html;
 	}
 
-	protected async getContent(document: vscode.TextDocument): Promise<string> {
+	protected async getContent(
+		document: vscode.TextDocument,
+		dependencyChanged = false,
+	): Promise<string> {
 		if (this.isDisposed) {
 			return this.latestHtml ?? this.getLoadingShellHtml();
 		}
@@ -279,7 +282,7 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 			document,
 			document.uri,
 			this.panel.webview,
-			{ partial: false, dependencyChanged: false },
+			{ partial: false, dependencyChanged },
 		);
 		if (this.isDisposed) {
 			return this.latestHtml ?? this.getLoadingShellHtml();

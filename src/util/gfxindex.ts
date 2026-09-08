@@ -27,6 +27,19 @@ let workspaceGfxIndex: Record<string, GfxIndexItem | undefined> = {};
 // Reverse map for O(1) removal: file path -> sprite names from that file
 const workspaceGfxFileToKeys = new Map<string, string[]>();
 
+// The sprite namespace has no file of its own for a cache built from it to stat, so every mutation
+// of either half moves this instead. Bumped *after* the write everywhere: a bump before it would let
+// a reader store the new version alongside the old data and then never refetch it.
+let gfxIndexVersion = 0;
+
+function bumpGfxIndexVersion(): void {
+	gfxIndexVersion++;
+}
+
+/** Changes whenever getIndexedGfxNames or getGfxContainerFile may answer differently. */
+export function getGfxIndexVersion(): number {
+	return gfxIndexVersion;
+}
 
 // Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
@@ -62,6 +75,24 @@ export async function getGfxContainerFile(
 
 	await ensureIndexBuilt().catch(() => undefined);
 	return (globalGfxIndex[gfxName] ?? workspaceGfxIndex[gfxName])?.file;
+}
+
+/**
+ * Every sprite name the index holds, from both halves. For a caller that has to look at the names
+ * themselves rather than resolve one it already knows -- listing which countries ship art for a
+ * technology means reading the whole namespace once, not probing every tag against every id.
+ * Empty when the index is off, like `getGfxContainerFile`.
+ */
+export async function getIndexedGfxNames(): Promise<string[]> {
+	if (!gfxIndex) {
+		return [];
+	}
+
+	await ensureIndexBuilt().catch(() => undefined);
+	return uniq([
+		...Object.keys(globalGfxIndex),
+		...Object.keys(workspaceGfxIndex),
+	]);
 }
 
 export async function getGfxContainerFiles(
@@ -150,6 +181,7 @@ async function buildGfxIndexHalf(
 						}
 					}
 				}
+				bumpGfxIndexVersion();
 			},
 			parseFile: async (file) => {
 				await fillGfxItems(
@@ -159,6 +191,7 @@ async function buildGfxIndexHalf(
 					options,
 					estimatedSize,
 				);
+				bumpGfxIndexVersion();
 			},
 			serialize: () => ({
 				index: targetIndex,
@@ -236,6 +269,7 @@ const watchers = createIndexWatchers({
 		reset: () => {
 			workspaceGfxIndex = {};
 			workspaceGfxFileToKeys.clear();
+			bumpGfxIndexVersion();
 		},
 		build: buildWorkspaceGfxIndex,
 		message: localize(
@@ -263,6 +297,7 @@ function removeWorkspaceGfxFile(relative: string): void {
 		}
 	}
 	workspaceGfxFileToKeys.delete(relative);
+	bumpGfxIndexVersion();
 }
 
 /**
@@ -303,6 +338,7 @@ async function reindexWorkspaceGfxFile(file: vscode.Uri): Promise<void> {
 	if (keys && keys.length > 0) {
 		workspaceGfxFileToKeys.set(relative, keys);
 	}
+	bumpGfxIndexVersion();
 }
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
 export function __resetGfxIndexForTests(): void {
@@ -312,6 +348,7 @@ export function __resetGfxIndexForTests(): void {
 	}
 	workspaceGfxIndex = {};
 	workspaceGfxFileToKeys.clear();
+	bumpGfxIndexVersion();
 }
 
 // Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
