@@ -12,6 +12,7 @@ v1.1.33
 - There is now a pre-release channel. Every push to `main` is built and published to the Marketplace and Open VSX automatically, so "Switch to Pre-Release Version" in the extension view gets you the newest build without waiting for a release.
 - [ CI ] Publish a pre-release build to both registries on every push to main.
 - Releases and pre-releases on GitHub are now published by the Millennium Dawn release bot rather than a generic actions account.
+- [ CI ] Publish releases and pre-releases as the Millennium Dawn release bot.
 
 v1.1.32
 
