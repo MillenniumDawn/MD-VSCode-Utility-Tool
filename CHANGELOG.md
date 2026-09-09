@@ -3,6 +3,8 @@ Unreleased
   Bugfixes:
 
 - The extension is now actually published to Open VSX. Publishing there quietly skipped itself when its access token was missing, and the release still reported success, so nothing ever reached the registry.
+- [ CI ] Fail the build when the test sources do not type-check. The step that compiles them reported success no matter what the compiler said, so a broken build could be released. Issue #173.
+- [ CI ] Run the test suite on Windows. `npm test` found no test files there and stopped before the first one.
 
 v1.1.33
 

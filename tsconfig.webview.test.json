@@ -13,6 +13,7 @@
 		"incremental": true,
 		"tsBuildInfoFile": "./out-test-webview/.tsbuildinfo",
 		"strict": true,
+		"noEmitOnError": true,
 		"noFallthroughCasesInSwitch": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,

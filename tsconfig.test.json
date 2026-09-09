@@ -12,6 +12,7 @@
 		"incremental": true,
 		"tsBuildInfoFile": "./out-test/.tsbuildinfo",
 		"strict": true,
+		"noEmitOnError": true,
 		"noFallthroughCasesInSwitch": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
