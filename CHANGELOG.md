@@ -2,6 +2,10 @@ Unreleased
 
 v1.1.34
 
+  Functionality:
+
+- [ CI ] Actually publish to Open VSX, and give each publish target its own job.
+
   Bugfixes:
 
 - The extension is now actually published to Open VSX. Publishing there quietly skipped itself when its access token was missing, and the release still reported success, so nothing ever reached the registry.
