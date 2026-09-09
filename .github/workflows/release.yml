@@ -4,16 +4,22 @@ on:
       - 'main'
   workflow_dispatch:
 
-name: Release
+name: Publish
 
+# Both channels live in one workflow so a push to main is one run in the Actions list rather than
+# two unrelated ones, and so the job graph names which registry broke instead of hiding it in a
+# step log.
+#
 # One publish at a time. Two of these overlapping would race for the same tag and the same
-# marketplace version.
+# marketplace version. A superseded pre-release build used to be cancelled rather than queued, which
+# a release must never be, so the two now share the release's rule: a run waits, it is not dropped.
 concurrency:
-  group: release
+  group: publish
   cancel-in-progress: false
 
 jobs:
   check:
+    name: Check version
     runs-on: ubuntu-latest
     # Reading which pull request a commit came from is how "did this merge the release pull
     # request?" is answered.
@@ -22,6 +28,7 @@ jobs:
       pull-requests: read
     outputs:
       tag: ${{ steps.check.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
       release: ${{ steps.check.outputs.release }}
     steps:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -37,30 +44,16 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: node scripts/release-check.js ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
 
-  publish:
-    needs: check
-    if: ${{ needs.check.outputs.release == 'true' }}
+  # Every branch in main was green on its own, but what goes out is installed by real users, so it
+  # is checked again here. Once, for both channels: a release push and a pre-release push run the
+  # same suite over the same commit.
+  verify:
+    name: Lint & test
     runs-on: ubuntu-latest
-    # The release itself is created with the bot's token, so nothing here writes as the workflow.
     permissions:
       contents: read
-    env:
-      OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
     steps:
-    # The release and its tag are published by the MD Utilities Release Bot. Unlike GITHUB_TOKEN an
-    # App token does fire `release: published`, so close-fixed-issues.yml finally runs on a release
-    # -- its own guard keeps the pre-release builds out of that.
-    - name: Mint the release bot token
-      id: app-token
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-      with:
-        app-id: ${{ secrets.RELEASE_PR_APP_ID }}
-        private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      with:
-        fetch-depth: 0
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
         node-version: 24
@@ -71,6 +64,187 @@ jobs:
       run: npm run lint
     - name: Test
       run: npm test
+
+  # --- Pre-release: every push to main that is not itself a release. ---
+
+  # Skipped on the release push. That commit carries a version and a changelog and nothing else, so
+  # publishing it to the pre-release channel as well would ship the same code twice.
+  build-pre-release:
+    name: "Pre-release: Build"
+    needs: [check, verify]
+    if: ${{ needs.check.outputs.release != 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      vsix: ${{ steps.find_vsix.outputs.vsix }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version: 24
+        cache: 'npm'
+    - name: Install dependencies
+      run: npm ci
+    # Writes the version into package.json in this checkout only. Nothing is committed, and
+    # CHANGELOG.md is deliberately left alone -- a pre-release is not a release.
+    - name: Resolve the pre-release version
+      id: version
+      run: node scripts/prerelease-version.js --apply
+    - name: Package the pre-release VSIX
+      run: npm run package:pre-release
+    - name: Find VSIX
+      id: find_vsix
+      run: |
+        vsix=$(ls *.vsix 2>/dev/null | head -1)
+        if [ -z "$vsix" ]; then
+          echo "::error::No .vsix file found after packaging"
+          exit 1
+        fi
+        echo "vsix=$vsix" >> "$GITHUB_OUTPUT"
+    # The three publish jobs below run on their own runners, so the bytes have to travel as an
+    # artifact. All three get the same ones, which is what "the same build is on both registries"
+    # means.
+    - name: Upload the VSIX
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: pre-release-vsix
+        path: ${{ steps.find_vsix.outputs.vsix }}
+        if-no-files-found: error
+        retention-days: 5
+
+  pre-release-marketplace:
+    name: "Pre-release: VS Code Marketplace"
+    needs: build-pre-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      VSIX: ${{ needs.build-pre-release.outputs.vsix }}
+    steps:
+    # vsce is a dev dependency, so this job needs the tree even though it publishes a .vsix that
+    # was built elsewhere. The other two publish jobs need neither a checkout nor node.
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version: 24
+        cache: 'npm'
+    - name: Install dependencies
+      run: npm ci
+    - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      with:
+        name: pre-release-vsix
+    - name: Check the Marketplace token
+      run: |
+        if [ -z "$VSCE_PAT" ]; then
+          echo "::error::VSCE_PAT is not set, so nothing can reach the VS Code Marketplace. Create a"
+          echo "::error::personal access token with Marketplace: Manage scope at"
+          echo "::error::https://dev.azure.com and add it as the repository secret VSCE_PAT."
+          exit 1
+        fi
+    - name: Publish to VS Code Marketplace
+      run: |
+        set -o pipefail
+        out=$(npx --no-install @vscode/vsce publish --packagePath "$VSIX" --pre-release --pat "$VSCE_PAT" 2>&1 | tee /dev/stderr) || {
+          if echo "$out" | grep -qi "already exists"; then
+            echo "::warning::Version already exists on the Marketplace; treating as already published."
+            exit 0
+          fi
+          exit 1
+        }
+
+  # No preRelease input: ovsx answers "Ignoring option '--pre-release' for prepackaged extension"
+  # and reads the flag out of the manifest instead, where `vsce package --pre-release` already put
+  # it. extensionFile is the input that takes a built .vsix; packagePath is a directory to package.
+  pre-release-open-vsx:
+    name: "Pre-release: Open VSX"
+    needs: build-pre-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+    steps:
+    - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      with:
+        name: pre-release-vsix
+    # A missing token used to skip the publish step and leave the job green, which is how the
+    # extension went months without ever reaching Open VSX while every run said success. Nothing
+    # here is optional any more: no token is a failure, and it says what to do about it.
+    - name: Check the Open VSX token
+      run: |
+        if [ -z "$OPEN_VSX_TOKEN" ]; then
+          echo "::error::OPEN_VSX_TOKEN is not set, so nothing can reach Open VSX. Create an access"
+          echo "::error::token at https://open-vsx.org/user-settings/tokens and add it as the"
+          echo "::error::repository secret OPEN_VSX_TOKEN. The publisher namespace has to exist"
+          echo "::error::first: npx ovsx create-namespace MilleniumDawnModTeam -p <token>."
+          exit 1
+        fi
+    - name: Publish to Open VSX Registry
+      uses: HaaLeo/publish-vscode-extension@ca5561daa085dee804bf9f37fe0165785a9b14db # v2
+      with:
+        extensionFile: ${{ needs.build-pre-release.outputs.vsix }}
+        pat: ${{ env.OPEN_VSX_TOKEN }}
+        registryUrl: https://open-vsx.org
+
+  pre-release-github:
+    name: "Pre-release: GitHub prerelease"
+    needs: build-pre-release
+    runs-on: ubuntu-latest
+    # The prerelease is created with the bot's token, so nothing here writes as the workflow.
+    permissions:
+      contents: read
+    steps:
+    # Same identity as a release: what the automation publishes is published by the bot.
+    - name: Mint the release bot token
+      id: app-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ secrets.RELEASE_PR_APP_ID }}
+        private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
+    - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      with:
+        name: pre-release-vsix
+    # generate_release_notes would draw its notes from the previous stable tag, which is a whole
+    # release behind. The commit this was built from is the useful thing to say instead.
+    - name: Create GitHub prerelease
+      uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
+      with:
+        token: ${{ steps.app-token.outputs.token }}
+        tag_name: ${{ needs.build-pre-release.outputs.tag }}
+        name: Pre-release ${{ needs.build-pre-release.outputs.version }}
+        target_commitish: ${{ github.sha }}
+        prerelease: true
+        body: |
+          Pre-release build of ${{ github.sha }}.
+
+          The same build is on the VS Code Marketplace and Open VSX on the pre-release channel, so
+          "Switch to Pre-Release Version" in the extension view gets you this without downloading
+          anything. The `.vsix` below is for installing it by hand.
+        files: ${{ needs.build-pre-release.outputs.vsix }}
+
+  # --- Release: only the push that merged the release pull request. ---
+
+  build-release:
+    name: "Release: Build"
+    needs: [check, verify]
+    if: ${{ needs.check.outputs.release == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      vsix: ${{ steps.find_vsix.outputs.vsix }}
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version: 24
+        cache: 'npm'
+    - name: Install dependencies
+      run: npm ci
     - name: Package VSIX
       run: npm run package
     - name: Find VSIX
@@ -82,27 +256,110 @@ jobs:
           exit 1
         fi
         echo "vsix=$vsix" >> "$GITHUB_OUTPUT"
+    - name: Upload the VSIX
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: release-vsix
+        path: ${{ steps.find_vsix.outputs.vsix }}
+        if-no-files-found: error
+        retention-days: 5
+
+  # The three below are deliberately siblings rather than steps in a row. Open VSX used to be a step
+  # after the Marketplace one, so a Marketplace outage took Open VSX and the GitHub release down with
+  # it; now one registry being unreachable costs exactly that registry, and re-running a single
+  # failed job republishes only that target.
+  release-marketplace:
+    name: "Release: VS Code Marketplace"
+    needs: build-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      VSIX: ${{ needs.build-release.outputs.vsix }}
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version: 24
+        cache: 'npm'
+    - name: Install dependencies
+      run: npm ci
+    - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      with:
+        name: release-vsix
+    - name: Check the Marketplace token
+      run: |
+        if [ -z "$VSCE_PAT" ]; then
+          echo "::error::VSCE_PAT is not set, so nothing can reach the VS Code Marketplace. Create a"
+          echo "::error::personal access token with Marketplace: Manage scope at"
+          echo "::error::https://dev.azure.com and add it as the repository secret VSCE_PAT."
+          exit 1
+        fi
+    # "already exists" is a success, not a failure: it is what a re-run of this one job answers once
+    # the version is up, which is what makes retrying a half-finished release safe.
     - name: Publish to VS Code Marketplace
-      if: ${{ env.VSCE_PAT != '' }}
       run: |
         set -o pipefail
-        out=$(npx --no-install @vscode/vsce publish --packagePath "${{ steps.find_vsix.outputs.vsix }}" --pat "$VSCE_PAT" 2>&1 | tee /dev/stderr) || {
+        out=$(npx --no-install @vscode/vsce publish --packagePath "$VSIX" --pat "$VSCE_PAT" 2>&1 | tee /dev/stderr) || {
           if echo "$out" | grep -qi "already exists"; then
             echo "::warning::Version already exists on the Marketplace; treating as already published."
             exit 0
           fi
           exit 1
         }
-    # extensionFile, not packagePath: packagePath is a directory the action packages itself, and
-    # pointing it at a .vsix made it read <file>.vsix/package.json and fail. Both registries now get
-    # the same bytes the Marketplace step published.
+
+  # extensionFile, not packagePath: packagePath is a directory the action packages itself, and
+  # pointing it at a .vsix made it read <file>.vsix/package.json and fail. Both registries get the
+  # same bytes, out of the same artifact.
+  release-open-vsx:
+    name: "Release: Open VSX"
+    needs: build-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+    steps:
+    - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      with:
+        name: release-vsix
+    - name: Check the Open VSX token
+      run: |
+        if [ -z "$OPEN_VSX_TOKEN" ]; then
+          echo "::error::OPEN_VSX_TOKEN is not set, so nothing can reach Open VSX. Create an access"
+          echo "::error::token at https://open-vsx.org/user-settings/tokens and add it as the"
+          echo "::error::repository secret OPEN_VSX_TOKEN. The publisher namespace has to exist"
+          echo "::error::first: npx ovsx create-namespace MilleniumDawnModTeam -p <token>."
+          exit 1
+        fi
     - name: Publish to Open VSX Registry
-      if: ${{ env.OPEN_VSX_TOKEN != '' }}
       uses: HaaLeo/publish-vscode-extension@ca5561daa085dee804bf9f37fe0165785a9b14db # v2
       with:
-        extensionFile: ${{ steps.find_vsix.outputs.vsix }}
+        extensionFile: ${{ needs.build-release.outputs.vsix }}
         pat: ${{ env.OPEN_VSX_TOKEN }}
         registryUrl: https://open-vsx.org
+
+  release-github:
+    name: "Release: GitHub release"
+    needs: [check, build-release]
+    runs-on: ubuntu-latest
+    # The release itself is created with the bot's token, so nothing here writes as the workflow.
+    permissions:
+      contents: read
+    steps:
+    # The release and its tag are published by the MD Utilities Release Bot. Unlike GITHUB_TOKEN an
+    # App token does fire `release: published`, so close-fixed-issues.yml finally runs on a release
+    # -- its own guard keeps the pre-release builds out of that.
+    - name: Mint the release bot token
+      id: app-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ secrets.RELEASE_PR_APP_ID }}
+        private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
+    - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      with:
+        name: release-vsix
     - name: Create GitHub Release
       uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
       with:
@@ -110,4 +367,106 @@ jobs:
         tag_name: ${{ needs.check.outputs.tag }}
         name: ${{ needs.check.outputs.tag }}
         generate_release_notes: true
-        files: ${{ steps.find_vsix.outputs.vsix }}
+        files: ${{ needs.build-release.outputs.vsix }}
+
+  # A failed release used to be a red run and nothing else. Now it leaves a branch and a draft pull
+  # request behind, so fixing it is a checkout rather than an archaeology dig through the log.
+  #
+  # Only a release gets one. A pre-release runs on every push to main and the next push supersedes
+  # it, so a pull request per failed pre-release would be noise.
+  release-failed:
+    name: "Release: Open a fix pull request"
+    needs: [check, verify, build-release, release-marketplace, release-open-vsx, release-github]
+    # `failure` only, and never `cancelled`: a run someone stopped by hand is not a problem to fix.
+    # The join is how a job id with a hyphen in it stays out of the expression -- `needs.*.result`
+    # covers exactly the jobs listed above.
+    if: ${{ always() && needs.check.outputs.release == 'true' && contains(join(needs.*.result, ','), 'failure') }}
+    runs-on: ubuntu-latest
+    # Everything below writes as the bot, through GH_TOKEN and the checkout token.
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.check.outputs.tag }}
+      BRANCH: fix/release-v${{ needs.check.outputs.version }}
+    steps:
+    - name: Mint the release bot token
+      id: app-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ secrets.RELEASE_PR_APP_ID }}
+        private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
+    # A job-level `env` cannot read the `steps` context, so the token every `gh` step below wants is
+    # exported once here instead. The action masks it, so it stays redacted in the log.
+    - name: Use the bot token for gh
+      env:
+        TOKEN: ${{ steps.app-token.outputs.token }}
+      run: echo "GH_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      with:
+        fetch-depth: 0
+        token: ${{ steps.app-token.outputs.token }}
+    - name: Configure git
+      env:
+        SLUG: ${{ steps.app-token.outputs.app-slug }}
+      run: |
+        id=$(gh api "users/$SLUG%5Bbot%5D" --jq .id)
+        git config user.name "${SLUG}[bot]"
+        git config user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
+    # Which jobs failed, and a link straight to each log. The run's own job list is the honest
+    # answer -- it names the ones that succeeded too, so it is clear what already reached a
+    # registry. The pull request job itself and the skipped pre-release jobs are left out.
+    - name: Write the failure summary
+      id: summary
+      run: |
+        set -euo pipefail
+        body="$RUNNER_TEMP/release-failure.md"
+        {
+          echo "Publishing **$TAG** failed."
+          echo
+          echo "This branch is here to fix it on. It carries one empty commit and nothing else, so"
+          echo "there is nothing to clean up -- push the fix, mark this ready and merge it, and the"
+          echo "release pull request after it carries the version out again."
+          echo
+          echo "### This run"
+          echo
+          # Tolerated, not required: a rate-limited job list is no reason to withhold the branch.
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --paginate \
+            --jq '.jobs[]
+              | select(.name != "Release: Open a fix pull request")
+              | select(.conclusion != "skipped")
+              | "- **\(.conclusion // "running")** — [\(.name)](\(.html_url))"' \
+            || echo "- The job list could not be read; open the run below."
+          echo
+          echo "A target that says \`success\` is already published. Re-running just the failed job"
+          echo "from [the run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+          echo "republishes only that one; the Marketplace step treats a version that is already up"
+          echo "as done rather than as an error."
+        } > "$body"
+        echo "body=$body" >> "$GITHUB_OUTPUT"
+    - name: Open or update the fix pull request
+      env:
+        BODY: ${{ steps.summary.outputs.body }}
+      run: |
+        set -euo pipefail
+        title="Release $TAG failed to publish"
+
+        # A branch that is already there belongs to whoever is fixing this version, and their
+        # commits are not ours to force over. The new run gets reported on their pull request
+        # instead.
+        if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+          number=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh pr comment "$number" --body-file "$BODY"
+            echo "::notice::$title -- reported on pull request #$number."
+            exit 0
+          fi
+        else
+          git checkout -b "$BRANCH" "$GITHUB_SHA"
+          git commit --allow-empty -m "$title"
+          git push origin "HEAD:$BRANCH"
+        fi
+
+        # No labels: a label is what decides where a seeded changelog bullet lands, and this pull
+        # request is a workspace, not a change. Whatever fix lands on it labels itself.
+        url=$(gh pr create --draft --base main --head "$BRANCH" --title "$title" --body-file "$BODY")
+        echo "::notice::$title -- opened $url."
