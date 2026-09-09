@@ -36,6 +36,15 @@ export function setPreviewOption(key: string, value: boolean): void {
 	vscode.postMessage({ command: "setPreviewOption", key, value });
 }
 
+// What a bare wheel does, from the `mdHoi4Utilities.previewWheel` setting the host renders into
+// every preview. "auto" reads the gesture -- see wheelIsFromMouse below -- and "zoom"/"scroll" are
+// the reader overriding it, which is the way out for a device the reading gets wrong. Anything else,
+// including the setting never having been rendered, is "auto".
+function wheelMode(): string {
+	const value = (window as any).previewWheel;
+	return value === "zoom" || value === "scroll" ? value : "auto";
+}
+
 export function scrollToState() {
 	const state = getState();
 	const xOffset = state.xOffset || 0;
@@ -117,6 +126,52 @@ let activeZoom: ((delta: number, pageX: number, pageY: number) => void) | undefi
 let activeZoomTop = 0;
 let zoomListenersRegistered = false;
 
+// A mouse notch and a two-finger trackpad swipe arrive as the same `wheel` event and want opposite
+// things: the notch is the only zoom gesture a mouse has, while the swipe is the laptop moving the
+// camera. Nothing in the platform tells them apart -- PointerEvent.pointerType says "mouse" for
+// both -- so the event itself is read, on `wheel` only and never on a pointer move.
+//
+// A webview is always Chromium, which reports a detent as a whole number of 120ths in the legacy
+// wheelDelta. That unit is the detent itself, so it survives the OS "lines per notch" setting that
+// deltaY does not, and a trackpad's small ramping deltas almost never land on it. The rule is
+// biased towards the trackpad: a bare wheel zooms only on positive mouse evidence, because reading
+// a mouse as a trackpad only costs it the shortcut -- ctrl+wheel, the buttons, the keys and the
+// setting all still zoom -- while reading a trackpad as a mouse zooms in the middle of a pan, which
+// is the whole bug. The cost of that bias is a high-resolution free-spin mouse, whose deltas are
+// not detents; `previewWheel: "zoom"` is what that reader sets.
+const notchUnit = 120;
+// A trackpad streams events far closer together than detents arrive.
+const burstGap = 100;
+
+let lastWheelWasMouse = false;
+let lastWheelTime = 0;
+
+function wheelIsFromMouse(e: WheelEvent): boolean {
+	const now = e.timeStamp || Date.now();
+	const inBurst = now - lastWheelTime < burstGap;
+	lastWheelTime = now;
+
+	// Line and page deltas only ever come from a wheel.
+	if (e.deltaMode !== 0) {
+		lastWheelWasMouse = true;
+		return true;
+	}
+
+	const wheelDeltaY = (e as unknown as { wheelDeltaY?: number }).wheelDeltaY;
+	const looksLikeDetent =
+		typeof wheelDeltaY === "number" &&
+		wheelDeltaY !== 0 &&
+		Math.abs(wheelDeltaY) % notchUnit === 0 &&
+		e.deltaX === 0 &&
+		Number.isInteger(e.deltaY);
+
+	// Mid-burst the previous verdict stands. A fast flick throws the occasional delta that is a
+	// whole number of detents, and one zoom step in the middle of a pan is exactly what this is
+	// preventing; a wheel spun quickly is a burst of detents, so it sticks to its own verdict.
+	lastWheelWasMouse = inBurst ? lastWheelWasMouse : looksLikeDetent;
+	return lastWheelWasMouse;
+}
+
 // A zoom step from a control rather than from the pointer. The wheel keeps the point under the
 // cursor still; a button has no cursor to keep still, so it holds the middle of the canvas -- the
 // visible area below the toolbar strip, which is what the preview's yOffset measures.
@@ -142,6 +197,10 @@ export function enableZoom(
 	contentElement.style.transformOrigin = "0 0";
 
 	activeZoomTop = yOffset;
+	// A new render is a fresh start for the wheel reading: whatever the last preview was scrolled
+	// with says nothing about this one.
+	lastWheelWasMouse = false;
+	lastWheelTime = 0;
 	activeZoom = function (delta: number, pageX: number, pageY: number) {
 		const oldScale = scale;
 		// Rounded to whole percents: the 0.2 steps do not land on exact tenths -- 1 - 0.2 - 0.2 is
@@ -182,11 +241,19 @@ export function enableZoom(
 				return;
 			}
 
-			// A bare wheel is the reader moving the camera -- a two-finger swipe on a trackpad, or a
-			// mouse wheel -- so it is left to scroll the document, which is what panning already is
-			// here. Zoom is the modified gesture, as it is everywhere else: ctrl/cmd + wheel, which
-			// is also what a trackpad pinch sends.
-			if (!e.ctrlKey && !e.metaKey) {
+			const mode = wheelMode();
+			// Read every event, modified or not, so the burst timing stays honest across a pinch.
+			const fromMouse = wheelIsFromMouse(e);
+
+			// ctrl/cmd + wheel zooms on any device -- it is also what a trackpad pinch sends. A
+			// bare wheel depends on what sent it: a mouse notch zooms, since that is the only zoom
+			// gesture a mouse has, while a two-finger swipe is left to scroll the document, which
+			// is what panning already is here.
+			if (
+				!e.ctrlKey &&
+				!e.metaKey &&
+				(mode === "scroll" || (mode === "auto" && !fromMouse))
+			) {
 				return;
 			}
 

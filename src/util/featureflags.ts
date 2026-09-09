@@ -22,6 +22,8 @@ export let technologyCountryIcons = getConfiguration().technologyCountryIcons;
 // often is pure overhead. It lives here because this is what already refreshes on a settings
 // change, so there is no second thing to keep in step.
 export let previewLocalisation = getConfiguration().previewLocalisation;
+// Read once per preview build, in html(), and rendered into the page as window.previewWheel.
+export let previewWheel = getConfiguration().previewWheel;
 
 export function refreshFeatureFlags(): void {
     const config = getConfiguration();
@@ -36,6 +38,7 @@ export function refreshFeatureFlags(): void {
     localisationIndex = config.localisationIndex;
     technologyCountryIcons = config.technologyCountryIcons;
     previewLocalisation = config.previewLocalisation;
+    previewWheel = config.previewWheel;
 }
 
 export function registerFeatureFlags(): vscode.Disposable {
