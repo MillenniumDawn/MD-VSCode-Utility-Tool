@@ -42,8 +42,8 @@ Everything the automation publishes is published by **MD Utilities Release Bot**
 App owned by the `MillenniumDawn` organisation and installed on this repository: it opens
 and pushes the release pull request, and it authors the GitHub release and every
 pre-release. Its two secrets are **required** — `RELEASE_PR_APP_ID` and
-`RELEASE_PR_APP_PRIVATE_KEY` — and without them the release, pre-release and release
-pull request workflows fail at their first step. The App needs four repository
+`RELEASE_PR_APP_PRIVATE_KEY` — and without them the publish and release pull request
+workflows fail at their first step. The App needs four repository
 permissions: Metadata read, Contents read & write, Pull requests read & write, and
 Workflows read & write. The last one is not optional: the release branch merges `main`,
 so its push carries any change to `.github/workflows/**`, and GitHub rejects such a push
@@ -65,14 +65,41 @@ A branch that does bump `package.json` no longer ships the moment it is merged: 
 release pull request takes that version over and publishes it from there, so the batching
 holds either way.
 
-Only one other thing publishes, and it is not a release.
-[.github/workflows/pre-release.yml](.github/workflows/pre-release.yml) builds every push
-to `main` and publishes it to both registries on the **pre-release** channel, plus a
-GitHub prerelease with the `.vsix` attached. It touches nothing in the repository: the
-version it packages is written into its own checkout and thrown away, and `CHANGELOG.md`
-is never part of it. Pre-release versions take the odd minor above the stable line with
-the run number as the patch — `1.3.57` while stable is `1.1.x` — which is why a minor bump
-steps `1.1 -> 1.2 -> 1.4`, over the pre-release line rather than onto it.
+### The Publish workflow
+
+Both channels come out of [.github/workflows/release.yml](.github/workflows/release.yml),
+in one run per push to `main`, because a release that is a black box is a release nobody
+can debug. `check` decides whether this push is the release; `verify` lints and tests it
+once; then a build job packages the `.vsix` and hands it to **three sibling jobs — VS Code
+Marketplace, Open VSX, GitHub release — that publish in parallel**. They are siblings on
+purpose: as steps in a row, a Marketplace outage took Open VSX and the GitHub release down
+with it, and re-running meant re-running all three. Now the Actions graph names what broke
+and re-running one job republishes one target.
+
+**A registry with no token fails.** It used to skip and leave the job green, which is how
+the extension reached nobody on Open VSX for months while every run said success. `VSCE_PAT`
+and `OPEN_VSX_TOKEN` are both required, and the error says what to create and where. Open VSX
+also needs the publisher namespace to exist before the first publish
+(`npx ovsx create-namespace <publisher> -p <token>`, once).
+
+**A failed release leaves somewhere to fix it.** When any `Release:` job fails, the bot
+pushes `fix/release-v<version>` — the failing commit plus one empty commit — and opens a
+**draft pull request** whose body lists every job in the run with a link to its log, so what
+already reached a registry is visible without opening anything. Nothing to clean up: push the
+fix, mark it ready, merge. If the branch already exists, someone is on it, and the new run is
+reported as a comment rather than force-pushed over. A failed *pre-release* gets none of this
+— it runs on every push and the next one supersedes it.
+
+The pre-release half builds every push to `main` and publishes it to both registries on the
+**pre-release** channel, plus a GitHub prerelease with the `.vsix` attached. It is skipped on
+the push that is a release, which otherwise shipped the same code twice. It touches nothing in
+the repository: the version it packages is written into its own checkout and thrown away, and
+`CHANGELOG.md` is never part of it. Pre-release versions take the odd minor above the stable
+line with the run number as the patch — `1.3.57` while stable is `1.1.x` — which is why a
+minor bump steps `1.1 -> 1.2 -> 1.4`, over the pre-release line rather than onto it.
+
+One publish at a time, and never cancelled: a run that may be halfway through a registry
+waits for the one ahead of it rather than being dropped.
 
 The version check on a pull request is advisory and quiet: leaving the version alone
 passes without a comment. It only speaks up when a branch touched the version and got it
