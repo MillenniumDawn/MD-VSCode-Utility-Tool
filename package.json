@@ -122,6 +122,22 @@
 						"default": false,
 						"description": "Add a country selector to the technology tree preview and prefer that country's icons (GFX_<TAG>_<technology>) over the generic ones, the way the game does. Needs the GFX index to list the countries."
 					},
+					"mdHoi4Utilities.previewWheel": {
+						"title": "Previews: what the mouse wheel does",
+						"type": "string",
+						"default": "auto",
+						"enum": [
+							"auto",
+							"zoom",
+							"scroll"
+						],
+						"enumDescriptions": [
+							"Zoom when the wheel is a mouse wheel, scroll when it is a two-finger trackpad swipe.",
+							"The wheel always zooms.",
+							"The wheel always scrolls; zoom with Ctrl+wheel, the zoom buttons or the +/- keys."
+						],
+						"description": "What a plain mouse wheel does in the focus tree, technology, MIO, event and decision previews. Ctrl+wheel, the zoom buttons and the +/- keys zoom whatever this is set to. Reopen the preview after changing this."
+					},
 					"mdHoi4Utilities.worldMapRetainContextWhenHidden": {
 						"title": "World map: keep webview in memory when hidden",
 						"type": "boolean",

@@ -8,6 +8,7 @@ v1.1.34
 
   Bugfixes:
 
+- A plain mouse wheel zooms the previews again. Zoom moved to Ctrl+wheel so that a two-finger trackpad swipe could scroll the canvas, which left desktop users with no wheel zoom at all; the wheel now scrolls only when the gesture came from a trackpad, and the new `mdHoi4Utilities.previewWheel` setting forces it either way. Ctrl+wheel, the zoom buttons and the +/- keys are unchanged. Issue #250.
 - The extension is now actually published to Open VSX. Publishing there quietly skipped itself when its access token was missing, and the release still reported success, so nothing ever reached the registry.
 - [ CI ] Fail the build when the test sources do not type-check. The step that compiles them reported success no matter what the compiler said, so a broken build could be released. Issue #173.
 - [ CI ] Run the test suite on Windows. `npm test` found no test files there and stopped before the first one.
