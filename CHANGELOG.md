@@ -1,5 +1,12 @@
 Unreleased
 
+v1.1.34
+
+  Functionality:
+
+- [ CI ] Actually publish to Open VSX, and give each publish target its own job.
+- A plain mouse wheel zooms the previews again.
+
   Bugfixes:
 
 - A plain mouse wheel zooms the previews again. Zoom moved to Ctrl+wheel so that a two-finger trackpad swipe could scroll the canvas, which left desktop users with no wheel zoom at all; the wheel now scrolls only when the gesture came from a trackpad, and the new `mdHoi4Utilities.previewWheel` setting forces it either way. Ctrl+wheel, the zoom buttons and the +/- keys are unchanged. Issue #250.
