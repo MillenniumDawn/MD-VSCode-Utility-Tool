@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- New extension icon: the Millennium Dawn logo with "HOI4 Utilities", shown on the Marketplace, Open VSX and the README.
+
 v1.1.34
 
   Functionality:

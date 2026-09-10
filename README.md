@@ -1,3 +1,5 @@
+<p align="center"><img src="icon.png" width="160" alt="Millennium Dawn – HOI4 Utilities"></p>
+
 # HOI4 Utilities 2026
 
 This extension add preview tools to Hearts of Iron 4 coding.
