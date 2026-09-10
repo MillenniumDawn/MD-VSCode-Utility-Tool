@@ -128,8 +128,20 @@ describe('webview/util/common', function () {
             return div;
         }
 
+        // A trackpad swipe: jsdom implements no wheelDeltaY, which is exactly what a trackpad's
+        // deltas look like to the classifier -- nothing that is a whole number of detents.
         const wheel = (init: Record<string, unknown>) => {
             const e = new (window as any).WheelEvent('wheel', { cancelable: true, ...init });
+            window.dispatchEvent(e);
+            return e;
+        };
+
+        // A mouse notch: the legacy wheelDeltaY a real wheel reports, which jsdom does not, so it
+        // is defined on the event by hand before the dispatch.
+        const mouseWheel = (init: Record<string, unknown> = {}) => {
+            const { wheelDeltaY = -120, ...rest } = init as { wheelDeltaY?: number };
+            const e = new (window as any).WheelEvent('wheel', { cancelable: true, deltaY: 100, ...rest });
+            Object.defineProperty(e, 'wheelDeltaY', { value: wheelDeltaY });
             window.dispatchEvent(e);
             return e;
         };
@@ -150,17 +162,79 @@ describe('webview/util/common', function () {
             // One state record is shared by the whole mocha run, and currentScale() reads it in
             // every later file, so the zoom these tests leave behind has to be put back.
             setState({ scale: 1 });
+            delete (window as any).previewWheel;
         });
 
         it('sets initial transform on the element', function () {
             assert.ok(zoomable().style.transform.includes('scale'));
         });
 
-        it('leaves a plain wheel to scroll the page, so a trackpad pans', function () {
+        it('leaves a plain trackpad wheel to scroll the page, so a two-finger swipe pans', function () {
             const div = zoomable();
             const e = wheel({ deltaY: 120 });
             assert.strictEqual(e.defaultPrevented, false, 'the page must be free to scroll');
             assert.strictEqual(div.style.transform, 'scale(1)');
+        });
+
+        it('leaves a fractional, sideways trackpad wheel to scroll', function () {
+            const div = zoomable();
+            const e = mouseWheel({ deltaY: 4.5, deltaX: 2, wheelDeltaY: -13.5 });
+            assert.strictEqual(e.defaultPrevented, false);
+            assert.strictEqual(div.style.transform, 'scale(1)');
+        });
+
+        it('zooms on a plain mouse wheel, which is a desktop reader\'s only zoom gesture', function () {
+            const div = zoomable();
+            const e = mouseWheel({ pageX: 100, pageY: 100 });
+            assert.strictEqual(e.defaultPrevented, true);
+            assert.strictEqual(div.style.transform, 'scale(0.8)');
+            assert.ok(scrolledTo, 'the zoom anchors by scrolling');
+        });
+
+        it('zooms on a line-mode wheel, which only a mouse sends', function () {
+            const div = zoomable();
+            wheel({ deltaY: 3, deltaMode: 1, pageX: 0, pageY: 0 });
+            assert.strictEqual(div.style.transform, 'scale(0.8)');
+        });
+
+        it('keeps scrolling through a trackpad burst that throws a detent-sized delta', function () {
+            const div = zoomable();
+            wheel({ deltaY: 6 });
+            const e = mouseWheel({ deltaY: 100 });
+            assert.strictEqual(e.defaultPrevented, false, 'still the same swipe');
+            assert.strictEqual(div.style.transform, 'scale(1)');
+        });
+
+        it('scrolls for a high-resolution wheel, whose deltas are not detents', function () {
+            const div = zoomable();
+            mouseWheel({ deltaY: 33, wheelDeltaY: -40 });
+            assert.strictEqual(div.style.transform, 'scale(1)');
+        });
+
+        it('always zooms when the reader set previewWheel to zoom', function () {
+            const div = zoomable();
+            (window as any).previewWheel = 'zoom';
+            const e = wheel({ deltaY: 120, pageX: 0, pageY: 0 });
+            assert.strictEqual(e.defaultPrevented, true);
+            assert.strictEqual(div.style.transform, 'scale(0.8)');
+        });
+
+        it('never zooms on a bare wheel when the reader set previewWheel to scroll', function () {
+            const div = zoomable();
+            (window as any).previewWheel = 'scroll';
+            const e = mouseWheel({ pageX: 0, pageY: 0 });
+            assert.strictEqual(e.defaultPrevented, false);
+            assert.strictEqual(div.style.transform, 'scale(1)');
+
+            wheel({ deltaY: 120, ctrlKey: true, pageX: 0, pageY: 0 });
+            assert.strictEqual(div.style.transform, 'scale(0.8)', 'ctrl+wheel still zooms');
+        });
+
+        it('reads the gesture when previewWheel is unset or not one of the three', function () {
+            const div = zoomable();
+            (window as any).previewWheel = 'sideways';
+            mouseWheel({ pageX: 0, pageY: 0 });
+            assert.strictEqual(div.style.transform, 'scale(0.8)');
         });
 
         it('zooms on ctrl+wheel', function () {

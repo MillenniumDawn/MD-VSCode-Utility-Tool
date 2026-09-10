@@ -20,6 +20,7 @@ declare module 'vscode' {
             readonly technologyGfxRoots: string[];
             readonly technologyCountryIcons: boolean;
             readonly worldMapRetainContextWhenHidden: boolean;
+            readonly previewWheel: 'auto' | 'zoom' | 'scroll';
         };
     }
 }

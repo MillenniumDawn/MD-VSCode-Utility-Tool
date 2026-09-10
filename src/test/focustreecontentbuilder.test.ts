@@ -191,6 +191,20 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(html.includes("focustreecontent"));
 	});
 
+	it("buildFocusTreeHtml renders the wheel setting the zoom reads", async () => {
+		// html() puts it into every preview, so the webview's shared zoom code has it without each
+		// contentbuilder carrying a copy. The stubbed configuration has no value for it, which is
+		// the case the "auto" fallback is there for.
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([minimalFocusTree()]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		assert.ok(html.includes('window.previewWheel = "auto";'));
+	});
+
 	it("buildFocusTreeHtml renders the warnings panel as a list, not a textarea", async () => {
 		const payload = await buildFocusTreePayload(
 			loaderWithTrees([minimalFocusTree()]),
