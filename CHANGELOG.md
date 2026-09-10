@@ -5,6 +5,7 @@ v1.1.34
   Functionality:
 
 - [ CI ] Actually publish to Open VSX, and give each publish target its own job.
+- A plain mouse wheel zooms the previews again.
 
   Bugfixes:
 
