@@ -17,6 +17,7 @@ const mergeChangelog = require('../../../scripts/merge-changelog');
 const issueVersionTriage = require('../../../scripts/issue-version-triage');
 const closeFixedIssues = require('../../../scripts/close-fixed-issues');
 const prereleaseVersion = require('../../../scripts/prerelease-version');
+const publishMarketplace = require('../../../scripts/publish-marketplace');
 
 describe('scripts/bump-version', function () {
     describe('nextVersion', function () {
@@ -904,6 +905,50 @@ describe('scripts/release-check', function () {
             });
             assert.strictEqual(result.bump, true);
         });
+
+        // The fix pull request for a failed publish is merged after the tag and the GitHub release
+        // may already be there -- the Marketplace was the one that failed -- so the tag existing
+        // must not turn its merge into "nothing to release" or a fresh release pull request.
+        it('publishes again when the fix pull request for a failed release is merged and the tag exists', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.35',
+                tagExists: true,
+                fromFixBranch: true,
+                changedFiles: ['.github/workflows/release.yml'],
+            });
+            assert.strictEqual(result.release, true);
+            assert.strictEqual(result.bump, false);
+            assert.strictEqual(result.adopt, false);
+            assert.strictEqual(result.version, '1.1.35');
+            assert.ok(result.notice.includes('again'));
+        });
+
+        it('publishes when the fix pull request is merged and the tag was never written', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.35',
+                tagExists: false,
+                fromReleaseBranch: false,
+                fromFixBranch: true,
+                changedFiles: [],
+            });
+            assert.strictEqual(result.release, true);
+            assert.strictEqual(result.bump, false);
+            assert.strictEqual(result.adopt, false);
+        });
+    });
+
+    describe('isFixBranch', function () {
+        it('recognises the branch release.yml opens for a failed publish', function () {
+            assert.strictEqual(releaseCheck.isFixBranch('fix/release-v1.1.35'), true);
+        });
+
+        it('rejects everything that only looks like it', function () {
+            assert.strictEqual(releaseCheck.isFixBranch('fix/release-v1'), false);
+            assert.strictEqual(releaseCheck.isFixBranch('fix/release-v1.1.35-pre.1'), false);
+            assert.strictEqual(releaseCheck.isFixBranch('release/version-bump'), false);
+            assert.strictEqual(releaseCheck.isFixBranch('fix/something'), false);
+            assert.strictEqual(releaseCheck.isFixBranch(undefined), false);
+        });
     });
 
     describe('lastReleaseTag', function () {
@@ -961,6 +1006,60 @@ describe('scripts/release-check', function () {
             const options = releaseCheck.parseArgs(['--repo', 'a/b', '--sha', 'abc123']);
             assert.strictEqual(options.repo, 'a/b');
             assert.strictEqual(options.sha, 'abc123');
+        });
+    });
+});
+
+describe('scripts/publish-marketplace', function () {
+    describe('isTransient', function () {
+        it('retries the gallery timeout that failed a release', function () {
+            assert.strictEqual(publishMarketplace.isTransient('Publishing \'x v1.1.35\'...\nError: Request timeout: /_apis/gallery'), true);
+        });
+
+        it('retries network errors and gateway failures', function () {
+            assert.strictEqual(publishMarketplace.isTransient('Error: read ECONNRESET'), true);
+            assert.strictEqual(publishMarketplace.isTransient('Error: connect ETIMEDOUT 1.2.3.4:443'), true);
+            assert.strictEqual(publishMarketplace.isTransient('Error: socket hang up'), true);
+            assert.strictEqual(publishMarketplace.isTransient('Failed request: 502 Bad Gateway'), true);
+            assert.strictEqual(publishMarketplace.isTransient('Error: Failed Request: Service Unavailable(503)'), true);
+            assert.strictEqual(publishMarketplace.isTransient('Error: Failed Request: (504)'), true);
+            assert.strictEqual(publishMarketplace.isTransient('status code: 503'), true);
+        });
+
+        it('does not retry a failure that would only fail again', function () {
+            assert.strictEqual(publishMarketplace.isTransient('Error: Failed request: (401)'), false);
+            assert.strictEqual(publishMarketplace.isTransient('Error: 404 Not Found'), false);
+            assert.strictEqual(publishMarketplace.isTransient('Error: Missing publisher name.'), false);
+            assert.strictEqual(publishMarketplace.isTransient(''), false);
+            assert.strictEqual(publishMarketplace.isTransient(undefined), false);
+        });
+
+        it('does not mistake a version for a status code', function () {
+            assert.strictEqual(publishMarketplace.isTransient('Publishing \'x v1.3.503\'...\nError: Missing publisher name.'), false);
+            assert.strictEqual(publishMarketplace.isTransient('hearts-of-iron-iv-utilities-2026-1.3.500.vsix: invalid manifest'), false);
+        });
+    });
+
+    describe('parseArgs', function () {
+        it('reads the vsix and the channel, and the token from the environment', function () {
+            const previous = process.env.VSCE_PAT;
+            process.env.VSCE_PAT = 'secret';
+            try {
+                const options = publishMarketplace.parseArgs(['--vsix', 'ext.vsix', '--pre-release']);
+                assert.strictEqual(options.vsix, 'ext.vsix');
+                assert.strictEqual(options.preRelease, true);
+                assert.strictEqual(options.pat, 'secret');
+            } finally {
+                if (previous === undefined) {
+                    delete process.env.VSCE_PAT;
+                } else {
+                    process.env.VSCE_PAT = previous;
+                }
+            }
+        });
+
+        it('defaults to the release channel', function () {
+            assert.strictEqual(publishMarketplace.parseArgs(['--vsix', 'ext.vsix']).preRelease, false);
         });
     });
 });

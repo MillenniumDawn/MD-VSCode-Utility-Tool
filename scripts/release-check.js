@@ -15,7 +15,11 @@
 // open release pull request instead, so a run of merges becomes one release.
 //
 // The four outcomes:
-//   release=true            an untagged version arrived from release/version-bump, so publish it
+//   release=true            an untagged version arrived from release/version-bump, so publish it.
+//                           Also the merge of a fix/release-v<version> branch -- the one
+//                           release.yml opens when publishing failed -- whatever the tag says:
+//                           the version goes out again, and a target that already has it is
+//                           left alone by the publish jobs.
 //   adopt=true bump=true    an untagged version arrived from somewhere else -- a branch bumped by
 //                           hand. The release pull request takes that version over instead of
 //                           bumping past it, and publishing waits for that pull request.
@@ -34,6 +38,12 @@ const { isExempt } = require('./check-version');
 const { pullRequestsForCommit } = require('./pr-bullets');
 
 const releaseBranch = 'release/version-bump';
+// The branch release.yml pushes when a release failed to publish. Its merge is a release too.
+const fixBranch = /^fix\/release-v\d+\.\d+\.\d+$/;
+
+function isFixBranch(ref) {
+	return fixBranch.test(String(ref ?? ''));
+}
 
 function git(args) {
 	return execFileSync('git', args, { encoding: 'utf8' }).trim();
@@ -60,20 +70,34 @@ function mergedReleaseBranch(sha) {
 		&& !gitSucceeds(['merge-base', '--is-ancestor', tip, `${sha}^`]);
 }
 
+// The fix branch is deleted the moment its pull request merges, so unlike the release branch there
+// is no remote ref left to test reachability against. The merge commit still names it.
+function mergedFixBranch(sha) {
+	let subject;
+	try {
+		subject = git(['log', '-1', '--pretty=%s', sha]);
+	} catch {
+		return false;
+	}
+	return /^Merge pull request #\d+ from [^/\s]+\/fix\/release-v\d+\.\d+\.\d+$/.test(subject);
+}
+
 // Which pull request this commit arrived on main with, and whether that was the release pull
-// request.
+// request or the fix pull request for a failed release.
 //
 // The pull request behind the commit is the reliable answer, because it survives a squash merge as
 // well as a merge commit -- the same lookup scripts/pr-bullets.js uses to name the pull requests in
 // the changelog. When it finds nothing (an unauthenticated gh, a rate limit) the shape of the
-// history answers the release-branch half on its own.
+// history answers both halves on its own.
 function pushSource(repo, sha) {
 	const pullRequests = repo ? pullRequestsForCommit(repo, sha) : [];
 	const fromReleaseBranch = pullRequests.some((pr) => pr?.head?.ref === releaseBranch);
+	const fromFixBranch = pullRequests.some((pr) => isFixBranch(pr?.head?.ref));
 
 	return {
 		number: pullRequests[0]?.number ?? '',
 		fromReleaseBranch: fromReleaseBranch || (pullRequests.length === 0 && mergedReleaseBranch(sha)),
+		fromFixBranch: fromFixBranch || (pullRequests.length === 0 && mergedFixBranch(sha)),
 	};
 }
 
@@ -109,6 +133,22 @@ function changedSince(tag) {
 function decide(state) {
 	const tag = state.tag;
 	const version = tag.replace(/^v/, '');
+
+	// The fix for a failed publish is a release in itself, tag or no tag. Whoever fixed it either
+	// left the version alone -- the same build goes out again, and a registry that already has it
+	// says so and is skipped -- or bumped it, and then the new version has no tag yet anyway.
+	if (state.fromFixBranch) {
+		return {
+			tag,
+			version,
+			release: true,
+			bump: false,
+			adopt: false,
+			notice:
+				`This push merged the fix pull request for a failed release, so ${tag} is published` +
+				(state.tagExists ? ' again; a target that already has it is left alone.' : '.'),
+		};
+	}
 
 	if (!state.tagExists) {
 		// A manual run is someone asking for this version to go out now, whatever opened it.
@@ -168,15 +208,16 @@ function evaluate(options = {}) {
 	const tag = `v${version}`;
 	const exists = tagExists(tag);
 
-	// Only the untagged case asks where the push came from, and it costs an API call, so do not ask
-	// otherwise.
-	const source = exists ? { number: '', fromReleaseBranch: false } : pushSource(options.repo, options.sha);
+	// Asked in every case, one API call per push: a tagged version still has to know whether this
+	// push merged the fix branch for it.
+	const source = pushSource(options.repo, options.sha);
 
 	const result = decide({
 		tag,
 		tagExists: exists,
 		manual: options.manual === true,
 		fromReleaseBranch: source.fromReleaseBranch,
+		fromFixBranch: source.fromFixBranch,
 		changedFiles: exists ? changedSince(tag) : [],
 	});
 
@@ -242,4 +283,4 @@ if (require.main === module) {
 	main();
 }
 
-module.exports = { decide, evaluate, lastReleaseTag, parseArgs, pushSource, releaseBranch };
+module.exports = { decide, evaluate, isFixBranch, lastReleaseTag, parseArgs, pushSource, releaseBranch };
