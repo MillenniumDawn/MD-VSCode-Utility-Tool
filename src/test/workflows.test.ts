@@ -134,12 +134,12 @@ describe('.github/workflows', function () {
             assert.ok(
                 runsIn(workflow, 'build-pre-release', 'package:pre-release'),
                 'nothing packages the VSIX with --pre-release');
-            assert.match(runsIn(workflow, 'pre-release-marketplace', 'vsce publish')?.run ?? '', /--pre-release/);
+            assert.match(runsIn(workflow, 'pre-release-marketplace', 'scripts/publish-marketplace.js')?.run ?? '', /--pre-release/);
             assert.strictEqual(
                 usesIn(workflow, 'pre-release-github', 'softprops/action-gh-release')?.with?.prerelease, true);
 
             // The release goes out as a release: no --pre-release anywhere on that side.
-            assert.doesNotMatch(runsIn(workflow, 'release-marketplace', 'vsce publish')?.run ?? '', /--pre-release/);
+            assert.doesNotMatch(runsIn(workflow, 'release-marketplace', 'scripts/publish-marketplace.js')?.run ?? '', /--pre-release/);
             assert.strictEqual(
                 usesIn(workflow, 'release-github', 'softprops/action-gh-release')?.with?.prerelease, undefined);
         });
@@ -153,12 +153,12 @@ describe('.github/workflows', function () {
         it('fails when a registry token is missing instead of skipping and reporting success', function () {
             // A missing OPEN_VSX_TOKEN used to skip the publish step and leave the job green, which is
             // how the extension reached no one on Open VSX for months while every run said success.
+            // The Marketplace side hands the token to the script, which exits 1 without it.
             for (const job of ['pre-release-marketplace', 'release-marketplace']) {
                 assert.strictEqual(jobs[job]?.env?.VSCE_PAT, '${{ secrets.VSCE_PAT }}');
-                assert.strictEqual(
-                    runsIn(workflow, job, 'vsce publish')?.if, undefined,
-                    `${job} still skips itself when VSCE_PAT is missing`);
-                assert.match(runsIn(workflow, job, '-z "$VSCE_PAT"')?.run ?? '', /exit 1/);
+                const publish = runsIn(workflow, job, 'scripts/publish-marketplace.js');
+                assert.ok(publish, `${job} does not publish through the script`);
+                assert.strictEqual(publish?.if, undefined, `${job} still skips itself when VSCE_PAT is missing`);
             }
             for (const job of ['pre-release-open-vsx', 'release-open-vsx']) {
                 assert.strictEqual(jobs[job]?.env?.OPEN_VSX_TOKEN, '${{ secrets.OPEN_VSX_TOKEN }}');
@@ -216,6 +216,20 @@ describe('.github/workflows', function () {
             assert.match(open?.run ?? '', /--draft/);
             // One empty commit, so there is nothing to delete before the fix can merge.
             assert.match(open?.run ?? '', /commit --allow-empty/);
+        });
+
+        it('lets the merge of the fix pull request publish the same version again', function () {
+            // Merging fix/release-v<version> is the release, and the tag and some of the targets
+            // may already be there from the failed run. Each target has to read "already
+            // published" as done, or the fix would fail on what did not fail the first time.
+            assert.strictEqual(
+                usesIn(workflow, 'release-open-vsx', 'HaaLeo/publish-vscode-extension')?.with?.skipDuplicate, true);
+            const publish = fs.readFileSync(path.join(workflowDir, '..', '..', 'scripts', 'publish-marketplace.js'), 'utf8');
+            assert.match(publish, /--skip-duplicate/);
+            // And the pull request says so, instead of sending the fixer to a release pull request.
+            const summary = runsIn(workflow, 'release-failed', 'Publishing **$TAG** failed');
+            assert.match(summary?.run ?? '', /merge publishes \$TAG again/);
+            assert.doesNotMatch(summary?.run ?? '', /release pull request after it/);
         });
     });
 });

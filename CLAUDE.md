@@ -86,9 +86,21 @@ also needs the publisher namespace to exist before the first publish
 pushes `fix/release-v<version>` — the failing commit plus one empty commit — and opens a
 **draft pull request** whose body lists every job in the run with a link to its log, so what
 already reached a registry is visible without opening anything. Nothing to clean up: push the
-fix, mark it ready, merge. If the branch already exists, someone is on it, and the new run is
-reported as a comment rather than force-pushed over. A failed *pre-release* gets none of this
-— it runs on every push and the next one supersedes it.
+fix, mark it ready, merge. **That merge is the release**: `release-check.js` recognises the
+branch name and publishes the version again, tag or no tag, and every target treats a
+version it already has as done (`--skip-duplicate` on the Marketplace, `skipDuplicate` on
+Open VSX, an in-place update of the GitHub release), so only what failed actually changes. No
+second release pull request is involved. The one thing to remember: if the fix changes what
+ships — anything outside `.github/` and documentation — bump `package.json` and the
+`Unreleased` heading on the fix branch first, or the new build replaces `v<version>` on the
+targets that already have the old one. If the branch already has an open pull request,
+someone is on it, and the new run is reported as a comment rather than force-pushed over. A
+failed *pre-release* gets none of this — it runs on every push and the next one supersedes it.
+
+**The Marketplace publish retries.** A `Request timeout: /_apis/gallery` once failed a
+release whose build had nothing wrong with it. `scripts/publish-marketplace.js` now runs
+`vsce publish` up to three times, pausing between, when the failure reads like the gallery or
+the network rather than the extension; a rejected token or a bad manifest fails at once.
 
 The pre-release half builds every push to `main` and publishes it to both registries on the
 **pre-release** channel, plus a GitHub prerelease with the `.vsix` attached. It is skipped on

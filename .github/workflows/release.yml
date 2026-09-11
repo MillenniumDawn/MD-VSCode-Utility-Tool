@@ -34,10 +34,12 @@ jobs:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         fetch-depth: 0
-    # Publishes when this push merged the release pull request and its version has no tag yet.
-    # Every other push publishes nothing -- a branch that bumped package.json by itself has that
-    # bump carried into the release pull request by version-bump.yml, so a run of merges becomes
-    # one release instead of one release each. The script owns that decision for both workflows.
+    # Publishes when this push merged the release pull request and its version has no tag yet, or
+    # when it merged the fix pull request that a failed publish opened below -- then the version
+    # goes out again, tag or no tag. Every other push publishes nothing -- a branch that bumped
+    # package.json by itself has that bump carried into the release pull request by
+    # version-bump.yml, so a run of merges becomes one release instead of one release each. The
+    # script owns that decision for both workflows.
     - name: Check version
       id: check
       env:
@@ -137,24 +139,10 @@ jobs:
     - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
       with:
         name: pre-release-vsix
-    - name: Check the Marketplace token
-      run: |
-        if [ -z "$VSCE_PAT" ]; then
-          echo "::error::VSCE_PAT is not set, so nothing can reach the VS Code Marketplace. Create a"
-          echo "::error::personal access token with Marketplace: Manage scope at"
-          echo "::error::https://dev.azure.com and add it as the repository secret VSCE_PAT."
-          exit 1
-        fi
+    # The script checks the token, retries a gallery timeout, and treats a version that is already
+    # up as done. A missing token is an error that says what to create, never a green skip.
     - name: Publish to VS Code Marketplace
-      run: |
-        set -o pipefail
-        out=$(npx --no-install @vscode/vsce publish --packagePath "$VSIX" --pre-release --pat "$VSCE_PAT" 2>&1 | tee /dev/stderr) || {
-          if echo "$out" | grep -qi "already exists"; then
-            echo "::warning::Version already exists on the Marketplace; treating as already published."
-            exit 0
-          fi
-          exit 1
-        }
+      run: node scripts/publish-marketplace.js --vsix "$VSIX" --pre-release
 
   # No preRelease input: ovsx answers "Ignoring option '--pre-release' for prepackaged extension"
   # and reads the flag out of the manifest instead, where `vsce package --pre-release` already put
@@ -288,26 +276,12 @@ jobs:
     - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
       with:
         name: release-vsix
-    - name: Check the Marketplace token
-      run: |
-        if [ -z "$VSCE_PAT" ]; then
-          echo "::error::VSCE_PAT is not set, so nothing can reach the VS Code Marketplace. Create a"
-          echo "::error::personal access token with Marketplace: Manage scope at"
-          echo "::error::https://dev.azure.com and add it as the repository secret VSCE_PAT."
-          exit 1
-        fi
-    # "already exists" is a success, not a failure: it is what a re-run of this one job answers once
-    # the version is up, which is what makes retrying a half-finished release safe.
+    # A gallery timeout is retried rather than failed, and a version that is already up is a
+    # success, not a failure: it is what a re-run of this one job -- or the merge of the fix pull
+    # request -- answers once the version is there, which is what makes publishing a half-finished
+    # release again safe. A missing token is an error that says what to create, never a green skip.
     - name: Publish to VS Code Marketplace
-      run: |
-        set -o pipefail
-        out=$(npx --no-install @vscode/vsce publish --packagePath "$VSIX" --pat "$VSCE_PAT" 2>&1 | tee /dev/stderr) || {
-          if echo "$out" | grep -qi "already exists"; then
-            echo "::warning::Version already exists on the Marketplace; treating as already published."
-            exit 0
-          fi
-          exit 1
-        }
+      run: node scripts/publish-marketplace.js --vsix "$VSIX"
 
   # extensionFile, not packagePath: packagePath is a directory the action packages itself, and
   # pointing it at a .vsix made it read <file>.vsix/package.json and fail. Both registries get the
@@ -333,13 +307,19 @@ jobs:
           echo "::error::first: npx ovsx create-namespace MilleniumDawnModTeam -p <token>."
           exit 1
         fi
+    # skipDuplicate: publishing a version Open VSX already has is what the merge of the fix pull
+    # request does when it was another registry that failed, and that is done, not an error.
     - name: Publish to Open VSX Registry
       uses: HaaLeo/publish-vscode-extension@ca5561daa085dee804bf9f37fe0165785a9b14db # v2
       with:
         extensionFile: ${{ needs.build-release.outputs.vsix }}
         pat: ${{ env.OPEN_VSX_TOKEN }}
         registryUrl: https://open-vsx.org
+        skipDuplicate: true
 
+  # Publishing again with the tag and release already there updates the release in place and
+  # replaces the .vsix on it (overwrite_files defaults to true), so this job needs no duplicate
+  # handling of its own.
   release-github:
     name: "Release: GitHub release"
     needs: [check, build-release]
@@ -371,6 +351,8 @@ jobs:
 
   # A failed release used to be a red run and nothing else. Now it leaves a branch and a draft pull
   # request behind, so fixing it is a checkout rather than an archaeology dig through the log.
+  # Merging that pull request is the release: release-check.js recognises the branch name and
+  # publishes the version again, so the fix does not wait on a second release pull request.
   #
   # Only a release gets one. A pre-release runs on every push to main and the next push supersedes
   # it, so a pull request per failed pre-release would be noise.
@@ -424,8 +406,14 @@ jobs:
           echo "Publishing **$TAG** failed."
           echo
           echo "This branch is here to fix it on. It carries one empty commit and nothing else, so"
-          echo "there is nothing to clean up -- push the fix, mark this ready and merge it, and the"
-          echo "release pull request after it carries the version out again."
+          echo "there is nothing to clean up -- push the fix, mark this ready and merge it. **That"
+          echo "merge publishes $TAG again**: every target treats a version it already has as done,"
+          echo "so only the ones that failed actually change. No release pull request is involved."
+          echo
+          echo "If the fix changes what ships -- anything outside \`.github/\` and documentation --"
+          echo "bump \`package.json\` and the \`Unreleased\` heading in \`CHANGELOG.md\` on this branch"
+          echo "first (\`node scripts/bump-version.js --type patch\`), so the new build goes out"
+          echo "under its own version instead of replacing $TAG on the targets that already have it."
           echo
           echo "### This run"
           echo
@@ -450,9 +438,11 @@ jobs:
         set -euo pipefail
         title="Release $TAG failed to publish"
 
-        # A branch that is already there belongs to whoever is fixing this version, and their
+        # A branch with an open pull request belongs to whoever is fixing this version, and their
         # commits are not ours to force over. The new run gets reported on their pull request
-        # instead.
+        # instead. A branch with no open pull request is a leftover -- the merge deleted it, so
+        # what is left is one that was closed unmerged -- and `gh pr create` on it would fail
+        # with "no commits between main and the branch", so it is started over from this commit.
         if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
           number=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
           if [ -n "$number" ]; then
@@ -460,11 +450,10 @@ jobs:
             echo "::notice::$title -- reported on pull request #$number."
             exit 0
           fi
-        else
-          git checkout -b "$BRANCH" "$GITHUB_SHA"
-          git commit --allow-empty -m "$title"
-          git push origin "HEAD:$BRANCH"
         fi
+        git checkout -B "$BRANCH" "$GITHUB_SHA"
+        git commit --allow-empty -m "$title"
+        git push --force origin "HEAD:$BRANCH"
 
         # No labels: a label is what decides where a seeded changelog bullet lands, and this pull
         # request is a workspace, not a change. Whatever fix lands on it labels itself.
