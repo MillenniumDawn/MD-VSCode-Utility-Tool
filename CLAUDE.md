@@ -15,7 +15,7 @@ your wording later.
 Releasing happens after the merge, on its own:
 
 1. A push to `main` that changed anything outside documentation and CI makes
-   [.github/workflows/version-bump.yml](.github/workflows/version-bump.yml) open a
+   [.github/workflows/release.yml](.github/workflows/release.yml) open a
    **release pull request** on branch `release/version-bump`.
 2. That pull request carries the +1 patch bump and renames `Unreleased` to `vX.Y.Z`,
    leaving a fresh empty `Unreleased` above it for the branches that come next. Any pull
@@ -42,8 +42,8 @@ Everything the automation publishes is published by **MD Utilities Release Bot**
 App owned by the `MillenniumDawn` organisation and installed on this repository: it opens
 and pushes the release pull request, and it authors the GitHub release and every
 pre-release. Its two secrets are **required** — `RELEASE_PR_APP_ID` and
-`RELEASE_PR_APP_PRIVATE_KEY` — and without them the publish and release pull request
-workflows fail at their first step. The App needs four repository
+`RELEASE_PR_APP_PRIVATE_KEY` — and without them the release pull request and publish jobs
+fail at their first step. The App needs four repository
 permissions: Metadata read, Contents read & write, Pull requests read & write, and
 Workflows read & write. The last one is not optional: the release branch merges `main`,
 so its push carries any change to `.github/workflows/**`, and GitHub rejects such a push
@@ -65,13 +65,20 @@ A branch that does bump `package.json` no longer ships the moment it is merged: 
 release pull request takes that version over and publishes it from there, so the batching
 holds either way.
 
-### The Publish workflow
+### The Release workflow
 
-Both channels come out of [.github/workflows/release.yml](.github/workflows/release.yml),
-in one run per push to `main`, because a release that is a black box is a release nobody
-can debug. `check` decides whether this push is the release; `verify` lints and tests it
-once; then a build job packages the `.vsix` and hands it to **three sibling jobs — VS Code
-Marketplace, Open VSX, GitHub release — that publish in parallel**. They are siblings on
+Everything above comes out of [.github/workflows/release.yml](.github/workflows/release.yml),
+in one run per push to `main`: the release pull request, the pre-release build, and the
+release itself. The `check` job asks `scripts/release-check.js` what this push is, once, and
+every other job reads its outputs — a push that changed the extension opens or refreshes the
+release pull request and publishes a pre-release; the push that merged that pull request
+publishes the release and skips the pre-release; a documentation-only push builds a
+pre-release and nothing else. The same rule answers the **Run workflow** button: a version
+with no tag yet is published, a tagged one gets a release pull request with the bump size
+you pick. One workflow because a release that is a black box is a release nobody can debug.
+`verify` lints and tests the commit once; then a build job packages the `.vsix` and hands it
+to **three sibling jobs — VS Code Marketplace, Open VSX, GitHub release — that publish in
+parallel**. They are siblings on
 purpose: as steps in a row, a Marketplace outage took Open VSX and the GitHub release down
 with it, and re-running meant re-running all three. Now the Actions graph names what broke
 and re-running one job republishes one target.

@@ -3,7 +3,7 @@
 // Also holds the union used when the release pull request's changelog conflicts with main's.
 //
 // Everything here is pure -- no git, no network, no filesystem -- so scripts/pr-bullets.js and
-// .github/workflows/version-bump.yml can call it and src/test/versionscripts.test.ts can test it
+// .github/workflows/release.yml can call it and src/test/versionscripts.test.ts can test it
 // without a repository.
 
 'use strict';

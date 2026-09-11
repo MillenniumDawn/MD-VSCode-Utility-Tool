@@ -3,7 +3,7 @@
 //   node scripts/check-version.js --base-ref origin/main
 //
 // This is advisory only. A branch does not have to bump anything -- that is the normal way to work,
-// and it passes without a word. Once the branch is merged, .github/workflows/version-bump.yml opens
+// and it passes without a word. Once the branch is merged, .github/workflows/release.yml opens
 // a release pull request that carries the bump and a seeded CHANGELOG.md section. The note this
 // writes is there for the branch that wanted to ship the bump itself and got it half right: a
 // version that already shipped, a version below the base, or a CHANGELOG heading that disagrees.

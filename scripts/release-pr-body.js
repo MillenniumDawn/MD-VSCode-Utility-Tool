@@ -4,7 +4,7 @@
 //   node scripts/release-pr-body.js --version 1.1.24 --bullets-file bullets.json \
 //       --existing current-body.md --output body.md
 //
-// .github/workflows/version-bump.yml uses this for both paths -- opening the pull request and
+// .github/workflows/release.yml uses this for both paths -- opening the pull request and
 // refreshing an open one -- so the two cannot drift apart.
 //
 // On a refresh only the block between the two markers is rewritten. Anything typed into the body by

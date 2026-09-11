@@ -5,7 +5,7 @@
 //
 // GITHUB_RUN_NUMBER and GITHUB_RUN_ATTEMPT say which build this is; --run-number and --run-attempt
 // override them. The answer is written to $GITHUB_OUTPUT as `version` and `tag`, and
-// .github/workflows/pre-release.yml packages and publishes from there.
+// .github/workflows/release.yml packages and publishes from there.
 //
 // VS Code's channel convention: stable takes the even minors and the pre-release channel takes the
 // odd minor directly above, so a pre-release is always ahead of the stable release it was built

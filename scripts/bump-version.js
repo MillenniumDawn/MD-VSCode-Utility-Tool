@@ -1,6 +1,6 @@
 // Bumps package.json and seeds a matching CHANGELOG.md section.
 //
-// Used by .github/workflows/version-bump.yml when a push to main needs a release pull request, and
+// Used by .github/workflows/release.yml when a push to main needs a release pull request, and
 // usable by hand:
 //
 //   node scripts/bump-version.js --type patch --title "Fix the thing" --number 42
