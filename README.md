@@ -2,75 +2,111 @@
 
 # HOI4 Utilities 2026
 
-This extension add preview tools to Hearts of Iron 4 coding.
-This is a continuation project based on the HOI4 mod utilities from herbix
-Very big shoutout to my friend AngriestBird for helping this project!
+**See your Hearts of Iron IV mod the way the game will draw it — without launching the game.**
 
-## Features
+Open a focus tree, an event file, a decisions file, an ideas file or the map folder, press the
+preview button, and the extension renders it next to your code with the game's own icons and
+textures. Edit the file and the preview follows. Click anything in the preview and the editor
+jumps to where it is defined.
 
-* World map preview
-* Focus tree preview
-* Event tree preview
-* Technology tree preview
-* Military industrial organization (MIO) preview.
-* GUI preview
-* `.gfx` file preview (sprites used by HOI4 are defined here)
-* `.dds`, `.tga` file preview (images files used by HOI4)
+Works in VS Code on the desktop and in the browser at [vscode.dev](https://vscode.dev).
+Install it from the [VS Code Marketplace][marketplace] or [Open VSX][openvsx].
 
-## Releases and pre-releases
+Continuation of [hoi4modutilities](https://github.com/herbix/hoi4modutilities) by herbix,
+maintained by the Millennium Dawn team. Very big shoutout to AngriestBird for helping this project!
 
-The extension ships on two channels, and both are published by GitHub Actions rather than by anyone
-by hand.
+## What you get
 
-* **Stable** — what you get by default from the [VS Code Marketplace][marketplace] and
-  [Open VSX][openvsx]. A release goes out when the open release pull request is merged, so a run of
-  merges becomes one release rather than one release each.
-* **Pre-release** — built and published automatically from every push to `main`, minutes after a
-  change lands. Press **Switch to Pre-Release Version** on the extension's page in VS Code to follow
-  it, and **Switch to Release Version** to go back. VS Code updates it like any other extension.
+**Focus trees.** The tree as it appears in game: real focus icons, the game's own textures for
+prerequisite and mutually exclusive links, shared and joint focus trees merged into the tree that
+uses them, focus inlay windows and dynamic focus icons. The preview reports layout mistakes that
+would render wrong in game — overlapping focuses, misplaced shared focuses, broken relative
+positions — as a clickable list and as red markers on the tree itself. Shift+click a focus to
+isolate its prerequisite lines, tick focuses off as completed to see which branches open up, and
+search a tree by focus id.
 
-Pre-release versions use the odd minor above the stable line, with the build number as the patch —
-`1.3.57` while stable is on `1.1.x`. That is VS Code's own convention, and it is why a pre-release
-always sorts above the release it was built from. `CHANGELOG.md` describes stable releases only, so
-a pre-release build ships a changelog whose newest version heading is the last stable one.
+**Event chains.** An events file becomes a graph of which event fires which, with every arrow
+labelled by its condition, delay and `random_list` weight. `FROM` resolves to the event that
+actually fired the call. Filter by event kind, show or hide hidden events, search by id or title,
+and use **Scan References** to find every place in the mod that fires an event.
 
-Every pre-release is also published as a [GitHub prerelease][releases] with the `.vsix` attached, for
-installing a specific build by hand (`Extensions: Install from VSIX...` in the command palette).
+**Decisions.** Decision categories, decisions and missions drawn as a graph, with the localised
+names from your mod.
+
+**Ideas.** Every idea in a `common/ideas` file as a card, grouped by category, with its icon,
+cost, traits, modifiers and `allowed` / `available` conditions. Ideas that swap into one another
+are drawn as a chain; clicking an arrow opens the file that performs the swap.
+
+**Characters.** Portraits, roles and, for every trait a character carries, the modifiers it
+grants — advisor, army, navy and political roles side by side.
+
+**Technology trees.** The full tree laid out from the mod's own `.gui` files. Optionally choose a
+country and see the tree with that country's own technology icons, the way the game shows it.
+
+**Military Industrial Organizations.** The MIO trait tree with a grid guide and a marker on every
+slot where two traits overlap, so a trait cannot silently disappear behind another.
+
+**World map.** Provinces, states, strategic regions and supply areas rendered from the map
+folder, with railways and supply nodes, hover tooltips for every province and state, and a
+warnings view that points at invalid province crossings and other map file mistakes.
+
+**GUI files.** `.gui` windows rendered with their sprites.
+
+**Sprites and images.** `.dds` and `.tga` files open as images straight in the editor, and a
+`.gfx` file shows every sprite it defines.
+
+**In every preview.** Zoom with the mouse wheel, Ctrl+wheel, the zoom buttons or the +/- keys;
+pan with the trackpad. Click an element to jump to its definition. Text comes from your
+localisation files, in the language you choose. Vanilla and DLC content is read from your game
+install, and the mod's `.mod` file is honoured for `replace_path`.
+
+## Get started
+
+1. Install the extension.
+2. Open the command palette (`Ctrl+Shift+P`) and run **Select HOI4 Install Path** to point the
+   extension at your Hearts of Iron IV installation.
+3. Open your mod folder. If it holds more than one `.mod` file, run **Select Mod File** to choose
+   the one to work with.
+4. Open a file and press the preview button in the editor's title bar, or run **Preview HOI4
+   file** from the command palette. **Preview World Map** opens the map.
+
+## Settings
+
+| Setting | What it does |
+|---|---|
+| `mdHoi4Utilities.installPath` | Hearts of Iron IV install path. Without it most previews have no icons. |
+| `mdHoi4Utilities.modFile` | The `.mod` file to read `replace_path` from. Defaults to the first `.mod` file in the workspace. |
+| `mdHoi4Utilities.loadDlcContents` | Load DLC images when previewing. Uses more memory. |
+| `mdHoi4Utilities.previewLocalisation` | Language of the text shown in previews. |
+| `mdHoi4Utilities.previewWheel` | What a plain mouse wheel does: `auto` (zoom for a mouse, scroll for a trackpad), `zoom` or `scroll`. |
+| `mdHoi4Utilities.useConditionInFocus` | Show conditions in the focus tree preview. |
+| `mdHoi4Utilities.inlayWindowGfxRoots` | Folders scanned for the `.gfx` files that focus inlay windows use. |
+| `mdHoi4Utilities.technologyGfxRoots` | Folders scanned for `.gfx` files used by the technology tree, including country-specific icons. |
+| `mdHoi4Utilities.technologyCountryIcons` | Add a country selector to the technology tree preview and prefer that country's icons. |
+| `mdHoi4Utilities.eventTreePreview`, `decisionPreview`, `ideaPreview`, `characterPreview` | Turn an individual preview on or off. |
+| `mdHoi4Utilities.sharedFocusIndex` | Index shared focuses so other trees can pull them in. |
+| `mdHoi4Utilities.ideaSwapIndex` | Scan `common` and `events` for `swap_ideas` so the idea preview can draw idea chains. |
+| `mdHoi4Utilities.gfxIndex` | Index every sprite definition. Faster icon lookups, more memory. |
+| `mdHoi4Utilities.localisationIndex` | Index localisation so previews show translated text. Uses more memory. |
+| `mdHoi4Utilities.imageDecodeWorkers` | Threads used to decode `.dds` / `.tga` images. More is faster on icon-heavy trees. |
+| `mdHoi4Utilities.worldMapRetainContextWhenHidden` | Keep the world map loaded while its tab is hidden. Faster to switch back, more memory. |
+| `mdHoi4Utilities.enableSupplyArea` | Show supply areas, for mods targeting HOI4 1.10 or older. |
+
+Settings that say so in their description need a window reload to take effect. **Show Index
+Status** in the command palette tells you what the indexes are doing.
+
+## Pre-release builds
+
+Want the newest changes before they are released? Press **Switch to Pre-Release Version** on the
+extension's page in VS Code; **Switch to Release Version** takes you back. Every build is also
+attached to a [GitHub release][releases] as a `.vsix`, for installing a specific one by hand with
+`Extensions: Install from VSIX...`.
+
+## Contribute
+
+Suggestions and bug reports are welcome on the
+[GitHub repository](https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool/issues).
 
 [marketplace]: https://marketplace.visualstudio.com/items?itemName=MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026
 [openvsx]: https://open-vsx.org/extension/MilleniumDawnModTeam/hearts-of-iron-iv-utilities-2026
 [releases]: https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool/releases
-
-## Steps to start
-
-1. Install and enable this extension in VSCode.
-2. Set Heart of Iron IV install path. You can:
-    * (Since v0.7.0, or on [vscode web](https://vscode.dev)) Open command palette using `Ctrl+Shift+P`. Use command `Select HOI4 install path` to browse the folder that installed Heart of Iron IV.
-    * Update setting `mdHoi4Utilities.installPath` (you can open settings page of VSCode using `Ctrl+,`) to the folder that installed Heart of Iron IV.
-3. Open your mod develop folder.
-4. (*Optional*) Open command palette using `Ctrl+Shift+P`. Use command `Select mod file` to set working mod descriptor (the `.mod` file).
-5. Use these entries:
-    * Command palette (`Ctrl+Shift+P`) commands: `Preview World Map` and `Preview HOI4 file`*.
-    * `Preview HOI4 file` button on right-top tool bar of text editor.
-    * Open a `.dds` or `.tga` file.
-
-## Extension Settings
-
-|Setting|Type|Description|
-|-------|----------|--------|
-|`mdHoi4Utilities.installPath`|`string`|Hearts of Iron IV install path. Without this, most features are broken.|
-|`mdHoi4Utilities.loadDlcContents`|`boolean`|Whether to load DLC images when previewing files. Enabling this will use more memory (All DLCs are around 600MB).|
-|`mdHoi4Utilities.modFile`|`string`|Path to the working `.mod` file. This file is used to read replace_path. If not specified, will use first `.mod` file in first folder of the workspace.|
-|`mdHoi4Utilities.enableSupplyArea`|`boolean`|If you are developing mod for HOI4(version<=1.10). Use this to check enable supply area.|
-|`mdHoi4Utilities.previewLocalisation`|`enum`|Language of content in event tree preview.|
-
-## Known Issues
-
-* GUI of focus tree can't be configured like technology tree.
-* Edge lines on world map not alway fit edge of colors.
-
-## Contribute
-* If you have any suggestion, feel free to create issue on this [Github repo](https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool).
-
-## Original Tool Repo
-- https://github.com/herbix/hoi4modutilities
