@@ -17,6 +17,7 @@ interface Step {
     run?: string;
     if?: string;
     with?: Record<string, unknown>;
+    env?: Record<string, string>;
 }
 
 interface Job {
@@ -70,7 +71,7 @@ function runsIn(workflow: Workflow, job: string, fragment: string): Step | undef
 describe('.github/workflows', function () {
     it('parses every workflow', function () {
         const files = workflowFiles();
-        assert.ok(files.length >= 6, `expected the workflows to still be there, found ${files.length}`);
+        assert.ok(files.length >= 5, `expected the workflows to still be there, found ${files.length}`);
         for (const file of files) {
             assert.ok(load(file)?.jobs, `${file} has no jobs`);
         }
@@ -94,19 +95,44 @@ describe('.github/workflows', function () {
         const preReleaseTargets = ['pre-release-marketplace', 'pre-release-open-vsx', 'pre-release-github'];
         const releaseTargets = ['release-marketplace', 'release-open-vsx', 'release-github'];
 
-        it('publishes both channels from one run', function () {
-            assert.ok(
-                !workflowFiles().includes('pre-release.yml'),
-                'pre-release.yml is back; a push to main should be one run, not two');
-            for (const job of ['check', 'verify', 'build-pre-release', 'build-release', ...preReleaseTargets, ...releaseTargets]) {
+        it('does everything a push to main leads to from one run', function () {
+            // The pre-release and the release pull request each used to be a workflow of their own,
+            // starting from the same release-check.js decision the publish made separately.
+            for (const file of ['pre-release.yml', 'version-bump.yml']) {
+                assert.ok(!workflowFiles().includes(file), `${file} is back; a push to main should be one run, not two`);
+            }
+            for (const job of ['check', 'verify', 'release-pull-request', 'build-pre-release', 'build-release', ...preReleaseTargets, ...releaseTargets]) {
                 assert.ok(jobs[job], `${job} is missing`);
             }
         });
 
-        it('runs on every push to main, and on demand', function () {
+        it('runs on every push to main, and on demand with a bump size', function () {
             const on = triggers(workflow);
             assert.deepStrictEqual((on.push as { branches: string[] }).branches, ['main']);
-            assert.ok('workflow_dispatch' in on);
+            const dispatch = on.workflow_dispatch as { inputs?: Record<string, { options?: string[]; default?: string }> };
+            assert.ok(dispatch, 'no workflow_dispatch trigger');
+            assert.deepStrictEqual(dispatch.inputs?.release_type?.options, ['patch', 'minor', 'major']);
+            assert.strictEqual(dispatch.inputs?.release_type?.default, 'patch');
+        });
+
+        it('opens the release pull request from the same decision as the publish', function () {
+            const job = jobs['release-pull-request'];
+            assert.ok([job?.needs ?? []].flat().includes('check'), 'the release pull request does not wait for check');
+            assert.match(job?.if ?? '', /needs\.check\.outputs\.bump == 'true'/);
+            // The decision is made once, in check; asking again here is how two answers drift apart.
+            assert.strictEqual(runsIn(workflow, 'release-pull-request', 'scripts/release-check.js'), undefined);
+            for (const step of jobSteps(workflow, 'release-pull-request')) {
+                for (const value of [step.if ?? '', step.run ?? '', ...Object.values(step.with ?? {}), ...Object.values(step.env ?? {})]) {
+                    assert.doesNotMatch(String(value), /steps\.state\.outputs/, `${step.name} still reads the old in-job decision`);
+                }
+            }
+            const open = runsIn(workflow, 'release-pull-request', 'gh pr create');
+            assert.match(open?.run ?? '', /--head "\$RELEASE_BRANCH"/);
+            assert.strictEqual(job?.env?.RELEASE_BRANCH, 'release/version-bump');
+            assert.match(job?.env?.RELEASE_TYPE ?? '', /inputs\.release_type/);
+            // The release pull request is what the bot pushes; a run that is not a release must never
+            // reach the publish targets through it.
+            assert.strictEqual(runsIn(workflow, 'release-pull-request', 'vsce publish'), undefined);
         });
 
         it('never cancels a run that may already be halfway through publishing', function () {
@@ -202,8 +228,10 @@ describe('.github/workflows', function () {
             for (const job of ['check', 'verify', 'build-release', ...releaseTargets]) {
                 assert.ok(watched.includes(job), `release-failed does not watch ${job}`);
             }
-            // A pre-release runs on every push and the next one supersedes it, so it stays out.
-            for (const job of preReleaseTargets) {
+            // A pre-release runs on every push and the next one supersedes it, so it stays out. So
+            // does the release pull request: it is skipped on a release push, and a failure there
+            // is not a failed publish.
+            for (const job of [...preReleaseTargets, 'release-pull-request']) {
                 assert.ok(!watched.includes(job), `release-failed should not watch ${job}`);
             }
 

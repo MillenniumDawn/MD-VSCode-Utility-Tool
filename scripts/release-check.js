@@ -5,10 +5,11 @@
 //
 // GITHUB_REPOSITORY and GITHUB_SHA say which commit to look at; --repo and --sha override them.
 //
-// Both .github/workflows/release.yml and .github/workflows/version-bump.yml run this, so the two
-// never disagree about whether a push is releasable. The answer is written to $GITHUB_OUTPUT as
-// `tag`, `lastTag`, `version`, `release`, `bump`, `adopt` and `adoptedFrom`, and the exit code is
-// always 0 -- "nothing to release" is an answer, not a failure.
+// .github/workflows/release.yml runs this once, in its `check` job, and every other job in it --
+// the release pull request, the pre-release build, the release -- reads the answer from that job's
+// outputs, so none of them can disagree about what a push is. The answer is written to
+// $GITHUB_OUTPUT as `tag`, `lastTag`, `version`, `release`, `bump`, `adopt` and `adoptedFrom`, and
+// the exit code is always 0 -- "nothing to release" is an answer, not a failure.
 //
 // Publishing is tied to the release pull request, not to the version number. A branch that bumps
 // package.json on its own no longer ships the moment it is merged; the bump is carried into the

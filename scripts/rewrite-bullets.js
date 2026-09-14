@@ -4,7 +4,7 @@
 //   node scripts/rewrite-bullets.js --bullets-file bullets.json
 //   node scripts/rewrite-bullets.js --check
 //
-// .github/workflows/version-bump.yml runs this once per pull request, on the bullets it has just
+// .github/workflows/release.yml runs this once per pull request, on the bullets it has just
 // seeded and never on one already in the release pull request -- so a bullet reworded by hand is
 // never sent anywhere and never rewritten twice.
 //

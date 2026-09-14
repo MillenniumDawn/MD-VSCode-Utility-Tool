@@ -3,16 +3,29 @@ on:
     branches:
       - 'main'
   workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'How far to bump when a release pull request is opened. Ignored when the current version has no tag yet: that run publishes it instead.'
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
 
-name: Publish
+name: Release
 
-# Both channels live in one workflow so a push to main is one run in the Actions list rather than
-# two unrelated ones, and so the job graph names which registry broke instead of hiding it in a
-# step log.
+# Everything a push to main can lead to lives in this one workflow: the release pull request that
+# collects the merges, the pre-release build of each of them, and the release itself when that pull
+# request is merged. They used to be two workflows that each started with the same question --
+# "what is this push?" -- and answered it separately; now the question is asked once, in `check`,
+# and every job below reads the answer from its outputs. One run in the Actions list per push, and
+# a job graph that names which part broke instead of hiding it in a step log.
 #
-# One publish at a time. Two of these overlapping would race for the same tag and the same
-# marketplace version. A superseded pre-release build used to be cancelled rather than queued, which
-# a release must never be, so the two now share the release's rule: a run waits, it is not dropped.
+# One run at a time. Two of these overlapping would race for the same tag, the same marketplace
+# version, or the same release branch. A superseded pre-release build used to be cancelled rather
+# than queued, which a release must never be, so everything shares the release's rule: a run
+# waits, it is not dropped.
 concurrency:
   group: publish
   cancel-in-progress: false
@@ -28,18 +41,24 @@ jobs:
       pull-requests: read
     outputs:
       tag: ${{ steps.check.outputs.tag }}
+      lastTag: ${{ steps.check.outputs.lastTag }}
       version: ${{ steps.check.outputs.version }}
       release: ${{ steps.check.outputs.release }}
+      bump: ${{ steps.check.outputs.bump }}
+      adopt: ${{ steps.check.outputs.adopt }}
+      adoptedFrom: ${{ steps.check.outputs.adoptedFrom }}
     steps:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         fetch-depth: 0
-    # Publishes when this push merged the release pull request and its version has no tag yet, or
-    # when it merged the fix pull request that a failed publish opened below -- then the version
-    # goes out again, tag or no tag. Every other push publishes nothing -- a branch that bumped
-    # package.json by itself has that bump carried into the release pull request by
-    # version-bump.yml, so a run of merges becomes one release instead of one release each. The
-    # script owns that decision for both workflows.
+    # `release` is true when this push merged the release pull request and its version has no tag
+    # yet, or when it merged the fix pull request that a failed publish opened below -- then the
+    # version goes out again, tag or no tag. `bump` is true when the extension itself changed since
+    # the last tag, so a release pull request has to carry the next version -- a branch that bumped
+    # package.json by itself has that bump carried into the release pull request rather than
+    # shipping on its own, so a run of merges becomes one release instead of one release each. Both
+    # false means only documentation and CI changed: a pre-release build and nothing else. The
+    # script owns that decision for every job in this file.
     - name: Check version
       id: check
       env:
@@ -66,6 +85,212 @@ jobs:
       run: npm run lint
     - name: Test
       run: npm test
+
+  # --- Release pull request: every push that changed what ships, until that pull request merges. ---
+
+  # Runs beside the pre-release build, not after the tests: the release pull request it pushes gets
+  # the Test and Version workflows on its own merge commit, which is the run that matters. Skipped on
+  # a release push and on a documentation-only push, because `bump` is false for both.
+  release-pull-request:
+    name: Release pull request
+    needs: check
+    if: ${{ needs.check.outputs.bump == 'true' }}
+    runs-on: ubuntu-latest
+    # Everything below writes as the bot, through GH_TOKEN and the checkout token, so the
+    # workflow's own token needs nothing beyond reading the tree.
+    permissions:
+      contents: read
+    env:
+      RELEASE_BRANCH: release/version-bump
+      RELEASE_TYPE: ${{ inputs.release_type || 'patch' }}
+      # Writes the changelog bullets in the wording CHANGELOG.md uses. Optional: without the key the
+      # bullets keep their pull request titles and nothing else changes.
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+    steps:
+    # Everything here is done as the MD Utilities Release Bot rather than as the workflow itself.
+    # A pull request opened with GITHUB_TOKEN starts no run by design, so the release used to
+    # reach the marketplace unchecked; a pull request opened with an App installation token does
+    # start one, against the merge commit, and unlike a personal access token it leaves no person
+    # as the author of the release.
+    - name: Mint the release bot token
+      id: app-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        app-id: ${{ secrets.RELEASE_PR_APP_ID }}
+        private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
+    # A job-level `env` cannot read the `steps` context, so the token every `gh` step below wants
+    # is exported once here instead. The action masks it, so it stays redacted in the log.
+    - name: Use the bot token for gh
+      env:
+        TOKEN: ${{ steps.app-token.outputs.token }}
+      run: echo "GH_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      with:
+        fetch-depth: 0
+        token: ${{ steps.app-token.outputs.token }}
+    # From the last version that shipped, which is the tag itself unless a branch bumped
+    # package.json by hand -- then that version has no tag yet and the range starts one release back.
+    #
+    # This is every pull request in the release, prefix and subsection included. Which of them
+    # still need a bullet written is decided per path below, because only the refresh path knows
+    # what the open pull request already covers.
+    #
+    # Scratch files go to $RUNNER_TEMP rather than the working tree, so a stray `git add` can
+    # never commit one.
+    - name: Collect the changelog bullets
+      id: bullets
+      env:
+        LAST_TAG: ${{ needs.check.outputs.lastTag }}
+      run: |
+        node scripts/pr-bullets.js --tag "$LAST_TAG" --output "$RUNNER_TEMP/all-bullets.json" >/dev/null
+        echo "prs=$(node -p "require('$RUNNER_TEMP/all-bullets.json').pullRequests.join(',')")" >> "$GITHUB_OUTPUT"
+    # Says in the log whether the key works, so a rejected or exhausted one is visible instead of
+    # looking exactly like a release whose bullets happened not to need rewriting.
+    - name: Check the release model key
+      run: node scripts/rewrite-bullets.js --check
+    - name: Look for an open release pull request
+      id: existing
+      run: |
+        number=$(gh pr list --head "$RELEASE_BRANCH" --state open --json number --jq '.[0].number // ""')
+        echo "number=$number" >> "$GITHUB_OUTPUT"
+    # The bot's own account, read from the token that was just minted rather than written out
+    # here, so renaming the App moves the commit author with it.
+    - name: Configure git
+      env:
+        SLUG: ${{ steps.app-token.outputs.app-slug }}
+      run: |
+        id=$(gh api "users/$SLUG%5Bbot%5D" --jq .id)
+        git config user.name "$SLUG[bot]"
+        git config user.email "$id+$SLUG[bot]@users.noreply.github.com"
+
+    # --- No release pull request yet: bump, seed the changelog, open one. ---
+    - name: Bump the version and seed the changelog
+      id: bump
+      if: ${{ steps.existing.outputs.number == '' }}
+      env:
+        ADOPT: ${{ needs.check.outputs.adopt }}
+        ADOPTED_FROM: ${{ needs.check.outputs.adoptedFrom }}
+        VERSION: ${{ needs.check.outputs.version }}
+      run: |
+        git checkout -B "$RELEASE_BRANCH"
+        # The pull request that carried a hand-written bump already wrote its own changelog section
+        # on main, so it is listed in the body but seeds no second bullet from its title.
+        node scripts/select-bullets.js --bullets-file "$RUNNER_TEMP/all-bullets.json" --output "$RUNNER_TEMP/bullets.json" \
+          --skip "$ADOPTED_FROM" >/dev/null
+        node scripts/rewrite-bullets.js --bullets-file "$RUNNER_TEMP/bullets.json"
+        if [ "$ADOPT" = "true" ]; then
+          # Keep the version that branch bumped to and add the seeded bullets to the section it
+          # wrote, rather than bumping past a version that was never published.
+          node scripts/bump-version.js --append --bullets-file "$RUNNER_TEMP/bullets.json" >/dev/null
+          echo "next=$VERSION" >> "$GITHUB_OUTPUT"
+        else
+          node scripts/bump-version.js --type "$RELEASE_TYPE" --bullets-file "$RUNNER_TEMP/bullets.json" >> "$GITHUB_OUTPUT"
+        fi
+        git add package.json CHANGELOG.md
+        version=$(node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync('package.json', 'utf8'))")
+        if git diff --cached --quiet; then
+          # Adopting a version can leave nothing to commit, when the branch that bumped already
+          # wrote every bullet by hand. The pull request still has to exist for that version to
+          # reach the marketplace.
+          git commit --allow-empty -m "Release v$version"
+        else
+          git commit -m "Bump version to $version"
+        fi
+        git push --force origin "HEAD:$RELEASE_BRANCH"
+        echo "pushed=true" >> "$GITHUB_OUTPUT"
+    - name: Open the release pull request
+      if: ${{ steps.existing.outputs.number == '' }}
+      env:
+        NEXT: ${{ steps.bump.outputs.next }}
+      run: |
+        node scripts/release-pr-body.js --version "$NEXT" --bullets-file "$RUNNER_TEMP/all-bullets.json" \
+          --output "$RUNNER_TEMP/release-pr-body.md"
+        gh pr create \
+          --base main \
+          --head "$RELEASE_BRANCH" \
+          --title "Release v$NEXT - collects every merge until you merge it" \
+          --body-file "$RUNNER_TEMP/release-pr-body.md"
+
+    # --- One is already open: catch it up with main and add only the new bullets. ---
+    - name: Refresh the open release pull request
+      id: refresh
+      if: ${{ steps.existing.outputs.number != '' }}
+      env:
+        ADOPTED_FROM: ${{ needs.check.outputs.adoptedFrom }}
+        PR: ${{ steps.existing.outputs.number }}
+        PRS: ${{ steps.bullets.outputs.prs }}
+      run: |
+        git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+        # readVersion refuses anything but a plain three-part version, so neither of these can
+        # carry a payload into the expressions and shell commands below.
+        ours=$(node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync('package.json', 'utf8'))")
+        theirs=$(git show origin/main:package.json | node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync(0, 'utf8'))")
+        # Before the merge, and not inside the conflict branch where it is used: a conflicted
+        # package.json holds merge markers, and node refuses to load any module from a directory
+        # whose package.json will not parse.
+        #
+        # Through the environment rather than interpolated into the expression: a version spliced
+        # into JS source is compiled, not read.
+        higher=$(OURS="$ours" THEIRS="$theirs" node -p "require('./scripts/bump-version').higherVersion(process.env.OURS, process.env.THEIRS)")
+
+        if ! git merge --no-edit origin/main; then
+          # A branch that wrote its own changelog section on main collides with the section this
+          # pull request is collecting, and a branch that also bumped the version collides in
+          # package.json as well. Both are worth resolving here rather than asking for a hand
+          # merge: keep this branch's changelog, which may have been reworded, take the higher
+          # version, and carry over the bullets main has that this branch does not.
+          conflicts=$(git diff --name-only --diff-filter=U | sort)
+          if printf '%s\n' "$conflicts" | grep -qvE '^(CHANGELOG\.md|package\.json)$'; then
+            git merge --abort || true
+            gh pr comment "$PR" --body "\`main\` moved on and this branch no longer merges cleanly. Resolve the conflict here and the next push to \`main\` will pick up from there."
+            exit 0
+          fi
+          # Only the paths that actually conflicted -- `--ours` fails on a path git merged cleanly.
+          git checkout --ours -- $conflicts
+          git show origin/main:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
+          node scripts/merge-changelog.js --theirs "$RUNNER_TEMP/main-changelog.md" --version "$higher" >/dev/null
+          git add package.json CHANGELOG.md
+          git commit --no-edit
+        elif [ "$ours" != "$theirs" ]; then
+          # No conflict, but main carried a version this branch did not have. The merge took
+          # main's package.json wholesale, so put the higher of the two back and move the section
+          # heading with it.
+          node scripts/bump-version.js --set-version "$higher" >/dev/null
+        fi
+
+        # The pull request body lists what is already covered, so a bullet reworded by hand is
+        # never rewritten and never sent to the model twice -- only genuinely new ones are added.
+        gh pr view "$PR" --json body --jq .body > "$RUNNER_TEMP/current-body.md"
+        covered=$(sed -n 's/^Included pull requests: //p' "$RUNNER_TEMP/current-body.md" | head -1)
+        node scripts/select-bullets.js --bullets-file "$RUNNER_TEMP/all-bullets.json" --output "$RUNNER_TEMP/fresh.json" \
+          --skip "$ADOPTED_FROM" --covered "$covered" >/dev/null
+        node scripts/rewrite-bullets.js --bullets-file "$RUNNER_TEMP/fresh.json"
+        node scripts/bump-version.js --append --bullets-file "$RUNNER_TEMP/fresh.json" >/dev/null
+
+        git add package.json CHANGELOG.md
+        # Nothing new to say: main moved, but this pull request already covers all of it. Saying
+        # so on every merge is noise, so say nothing at all.
+        if git diff --cached --quiet && git diff --quiet "origin/$RELEASE_BRANCH" HEAD; then
+          echo "::notice::The release pull request already covers everything on main."
+          exit 0
+        fi
+        git diff --cached --quiet || git commit -m "Catch up with main"
+        git push origin "HEAD:$RELEASE_BRANCH"
+        echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+        next=$(node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync('package.json', 'utf8'))")
+        gh pr edit "$PR" --title "Release v$next - collects every merge until you merge it"
+
+        gh pr view "$PR" --json body --jq .body > "$RUNNER_TEMP/current-body.md"
+        node scripts/release-pr-body.js --version "$next" --bullets-file "$RUNNER_TEMP/all-bullets.json" \
+          --existing "$RUNNER_TEMP/current-body.md" --output "$RUNNER_TEMP/updated-body.md"
+        gh pr edit "$PR" --body-file "$RUNNER_TEMP/updated-body.md"
+        gh pr comment "$PR" --body "Caught up with \`main\`, now releasing \`v$next\`. Included pull requests: $PRS"
+
+    # Nothing dispatches the tests: the release is what nobody has tested -- every branch in it was
+    # green on its own, but the collection of them runs nowhere else -- and the bot's push starts
+    # the Test and Version workflows against the merge commit by itself.
 
   # --- Pre-release: every push to main that is not itself a release. ---
 
@@ -396,7 +621,8 @@ jobs:
         git config user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
     # Which jobs failed, and a link straight to each log. The run's own job list is the honest
     # answer -- it names the ones that succeeded too, so it is clear what already reached a
-    # registry. The pull request job itself and the skipped pre-release jobs are left out.
+    # registry. This job itself and the skipped ones -- the pre-release jobs and the release pull
+    # request job, neither of which runs on a release push -- are left out.
     - name: Write the failure summary
       id: summary
       run: |

@@ -2,7 +2,7 @@
 //
 //   node scripts/merge-changelog.js --theirs main-changelog.md --version 1.1.24
 //
-// .github/workflows/version-bump.yml runs this after `git merge origin/main` conflicts on the
+// .github/workflows/release.yml runs this after `git merge origin/main` conflicts on the
 // release branch. The release pull request's changelog wins, because it may have been reworded by
 // hand; main contributes only the bullets ours does not already say, under the same subsection
 // heading it had there.

@@ -3,7 +3,7 @@
 //   node scripts/select-bullets.js --bullets-file bullets.json --output fresh.json \
 //       --skip 114 --covered 109,110
 //
-// .github/workflows/version-bump.yml drops two kinds of bullet before touching CHANGELOG.md:
+// .github/workflows/release.yml drops two kinds of bullet before touching CHANGELOG.md:
 //
 //   --skip     the pull request that carried a hand-written version bump. It already wrote its own
 //              changelog section on main, so seeding a second bullet from its title would repeat it.

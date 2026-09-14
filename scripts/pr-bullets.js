@@ -2,7 +2,7 @@
 //
 //   node scripts/pr-bullets.js --tag v1.1.23 --output bullets.json
 //
-// .github/workflows/version-bump.yml runs this to seed the release pull request. Every commit on
+// .github/workflows/release.yml runs this to seed the release pull request. Every commit on
 // main since the tag is asked which pull request it came from, so a squash merge ("Title (#108)")
 // and a merge commit ("Merge pull request #97 from ...") both resolve to the real pull request --
 // parsing the subject line would only handle one of the two. A commit that belongs to no pull
