@@ -1,8 +1,13 @@
 Unreleased
 
+v1.1.36
+
   Functionality:
 
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
+- [ CI ] Release v1.1.35 failed to publish.
+- [ CI ] The release pull request and the publish are one workflow, so a push to main is one run.
+- Rewrite the README as a user-facing page: what each preview does, no release internals.
 
 v1.1.35
 
