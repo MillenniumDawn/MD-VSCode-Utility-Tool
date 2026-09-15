@@ -669,14 +669,14 @@ describe('scripts/check-version', function () {
     describe('isExempt', function () {
         it('exempts documentation and repository tooling', function () {
             for (const file of ['README.md', 'CHANGELOG.md', 'CLAUDE.md', '.github/workflows/test.yml',
-                '.claude/skills/fix-issue/SKILL.md', 'LICENSE', '.gitignore', '.vscodeignore']) {
+                '.claude/skills/fix-issue/SKILL.md', 'LICENSE', '.gitignore']) {
                 assert.strictEqual(checkVersion.isExempt(file), true, file);
             }
         });
 
         it('does not exempt anything that ships in the extension', function () {
             for (const file of ['package.json', 'src/extension.ts', 'webviewsrc/eventtree.ts',
-                'resource/eventtree.css', 'i18n/en.ts', 'scripts/bump-version.js']) {
+                'resource/eventtree.css', 'i18n/en.ts', 'scripts/bump-version.js', '.vscodeignore']) {
                 assert.strictEqual(checkVersion.isExempt(file), false, file);
             }
         });
@@ -889,6 +889,16 @@ describe('scripts/release-check', function () {
             });
             assert.strictEqual(result.release, false);
             assert.strictEqual(result.bump, false);
+        });
+
+        it('asks for a release pull request when only .vscodeignore changed', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.23',
+                tagExists: true,
+                changedFiles: ['.vscodeignore'],
+            });
+            assert.strictEqual(result.release, false);
+            assert.strictEqual(result.bump, true);
         });
 
         it('does nothing when nothing changed at all', function () {

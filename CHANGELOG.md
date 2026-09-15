@@ -4,6 +4,10 @@ Unreleased
 
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
 
+  Bugfixes:
+
+- Treat changes to `.vscodeignore` as extension changes that trigger a release. Issue #198.
+
 v1.1.35
 
   Functionality:
