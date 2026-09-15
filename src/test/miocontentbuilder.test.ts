@@ -2,6 +2,9 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { renderMioFile } from '../previewdef/mio/contentbuilder';
 import { LoaderRenderResult } from '../previewdef/loaderpreview';
+import { getMiosFromFile } from '../previewdef/mio/schema';
+import { parseHoi4File } from '../hoiformat/hoiparser';
+import { stubLocalisation, restoreLocalisation } from './_localisation_stub';
 
 // The mio preview's updateBody replaces the whole #mio-server-styles sheet while the shell markup
 // (#dragger, #miopreviewcontent, frame, toolbar) persists. These drive renderMioFile against a stub
@@ -23,6 +26,24 @@ function loaderFor(headerCount: number): any {
             },
         }),
     };
+}
+
+// A loader over a real parsed file, so a quoted trait token reaches the renderer the way the mod
+// writes it.
+function loaderForFile(content: string): any {
+    const file = 'common/military_industrial_organization/organizations/test.txt';
+    return {
+        file,
+        load: async () => ({
+            result: { mios: getMiosFromFile(parseHoi4File(content), [], file), gfxFiles: [], frame: undefined },
+        }),
+    };
+}
+
+// The rendered trait cards of the one organization in the file.
+function traitHtmlOf(rendered: LoaderRenderResult): string {
+    const renderedTrait = (rendered.update!.data as { renderedTrait: Record<string, Record<string, string>> }).renderedTrait;
+    return Object.values(renderedTrait).flatMap(traits => Object.values(traits)).join('\n');
 }
 
 // The class list on an element carrying id="<id>", read out of the rendered html.
@@ -124,5 +145,55 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
     it('hands the page the stored toolbar options', async () => {
         const rendered = await renderMioFile(loaderFor(1), uri, webview) as LoaderRenderResult;
         assert.ok(rendered.html.includes('window.previewOptions = '));
+    });
+});
+
+// The trait card html is inserted into the page as markup, so everything the mod wrote into it has
+// to arrive escaped: the token (which the parser accepts quoted) and the localised name (which the
+// localisation index copies verbatim out of the .yml).
+describe('previewdef/mio renderMioFile escaping', () => {
+    afterEach(() => restoreLocalisation());
+
+    it('escapes a quoted trait token in the card body and its tooltip', async () => {
+        const hostileToken = 'trait" onmouseover="alert(1)" x="<b>';
+        const rendered = await renderMioFile(loaderForFile(`
+            test_org = {
+                name = test_org
+                trait = {
+                    token = "${hostileToken.replace(/"/g, '\\"')}"
+                    name = test_org_trait
+                    position = { x = 0 y = 0 }
+                }
+            }
+        `), uri, webview) as LoaderRenderResult;
+        const traitHtml = traitHtmlOf(rendered);
+
+        assert.ok(!traitHtml.includes(hostileToken), traitHtml);
+        assert.ok(!traitHtml.includes('onmouseover="'), traitHtml);
+        assert.ok(!traitHtml.includes('<b>'), traitHtml);
+        assert.ok(traitHtml.includes('title="trait&quot; onmouseover=&quot;alert(1)&quot; x=&quot;&lt;b&gt;'), traitHtml);
+        assert.ok(traitHtml.includes('trait&quot;&nbsp;onmouseover=&quot;alert(1)&quot;&nbsp;x=&quot;&lt;b&gt;'), traitHtml);
+    });
+
+    it('escapes a localised trait name carrying quotes and angle brackets', async () => {
+        // The greedy value regex keeps everything between the first and last quote, so the inner
+        // quotes survive into the index exactly as a hostile .yml wrote them.
+        stubLocalisation({ test_org_trait: 'x" onmouseover="alert(1)" y="<b>' });
+        const rendered = await renderMioFile(loaderForFile(`
+            test_org = {
+                name = test_org
+                trait = {
+                    token = test_org_trait
+                    name = test_org_trait
+                    position = { x = 0 y = 0 }
+                }
+            }
+        `), uri, webview) as LoaderRenderResult;
+        const traitHtml = traitHtmlOf(rendered);
+
+        assert.ok(!traitHtml.includes('onmouseover="'), traitHtml);
+        assert.ok(!traitHtml.includes('<b>'), traitHtml);
+        assert.ok(traitHtml.includes('title="test_org_trait\nx&quot; onmouseover=&quot;alert(1)&quot; y=&quot;&lt;b&gt;'), traitHtml);
+        assert.ok(traitHtml.includes('x&quot;&nbsp;onmouseover=&quot;alert(1)&quot;&nbsp;y=&quot;&lt;b&gt;'), traitHtml);
     });
 });
