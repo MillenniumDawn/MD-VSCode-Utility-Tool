@@ -4,6 +4,10 @@ Unreleased
 
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
 
+  Bugfixes:
+
+- [ World Map ] Province definitions with color zero no longer produce duplicate provinces or missing-definition warnings. Issue #166.
+
 v1.1.35
 
   Functionality:
