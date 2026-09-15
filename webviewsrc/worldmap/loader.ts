@@ -38,6 +38,20 @@ interface ExtraMapData {
 	supplyNodesCount: number;
 }
 
+// Uniform grid over the provinces' bounding boxes, in map coordinates. Each cell lists the
+// provinces whose bounding box overlaps it, in forEachProvince order so that the first match
+// is the same province a full scan would have returned.
+interface ProvinceGrid {
+	originX: number;
+	originY: number;
+	cellSize: number;
+	cols: number;
+	rows: number;
+	cells: (Province[] | undefined)[];
+}
+
+const provinceGridCellSize = 64;
+
 interface FEWorldMapClassExtra {
 	getProvinceById(provinceId: number | undefined): Province | undefined;
 	getStateById(stateId: number | undefined): State | undefined;
@@ -456,6 +470,7 @@ export class FEWorldMapClass implements FEWorldMap {
 	private provinceToSupplyNodeMemo:
 		| Record<number, SupplyNode | undefined>
 		| undefined = undefined;
+	private provinceGridMemo: ProvinceGrid | undefined = undefined;
 
 	constructor(worldMap?: WorldMapData & ExtraMapData) {
 		Object.assign(
@@ -564,18 +579,80 @@ export class FEWorldMapClass implements FEWorldMap {
 	}
 
 	public getProvinceByPosition(x: number, y: number): Province | undefined {
+		const grid = this.getProvinceGrid();
+		const col = Math.floor((x - grid.originX) / grid.cellSize);
+		const row = Math.floor((y - grid.originY) / grid.cellSize);
+		if (col < 0 || row < 0 || col >= grid.cols || row >= grid.rows) {
+			return undefined;
+		}
+		const candidates = grid.cells[row * grid.cols + col];
+		if (candidates === undefined) {
+			return undefined;
+		}
 		const point: Point = { x, y };
-		let resultProvince: Province | undefined = undefined;
-		this.forEachProvince((province) => {
+		for (const province of candidates) {
 			if (
 				inBBox(point, province.boundingBox) &&
 				province.coverZones.some((z) => inBBox(point, z))
 			) {
-				resultProvince = province;
-				return true;
+				return province;
 			}
-		});
-		return resultProvince;
+		}
+		return undefined;
+	}
+
+	private getProvinceGrid(): ProvinceGrid {
+		if (this.provinceGridMemo === undefined) {
+			let minX = Infinity;
+			let minY = Infinity;
+			let maxX = -Infinity;
+			let maxY = -Infinity;
+			this.forEachProvince((province) => {
+				const bbox = province.boundingBox;
+				minX = Math.min(minX, bbox.x);
+				minY = Math.min(minY, bbox.y);
+				maxX = Math.max(maxX, bbox.x + bbox.w);
+				maxY = Math.max(maxY, bbox.y + bbox.h);
+			});
+
+			const cellSize = provinceGridCellSize;
+			const grid: ProvinceGrid =
+				minX < maxX && minY < maxY
+					? {
+							originX: minX,
+							originY: minY,
+							cellSize,
+							cols: Math.ceil((maxX - minX) / cellSize),
+							rows: Math.ceil((maxY - minY) / cellSize),
+							cells: [],
+						}
+					: { originX: 0, originY: 0, cellSize, cols: 0, rows: 0, cells: [] };
+
+			this.forEachProvince((province) => {
+				const bbox = province.boundingBox;
+				const colStart = Math.floor((bbox.x - grid.originX) / cellSize);
+				const rowStart = Math.floor((bbox.y - grid.originY) / cellSize);
+				// The far edge is exclusive in inBBox, so a box ending exactly on a cell boundary
+				// does not reach the next cell.
+				const colEnd = Math.min(
+					grid.cols - 1,
+					Math.ceil((bbox.x + bbox.w - grid.originX) / cellSize) - 1,
+				);
+				const rowEnd = Math.min(
+					grid.rows - 1,
+					Math.ceil((bbox.y + bbox.h - grid.originY) / cellSize) - 1,
+				);
+				for (let row = rowStart; row <= rowEnd; row++) {
+					for (let col = colStart; col <= colEnd; col++) {
+						const index = row * grid.cols + col;
+						(grid.cells[index] ??= []).push(province);
+					}
+				}
+			});
+
+			this.provinceGridMemo = grid;
+		}
+		return this.provinceGridMemo;
 	}
 
 	public getProvinceToStateMap(): Record<number, number | undefined> {
