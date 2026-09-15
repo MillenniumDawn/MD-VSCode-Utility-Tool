@@ -9,6 +9,7 @@ Unreleased
 - A focus id, MIO trait id, GUI window name or country tag containing `</script>` can no longer break out of the preview page or inject markup into it: the focus tree, MIO, GUI and technology previews now escape their data the way the other previews already did. Issue #209.
 - A GUI container-window name or technology folder name containing quotes or angle brackets can no longer break out of the folder selector or inject markup into the GUI and technology previews. Issue #210.
 - A MIO trait token or a localisation value containing quotes or angle brackets can no longer inject markup into the MIO and technology previews. Issue #211.
+- [ CI ] A merged pull request labelled bug, or one closing an issue labelled bug, is now filed under Bugfixes in the release changelog instead of always landing under Functionality. Issue #212.
 
 v1.1.35
 
