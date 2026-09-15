@@ -9,7 +9,7 @@ import { ParentInfo, RenderCommonOptions } from '../../util/hoi4gui/common';
 import { renderGridBox, GridBoxItem, GridBoxConnection, GridBoxConnectionItem } from '../../util/hoi4gui/gridbox';
 import { renderInstantTextBox } from '../../util/hoi4gui/instanttextbox';
 import { renderIcon } from '../../util/hoi4gui/icon';
-import { escapeAttr, html, previewedFileUriScript, errorPage } from '../../util/html';
+import { escapeAttr, htmlEscape, html, previewedFileUriScript, errorPage } from '../../util/html';
 import { ContainerWindowType, GridBoxType, IconType, InstantTextBoxType, Format } from '../../hoiformat/gui';
 import { TechnologyTreeLoader, TechnologyTreeLoaderResult } from './loader';
 import { EquipmentArchetype } from './equipmentschema';
@@ -172,7 +172,7 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
 async function renderFolderOptions(folders: string[]): Promise<string> {
     return (await Promise.all(folders.map(async (folder) => {
         const localizedText = localisationIndex ? `${await getLocalisedTextQuick(folder)} (${folder})` : folder;
-        return `<option value="techfolder_${folder}">${localizedText}</option>`;
+        return `<option value="techfolder_${escapeAttr(folder)}">${htmlEscape(localizedText)}</option>`;
     }))).join('');
 }
 
@@ -291,7 +291,7 @@ async function renderTechnologyFolder(
     const folderTreeView = flatMap(techTreeViews, tv => tv.containerwindowtype).find(c => c.name === folder);
     let children: string;
     if (!folderTreeView) {
-        children = `<div>${localize('techtree.cantfindtechfolderin', "Can't find technology folder {0} in {1}.", folder, guiFiles)}</div>`;
+        children = `<div>${localize('techtree.cantfindtechfolderin', "Can't find technology folder {0} in {1}.", htmlEscape(folder), guiFiles)}</div>`;
 
     } else {
         const folderItem = allContainerWindowTypes.find(c => c.name === `techtree_${folder}_item`);
@@ -328,7 +328,7 @@ async function renderTechnologyFolder(
     }
 
     return `<div
-        id="techfolder_${folder}"
+        id="techfolder_${escapeAttr(folder)}"
         class="techfolder ${styleTable.style('displayNone', () => `display:none;`)}"
     >
         ${children}
@@ -572,7 +572,7 @@ async function renderTechnology(
     country: string | undefined,
 ): Promise<string> {
     if (!item) {
-        return `<div>${localize('techtree.cantfindtechitemin', "Can't find containerwindowtype \"{0}\" in {1}", `techtree_${folder.name}_item`, guiFiles)}</div>`;
+        return `<div>${localize('techtree.cantfindtechitemin', "Can't find containerwindowtype \"{0}\" in {1}", htmlEscape(`techtree_${folder.name}_item`), guiFiles)}</div>`;
     }
 
     const nameKeys = await resolveTechNameKeys(technology, equipmentArchetypes);

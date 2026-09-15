@@ -149,6 +149,28 @@ describe("previewdef/technology renderTechnologyFile in-place update", () => {
 		}
 	});
 
+	it("escapes a folder name carrying quotes and angle brackets everywhere it is written into markup", async () => {
+		// The parser accepts quoted identifiers, so a folder name is workspace text. It lands in the
+		// selector <option>, the folder div's id and, with this stub's tree view having no folder
+		// children, the "can't find folder" fallback message.
+		const hostileFolder = 'arty" onload="x<b>';
+		const rendered = (await renderTechnologyFile(
+			loaderFor([hostileFolder]),
+			uri,
+			webview,
+		)) as LoaderRenderResult;
+		const data = rendered.update!.data as { folderOptionsHtml: string; folders: string[] };
+
+		assert.ok(!rendered.html.includes(hostileFolder), rendered.html);
+		assert.ok(!rendered.html.includes("<b>"), rendered.html);
+		assert.ok(!data.folderOptionsHtml.includes(hostileFolder), data.folderOptionsHtml);
+		assert.ok(rendered.html.includes('<option value="techfolder_arty&quot; onload=&quot;x&lt;b&gt;">arty&quot;&nbsp;onload=&quot;x&lt;b&gt;</option>'), rendered.html);
+		assert.ok(rendered.html.includes('id="techfolder_arty&quot; onload=&quot;x&lt;b&gt;"'), rendered.html);
+		// The page matches option values and ids against these raw names after the browser has
+		// decoded the attributes, so the data itself stays unescaped.
+		assert.deepStrictEqual(data.folders, [hostileFolder]);
+	});
+
 	it("returns a plain string (no update parts) for the no-technology-tree page", async () => {
 		const rendered = await renderTechnologyFile(loaderFor([]), uri, webview);
 		assert.strictEqual(typeof rendered, "string");
