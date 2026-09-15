@@ -355,6 +355,24 @@ describe("previewdef/technology country selector", () => {
 		assert.ok((rendered.update!.data as { countries: unknown }).countries);
 	});
 
+	it("escapes a tag that would otherwise end the inline script", async () => {
+		// The tags are read from the workspace. The HTML parser ends the script at the first
+		// `</script`, whatever the JavaScript around it means.
+		withCountryIcons(true);
+		const hostileTag = "</script><img src=x>";
+		const rendered = (await renderTechnologyFile(
+			loaderFor(["artillery"], { artillery: [hostileTag] }),
+			uri,
+			webview,
+		)) as LoaderRenderResult;
+
+		const script = /window\.techCountries = (.*?);<\/script>/s.exec(rendered.html);
+		assert.ok(script, "expected the countries payload script");
+		assert.ok(!script![1]!.includes("</script"), script![1]!);
+		const countries = JSON.parse(script![1]!);
+		assert.strictEqual(countries.artillery[0].tag, hostileTag);
+	});
+
 	// The full html injects window.techCountry, so an in-place update that leaves it out lets the page
 	// keep listing a country the host stopped drawing for.
 	it("carries the country the tree was drawn for in the update", async () => {

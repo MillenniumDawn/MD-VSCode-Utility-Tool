@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getSpriteByGfxName, Image, getImageByPath } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
-import { randomString } from '../../util/common';
+import { randomString, jsonForScript } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { escapeAttr, html, htmlEscape, previewedFileUriScript, errorPage } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
@@ -138,14 +138,17 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
         renderedHeaders[mio.id] = (await renderTreeHeaders(mio, styleTable)).replace(/\s\s+/g, ' ');
     }
 
-    jsCodes.push('window.mios = ' + JSON.stringify(mios));
-    jsCodes.push('window.renderedTrait = ' + JSON.stringify(renderedTrait));
-    jsCodes.push('window.renderedHeaders = ' + JSON.stringify(renderedHeaders));
-    jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
-    jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
+    // jsonForScript, not JSON.stringify: organization and trait ids come straight from the
+    // workspace, and one containing `</script` would end the inline script and spill the rest
+    // into the document.
+    jsCodes.push('window.mios = ' + jsonForScript(mios));
+    jsCodes.push('window.renderedTrait = ' + jsonForScript(renderedTrait));
+    jsCodes.push('window.renderedHeaders = ' + jsonForScript(renderedHeaders));
+    jsCodes.push('window.gridBox = ' + jsonForScript(gridBox));
+    jsCodes.push('window.styleNonce = ' + jsonForScript(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
     jsCodes.push('window.toolbarHeight = ' + toolbarHeight);
-    jsCodes.push('window.previewOptions = ' + JSON.stringify(getPreviewOptions(previewOptionKeys)));
+    jsCodes.push('window.previewOptions = ' + jsonForScript(getPreviewOptions(previewOptionKeys)));
 
     return {
         baseContent,

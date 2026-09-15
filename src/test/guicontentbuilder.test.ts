@@ -90,6 +90,23 @@ describe("previewdef/gui contentbuilder", () => {
 		assert.ok(html.includes('<option value="containerwindow_b">b</option>'));
 	});
 
+	it("escapes a window name that would otherwise end the inline script", async () => {
+		// The parser accepts quoted identifiers, so a window name is workspace text. The HTML parser
+		// ends the script at the first `</script`, whatever the JavaScript around it means.
+		const hostileName = "win_</script><img src=x>";
+		const html = await renderGuiFile(
+			loaderWithWindows([minimalWindow(hostileName)]),
+			uri,
+			webview,
+		);
+
+		const script = /window\.containerWindowToggles = (.*?);<\/script>/s.exec(html);
+		assert.ok(script, "expected the toggles payload script");
+		assert.ok(!script![1]!.includes("</script"), script![1]!);
+		const toggles = JSON.parse(script![1]!);
+		assert.strictEqual(toggles[hostileName].name, hostileName);
+	});
+
 	it("handles loader error gracefully", async () => {
 		const badLoader: any = {
 			load: async () => {

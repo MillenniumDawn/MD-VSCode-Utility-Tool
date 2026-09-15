@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { localize } from '../../util/i18n';
 import { Technology, TechnologyTree, TechnologyFolder } from './schema';
 import { getSpriteByGfxName, Sprite } from '../../util/image/imagecache';
-import { arrayToMap, UserError } from '../../util/common';
+import { arrayToMap, UserError, jsonForScript } from '../../util/common';
 import { HOIPartial } from '../../hoiformat/schema';
 import { renderContainerWindow, renderContainerWindowChildren } from '../../util/hoi4gui/containerwindow';
 import { ParentInfo, RenderCommonOptions } from '../../util/hoi4gui/common';
@@ -65,8 +65,10 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
                 // The country dropdown is re-listed per folder on the page, so the page needs the
                 // whole map rather than one folder's options; the update carries it too, so an edit
                 // that moves a technology re-lists as well.
-                { content: `window.techCountries = ${JSON.stringify(countries)};` },
-                { content: `window.techCountry = ${JSON.stringify(country ?? '')};` },
+                // jsonForScript, not JSON.stringify: the tags come from the workspace, and one
+                // containing `</script` would end the inline script.
+                { content: `window.techCountries = ${jsonForScript(countries)};` },
+                { content: `window.techCountry = ${jsonForScript(country ?? '')};` },
                 'common.js',
                 'techtree.js',
             ],
