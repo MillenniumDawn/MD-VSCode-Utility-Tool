@@ -3,6 +3,7 @@ Unreleased
   Functionality:
 
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
+- [ World Map Previewer ] The country colour set pans and zooms smoothly on a full-size map. Each province's owner colour was searched through every country tag on every redraw; the table is now built once per redraw. Issue #214.
 
   Bugfixes:
 
