@@ -25,6 +25,7 @@ import {
 	getImageSizeInBytes,
 } from "./pixelformat";
 import { UserError } from "../../common";
+import { assertImageDimensions } from "../imagelimits";
 
 export class DDS {
 	private constructor(
@@ -43,6 +44,7 @@ export class DDS {
 		}
 
 		const header = extractHeader(headerArray);
+		assertImageDimensions(header.dwWidth, header.dwHeight, "DDS");
 		if (
 			header.ddspf.dwFlags === DDPF_FOURCC &&
 			header.ddspf.dwFourCC === FOURCC_DX10
