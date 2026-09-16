@@ -901,18 +901,13 @@ function clearCheckedFocuses() {
 
 function setupCheckedFocuses(focuses: Focus[], focusTree: FocusTree) {
 	const focusCheckState = getState().checkedFocuses ?? {};
+	const completedFocusIds = collectCompletedFocusIds(focusTree.conditionExprs);
 	for (const focus of focuses) {
 		const checkbox = document.getElementById(
 			`checkbox-${normalizeForStyle(focus.id)}`,
 		) as HTMLInputElement;
 		if (checkbox) {
-			if (
-				focusTree.conditionExprs.some(
-					(e) =>
-						e.scopeName === "" &&
-						e.nodeContent === "has_completed_focus = " + focus.id,
-				)
-			) {
+			if (completedFocusIds.has(focus.id)) {
 				checkbox.checked = !!focusCheckState[focus.id];
 				const checkboxItem = new Checkbox(checkbox);
 				checkedFocuses[focus.id] = checkboxItem;
@@ -951,6 +946,27 @@ function setupCheckedFocuses(focuses: Focus[], focusTree: FocusTree) {
 			}
 		}
 	}
+}
+
+const hasCompletedFocusPrefix = "has_completed_focus = ";
+
+/**
+ * The ids named by an unscoped `has_completed_focus = <id>` condition. Built once per rebuild
+ * rather than scanned per focus: a large tree carries thousands of expressions and thousands of
+ * focuses, and every checkbox click rebuilds, so the per-focus scan froze the preview for seconds.
+ */
+export function collectCompletedFocusIds(exprs: ConditionItem[]): Set<string> {
+	const ids = new Set<string>();
+	for (const expr of exprs) {
+		if (
+			expr.scopeName === "" &&
+			expr.nodeContent.startsWith(hasCompletedFocusPrefix)
+		) {
+			ids.add(expr.nodeContent.slice(hasCompletedFocusPrefix.length));
+		}
+	}
+
+	return ids;
 }
 
 function dedupeConditionExprs(exprs: ConditionItem[]): ConditionItem[] {
