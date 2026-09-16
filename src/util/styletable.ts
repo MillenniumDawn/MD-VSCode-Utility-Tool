@@ -4,10 +4,15 @@ export class StyleTable {
     private id: number = 0;
     private cachedCss: string | undefined = undefined;
 
+    public get styleRecords(): Readonly<Record<string, string>> {
+        return this.records;
+    }
+
     // The third argument is the pseudo-class the rule hangs off (':hover', ':focus'). It is part of
     // the record key, so the same name can carry a base rule and its pseudo-class variants.
     public style(name: string, callback: () => string, pseudoClass?: string): string
     public style(name: string, callback: () => Promise<string>, pseudoClass?: string): Promise<string>
+    public style(name: string, callback: (() => string) | (() => Promise<string>), pseudoClass?: string): string | Promise<string>
     public style(name: string, callback: (() => string) | (() => Promise<string>), pseudoClass: string = ''): string | Promise<string> {
         name = this.name(name);
         const key = name + pseudoClass;
@@ -34,7 +39,7 @@ export class StyleTable {
     public oneTimeStyle(name: string, callback: () => Promise<string>, pseudoClass?: string): Promise<string>
     public oneTimeStyle(name: string, callback: (() => string) | (() => Promise<string>), pseudoClass: string = ''): string | Promise<string> {
         const sid = this.id++;
-        return this.style(name + '-' + sid, callback as any, pseudoClass);
+        return this.style(name + '-' + sid, callback, pseudoClass);
     }
 
     public toStyleElement(nonce: string): string {
