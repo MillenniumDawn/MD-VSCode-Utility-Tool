@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 
@@ -50,7 +51,8 @@ function fakeSpawner(plan: Record<string, Outcome>) {
     return { spawn, started };
 }
 
-async function runCapturing(projects: string[], spawn: (project: string) => unknown) {
+// The fake projects have no tsconfig on disk, so the purge is a no-op unless a test wants to watch it.
+async function runCapturing(projects: string[], spawn: (project: string) => unknown, purge: (project: string) => void = () => undefined) {
     const write = process.stdout.write;
     let output = '';
 
@@ -60,7 +62,7 @@ async function runCapturing(projects: string[], spawn: (project: string) => unkn
     }) as typeof process.stdout.write;
 
     try {
-        const code = await compileTests.run(projects, spawn);
+        const code = await compileTests.run(projects, spawn, purge);
         return { code, output };
     } finally {
         process.stdout.write = write;
@@ -127,6 +129,70 @@ describe('scripts/compile-tests', function () {
             assert.notStrictEqual(result.code, 0);
             assert.ok(result.output.includes('spawn ENOENT'));
         });
+
+        // tsc only ever writes, so a compiler started over a directory still holding the JS of a
+        // deleted test would leave that test in the mocha glob. Every purge has to land first.
+        it('purges every project before starting any compiler', async function () {
+            const events: string[] = [];
+            const spawner = fakeSpawner({ a: { code: 0 }, b: { code: 0 } });
+
+            const result = await runCapturing(['a', 'b'], (project) => {
+                events.push(`spawn:${project}`);
+                return spawner.spawn(project);
+            }, (project) => {
+                events.push(`purge:${project}`);
+            });
+
+            assert.strictEqual(result.code, 0);
+            assert.deepStrictEqual(events, ['purge:a', 'purge:b', 'spawn:a', 'spawn:b']);
+        });
+    });
+
+    describe('purge', function () {
+        let root: string;
+
+        beforeEach(function () {
+            root = fs.mkdtempSync(path.join(os.tmpdir(), 'compile-tests-'));
+        });
+
+        afterEach(function () {
+            fs.rmSync(root, { recursive: true, force: true });
+        });
+
+        function writeConfig(name: string, compilerOptions: Record<string, unknown>) {
+            fs.writeFileSync(path.join(root, name), JSON.stringify({ compilerOptions }));
+        }
+
+        it('removes the output directory named by the project, stale files and all', function () {
+            writeConfig('tsconfig.json', { outDir: 'out' });
+            fs.mkdirSync(path.join(root, 'out', 'src', 'test'), { recursive: true });
+            fs.writeFileSync(path.join(root, 'out', 'src', 'test', 'deleted.test.js'), '');
+            fs.writeFileSync(path.join(root, 'out', '.tsbuildinfo'), '');
+
+            compileTests.purge('tsconfig.json', root);
+
+            assert.ok(!fs.existsSync(path.join(root, 'out')));
+        });
+
+        it('is fine when there is nothing to remove yet', function () {
+            writeConfig('tsconfig.json', { outDir: 'out' });
+
+            assert.doesNotThrow(() => compileTests.purge('tsconfig.json', root));
+        });
+
+        it('refuses a project with no outDir', function () {
+            writeConfig('tsconfig.json', {});
+
+            assert.throws(() => compileTests.purge('tsconfig.json', root), /outDir/);
+        });
+
+        it('refuses a project that emits into the root itself', function () {
+            writeConfig('tsconfig.json', { outDir: '.' });
+            fs.writeFileSync(path.join(root, 'keep.txt'), '');
+
+            assert.throws(() => compileTests.purge('tsconfig.json', root), /root/);
+            assert.ok(fs.existsSync(path.join(root, 'keep.txt')));
+        });
     });
 
     describe('the projects it compiles', function () {
@@ -145,6 +211,26 @@ describe('scripts/compile-tests', function () {
                 assert.strictEqual(config.compilerOptions.noEmitOnError, true, `${project} may emit despite errors`);
             }
         });
+
+        // The output directory is purged before every compile, so an incremental build would only
+        // write a .tsbuildinfo it never gets to read -- and it was the incremental build that let
+        // the JS of deleted sources pile up in the first place.
+        it('compiles projects that are not incremental', function () {
+            for (const project of compileTests.projects) {
+                const config = JSON.parse(fs.readFileSync(path.join(repoRoot, project), 'utf8'));
+                assert.strictEqual(config.compilerOptions.incremental, undefined, `${project} is incremental`);
+                assert.strictEqual(config.compilerOptions.tsBuildInfoFile, undefined, `${project} names a tsBuildInfoFile`);
+            }
+        });
+
+        it('purges the directories mocha reads from', function () {
+            const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+
+            for (const project of compileTests.projects) {
+                const outDir = path.relative(repoRoot, compileTests.outputDir(project)).replace(/\\/g, '/');
+                assert.ok(pkg.scripts.test.includes(`${outDir}/`), `${project} emits into ${outDir}, which the test script does not read`);
+            }
+        });
     });
 
     describe('package.json', function () {
@@ -160,6 +246,15 @@ describe('scripts/compile-tests', function () {
         // cmd.exe, which is what npm runs scripts through on Windows, does not strip single quotes:
         // mocha would be handed a pattern with the quotes still in it and match no files at all.
         // Double quotes are stripped there and still keep sh from expanding the glob itself.
+        it('cleans the test output along with the build output', function () {
+            const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+
+            for (const project of compileTests.projects) {
+                const outDir = path.relative(repoRoot, compileTests.outputDir(project)).replace(/\\/g, '/');
+                assert.ok(pkg.scripts.clean.split(/\s+/).includes(outDir), `clean does not remove ${outDir}`);
+            }
+        });
+
         it('quotes the mocha globs so they survive both shells', function () {
             const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 

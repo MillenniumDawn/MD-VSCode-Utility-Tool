@@ -320,7 +320,7 @@
 		"test:coverage": "c8 --reporter=text --reporter=lcov --reports-dir=coverage mocha --require ./out-test/src/test/_vscode_stub.js \"out-test/src/test/**/*.test.js\" \"out-test-webview/src/test/webview/**/*.test.js\" --exclude \"out-test/src/test/integration/**\"",
 		"test:integration": "node ./out-test/src/test/integration/runTest.js",
 		"smoke:webviews": "node scripts/smoke-webviews.js",
-		"clean": "rimraf dist out static",
+		"clean": "rimraf dist out static out-test out-test-webview",
 		"geni18n": "npm run compile-ts && node scripts/genzhi18n.js",
 		"package": "vsce package",
 		"package:pre-release": "vsce package --pre-release",

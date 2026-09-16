@@ -22,6 +22,7 @@ Unreleased
   Bugfixes:
 
 - Treat changes to `.vscodeignore` as extension changes that trigger a release. Issue #198.
+- [ CI ] A local `npm test` no longer runs tests for source files that were deleted: the compiled test output is purged before every compile, so a local run covers the same code CI does. Issue #217.
 
   Bugfixes:
 

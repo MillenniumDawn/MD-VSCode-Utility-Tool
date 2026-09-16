@@ -13,7 +13,12 @@
 // the second project's diagnostics, because the point of a run is to see every error at once.
 // Output is buffered per project and printed after that child exits: two tsc processes writing at
 // the same time interleave their multi-line diagnostics into nonsense.
+//
+// Each project's output directory is emptied before its compiler starts. tsc only ever writes: the
+// JS of a source file that was deleted stays behind, still matches the mocha glob and still runs,
+// so a local `npm test` measured code that no longer existed while CI, which starts clean, did not.
 
+const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -27,6 +32,25 @@ const projects = ['tsconfig.test.json', 'tsconfig.webview.test.json'];
 function spawnTsc(project) {
 	const tsc = path.join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
 	return spawn(process.execPath, [tsc, '-p', path.join(repoRoot, project)], { cwd: repoRoot });
+}
+
+// The directory a project emits into, read from its own tsconfig so the two cannot drift apart. An
+// outDir that is missing or is the root itself is refused rather than handed to a recursive delete.
+function outputDir(project, root = repoRoot) {
+	const config = JSON.parse(fs.readFileSync(path.join(root, project), 'utf8'));
+	const outDir = config.compilerOptions?.outDir;
+	if (typeof outDir !== 'string' || outDir.trim() === '') {
+		throw new Error(`${project} has no compilerOptions.outDir to purge`);
+	}
+	const resolved = path.resolve(root, outDir);
+	if (resolved === path.resolve(root)) {
+		throw new Error(`${project} emits into the repository root; refusing to purge it`);
+	}
+	return resolved;
+}
+
+function purge(project, root = repoRoot) {
+	fs.rmSync(outputDir(project, root), { recursive: true, force: true });
 }
 
 // Resolves to the child's exit code, with everything it wrote on either stream. A child that never
@@ -52,7 +76,11 @@ function compile(project, spawnProject) {
 	});
 }
 
-async function run(projectList = projects, spawnProject = spawnTsc) {
+async function run(projectList = projects, spawnProject = spawnTsc, purgeProject = purge) {
+	for (const project of projectList) {
+		purgeProject(project);
+	}
+
 	const results = await Promise.all(projectList.map((project) => compile(project, spawnProject)));
 
 	for (const result of results) {
@@ -72,4 +100,4 @@ if (require.main === module) {
 	});
 }
 
-module.exports = { compile, projects, run, spawnTsc };
+module.exports = { compile, outputDir, projects, purge, run, spawnTsc };
