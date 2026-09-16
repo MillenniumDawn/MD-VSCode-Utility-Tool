@@ -429,6 +429,84 @@ describe('scripts/bump-version', function () {
         });
     });
 
+    // The file is what scripts/pr-bullets.js really writes: bullets as plain strings, with the
+    // subsection only on the entries array beside them. Everything below reads that shape rather
+    // than hand-built { text, section } pairs, which is how the section used to go missing.
+    describe('readBulletsFile', function () {
+        let dir: string;
+        let file: string;
+
+        const seeded = {
+            bullets: ['- [ MIO ] A fix. Issue #4.', '- A feature.', '- From a bare commit.'],
+            pullRequests: [4, 5],
+            entries: [
+                { number: 4, title: 'A fix', component: 'MIO', section: 'Bugfixes', issue: 4 },
+                { number: 5, title: 'A feature', section: 'Functionality' },
+            ],
+        };
+
+        beforeEach(function () {
+            dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bump-'));
+            file = path.join(dir, 'bullets.json');
+            fs.writeFileSync(file, JSON.stringify(seeded));
+        });
+
+        afterEach(function () {
+            fs.rmSync(dir, { recursive: true, force: true });
+        });
+
+        it('pairs each bullet with the section its entry carries', function () {
+            assert.deepStrictEqual(bumpVersion.readBulletsFile(file), [
+                { text: '- [ MIO ] A fix. Issue #4.', section: 'Bugfixes' },
+                { text: '- A feature.', section: 'Functionality' },
+                '- From a bare commit.',
+            ]);
+        });
+
+        it('returns a bare array as it is, and nothing for a missing file', function () {
+            fs.writeFileSync(file, JSON.stringify(['- One.', '- Two.']));
+            assert.deepStrictEqual(bumpVersion.readBulletsFile(file), ['- One.', '- Two.']);
+            assert.deepStrictEqual(bumpVersion.readBulletsFile(path.join(dir, 'missing.json')), []);
+            assert.deepStrictEqual(bumpVersion.readBulletsFile(undefined), []);
+        });
+
+        it('ignores an entry whose section is not one of the headings', function () {
+            fs.writeFileSync(file, JSON.stringify({
+                bullets: ['- One.'],
+                pullRequests: [1],
+                entries: [{ number: 1, section: 'Whatever' }],
+            }));
+            assert.deepStrictEqual(bumpVersion.readBulletsFile(file), ['- One.']);
+        });
+
+        it('files a bug-labelled pull request under Bugfixes in a fresh release', function () {
+            fs.writeFileSync(path.join(dir, 'package.json'), '{\n\t"version": "1.1.30"\n}\n');
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), 'v1.1.30\n\n  Functionality:\n\n- Shipped.\n');
+
+            const options = bumpVersion.parseArgs(['--type', 'patch', '--bullets-file', file]);
+            bumpVersion.applyBump({ cwd: dir, ...options });
+
+            assert.strictEqual(
+                fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
+                'v1.1.31\n\n  Functionality:\n\n- A feature.\n- From a bare commit.\n\n'
+                + '  Bugfixes:\n\n- [ MIO ] A fix. Issue #4.\n\n'
+                + 'v1.1.30\n\n  Functionality:\n\n- Shipped.\n');
+        });
+
+        it('files a bug-labelled pull request under Bugfixes when refreshing an open release', function () {
+            fs.writeFileSync(path.join(dir, 'package.json'), '{\n\t"version": "1.1.31"\n}\n');
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), 'v1.1.31\n\n  Functionality:\n\n- Already there.\n');
+
+            const options = bumpVersion.parseArgs(['--append', '--bullets-file', file]);
+            bumpVersion.appendToChangelog({ cwd: dir, ...options });
+
+            assert.strictEqual(
+                fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
+                'v1.1.31\n\n  Functionality:\n\n- Already there.\n- A feature.\n- From a bare commit.\n\n'
+                + '  Bugfixes:\n\n- [ MIO ] A fix. Issue #4.\n');
+        });
+    });
+
     describe('appendToChangelog', function () {
         let dir: string;
 
@@ -669,14 +747,14 @@ describe('scripts/check-version', function () {
     describe('isExempt', function () {
         it('exempts documentation and repository tooling', function () {
             for (const file of ['README.md', 'CHANGELOG.md', 'CLAUDE.md', '.github/workflows/test.yml',
-                '.claude/skills/fix-issue/SKILL.md', 'LICENSE', '.gitignore', '.vscodeignore']) {
+                '.claude/skills/fix-issue/SKILL.md', 'LICENSE', '.gitignore']) {
                 assert.strictEqual(checkVersion.isExempt(file), true, file);
             }
         });
 
         it('does not exempt anything that ships in the extension', function () {
             for (const file of ['package.json', 'src/extension.ts', 'webviewsrc/eventtree.ts',
-                'resource/eventtree.css', 'i18n/en.ts', 'scripts/bump-version.js']) {
+                'resource/eventtree.css', 'i18n/en.ts', 'scripts/bump-version.js', '.vscodeignore']) {
                 assert.strictEqual(checkVersion.isExempt(file), false, file);
             }
         });
@@ -889,6 +967,16 @@ describe('scripts/release-check', function () {
             });
             assert.strictEqual(result.release, false);
             assert.strictEqual(result.bump, false);
+        });
+
+        it('asks for a release pull request when only .vscodeignore changed', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.23',
+                tagExists: true,
+                changedFiles: ['.vscodeignore'],
+            });
+            assert.strictEqual(result.release, false);
+            assert.strictEqual(result.bump, true);
         });
 
         it('does nothing when nothing changed at all', function () {

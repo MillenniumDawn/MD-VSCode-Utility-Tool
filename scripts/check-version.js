@@ -29,7 +29,6 @@ const exemptPatterns = [
 	/^\.claude\//,
 	/^LICENSE$/,
 	/^\.gitignore$/,
-	/^\.vscodeignore$/,
 ];
 
 function git(args) {

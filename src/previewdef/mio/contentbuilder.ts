@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { getSpriteByGfxName, Image, getImageByPath } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
-import { randomString } from '../../util/common';
+import { randomString, jsonForScript } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { escapeAttr, html, htmlEscape, previewedFileUriScript, errorPage } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
@@ -138,14 +138,17 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
         renderedHeaders[mio.id] = (await renderTreeHeaders(mio, styleTable)).replace(/\s\s+/g, ' ');
     }
 
-    jsCodes.push('window.mios = ' + JSON.stringify(mios));
-    jsCodes.push('window.renderedTrait = ' + JSON.stringify(renderedTrait));
-    jsCodes.push('window.renderedHeaders = ' + JSON.stringify(renderedHeaders));
-    jsCodes.push('window.gridBox = ' + JSON.stringify(gridBox));
-    jsCodes.push('window.styleNonce = ' + JSON.stringify(styleNonce));
+    // jsonForScript, not JSON.stringify: organization and trait ids come straight from the
+    // workspace, and one containing `</script` would end the inline script and spill the rest
+    // into the document.
+    jsCodes.push('window.mios = ' + jsonForScript(mios));
+    jsCodes.push('window.renderedTrait = ' + jsonForScript(renderedTrait));
+    jsCodes.push('window.renderedHeaders = ' + jsonForScript(renderedHeaders));
+    jsCodes.push('window.gridBox = ' + jsonForScript(gridBox));
+    jsCodes.push('window.styleNonce = ' + jsonForScript(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
     jsCodes.push('window.toolbarHeight = ' + toolbarHeight);
-    jsCodes.push('window.previewOptions = ' + JSON.stringify(getPreviewOptions(previewOptionKeys)));
+    jsCodes.push('window.previewOptions = ' + jsonForScript(getPreviewOptions(previewOptionKeys)));
 
     return {
         baseContent,
@@ -245,6 +248,10 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
 
     const traitBg = await getSpriteByGfxName(trait.specialTraitBackground ? 'GFX_country_spefific_org_trait_button' : 'GFX_industrial_org_trait_button', gfxFiles);
 
+    // The token may be a quoted string and the localised name is copied verbatim out of the .yml, so
+    // both are mod text and are escaped for the context they land in: the title attribute and the body.
+    const traitName = localisationIndex ? (await getLocalisedTextQuick(trait.name)) ?? '' : '';
+
     return `<div
     class="
         ${styleTable.style(trait.specialTraitBackground ? 'trait-bg-special' : 'trait-bg-normal',
@@ -276,7 +283,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
         start="${trait.token?.start}"
         end="${trait.token?.end}"
         ${file === trait.file ? '' : `file="${escapeAttr(trait.file)}"`}
-        title="${escapeAttr(trait.id)}${localisationIndex ? `\n${await getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
+        title="${escapeAttr(trait.id)}${localisationIndex ? `\n${escapeAttr(traitName)}` : ''}\n({{position}})">
             <div class="
                 ${styleTable.style('effect-host', () => `
                     text-align: center;
@@ -308,7 +315,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
                 position: relative;
                 z-index: 5;
             `)}">
-            ${trait.id}
+            ${htmlEscape(trait.id)}
             </span>
             <br/>
             <span
@@ -320,7 +327,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
                 position: relative;
                 z-index: 5;
             `)}">
-            ${localisationIndex ? `${await getLocalisedTextQuick(trait.name)}` : ''}
+            ${htmlEscape(traitName)}
             </span>
         </div>
     </div>`;

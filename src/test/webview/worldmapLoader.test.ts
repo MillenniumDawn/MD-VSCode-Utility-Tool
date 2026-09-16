@@ -3,6 +3,8 @@ import * as assert from "assert";
 import { WorldMapData } from "../../previewdef/worldmap/definitions";
 import { buildWorldMapChangeMessages } from "../../previewdef/worldmap/worldmapchanges";
 import { Loader, FEWorldMapClass } from "../../../webviewsrc/worldmap/loader";
+import { inBBox } from "../../../webviewsrc/worldmap/graphutils";
+import { Zone } from "../../../webviewsrc/worldmap/definitions";
 import { vscode } from "../../../webviewsrc/util/vscode";
 
 function buildMap() {
@@ -85,6 +87,120 @@ describe("webview/worldmap/FEWorldMapClass reverse maps", function () {
 			assert.strictEqual(map.getProvinceByPosition(1, 1)?.id, 1);
 			assert.strictEqual(map.getProvinceByPosition(2, 1), undefined);
 			assert.strictEqual(map.getProvinceByPosition(1, 2), undefined);
+		});
+
+		it("prefers the lowest province id when cover zones overlap, bad provinces first", function () {
+			const provinces: any[] = [];
+			provinces[-1] = {
+				id: -1,
+				boundingBox: { x: 100, y: 100, w: 10, h: 10 },
+				coverZones: [{ x: 105, y: 105, w: 5, h: 5 }],
+			};
+			provinces[1] = {
+				id: 1,
+				boundingBox: { x: 100, y: 100, w: 10, h: 10 },
+				coverZones: [{ x: 100, y: 100, w: 10, h: 10 }],
+			};
+			provinces[2] = {
+				id: 2,
+				boundingBox: { x: 100, y: 100, w: 10, h: 10 },
+				coverZones: [{ x: 100, y: 100, w: 10, h: 10 }],
+			};
+			const map = new FEWorldMapClass({
+				provinces,
+				provincesCount: 3,
+				badProvincesCount: 1,
+			} as any);
+
+			assert.strictEqual(map.getProvinceByPosition(107, 107)?.id, -1);
+			assert.strictEqual(map.getProvinceByPosition(101, 101)?.id, 1);
+		});
+
+		it("finds a province spanning several grid cells from every cell it touches", function () {
+			const map = new FEWorldMapClass({
+				provinces: [
+					undefined,
+					{
+						id: 1,
+						boundingBox: { x: 10, y: 10, w: 200, h: 150 },
+						coverZones: [{ x: 10, y: 10, w: 200, h: 150 }],
+					},
+					{
+						id: 2,
+						boundingBox: { x: 500, y: 500, w: 8, h: 8 },
+						coverZones: [{ x: 500, y: 500, w: 8, h: 8 }],
+					},
+				],
+				provincesCount: 3,
+				badProvincesCount: 0,
+			} as any);
+
+			assert.strictEqual(map.getProvinceByPosition(10, 10)?.id, 1);
+			assert.strictEqual(map.getProvinceByPosition(209, 159)?.id, 1);
+			assert.strictEqual(map.getProvinceByPosition(100, 80)?.id, 1);
+			assert.strictEqual(map.getProvinceByPosition(210, 160), undefined);
+			assert.strictEqual(map.getProvinceByPosition(507, 507)?.id, 2);
+			assert.strictEqual(map.getProvinceByPosition(300, 300), undefined);
+			assert.strictEqual(map.getProvinceByPosition(-5, -5), undefined);
+			assert.strictEqual(map.getProvinceByPosition(10000, 10000), undefined);
+		});
+
+		it("matches a full scan on a 15000-province map and stays fast", function () {
+			this.timeout(20000);
+			const tile = 32;
+			const cols = 150;
+			const rows = 100;
+			const provinces: any[] = [undefined];
+			for (let row = 0; row < rows; row++) {
+				for (let col = 0; col < cols; col++) {
+					const x = col * tile;
+					const y = row * tile;
+					provinces.push({
+						id: provinces.length,
+						boundingBox: { x, y, w: tile, h: tile },
+						// Leave a one-pixel gutter uncovered so some lookups miss.
+						coverZones: [{ x: x + 1, y: y + 1, w: tile - 2, h: tile - 2 }],
+					});
+				}
+			}
+			const map = new FEWorldMapClass({
+				provinces,
+				provincesCount: provinces.length,
+				badProvincesCount: 0,
+			} as any);
+
+			let seed = 12345;
+			const random = (): number => {
+				seed = (seed * 1103515245 + 12345) % 2147483648;
+				return seed / 2147483648;
+			};
+			const points = Array.from({ length: 2000 }, () => ({
+				x: Math.floor(random() * (cols * tile + 20)) - 10,
+				y: Math.floor(random() * (rows * tile + 20)) - 10,
+			}));
+			const bruteForce = (x: number, y: number): number | undefined => {
+				for (let i = 1; i < provinces.length; i++) {
+					const p = provinces[i];
+					if (
+						inBBox({ x, y }, p.boundingBox) &&
+						p.coverZones.some((z: Zone) => inBBox({ x, y }, z))
+					) {
+						return p.id;
+					}
+				}
+				return undefined;
+			};
+
+			map.getProvinceByPosition(0, 0);
+			const start = performance.now();
+			const indexed = points.map((p) => map.getProvinceByPosition(p.x, p.y)?.id);
+			const elapsed = performance.now() - start;
+
+			const expected = points.map((p) => bruteForce(p.x, p.y));
+			assert.deepStrictEqual(indexed, expected);
+			assert.ok(expected.some((id) => id !== undefined));
+			assert.ok(expected.some((id) => id === undefined));
+			assert.ok(elapsed < 100, `2000 indexed lookups took ${elapsed}ms`);
 		});
 
 		it("builds the forward maps used by the renderer", function () {

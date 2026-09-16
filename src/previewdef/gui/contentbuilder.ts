@@ -2,8 +2,9 @@ import { chain } from 'lodash';
 import * as vscode from 'vscode';
 import { ContainerWindowType } from '../../hoiformat/gui';
 import { HOIPartial } from '../../hoiformat/schema';
-import { arrayToMap } from '../../util/common';
+import { arrayToMap, jsonForScript } from '../../util/common';
 import { debug } from '../../util/debug';
+import { escapeAttr, htmlEscape } from '../../util/escape';
 import { renderStandaloneWindow } from '../../util/hoi4gui/window';
 import { html, previewedFileUriScript, errorPage } from '../../util/html';
 import { localize } from '../../util/i18n';
@@ -34,7 +35,9 @@ export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webv
             baseContent,
             [
                 previewedFileUriScript(uri),
-                { content: 'window.containerWindowToggles = ' + JSON.stringify(makeToggleContainerWindowCheckboxes(containerWindows, styleTable)) + ';' },
+                // jsonForScript, not JSON.stringify: the map is keyed by window names read from the
+                // workspace, and one containing `</script` would end the inline script.
+                { content: 'window.containerWindowToggles = ' + jsonForScript(makeToggleContainerWindowCheckboxes(containerWindows, styleTable)) + ';' },
                 'common.js',
                 'guipreview.js',
             ],
@@ -102,7 +105,7 @@ function renderTopBar(folders: string[], styleTable: StyleTable): string {
                 type="text"
                 class="${styleTable.oneTimeStyle('folderSelector', () => `min-width:200px`)}"
             >
-                ${folders.map(folder => `<option value="containerwindow_${folder}">${folder}</option>`)}
+                ${folders.map(folder => `<option value="containerwindow_${escapeAttr(folder)}">${htmlEscape(folder)}</option>`)}
             </select>
         </div>
         <button id="refresh" title="${localize('common.topbar.refresh.title', 'Refresh')}">
@@ -144,7 +147,7 @@ async function renderSingleContainerWindow(
     const { html } = await renderStandaloneWindow(containerWindow, styleTable, gfxFiles);
 
     return `<div
-        id="containerwindow_${containerWindow.name}"
+        id="containerwindow_${escapeAttr(containerWindow.name ?? '')}"
         class="
             containerwindow
             containerwindow_${normalizeForStyle(containerWindow.name ?? '')}
@@ -169,7 +172,7 @@ function makeToggleContainerWindowCheckboxesRecursively(containerWindow: HOIPart
             <input
                 type="checkbox"
                 id="toggleContainerWindow_${prefix}${normalizedName}"
-                containerWindowName="${cw.name}"
+                containerWindowName="${escapeAttr(cw.name ?? '')}"
                 checked="checked"
                 class="toggleContainerWindowCheckbox"
             />
