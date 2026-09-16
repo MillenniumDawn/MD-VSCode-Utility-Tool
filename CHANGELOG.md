@@ -23,6 +23,10 @@ Unreleased
 
 - Treat changes to `.vscodeignore` as extension changes that trigger a release. Issue #198.
 
+  Bugfixes:
+
+- [ World Map ] Province definitions with color zero no longer produce duplicate provinces or missing-definition warnings. Issue #166.
+
 v1.1.35
 
   Functionality:

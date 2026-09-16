@@ -383,7 +383,7 @@ function mergeProvinceDefinitions(
 	let badId = -1;
 	for (const provinceInMap of provinces) {
 		const color = provinceInMap.color;
-		if (colorToProvinceId[color]) {
+		if (colorToProvinceId[color] !== undefined) {
 			continue;
 		}
 
