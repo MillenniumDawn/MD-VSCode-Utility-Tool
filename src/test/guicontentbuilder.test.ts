@@ -107,6 +107,22 @@ describe("previewdef/gui contentbuilder", () => {
 		assert.strictEqual(toggles[hostileName].name, hostileName);
 	});
 
+	it("escapes a window name carrying quotes and angle brackets in the selector and window id", async () => {
+		// The parser accepts quoted identifiers, so a window name is workspace text; a raw `"`
+		// would end the attribute and a raw `<img` would be markup rather than text.
+		const hostileName = 'win" onload="x<img src=x>';
+		const html = await renderGuiFile(
+			loaderWithWindows([minimalWindow(hostileName)]),
+			uri,
+			webview,
+		);
+
+		assert.ok(!html.includes('value="containerwindow_win" '), html);
+		assert.ok(!html.includes('id="containerwindow_win" '), html);
+		assert.ok(html.includes('<option value="containerwindow_win&quot; onload=&quot;x&lt;img src=x&gt;">win&quot;&nbsp;onload=&quot;x&lt;img&nbsp;src=x&gt;</option>'), html);
+		assert.ok(html.includes('id="containerwindow_win&quot; onload=&quot;x&lt;img src=x&gt;"'), html);
+	});
+
 	it("handles loader error gracefully", async () => {
 		const badLoader: any = {
 			load: async () => {
