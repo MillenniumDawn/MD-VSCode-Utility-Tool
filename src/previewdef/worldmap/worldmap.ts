@@ -28,6 +28,8 @@ export class WorldMap {
 	private cachedWorldMap: WorldMapData | undefined;
 
 	private lastRequestedExportUri: vscode.Uri | undefined;
+	private lastRequestedExportRequestId = 0;
+	private exportInProgressRequestId: number | undefined;
 
 	constructor(panel: vscode.WebviewPanel) {
 		this.panel = panel;
@@ -336,6 +338,7 @@ export class WorldMap {
 			filters: { [localize("pngfile", "PNG file")]: ["png"] },
 		});
 		this.lastRequestedExportUri = uri;
+		this.lastRequestedExportRequestId++;
 		if (!uri) {
 			return;
 		}
@@ -345,7 +348,8 @@ export class WorldMap {
 
 	private async exportMap(dataUrl?: string) {
 		const uri = this.lastRequestedExportUri;
-		if (!uri) {
+		const requestId = this.lastRequestedExportRequestId;
+		if (!uri || this.exportInProgressRequestId !== undefined) {
 			return;
 		}
 
@@ -360,12 +364,16 @@ export class WorldMap {
 			return;
 		}
 
+		this.exportInProgressRequestId = requestId;
 		try {
 			const base64 = dataUrl.slice(prefix.length);
 			const buffer = Buffer.from(base64, "base64");
 
 			await writeFile(uri, buffer);
 
+			if (this.lastRequestedExportRequestId === requestId) {
+				this.lastRequestedExportUri = undefined;
+			}
 			vscode.window.showInformationMessage(
 				localize("worldmap.export.success", "Successfully exported world map."),
 			);
@@ -374,6 +382,10 @@ export class WorldMap {
 			vscode.window.showErrorMessage(
 				localize("worldmap.export.error", "Can't export world map: {0}.", e),
 			);
+		} finally {
+			if (this.exportInProgressRequestId === requestId) {
+				this.exportInProgressRequestId = undefined;
+			}
 		}
 	}
 }

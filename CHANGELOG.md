@@ -15,6 +15,10 @@ Unreleased
 - [ CI ] A merged pull request labelled bug, or one closing an issue labelled bug, is now filed under Bugfixes in the release changelog instead of always landing under Functionality. Issue #212.
 - [ Focus Tree Previewer ] Ticking a completed-focus checkbox on a large tree no longer freezes the preview for seconds; the completed-focus conditions are indexed once per redraw instead of rescanned for every focus. Issue #213.
 
+  Bugfixes:
+
+- [ World Map ] Exporting a map writes the image only once, even if the webview repeats its response, and failed exports can be retried. Issue #196.
+
 v1.1.35
 
   Functionality:
