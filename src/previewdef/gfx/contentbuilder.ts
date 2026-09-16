@@ -146,7 +146,7 @@ async function renderSpriteType(
                 background-image: url(${image.uri});
                 background-size: ${image.width}px ${image.height}px;
             `,
-							)}"></div>`
+							)}" aria-hidden="true"></div>`
 						: `<div
             class="${styleTable.style(
 							"missingImageOuter",

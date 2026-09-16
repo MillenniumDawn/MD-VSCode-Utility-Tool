@@ -429,6 +429,84 @@ describe('scripts/bump-version', function () {
         });
     });
 
+    // The file is what scripts/pr-bullets.js really writes: bullets as plain strings, with the
+    // subsection only on the entries array beside them. Everything below reads that shape rather
+    // than hand-built { text, section } pairs, which is how the section used to go missing.
+    describe('readBulletsFile', function () {
+        let dir: string;
+        let file: string;
+
+        const seeded = {
+            bullets: ['- [ MIO ] A fix. Issue #4.', '- A feature.', '- From a bare commit.'],
+            pullRequests: [4, 5],
+            entries: [
+                { number: 4, title: 'A fix', component: 'MIO', section: 'Bugfixes', issue: 4 },
+                { number: 5, title: 'A feature', section: 'Functionality' },
+            ],
+        };
+
+        beforeEach(function () {
+            dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bump-'));
+            file = path.join(dir, 'bullets.json');
+            fs.writeFileSync(file, JSON.stringify(seeded));
+        });
+
+        afterEach(function () {
+            fs.rmSync(dir, { recursive: true, force: true });
+        });
+
+        it('pairs each bullet with the section its entry carries', function () {
+            assert.deepStrictEqual(bumpVersion.readBulletsFile(file), [
+                { text: '- [ MIO ] A fix. Issue #4.', section: 'Bugfixes' },
+                { text: '- A feature.', section: 'Functionality' },
+                '- From a bare commit.',
+            ]);
+        });
+
+        it('returns a bare array as it is, and nothing for a missing file', function () {
+            fs.writeFileSync(file, JSON.stringify(['- One.', '- Two.']));
+            assert.deepStrictEqual(bumpVersion.readBulletsFile(file), ['- One.', '- Two.']);
+            assert.deepStrictEqual(bumpVersion.readBulletsFile(path.join(dir, 'missing.json')), []);
+            assert.deepStrictEqual(bumpVersion.readBulletsFile(undefined), []);
+        });
+
+        it('ignores an entry whose section is not one of the headings', function () {
+            fs.writeFileSync(file, JSON.stringify({
+                bullets: ['- One.'],
+                pullRequests: [1],
+                entries: [{ number: 1, section: 'Whatever' }],
+            }));
+            assert.deepStrictEqual(bumpVersion.readBulletsFile(file), ['- One.']);
+        });
+
+        it('files a bug-labelled pull request under Bugfixes in a fresh release', function () {
+            fs.writeFileSync(path.join(dir, 'package.json'), '{\n\t"version": "1.1.30"\n}\n');
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), 'v1.1.30\n\n  Functionality:\n\n- Shipped.\n');
+
+            const options = bumpVersion.parseArgs(['--type', 'patch', '--bullets-file', file]);
+            bumpVersion.applyBump({ cwd: dir, ...options });
+
+            assert.strictEqual(
+                fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
+                'v1.1.31\n\n  Functionality:\n\n- A feature.\n- From a bare commit.\n\n'
+                + '  Bugfixes:\n\n- [ MIO ] A fix. Issue #4.\n\n'
+                + 'v1.1.30\n\n  Functionality:\n\n- Shipped.\n');
+        });
+
+        it('files a bug-labelled pull request under Bugfixes when refreshing an open release', function () {
+            fs.writeFileSync(path.join(dir, 'package.json'), '{\n\t"version": "1.1.31"\n}\n');
+            fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), 'v1.1.31\n\n  Functionality:\n\n- Already there.\n');
+
+            const options = bumpVersion.parseArgs(['--append', '--bullets-file', file]);
+            bumpVersion.appendToChangelog({ cwd: dir, ...options });
+
+            assert.strictEqual(
+                fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
+                'v1.1.31\n\n  Functionality:\n\n- Already there.\n- A feature.\n- From a bare commit.\n\n'
+                + '  Bugfixes:\n\n- [ MIO ] A fix. Issue #4.\n');
+        });
+    });
+
     describe('appendToChangelog', function () {
         let dir: string;
 

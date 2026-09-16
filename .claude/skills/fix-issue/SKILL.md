@@ -139,19 +139,22 @@ npm test
 If types changed, also run `npm run compile-ts`. If a check fails, fix the cause before
 continuing — do not commit failing code.
 
-### 7. Commit
+### 7. Branch and commit
 
-Never create or switch branches on your own. First check the current branch:
+**Every issue gets its own branch, cut from `origin/main`, and its own pull request.** Never
+commit a fix on `main` or on a branch that belongs to other work, even if that is the branch
+checked out when the skill starts.
 
 ```
-git rev-parse --abbrev-ref HEAD
+git fetch origin
+git checkout -b fix/issue-<number> origin/main
 ```
 
-- If on **`main`**: stop and use `AskUserQuestion` to ask which branch to use. Offer: (a) check
-  out an existing branch (user supplies the name), (b) create a new branch (user supplies the
-  name). Only after the user answers, run `git checkout <name>` or `git checkout -b <name>`. Do
-  not invent a branch name.
-- If **not on `main`**: commit on the current branch. Do not switch or create a branch.
+For a codebase-scanned bug with no issue, name it after the fix instead
+(`fix/<short-description>`). If the fix branch already exists (a rerun on the same issue),
+check it out and continue on it. If the working tree carries uncommitted changes from another
+branch that are not this fix, stash them first and leave them stashed — do not carry them
+over.
 
 Then stage only the files changed for this fix and commit. **Do not add a `Co-Authored-By`
 trailer, a "Generated with Claude Code" footer, or any other reference to Claude Code,
@@ -164,16 +167,17 @@ git commit -m "Fix <short description> (#<issue number>)
 <one or two sentences explaining root cause and fix>"
 ```
 
-### 8. Version bump + changelog — leave both alone
+### 8. Version bump — leave it alone; changelog — one bullet
 
-**Do not touch [package.json](../../../package.json) or
-[CHANGELOG.md](../../../CHANGELOG.md).** Releasing is handled after the merge: a push to `main`
+**Do not touch the version in [package.json](../../../package.json)** or any `vX.Y.Z` heading
+in [CHANGELOG.md](../../../CHANGELOG.md). Releasing is handled after the merge: a push to `main`
 that changed anything outside documentation and CI opens a release pull request carrying the
-version bump and a changelog section seeded from the merged pull request titles. Bumping here
-only creates a conflict with it.
+version bump. Bumping here only creates a conflict with it.
 
-Write the explanation of the fix in the pull request description instead (step 10). That is what
-the changelog entry is later reworded from.
+**Do write one bullet under the `Unreleased` heading** at the top of the CHANGELOG, under its
+`  Bugfixes:` subheading, in the style the project CLAUDE.md describes: one or two plain
+sentences for users of the extension, no internals, ending with `Issue #NN.`. Commit it with
+the fix. The detail a reviewer needs goes in the pull request description (step 10).
 
 ### 9. Ensure the branch is up to date
 

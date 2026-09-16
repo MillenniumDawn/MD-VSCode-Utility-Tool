@@ -90,6 +90,39 @@ describe("previewdef/gui contentbuilder", () => {
 		assert.ok(html.includes('<option value="containerwindow_b">b</option>'));
 	});
 
+	it("escapes a window name that would otherwise end the inline script", async () => {
+		// The parser accepts quoted identifiers, so a window name is workspace text. The HTML parser
+		// ends the script at the first `</script`, whatever the JavaScript around it means.
+		const hostileName = "win_</script><img src=x>";
+		const html = await renderGuiFile(
+			loaderWithWindows([minimalWindow(hostileName)]),
+			uri,
+			webview,
+		);
+
+		const script = /window\.containerWindowToggles = (.*?);<\/script>/s.exec(html);
+		assert.ok(script, "expected the toggles payload script");
+		assert.ok(!script![1]!.includes("</script"), script![1]!);
+		const toggles = JSON.parse(script![1]!);
+		assert.strictEqual(toggles[hostileName].name, hostileName);
+	});
+
+	it("escapes a window name carrying quotes and angle brackets in the selector and window id", async () => {
+		// The parser accepts quoted identifiers, so a window name is workspace text; a raw `"`
+		// would end the attribute and a raw `<img` would be markup rather than text.
+		const hostileName = 'win" onload="x<img src=x>';
+		const html = await renderGuiFile(
+			loaderWithWindows([minimalWindow(hostileName)]),
+			uri,
+			webview,
+		);
+
+		assert.ok(!html.includes('value="containerwindow_win" '), html);
+		assert.ok(!html.includes('id="containerwindow_win" '), html);
+		assert.ok(html.includes('<option value="containerwindow_win&quot; onload=&quot;x&lt;img src=x&gt;">win&quot;&nbsp;onload=&quot;x&lt;img&nbsp;src=x&gt;</option>'), html);
+		assert.ok(html.includes('id="containerwindow_win&quot; onload=&quot;x&lt;img src=x&gt;"'), html);
+	});
+
 	it("handles loader error gracefully", async () => {
 		const badLoader: any = {
 			load: async () => {

@@ -1,5 +1,8 @@
 import * as assert from "assert";
+import * as vscode from "vscode";
+import { afterEach, describe, it } from "mocha";
 import { WorldMap } from "../previewdef/worldmap/worldmap";
+import { restoreVscodeStubs, stubVscode } from "./_vscode_stub";
 
 function panel(posts: unknown[]): unknown {
 	return {
@@ -13,6 +16,10 @@ function panel(posts: unknown[]): unknown {
 }
 
 describe("previewdef/worldmap/WorldMap", () => {
+	afterEach(() => {
+		restoreVscodeStubs();
+	});
+
 	it("slices requested province data before posting it to the webview", async () => {
 		const posts: unknown[] = [];
 		const worldMap = new WorldMap(panel(posts) as any);
@@ -34,5 +41,138 @@ describe("previewdef/worldmap/WorldMap", () => {
 				end: 3,
 			},
 		]);
+	});
+
+	it("writes a successful export only once when the webview replays it", async () => {
+		const writes: string[] = [];
+		stubVscode({
+			writeFile: async (uri: vscode.Uri) => {
+				writes.push(uri.toString());
+			},
+		});
+		const worldMap = new WorldMap(panel([]) as any);
+		const uri = vscode.Uri.file("/tmp/world-map.png");
+		const state = worldMap as any;
+		state.lastRequestedExportUri = uri;
+		state.lastRequestedExportRequestId = 1;
+
+		await (worldMap as any).onMessage({
+			command: "exportmap",
+			dataUrl: "data:image/png;base64,AA==",
+		});
+		await (worldMap as any).onMessage({
+			command: "exportmap",
+			dataUrl: "data:image/png;base64,AA==",
+		});
+
+		assert.deepStrictEqual(writes, [uri.toString()]);
+		assert.strictEqual(state.lastRequestedExportUri, undefined);
+	});
+
+	it("suppresses a concurrent replay while the export is pending", async () => {
+		const writes: string[] = [];
+		let writeStarted!: () => void;
+		let finishWrite!: () => void;
+		const started = new Promise<void>((resolve) => {
+			writeStarted = resolve;
+		});
+		const finished = new Promise<void>((resolve) => {
+			finishWrite = resolve;
+		});
+		stubVscode({
+			writeFile: async (uri: vscode.Uri) => {
+				writes.push(uri.toString());
+				writeStarted();
+				await finished;
+			},
+		});
+		const worldMap = new WorldMap(panel([]) as any);
+		const state = worldMap as any;
+		state.lastRequestedExportUri = vscode.Uri.file("/tmp/world-map.png");
+		state.lastRequestedExportRequestId = 1;
+		const message = {
+			command: "exportmap",
+			dataUrl: "data:image/png;base64,AA==",
+		};
+
+		const firstExport = (worldMap as any).onMessage(message);
+		await started;
+		await (worldMap as any).onMessage(message);
+		assert.strictEqual(writes.length, 1);
+		finishWrite();
+		await firstExport;
+	});
+
+	it("keeps a failed export target available for retry", async () => {
+		let attempts = 0;
+		stubVscode({
+			writeFile: async () => {
+				attempts++;
+				if (attempts === 1) {
+					throw new Error("write failed");
+				}
+			},
+		});
+		const worldMap = new WorldMap(panel([]) as any);
+		const state = worldMap as any;
+		state.lastRequestedExportUri = vscode.Uri.file("/tmp/world-map.png");
+		state.lastRequestedExportRequestId = 1;
+
+		await (worldMap as any).onMessage({
+			command: "exportmap",
+			dataUrl: "data:image/png;base64,AA==",
+		});
+		assert.ok(state.lastRequestedExportUri);
+		await (worldMap as any).onMessage({
+			command: "exportmap",
+			dataUrl: "data:image/png;base64,AA==",
+		});
+
+		assert.strictEqual(attempts, 2);
+		assert.strictEqual(state.lastRequestedExportUri, undefined);
+	});
+
+	it("preserves a newer target while an older export is pending", async () => {
+		let finishWrite!: () => void;
+		let writeStarted!: () => void;
+		const started = new Promise<void>((resolve) => {
+			writeStarted = resolve;
+		});
+		const finished = new Promise<void>((resolve) => {
+			finishWrite = resolve;
+		});
+		const writes: string[] = [];
+		stubVscode({
+			writeFile: async (uri: vscode.Uri) => {
+				writes.push(uri.toString());
+				writeStarted();
+				await finished;
+			},
+		});
+		const worldMap = new WorldMap(panel([]) as any);
+		const state = worldMap as any;
+		const oldUri = vscode.Uri.file("/tmp/old-world-map.png");
+		const newUri = vscode.Uri.file("/tmp/new-world-map.png");
+		state.lastRequestedExportUri = oldUri;
+		state.lastRequestedExportRequestId = 1;
+
+		const oldExport = (worldMap as any).onMessage({
+			command: "exportmap",
+			dataUrl: "data:image/png;base64,AA==",
+		});
+		await started;
+		state.lastRequestedExportUri = newUri;
+		state.lastRequestedExportRequestId = 2;
+		finishWrite();
+		await oldExport;
+
+		assert.strictEqual(state.lastRequestedExportUri, newUri);
+		await (worldMap as any).onMessage({
+			command: "exportmap",
+			dataUrl: "data:image/png;base64,AA==",
+		});
+
+		assert.deepStrictEqual(writes, [oldUri.toString(), newUri.toString()]);
+		assert.strictEqual(state.lastRequestedExportUri, undefined);
 	});
 });
