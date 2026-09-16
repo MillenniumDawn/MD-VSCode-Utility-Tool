@@ -4,6 +4,7 @@ v1.1.36
 
   Functionality:
 
+- Navigate preview definitions with Tab, Enter or Space. Issue #192.
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
 - [ CI ] Release v1.1.35 failed to publish.
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run.

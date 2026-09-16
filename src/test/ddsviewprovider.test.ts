@@ -48,6 +48,7 @@ describe("DDS and TGA custom editor providers", () => {
 
 			assert.ok(view.webview.html.includes("width:2px;height:3px;"));
 			assert.ok(view.webview.html.includes("data:image/png;base64,AQI="));
+			assert.ok(view.webview.html.includes('alt="TGA texture preview"'));
 		} finally {
 			mutableVscodeCommon.readFile = originalReadFile;
 			mutableImageDecoder.decodeImageToPng = originalDecode;
