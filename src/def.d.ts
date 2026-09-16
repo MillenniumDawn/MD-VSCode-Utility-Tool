@@ -5,6 +5,7 @@ declare module 'vscode' {
             readonly loadDlcContents: boolean;
             readonly modFile: string;
             readonly parentModPaths: string[];
+            readonly userDataPath: string;
             readonly useConditionInFocus: boolean;
             readonly eventTreePreview: boolean;
             readonly ideaPreview: boolean;

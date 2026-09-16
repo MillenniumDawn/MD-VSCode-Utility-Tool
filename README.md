@@ -59,10 +59,12 @@ warnings view that points at invalid province crossings and other map file mista
 pan with the trackpad. Click an element to jump to its definition. Text comes from your
 localisation files, in the language you choose. Vanilla and DLC content is read from your game
 install, and the mod's `.mod` file is honoured for `replace_path`. A submod that only holds the
-files it overrides lists the mods it extends in `mdHoi4Utilities.parentModPaths`; their files are
-read after the workspace and before the game install, so shared sprites, layouts and localisation
-resolve without copying them in. Each parent's own `descriptor.mod` counts for `replace_path` too,
-as it does in the game.
+files it overrides gets the mods it extends from the `dependencies` list in its `.mod` file, each
+name resolved to a folder through the launcher's mod registry; their files are read after the
+workspace and before the game install, so shared sprites, layouts and localisation resolve without
+copying them in. A mod the registry does not know goes in `mdHoi4Utilities.parentModPaths`, which
+also wins over the registry for a mod listed in both. Each parent's own `descriptor.mod` counts
+for `replace_path` too, as it does in the game.
 
 ## Get started
 
@@ -80,7 +82,8 @@ as it does in the game.
 |---|---|
 | `mdHoi4Utilities.installPath` | Hearts of Iron IV install path. Without it most previews have no icons. |
 | `mdHoi4Utilities.modFile` | The `.mod` file to read `replace_path` from. Defaults to the first `.mod` file in the workspace. |
-| `mdHoi4Utilities.parentModPaths` | Absolute folders of the mods this workspace extends, in order. Searched after the workspace folders and before the game install, e.g. `["D:/mods/parent-mod"]` in the submod's `.vscode/settings.json`. |
+| `mdHoi4Utilities.parentModPaths` | Absolute folders of the mods this workspace extends, in order, for what the `.mod` file's `dependencies` cannot resolve. Searched after the workspace folders and before the game install, e.g. `["D:/mods/parent-mod"]` in the submod's `.vscode/settings.json`. An entry here wins over the registry's folder for the same mod. |
+| `mdHoi4Utilities.userDataPath` | The Hearts of Iron IV user data folder (the one with `dlc_load.json` and the launcher's `mod` folder), where `dependencies` names are looked up. Found automatically when empty, including a Documents folder Windows has moved. |
 | `mdHoi4Utilities.loadDlcContents` | Load DLC images when previewing. Uses more memory. |
 | `mdHoi4Utilities.previewLocalisation` | Language of the text shown in previews. |
 | `mdHoi4Utilities.previewWheel` | What a plain mouse wheel does: `auto` (zoom for a mouse, scroll for a trackpad), `zoom` or `scroll`. |

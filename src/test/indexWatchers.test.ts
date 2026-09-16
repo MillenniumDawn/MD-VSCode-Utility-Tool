@@ -2,6 +2,7 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { __resetIndexProgressForTests } from "../util/indexBuild";
 import { createIndexWatchers } from "../util/indexWatchers";
+import { publishParentMods, resetParentModsForTest } from "../util/parentmods";
 import { createBuildGate } from "../util/promiseUtils";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
@@ -163,16 +164,18 @@ describe("util/indexWatchers folder-change rebuild", function () {
 	});
 });
 
-// Changing `parentModPaths` rebuilds the parent half and only that; a folder change rebuilds the
-// workspace half and only that. Driven through register(), because that is where the configuration
-// event is wired up.
-describe("util/indexWatchers parentModPaths change", function () {
+// A change of the parent list rebuilds the parent half and only that; a folder change rebuilds
+// the workspace half and only that. Driven through register(), because that is where the
+// subscription is wired up: to the published parent list, not to the raw setting, so a setting
+// change reaches the index once the `.mod` dependencies have been re-resolved against it.
+describe("util/indexWatchers parent list change", function () {
 	let resets: number;
 	let rebuilds: number;
 	let parentResets: number;
 	let parentRebuilds: number;
 	let configurationHandler: ((e: vscode.ConfigurationChangeEvent) => void) | undefined;
 	let handlers: ReturnType<typeof createIndexWatchers>["handlers"];
+	let registration: vscode.Disposable;
 
 	beforeEach(function () {
 		resets = 0;
@@ -180,7 +183,9 @@ describe("util/indexWatchers parentModPaths change", function () {
 		parentResets = 0;
 		parentRebuilds = 0;
 		configurationHandler = undefined;
+		resetParentModsForTest();
 		stubVscode({
+			getConfiguration: () => ({ parentModPaths: ["D:\parent"] }),
 			onDidChangeConfiguration: (handler: (e: vscode.ConfigurationChangeEvent) => void) => {
 				configurationHandler = handler;
 				return { dispose: () => undefined };
@@ -214,27 +219,33 @@ describe("util/indexWatchers parentModPaths change", function () {
 			},
 		});
 		handlers = watchers.handlers;
-		watchers.register();
+		registration = watchers.register();
 	});
 
 	afterEach(function () {
+		registration.dispose();
+		resetParentModsForTest();
 		restoreVscodeStubs();
 		__resetIndexProgressForTests();
 	});
 
-	function configurationChanged(section: string): vscode.ConfigurationChangeEvent {
-		return { affectsConfiguration: (s: string) => s === section };
-	}
-
-	it("rebuilds the parent half, and leaves the workspace half alone, when the parent mod paths change", async function () {
-		assert.ok(configurationHandler, "register() should subscribe to configuration changes");
-		configurationHandler!(configurationChanged("mdHoi4Utilities.parentModPaths"));
+	it("rebuilds the parent half, and leaves the workspace half alone, when the parent list is published", async function () {
+		assert.ok(publishParentMods(), "the first publish of a non-empty list is a change");
 		await waitForAsyncTasks();
 
 		assert.strictEqual(parentResets, 1);
 		assert.strictEqual(parentRebuilds, 1);
 		assert.strictEqual(resets, 0);
 		assert.strictEqual(rebuilds, 0);
+	});
+
+	it("does not rebuild when the published list is the one it already heard", async function () {
+		publishParentMods();
+		await waitForAsyncTasks();
+		assert.strictEqual(publishParentMods(), false);
+		await waitForAsyncTasks();
+
+		assert.strictEqual(parentRebuilds, 1);
 	});
 
 	it("leaves the parent half alone when a workspace folder changes", async function () {
@@ -247,12 +258,16 @@ describe("util/indexWatchers parentModPaths change", function () {
 		assert.strictEqual(parentRebuilds, 0);
 	});
 
-	it("ignores every other setting", async function () {
-		configurationHandler!(configurationChanged("mdHoi4Utilities.modFile"));
+	// The raw setting is somebody else's event: hoifs.ts re-resolves on it and publishes the result.
+	it("does not subscribe to the configuration itself", async function () {
+		assert.strictEqual(configurationHandler, undefined);
+	});
+
+	it("stops listening once disposed", async function () {
+		registration.dispose();
+		publishParentMods();
 		await waitForAsyncTasks();
 
-		assert.strictEqual(resets, 0);
-		assert.strictEqual(rebuilds, 0);
 		assert.strictEqual(parentRebuilds, 0);
 	});
 });

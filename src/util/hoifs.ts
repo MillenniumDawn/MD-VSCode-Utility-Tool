@@ -9,6 +9,7 @@ import {
 	getInstallPathUri,
 	setInstallPathUri,
 } from "./installpath";
+import { refreshModDependencies } from "./moddependencies";
 import { checkParentModPaths, clearParentModCache } from "./parentmods";
 import { sendEvent } from "./telemetry";
 import { getConfiguration, isFileScheme } from "./vsccommon";
@@ -46,7 +47,11 @@ export function registerHoiFs(): vscode.Disposable {
 	disposables.push(
 		vscode.workspace.onDidChangeConfiguration(onChangeParentModPaths),
 	);
+	disposables.push(
+		vscode.workspace.onDidSaveTextDocument(onSaveTextDocument),
+	);
 	void checkParentModPaths();
+	void refreshModDependencies();
 
 	return vscode.Disposable.from(...disposables);
 }
@@ -89,12 +94,26 @@ function onChangeWorkspaceConfiguration(
 	}
 }
 
-// Registered before the indexes, so their rebuild on the same event runs against cleared caches.
+// Every input to the parent list ends in one resolution of the `.mod` dependencies, which tells
+// the indexes and the status bar once the list is final rather than once per input.
 function onChangeParentModPaths(e: vscode.ConfigurationChangeEvent): void {
 	if (e.affectsConfiguration(`${ConfigurationKey}.parentModPaths`)) {
 		clearParentModCache();
 		void clearDlcZipCache();
 		void checkParentModPaths();
+		void refreshModDependencies();
+	} else if (
+		e.affectsConfiguration(`${ConfigurationKey}.modFile`) ||
+		e.affectsConfiguration(`${ConfigurationKey}.userDataPath`)
+	) {
+		void refreshModDependencies();
+	}
+}
+
+// An edited `dependencies` block takes effect on save, not on the next reload.
+function onSaveTextDocument(document: vscode.TextDocument): void {
+	if (document.uri.path.endsWith(".mod")) {
+		void refreshModDependencies();
 	}
 }
 

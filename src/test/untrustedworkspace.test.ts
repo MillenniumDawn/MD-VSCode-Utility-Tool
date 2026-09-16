@@ -10,6 +10,7 @@ const restricted = [
 	"mdHoi4Utilities.installPath",
 	"mdHoi4Utilities.modFile",
 	"mdHoi4Utilities.parentModPaths",
+	"mdHoi4Utilities.userDataPath",
 	"mdHoi4Utilities.inlayWindowGfxRoots",
 	"mdHoi4Utilities.technologyGfxRoots",
 ];

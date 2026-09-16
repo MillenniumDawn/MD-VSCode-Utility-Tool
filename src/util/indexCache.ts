@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import { contextContainer } from '../context';
 import { Logger } from './logger';
 import { fnv1a64Hex } from './hash';
-import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration } from './vsccommon';
-import { normalizeParentModPathSetting } from './parentmods';
+import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration, uriToFilePathWhenPossible } from './vsccommon';
+import { getParentModUris } from './parentmods';
 
 interface CacheManifest {
     version: number;
@@ -74,7 +74,9 @@ function cacheNamespace(): string {
     try {
         const conf = getConfiguration();
         modFile = conf.modFile as string | undefined;
-        parentModPaths = normalizeParentModPathSetting(conf.parentModPaths);
+        // The effective list, dependencies included: two `.mod` files that resolve differently
+        // under the same setting must not share a cache.
+        parentModPaths = getParentModUris().map(uriToFilePathWhenPossible);
     } catch {
         modFile = undefined;
         parentModPaths = [];
