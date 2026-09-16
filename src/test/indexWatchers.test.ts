@@ -162,3 +162,69 @@ describe("util/indexWatchers folder-change rebuild", function () {
 		assert.strictEqual(removed.length, 1);
 	});
 });
+
+// The parent mods are part of the workspace half, so changing `parentModPaths` has to rebuild it
+// the same way adding a workspace folder does. Driven through register(), because that is where
+// the configuration event is wired to the folder-change handler.
+describe("util/indexWatchers parentModPaths change", function () {
+	let resets: number;
+	let rebuilds: number;
+	let configurationHandler: ((e: vscode.ConfigurationChangeEvent) => void) | undefined;
+
+	beforeEach(function () {
+		resets = 0;
+		rebuilds = 0;
+		configurationHandler = undefined;
+		stubVscode({
+			onDidChangeConfiguration: (handler: (e: vscode.ConfigurationChangeEvent) => void) => {
+				configurationHandler = handler;
+				return { dispose: () => undefined };
+			},
+		});
+		createIndexWatchers({
+			enabled: true,
+			extension: ".txt",
+			hasStarted: () => true,
+			gate: createBuildGate(),
+			reindexFile: () => undefined,
+			removeFile: () => undefined,
+			rebuildWorkspace: {
+				reset: () => {
+					resets++;
+				},
+				build: async () => {
+					rebuilds++;
+				},
+				message: "Building workspace index...",
+				telemetryEvent: "testIndex.workspace",
+				failureMessage: "Building workspace index failed.",
+			},
+		}).register();
+	});
+
+	afterEach(function () {
+		restoreVscodeStubs();
+		__resetIndexProgressForTests();
+	});
+
+	function configurationChanged(section: string): vscode.ConfigurationChangeEvent {
+		return { affectsConfiguration: (s: string) => s === section };
+	}
+
+	it("rebuilds the workspace half when the parent mod paths change", async function () {
+		assert.ok(configurationHandler, "register() should subscribe to configuration changes");
+		configurationHandler!(configurationChanged("mdHoi4Utilities.parentModPaths"));
+		await waitForAsyncTasks();
+
+		assert.strictEqual(resets, 1);
+		assert.strictEqual(rebuilds, 1);
+	});
+
+	it("ignores every other setting", async function () {
+		configurationHandler!(configurationChanged("mdHoi4Utilities.modFile"));
+		await waitForAsyncTasks();
+
+		assert.strictEqual(resets, 0);
+		assert.strictEqual(rebuilds, 0);
+	});
+});

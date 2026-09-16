@@ -29,15 +29,20 @@ const CACHE_ROOT = 'indexCache';
  * profile get two caches instead of overwriting each other's.
  *
  * The identity is the selected `modFile` plus the workspace folders, sorted, so reordering the
- * folders does not invalidate anything. A plain FNV-1a hash rather than `node:crypto`, because this
- * module is loaded in the web build too (where it never reaches disk at all) and because a collision
+ * folders does not invalidate anything, plus the parent mod paths in setting order, because there
+ * the order is the precedence. A plain FNV-1a hash rather than `node:crypto`, because this module
+ * is loaded in the web build too (where it never reaches disk at all) and because a collision
  * costs no more than two mods sharing one cache -- which is exactly today's behaviour.
  *
  * The vanilla (`.global`) halves are namespaced along with the mod's, so a second mod rebuilds them
  * once. That is a few seconds of the shared parse queue, and it buys one identity rule instead of
  * two.
  */
-export function cacheNamespaceFor(modFile: string | undefined, workspaceFolderUris: readonly string[]): string {
+export function cacheNamespaceFor(
+    modFile: string | undefined,
+    workspaceFolderUris: readonly string[],
+    parentModPaths: readonly string[] = [],
+): string {
     const parts: string[] = [];
 
     const mod = modFile?.trim();
@@ -50,17 +55,28 @@ export function cacheNamespaceFor(modFile: string | undefined, workspaceFolderUr
         parts.push('ws:' + uri);
     }
 
+    for (const parent of parentModPaths) {
+        const trimmed = parent.trim();
+        if (trimmed) {
+            parts.push('parent:' + trimmed.replace(/\\+/g, '/').toLowerCase());
+        }
+    }
+
     return fnv1a64Hex(parts.join('\n'));
 }
 
 
-/** The two inputs to `cacheNamespaceFor`, each read defensively -- neither is worth failing over. */
+/** The inputs to `cacheNamespaceFor`, each read defensively -- none is worth failing over. */
 function cacheNamespace(): string {
     let modFile: string | undefined;
+    let parentModPaths: string[] = [];
     try {
-        modFile = getConfiguration().modFile as string | undefined;
+        const conf = getConfiguration();
+        modFile = conf.modFile as string | undefined;
+        parentModPaths = (conf.parentModPaths ?? []).filter((p): p is string => typeof p === 'string');
     } catch {
         modFile = undefined;
+        parentModPaths = [];
     }
 
     let folders: string[] = [];
@@ -70,7 +86,7 @@ function cacheNamespace(): string {
         folders = [];
     }
 
-    return cacheNamespaceFor(modFile, folders);
+    return cacheNamespaceFor(modFile, folders, parentModPaths);
 }
 
 function getCacheDir(): vscode.Uri | null {

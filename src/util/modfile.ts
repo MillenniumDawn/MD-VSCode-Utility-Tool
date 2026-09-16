@@ -3,6 +3,7 @@ import * as path from "path";
 import { ConfigurationKey, Commands } from "../constants";
 import { PromiseCache } from "./cache";
 import { localize } from "./i18n";
+import { clearParentModCache, getParentModUris } from "./parentmods";
 import {
 	basename,
 	fileOrUriStringToUri,
@@ -55,23 +56,38 @@ export function updateSelectedModFileStatus(
 ): void {
 	if (modFileStatusContainer.current) {
 		const modName = modFileStatusContainer.current;
+		const parents = getParentModUris();
+		// The parent mods ride along on this item rather than getting one of their own: they are
+		// part of what "the working mod" resolves to, and a second item costs status bar space.
+		const parentSuffix = parents.length > 0 ? ` +${parents.length}` : "";
+		const parentTooltip = parents
+			.map(
+				(parent) =>
+					"\n" +
+					localize("modfile.extends", "Extends: {0}", uriToFilePathWhenPossible(parent)),
+			)
+			.join("");
 		if (modFile) {
 			const modFileName = basename(modFile, ".mod");
 			modName.command = Commands.SelectModFile;
-			modName.text = (error ? "$(error) " : "$(file-code) ") + modFileName;
+			modName.text =
+				(error ? "$(error) " : "$(file-code) ") + modFileName + parentSuffix;
 			modName.tooltip =
 				(error
 					? localize("modfile.errorreading", "Error reading this file: ")
-					: "") + uriToFilePathWhenPossible(modFile);
+					: "") +
+				uriToFilePathWhenPossible(modFile) +
+				parentTooltip;
 			modName.show();
 		} else {
 			modName.command = Commands.SelectModFile;
 			modName.text =
-				"$(file-code) " + localize("modfile.nomodfile", "(No mod descriptor)");
-			modName.tooltip = localize(
-				"modfile.clicktoselect",
-				"Click to select a mod file...",
-			);
+				"$(file-code) " +
+				localize("modfile.nomodfile", "(No mod descriptor)") +
+				parentSuffix;
+			modName.tooltip =
+				localize("modfile.clicktoselect", "Click to select a mod file...") +
+				parentTooltip;
 			modName.show();
 		}
 	}
@@ -84,6 +100,11 @@ function onChangeWorkspaceConfiguration(
 		void checkAndUpdateModFileStatus(
 			fileOrUriStringToUri(getConfiguration().modFile),
 		);
+	} else if (e.affectsConfiguration(`${ConfigurationKey}.parentModPaths`)) {
+		// This listener is registered ahead of the one in hoifs.ts that owns the cache, so drop
+		// it here too or the item redraws with the old list.
+		clearParentModCache();
+		updateSelectedModFileStatus(fileOrUriStringToUri(getConfiguration().modFile));
 	}
 }
 

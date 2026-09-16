@@ -58,7 +58,10 @@ warnings view that points at invalid province crossings and other map file mista
 **In every preview.** Zoom with the mouse wheel, Ctrl+wheel, the zoom buttons or the +/- keys;
 pan with the trackpad. Click an element to jump to its definition. Text comes from your
 localisation files, in the language you choose. Vanilla and DLC content is read from your game
-install, and the mod's `.mod` file is honoured for `replace_path`.
+install, and the mod's `.mod` file is honoured for `replace_path`. A submod that only holds the
+files it overrides lists the mods it extends in `mdHoi4Utilities.parentModPaths`; their files are
+read after the workspace and before the game install, so shared sprites, layouts and localisation
+resolve without copying them in.
 
 ## Get started
 
@@ -76,6 +79,7 @@ install, and the mod's `.mod` file is honoured for `replace_path`.
 |---|---|
 | `mdHoi4Utilities.installPath` | Hearts of Iron IV install path. Without it most previews have no icons. |
 | `mdHoi4Utilities.modFile` | The `.mod` file to read `replace_path` from. Defaults to the first `.mod` file in the workspace. |
+| `mdHoi4Utilities.parentModPaths` | Absolute folders of the mods this workspace extends, in order. Searched after the workspace folders and before the game install, e.g. `["D:/mods/parent-mod"]` in the submod's `.vscode/settings.json`. |
 | `mdHoi4Utilities.loadDlcContents` | Load DLC images when previewing. Uses more memory. |
 | `mdHoi4Utilities.previewLocalisation` | Language of the text shown in previews. |
 | `mdHoi4Utilities.previewWheel` | What a plain mouse wheel does: `auto` (zoom for a mouse, scroll for a trackpad), `zoom` or `scroll`. |

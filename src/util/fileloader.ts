@@ -36,6 +36,7 @@ import {
 } from "./common";
 import { Logger } from "./logger";
 import { getInstallPathUri } from "./installpath";
+import { getParentModUris } from "./parentmods";
 import { appendEntriesWithErrorLogging } from "./promiseUtils";
 import type { ZipIndex } from "./nativezip";
 import { Hoi4FsSchema } from "../constants";
@@ -43,10 +44,19 @@ import { trimStart } from "lodash";
 
 const dlcRootFolders = ["dlc", "integrated_dlc"];
 
-/** Which of the mod / HOI4 / DLC sources a listing looks in, and how deep. */
-export interface ListFilesOptions {
+/** Which of the mod / parent mod / HOI4 / DLC sources a lookup looks in. */
+export interface FileSourceOptions {
 	mod?: boolean;
 	hoi4?: boolean;
+	/**
+	 * The mods this workspace extends (`parentModPaths`), searched after the workspace folders.
+	 * Part of the `mod` half: `mod: false` skips them too. Default true.
+	 */
+	parent?: boolean;
+}
+
+/** Which of the mod / parent mod / HOI4 / DLC sources a listing looks in, and how deep. */
+export interface ListFilesOptions extends FileSourceOptions {
 	recursively?: boolean;
 }
 
@@ -165,10 +175,14 @@ export async function clearDlcZipCache() {
 	parseCache.clear();
 }
 
+/**
+ * Only the workspace folders: a file that exists just in a parent mod is not "in the mod", so
+ * the preview opener copies it into the workspace instead of opening the parent's copy.
+ */
 export function getFilePathFromMod(
 	relativePath: string,
 ): Promise<vscode.Uri | undefined> {
-	return getFilePathFromModOrHOI4(relativePath, { hoi4: false });
+	return getFilePathFromModOrHOI4(relativePath, { hoi4: false, parent: false });
 }
 
 function parseJsonTuple(key: string): unknown[] | undefined {
@@ -216,19 +230,20 @@ function isCacheOptionsObject(
 
 function parseFilePathCacheKey(
 	key: string,
-): [string, boolean | null, boolean | null] | undefined {
+): [string, boolean | null, boolean | null, boolean | null] | undefined {
 	const parsed = parseJsonTuple(key);
 	if (
 		!parsed ||
-		parsed.length !== 3 ||
+		parsed.length !== 4 ||
 		typeof parsed[0] !== "string" ||
 		!isBooleanOrNull(parsed[1]) ||
-		!isBooleanOrNull(parsed[2])
+		!isBooleanOrNull(parsed[2]) ||
+		!isBooleanOrNull(parsed[3])
 	) {
 		return undefined;
 	}
 
-	return [parsed[0], parsed[1], parsed[2]];
+	return [parsed[0], parsed[1], parsed[2], parsed[3]];
 }
 
 function parseParseCacheKey(
@@ -269,8 +284,8 @@ function parseListCacheKey(
 // Every icon lookup and every expiry-token check resolves a path through here, doing several
 // fs.stats each; a single render does this hundreds of times over the same paths. Collapse the
 // repeats to one resolution per path/options within the 500ms window getLastModifiedMemo
-// uses. Keyed only on the mod/hoi4 fields the resolver reads, so unrelated option fields and key
-// order don't split the cache. Cleared by clearDlcZipCache on folder/config change.
+// uses. Keyed only on the mod/hoi4/parent fields the resolver reads, so unrelated option fields
+// and key order don't split the cache. Cleared by clearDlcZipCache on folder/config change.
 const getFilePathMemo = memoizeWithTtl(
 	(key: string): Promise<vscode.Uri | undefined> => {
 		const parsed = parseFilePathCacheKey(key);
@@ -280,6 +295,7 @@ const getFilePathMemo = memoizeWithTtl(
 		return getFilePathFromModOrHOI4Impl(parsed[0], {
 			mod: parsed[1] ?? undefined,
 			hoi4: parsed[2] ?? undefined,
+			parent: parsed[3] ?? undefined,
 		});
 	},
 	{ ttl: 500, maxSize: 1000 },
@@ -303,7 +319,7 @@ function escapesRelativeRoot(normalizedPath: string): boolean {
 
 export function getFilePathFromModOrHOI4(
 	relativePath: string,
-	options?: { mod?: boolean; hoi4?: boolean },
+	options?: FileSourceOptions,
 ): Promise<vscode.Uri | undefined> {
 	const normalizedPath = relativePath.replace(/\/\/+|\\+/g, "/");
 	// Rejected before the memo so an escaping path never occupies one of its slots.
@@ -315,13 +331,14 @@ export function getFilePathFromModOrHOI4(
 			normalizedPath,
 			options?.mod ?? null,
 			options?.hoi4 ?? null,
+			options?.parent ?? null,
 		]),
 	);
 }
 
 async function getFilePathFromModOrHOI4Impl(
 	relativePath: string,
-	options?: { mod?: boolean; hoi4?: boolean },
+	options?: FileSourceOptions,
 ): Promise<vscode.Uri | undefined> {
 	relativePath = relativePath.replace(/\/\/+|\\+/g, "/");
 	if (escapesRelativeRoot(relativePath)) {
@@ -353,6 +370,17 @@ async function getFilePathFromModOrHOI4Impl(
 
 		if (absolutePath !== undefined) {
 			return absolutePath;
+		}
+
+		// Then the mods this one extends, in setting order. Before the replace_path check: that
+		// blocks vanilla only, a submod's replace_path never hides its parent's files.
+		if (options?.parent !== false) {
+			for (const parent of getParentModUris()) {
+				const findPath = vscode.Uri.joinPath(parent, relativePath);
+				if (await isFile(findPath)) {
+					return findPath;
+				}
+			}
 		}
 
 		const replacePaths = await getReplacePaths();
@@ -538,7 +566,7 @@ async function readFileFromPathImpl(
 
 export async function readFileFromModOrHOI4(
 	relativePath: string,
-	options?: { mod?: boolean; hoi4?: boolean },
+	options?: FileSourceOptions,
 	/**
 	 * A path a listing already resolved, for callers that have one. Skips getFilePathFromModOrHOI4,
 	 * which during an index build is a stat of the install path plus one of every DLC folder, per
@@ -960,7 +988,9 @@ interface FileSourceVisitor {
  *
  * Returns whether the caller should deduplicate what it collected. Every exit says yes except the one
  * `options.hoi4 === false` takes, which has always handed back its raw result -- so two workspace
- * folders holding the same relative path still list it twice there, exactly as before.
+ * folders holding the same relative path still list it twice there, exactly as before. Once a
+ * parent mod folder was visited that exit says yes too: a file the workspace overrides is in both,
+ * and the listing has to name it once, at the workspace's URI.
  */
 async function visitFileSources(
 	relativePath: string,
@@ -972,6 +1002,7 @@ async function visitFileSources(
 		return false;
 	}
 
+	let visitedParent = false;
 	if (options?.mod !== false) {
 		// Find in opened workspace folders
 		if (vscode.workspace.workspaceFolders) {
@@ -981,6 +1012,20 @@ async function visitFileSources(
 					await visitor.directory(
 						findPath,
 						`Failed to list workspace files in ${findPath}`,
+					);
+				}
+			}
+		}
+
+		// Find in the mods this one extends
+		if (options?.parent !== false) {
+			for (const parent of getParentModUris()) {
+				const findPath = vscode.Uri.joinPath(parent, relativePath);
+				if (await isDirectory(findPath)) {
+					visitedParent = true;
+					await visitor.directory(
+						findPath,
+						`Failed to list parent mod files in ${findPath}`,
 					);
 				}
 			}
@@ -997,7 +1042,7 @@ async function visitFileSources(
 	}
 
 	if (options?.hoi4 === false) {
-		return false;
+		return visitedParent;
 	}
 
 	// Find in HOI4 install path

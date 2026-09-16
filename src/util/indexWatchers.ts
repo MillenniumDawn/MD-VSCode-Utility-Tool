@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
+import { ConfigurationKey } from "../constants";
 import { debounceByInput } from "./common";
 import { IndexProgress, withIndexProgress } from "./indexBuild";
 import { attachTaskWithErrorLogging, BuildGate } from "./promiseUtils";
@@ -204,6 +205,13 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 
 			return vscode.Disposable.from(
 				vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
+				// The parent mods are listed in the workspace half, so a change to them is a
+				// change to the folders as far as the index is concerned.
+				vscode.workspace.onDidChangeConfiguration((e) => {
+					if (e.affectsConfiguration(`${ConfigurationKey}.parentModPaths`)) {
+						onChangeWorkspaceFolders({ added: [], removed: [] });
+					}
+				}),
 				vscode.workspace.onDidChangeTextDocument(onChangeTextDocument),
 				vscode.workspace.onDidCloseTextDocument(onCloseTextDocument),
 				vscode.workspace.onDidCreateFiles(onCreateFiles),

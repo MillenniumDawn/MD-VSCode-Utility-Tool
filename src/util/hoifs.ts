@@ -9,6 +9,7 @@ import {
 	getInstallPathUri,
 	setInstallPathUri,
 } from "./installpath";
+import { checkParentModPaths, clearParentModCache } from "./parentmods";
 import { sendEvent } from "./telemetry";
 import { getConfiguration, isFileScheme } from "./vsccommon";
 
@@ -41,6 +42,11 @@ export function registerHoiFs(): vscode.Disposable {
 		);
 		void checkInstallPath();
 	}
+
+	disposables.push(
+		vscode.workspace.onDidChangeConfiguration(onChangeParentModPaths),
+	);
+	void checkParentModPaths();
 
 	return vscode.Disposable.from(...disposables);
 }
@@ -80,6 +86,15 @@ function onChangeWorkspaceConfiguration(
 		clearInstallPathCache();
 		void clearDlcZipCache();
 		void checkInstallPath();
+	}
+}
+
+// Registered before the indexes, so their rebuild on the same event runs against cleared caches.
+function onChangeParentModPaths(e: vscode.ConfigurationChangeEvent): void {
+	if (e.affectsConfiguration(`${ConfigurationKey}.parentModPaths`)) {
+		clearParentModCache();
+		void clearDlcZipCache();
+		void checkParentModPaths();
 	}
 }
 

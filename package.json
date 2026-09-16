@@ -44,6 +44,7 @@
 			"restrictedConfigurations": [
 				"mdHoi4Utilities.installPath",
 				"mdHoi4Utilities.modFile",
+				"mdHoi4Utilities.parentModPaths",
 				"mdHoi4Utilities.inlayWindowGfxRoots",
 				"mdHoi4Utilities.technologyGfxRoots"
 			]
@@ -72,6 +73,15 @@
 						"type": "string",
 						"default": "",
 						"description": "%hoi4modutilities.modFile.desc%"
+					},
+					"mdHoi4Utilities.parentModPaths": {
+						"title": "Parent mod paths",
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"description": "Absolute folders of the mods this workspace extends (for a submod), searched in order after the workspace folders and before the Hearts of Iron IV install and DLCs."
 					},
 					"mdHoi4Utilities.enableSupplyArea": {
 						"title": "%hoi4modutilities.enableSupplyArea.title%",
