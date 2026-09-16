@@ -356,6 +356,29 @@ describe("webview entrypoints", () => {
 		);
 	});
 
+	it("wires GFX navigators when the page loads", () => {
+		installGfxShell();
+		const navigator = document.getElementById("KeepMe")!;
+		navigator.classList.add("navigator");
+		navigator.setAttribute("start", "5");
+		navigator.setAttribute("end", "10");
+		navigator.setAttribute("file", "test.txt");
+
+		withPosts((posts) => {
+			withQuietScrolling(() => run(gfx, "load", new Event("load")));
+			const space = new KeyboardEvent("keydown", {
+				code: "Space",
+				cancelable: true,
+			});
+			navigator.dispatchEvent(space);
+
+			assert.strictEqual(space.defaultPrevented, true);
+			assert.deepStrictEqual(posts, [
+				{ command: "navigate", start: 5, end: 10, file: "test.txt" },
+			]);
+		});
+	});
+
 	it("asks the host to reload when the GFX update target is absent", () => {
 		installGfxShell();
 		document.getElementById("gfx-image-list")!.remove();

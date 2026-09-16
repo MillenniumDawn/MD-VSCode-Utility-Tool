@@ -64,19 +64,43 @@ export function copyArray<T>(
 	}
 }
 
+const wiredNavigators = new WeakSet<HTMLElement>();
+
 export function subscribeNavigators() {
 	const navigators = document.getElementsByClassName("navigator");
 	for (let i = 0; i < navigators.length; i++) {
-		const navigator = navigators[i] as HTMLDivElement;
-		navigator.addEventListener("click", function (e) {
-			e.stopPropagation();
-			const startStr = this.attributes.getNamedItem("start")?.value;
-			const endStr = this.attributes.getNamedItem("end")?.value;
-			const file = this.attributes.getNamedItem("file")?.value;
+		const navigator = navigators[i] as HTMLElement;
+		navigator.setAttribute("role", "button");
+		navigator.tabIndex = 0;
+		if (wiredNavigators.has(navigator)) {
+			continue;
+		}
+		wiredNavigators.add(navigator);
+		const navigate = () => {
+			const startStr = navigator.attributes.getNamedItem("start")?.value;
+			const endStr = navigator.attributes.getNamedItem("end")?.value;
+			const file = navigator.attributes.getNamedItem("file")?.value;
 			const start =
 				!startStr || startStr === "undefined" ? undefined : parseInt(startStr);
 			const end = !endStr ? undefined : parseInt(endStr);
 			navigateText(start, end, file);
+		};
+		navigator.addEventListener("click", (e) => {
+			e.stopPropagation();
+			navigate();
+		});
+		navigator.addEventListener("keydown", (e) => {
+			if (
+				e.key !== "Enter" &&
+				e.key !== " " &&
+				e.code !== "Enter" &&
+				e.code !== "Space"
+			) {
+				return;
+			}
+			e.preventDefault();
+			e.stopPropagation();
+			navigate();
 		});
 	}
 }

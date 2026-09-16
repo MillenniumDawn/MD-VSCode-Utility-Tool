@@ -1,4 +1,4 @@
-import './setup';
+import { takePostedMessages } from './setup';
 import * as assert from 'assert';
 import { copyArray, tryRun, getState, setState, enableZoom, scrollToState, subscribeNavigators, subscribeRefreshButton, initCommon } from '../../../webviewsrc/util/common';
 
@@ -6,6 +6,7 @@ describe('webview/util/common', function () {
     beforeEach(function () {
         document.body.innerHTML = '';
         setState({});
+        takePostedMessages();
     });
 
     describe('copyArray', function () {
@@ -89,17 +90,45 @@ describe('webview/util/common', function () {
     });
 
     describe('subscribeNavigators', function () {
-        it('attaches click handler to .navigator elements', function () {
+        function navigator(): HTMLDivElement {
             const el = document.createElement('div');
             el.className = 'navigator';
             el.setAttribute('start', '5');
             el.setAttribute('end', '10');
             el.setAttribute('file', 'test.txt');
             document.body.appendChild(el);
+            return el;
+        }
+
+        it('makes navigators buttons that activate with Enter and Space', function () {
+            const el = navigator();
 
             subscribeNavigators();
-            // Does not throw when clicked
+
+            assert.strictEqual(el.getAttribute('role'), 'button');
+            assert.strictEqual(el.tabIndex, 0);
+
+            el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+            const space = new KeyboardEvent('keydown', { key: ' ', cancelable: true });
+            el.dispatchEvent(space);
+
+            assert.strictEqual(space.defaultPrevented, true);
+            assert.deepStrictEqual(takePostedMessages(), [
+                { command: 'navigate', start: 5, end: 10, file: 'test.txt' },
+                { command: 'navigate', start: 5, end: 10, file: 'test.txt' },
+            ]);
+        });
+
+        it('does not wire the same navigator more than once', function () {
+            const el = navigator();
+
+            subscribeNavigators();
+            subscribeNavigators();
             el.dispatchEvent(new Event('click'));
+
+            assert.deepStrictEqual(takePostedMessages(), [
+                { command: 'navigate', start: 5, end: 10, file: 'test.txt' },
+            ]);
         });
     });
 

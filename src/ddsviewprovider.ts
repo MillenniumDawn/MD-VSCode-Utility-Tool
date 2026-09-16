@@ -45,7 +45,7 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
             webviewPanel.webview.html = html(
                 webviewPanel.webview,
                 `<div class="${styleTable.oneTimeStyle('imagePreview', () => `width:${width}px;height:${height}px;`)}">
-                    <img src="data:image/png;base64,${pngBuffer.toString('base64')}"/>
+                    <img src="data:image/png;base64,${pngBuffer.toString('base64')}" alt="${this.imageKind.toUpperCase()} texture preview"/>
                 </div>`,
                 [],
                 [styleTable]
