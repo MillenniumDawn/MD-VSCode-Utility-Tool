@@ -248,6 +248,10 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
 
     const traitBg = await getSpriteByGfxName(trait.specialTraitBackground ? 'GFX_country_spefific_org_trait_button' : 'GFX_industrial_org_trait_button', gfxFiles);
 
+    // The token may be a quoted string and the localised name is copied verbatim out of the .yml, so
+    // both are mod text and are escaped for the context they land in: the title attribute and the body.
+    const traitName = localisationIndex ? (await getLocalisedTextQuick(trait.name)) ?? '' : '';
+
     return `<div
     class="
         ${styleTable.style(trait.specialTraitBackground ? 'trait-bg-special' : 'trait-bg-normal',
@@ -279,7 +283,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
         start="${trait.token?.start}"
         end="${trait.token?.end}"
         ${file === trait.file ? '' : `file="${escapeAttr(trait.file)}"`}
-        title="${escapeAttr(trait.id)}${localisationIndex ? `\n${await getLocalisedTextQuick(trait.name)}` : ''}\n({{position}})">
+        title="${escapeAttr(trait.id)}${localisationIndex ? `\n${escapeAttr(traitName)}` : ''}\n({{position}})">
             <div class="
                 ${styleTable.style('effect-host', () => `
                     text-align: center;
@@ -311,7 +315,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
                 position: relative;
                 z-index: 5;
             `)}">
-            ${trait.id}
+            ${htmlEscape(trait.id)}
             </span>
             <br/>
             <span
@@ -323,7 +327,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
                 position: relative;
                 z-index: 5;
             `)}">
-            ${localisationIndex ? `${await getLocalisedTextQuick(trait.name)}` : ''}
+            ${htmlEscape(traitName)}
             </span>
         </div>
     </div>`;

@@ -631,7 +631,7 @@ async function renderTechnology(
         data-tech-id="${escapeAttr(technology.id)}" data-tech-small="${technology.enableEquipments ? '0' : '1'}"
         start="${technology.token?.start}"
         end="${technology.token?.end}"
-        title="${escapeAttr(technology.id)}${localisationIndex ? `\n${await getLocalisedTextQuick(bestNameKey)}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${escapeAttr(technology.id)}${localisationIndex ? `\n${escapeAttr((await getLocalisedTextQuick(bestNameKey)) ?? '')}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `
@@ -713,7 +713,7 @@ async function renderSubTechnology(
         data-subtech-id="${escapeAttr(subTechnology.id)}"
         start="${subTechnology.token?.start}"
         end="${subTechnology.token?.end}"
-        title="${escapeAttr(subTechnology.id)}${localisationIndex ? `\n${await getLocalisedTextQuick(subTechnology.id)}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${escapeAttr(subTechnology.id)}${localisationIndex ? `\n${escapeAttr((await getLocalisedTextQuick(subTechnology.id)) ?? '')}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `

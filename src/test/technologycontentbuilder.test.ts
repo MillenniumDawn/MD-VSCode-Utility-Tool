@@ -11,6 +11,11 @@ import {
 import * as featureflags from "../util/featureflags";
 import { contextContainer } from "../context";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
+import { stubLocalisation, restoreLocalisation } from "./_localisation_stub";
+import { parseHoi4File } from "../hoiformat/hoiparser";
+import { convertNodeToJson } from "../hoiformat/schema";
+import { GuiFile, guiFileSchema } from "../hoiformat/gui";
+import { Technology } from "../previewdef/technology/schema";
 
 // renderTechnologyFile returns the in-place update parts { html, update } on success and a plain html
 // string on the no-tree / error branches. These drive it against a stub loader (a countrytechtreeview
@@ -444,5 +449,77 @@ describe("previewdef/technology country selector", () => {
 		)) as LoaderRenderResult;
 
 		assert.notStrictEqual(serializeUpdate(a.update!), serializeUpdate(b.update!));
+	});
+});
+
+// A technology's tooltip is its id and, with the localisation index on, the localised name copied
+// verbatim out of the .yml -- so the name has to be escaped for the attribute it is written into,
+// exactly as the id beside it already is.
+describe("previewdef/technology renderTechnology escaping", () => {
+	afterEach(() => restoreLocalisation());
+
+	// The smallest tree view that reaches renderTechnology: the folder window holding the tree's
+	// gridbox, an item window for the technology and a slot in it for the sub-technology.
+	const guiText = `
+		guiTypes = {
+			containerWindowType = {
+				name = "countrytechtreeview"
+				containerWindowType = {
+					name = "infantry"
+					gridboxType = { name = "start_tree" position = { x = 0 y = 0 } slotsize = { width = 100 height = 100 } format = "UP" }
+				}
+			}
+			containerWindowType = {
+				name = "techtree_infantry_item"
+				size = { width = 100 height = 100 }
+				containerWindowType = { name = "sub_technology_slot_0" size = { width = 40 height = 40 } }
+			}
+		}`;
+
+	function technology(id: string, subTechnologies: Technology[] = []): Technology {
+		return {
+			id,
+			folders: { infantry: { name: "infantry", x: 0, y: 0 } },
+			leadsToTechs: [],
+			xor: [],
+			startYear: 2000,
+			enableEquipments: true,
+			enableEquipmentNames: [],
+			categories: [],
+			isSpecialProject: false,
+			subTechnologies,
+			token: { start: 0, end: 5 } as Technology["token"],
+		};
+	}
+
+	function loaderWithTree(technologies: Technology[]): any {
+		return {
+			load: async () => ({
+				result: {
+					technologyTrees: [{ startTechnology: "start", folder: "infantry", technologies }],
+					guiFiles: [{ file: "countrytechtreeview.gui", data: convertNodeToJson<GuiFile>(parseHoi4File(guiText), guiFileSchema) }],
+					gfxFiles: [],
+					equipmentArchetypes: {},
+				},
+			}),
+		};
+	}
+
+	it("escapes the localised technology and sub-technology names in their tooltips", async () => {
+		const hostile = 'x" onmouseover="alert(1)" y="<b>';
+		stubLocalisation({ start: hostile, start_sub: hostile });
+		const rendered = (await renderTechnologyFile(
+			loaderWithTree([technology("start", [technology("start_sub")])]),
+			uri,
+			webview,
+		)) as LoaderRenderResult;
+		const contentHtml = (rendered.update!.data as { contentHtml: string }).contentHtml;
+
+		assert.ok(contentHtml.includes('data-tech-id="start"'), contentHtml);
+		assert.ok(contentHtml.includes('data-subtech-id="start_sub"'), contentHtml);
+		assert.ok(!contentHtml.includes('onmouseover="'), contentHtml);
+		assert.ok(!contentHtml.includes("<b>"), contentHtml);
+		assert.ok(contentHtml.includes('title="start\nx&quot; onmouseover=&quot;alert(1)&quot; y=&quot;&lt;b&gt;'), contentHtml);
+		assert.ok(contentHtml.includes('title="start_sub\nx&quot; onmouseover=&quot;alert(1)&quot; y=&quot;&lt;b&gt;'), contentHtml);
 	});
 });
