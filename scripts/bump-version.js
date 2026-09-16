@@ -515,14 +515,25 @@ function appendToChangelog(options = {}) {
 	return { version, changed: updated !== changelogText };
 }
 
-// scripts/pr-bullets.js writes { bullets: [...] }; a bare array is accepted too.
+// scripts/pr-bullets.js writes { bullets, pullRequests, entries }, where bullets[i] is the finished
+// line and entries[i].section says which subsection its labels put it in. The two are zipped here
+// into the { text, section } pairs appendBullets files by; a bullet past the end of entries came
+// from a commit with no pull request and stays a plain string, which lands under Functionality. A
+// bare array is accepted too and returned as it is.
 function readBulletsFile(file) {
 	if (!file || !fs.existsSync(file)) {
 		return [];
 	}
 	const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-	const bullets = Array.isArray(parsed) ? parsed : parsed.bullets;
-	return Array.isArray(bullets) ? bullets : [];
+	if (Array.isArray(parsed)) {
+		return parsed;
+	}
+	const bullets = Array.isArray(parsed?.bullets) ? parsed.bullets : [];
+	const entries = Array.isArray(parsed?.entries) ? parsed.entries : [];
+	return bullets.map((bullet, index) => {
+		const section = entries[index]?.section;
+		return typeof bullet === 'string' && sections.includes(section) ? { text: bullet, section } : bullet;
+	});
 }
 
 function parseArgs(argv) {
