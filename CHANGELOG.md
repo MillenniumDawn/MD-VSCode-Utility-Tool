@@ -10,6 +10,7 @@ Unreleased
 - A GUI container-window name or technology folder name containing quotes or angle brackets can no longer break out of the folder selector or inject markup into the GUI and technology previews. Issue #210.
 - A MIO trait token or a localisation value containing quotes or angle brackets can no longer inject markup into the MIO and technology previews. Issue #211.
 - [ CI ] A merged pull request labelled bug, or one closing an issue labelled bug, is now filed under Bugfixes in the release changelog instead of always landing under Functionality. Issue #212.
+- [ Focus Tree Previewer ] Ticking a completed-focus checkbox on a large tree no longer freezes the preview for seconds; the completed-focus conditions are indexed once per redraw instead of rescanned for every focus. Issue #213.
 
 v1.1.35
 
