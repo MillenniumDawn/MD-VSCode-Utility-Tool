@@ -163,17 +163,22 @@ describe("util/indexWatchers folder-change rebuild", function () {
 	});
 });
 
-// The parent mods are part of the workspace half, so changing `parentModPaths` has to rebuild it
-// the same way adding a workspace folder does. Driven through register(), because that is where
-// the configuration event is wired to the folder-change handler.
+// Changing `parentModPaths` rebuilds the parent half and only that; a folder change rebuilds the
+// workspace half and only that. Driven through register(), because that is where the configuration
+// event is wired up.
 describe("util/indexWatchers parentModPaths change", function () {
 	let resets: number;
 	let rebuilds: number;
+	let parentResets: number;
+	let parentRebuilds: number;
 	let configurationHandler: ((e: vscode.ConfigurationChangeEvent) => void) | undefined;
+	let handlers: ReturnType<typeof createIndexWatchers>["handlers"];
 
 	beforeEach(function () {
 		resets = 0;
 		rebuilds = 0;
+		parentResets = 0;
+		parentRebuilds = 0;
 		configurationHandler = undefined;
 		stubVscode({
 			onDidChangeConfiguration: (handler: (e: vscode.ConfigurationChangeEvent) => void) => {
@@ -181,7 +186,7 @@ describe("util/indexWatchers parentModPaths change", function () {
 				return { dispose: () => undefined };
 			},
 		});
-		createIndexWatchers({
+		const watchers = createIndexWatchers({
 			enabled: true,
 			extension: ".txt",
 			hasStarted: () => true,
@@ -199,7 +204,17 @@ describe("util/indexWatchers parentModPaths change", function () {
 				telemetryEvent: "testIndex.workspace",
 				failureMessage: "Building workspace index failed.",
 			},
-		}).register();
+			rebuildParent: {
+				reset: () => {
+					parentResets++;
+				},
+				build: async () => {
+					parentRebuilds++;
+				},
+			},
+		});
+		handlers = watchers.handlers;
+		watchers.register();
 	});
 
 	afterEach(function () {
@@ -211,13 +226,25 @@ describe("util/indexWatchers parentModPaths change", function () {
 		return { affectsConfiguration: (s: string) => s === section };
 	}
 
-	it("rebuilds the workspace half when the parent mod paths change", async function () {
+	it("rebuilds the parent half, and leaves the workspace half alone, when the parent mod paths change", async function () {
 		assert.ok(configurationHandler, "register() should subscribe to configuration changes");
 		configurationHandler!(configurationChanged("mdHoi4Utilities.parentModPaths"));
 		await waitForAsyncTasks();
 
+		assert.strictEqual(parentResets, 1);
+		assert.strictEqual(parentRebuilds, 1);
+		assert.strictEqual(resets, 0);
+		assert.strictEqual(rebuilds, 0);
+	});
+
+	it("leaves the parent half alone when a workspace folder changes", async function () {
+		handlers.onChangeWorkspaceFolders({ added: [], removed: [] });
+		await waitForAsyncTasks();
+
 		assert.strictEqual(resets, 1);
 		assert.strictEqual(rebuilds, 1);
+		assert.strictEqual(parentResets, 0);
+		assert.strictEqual(parentRebuilds, 0);
 	});
 
 	it("ignores every other setting", async function () {
@@ -226,5 +253,6 @@ describe("util/indexWatchers parentModPaths change", function () {
 
 		assert.strictEqual(resets, 0);
 		assert.strictEqual(rebuilds, 0);
+		assert.strictEqual(parentRebuilds, 0);
 	});
 });

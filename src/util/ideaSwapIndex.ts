@@ -3,6 +3,8 @@ import { IndexFile, IndexListing, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
+import { FileSourceOptions } from "./fileloader";
+import { getParentModUris } from "./parentmods";
 import {
 	buildIndexHalf,
 	readIndexFileContent,
@@ -57,6 +59,10 @@ interface SwapIndex {
 const swapRoots = ["common", "events"];
 
 const globalSwapIndex: SwapIndex = {};
+// The parent mods' own half, like the other indexes. This one is keyed by file rather than by id, so
+// nothing here races; the half exists so that deleting a workspace override of a parent's file leaves
+// the parent's copy in place rather than dropping both.
+let parentSwapIndex: SwapIndex = {};
 let workspaceSwapIndex: SwapIndex = {};
 
 
@@ -71,6 +77,7 @@ const builder = createIndexBuilder({
 		estimatedSize = [0];
 		return Promise.all([
 			buildGlobalSwapIndex(estimatedSize, progress),
+			buildParentSwapIndex(estimatedSize, progress),
 			buildWorkspaceSwapIndex(estimatedSize, progress),
 		]);
 	},
@@ -81,14 +88,14 @@ const builder = createIndexBuilder({
 
 const buildGate = builder.gate;
 
-function ensureIndexBuilt(): Promise<[void, void]> {
+function ensureIndexBuilt(): Promise<[void, void, void]> {
 	return builder.ensureBuilt();
 }
 
 const SWAP_CACHE_VERSION = 1;
 
 function listSwapFiles(
-	options: { mod?: boolean; hoi4?: boolean },
+	options: FileSourceOptions,
 	token: vscode.CancellationToken,
 ): Promise<IndexListing> {
 	return listIndexFiles({
@@ -114,13 +121,30 @@ async function buildGlobalSwapIndex(
 	);
 }
 
+async function buildParentSwapIndex(
+	estimatedSize: [number],
+	progress: IndexProgress,
+): Promise<void> {
+	// No parents, no half: a mod that extends nothing pays no listing and writes no cache for it.
+	if (getParentModUris().length === 0) {
+		return;
+	}
+	await buildSwapIndexHalf(
+		"ideaSwapIndex.parent",
+		{ workspace: false, hoi4: false },
+		parentSwapIndex,
+		estimatedSize,
+		progress,
+	);
+}
+
 async function buildWorkspaceSwapIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
 	await buildSwapIndexHalf(
 		"ideaSwapIndex.workspace",
-		{ mod: true, hoi4: false },
+		{ mod: true, parent: false, hoi4: false },
 		workspaceSwapIndex,
 		estimatedSize,
 		progress,
@@ -129,7 +153,7 @@ async function buildWorkspaceSwapIndex(
 
 async function buildSwapIndexHalf(
 	cacheName: string,
-	options: { mod?: boolean; hoi4?: boolean },
+	options: FileSourceOptions,
 	swapIndex: SwapIndex,
 	estimatedSize: [number],
 	progress: IndexProgress,
@@ -161,7 +185,7 @@ async function buildSwapIndexHalf(
 async function fillSwaps(
 	swapFile: IndexFile,
 	swapIndex: SwapIndex,
-	options: { mod?: boolean; hoi4?: boolean },
+	options: FileSourceOptions,
 	estimatedSize?: [number],
 ): Promise<void> {
 	const filePath = swapFile.path;
@@ -364,7 +388,12 @@ function buildLookup(): Map<string, IdeaSwap[]> {
 		return cachedLookup;
 	}
 
-	const merged: SwapIndex = { ...globalSwapIndex, ...workspaceSwapIndex };
+	// The game's order, lowest first, so a file every layer has is read from the working mod's copy.
+	const merged: SwapIndex = {
+		...globalSwapIndex,
+		...parentSwapIndex,
+		...workspaceSwapIndex,
+	};
 	const byIdea = new Map<string, IdeaSwap[]>();
 
 	for (const [file, records] of Object.entries(merged)) {
@@ -399,8 +428,13 @@ const swapRootPrefixes = swapRoots.map((root) => `${root}/`);
 function reindexWorkspaceSwapFile(file: vscode.Uri): void {
 	const relative = toWorkspaceRelativePath(file, swapRootPrefixes);
 	if (relative) {
-		// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
-		void fillSwaps({ path: relative }, workspaceSwapIndex, { hoi4: false });
+		// No URI: a re-index reaches one file, so resolving it the usual way costs nothing. Workspace
+		// only: a re-index that fires after the file was deleted must not read the parent's copy
+		// into this half.
+		void fillSwaps({ path: relative }, workspaceSwapIndex, {
+			parent: false,
+			hoi4: false,
+		});
 	}
 }
 
@@ -430,6 +464,13 @@ const watchers = createIndexWatchers({
 		telemetryEvent: "ideaSwapIndex.workspace",
 		failureMessage: "Building workspace idea swap index failed.",
 	},
+	rebuildParent: {
+		reset: () => {
+			parentSwapIndex = {};
+			markSwapIndexChanged();
+		},
+		build: buildParentSwapIndex,
+	},
 });
 
 export function registerIdeaSwapIndex(): vscode.Disposable {
@@ -442,6 +483,7 @@ export function __resetIdeaSwapIndexForTests(): void {
 	for (const file of Object.keys(globalSwapIndex)) {
 		delete globalSwapIndex[file];
 	}
+	parentSwapIndex = {};
 	workspaceSwapIndex = {};
 	markSwapIndexChanged();
 }
@@ -455,5 +497,5 @@ export function __seedWorkspaceSwapsForTests(index: {
 }): void {
 	workspaceSwapIndex = { ...index };
 	markSwapIndexChanged();
-	builder.seed([undefined, undefined]);
+	builder.seed([undefined, undefined, undefined]);
 }

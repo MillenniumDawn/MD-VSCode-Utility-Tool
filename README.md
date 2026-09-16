@@ -61,7 +61,8 @@ localisation files, in the language you choose. Vanilla and DLC content is read 
 install, and the mod's `.mod` file is honoured for `replace_path`. A submod that only holds the
 files it overrides lists the mods it extends in `mdHoi4Utilities.parentModPaths`; their files are
 read after the workspace and before the game install, so shared sprites, layouts and localisation
-resolve without copying them in.
+resolve without copying them in. Each parent's own `descriptor.mod` counts for `replace_path` too,
+as it does in the game.
 
 ## Get started
 

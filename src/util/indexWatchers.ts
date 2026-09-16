@@ -62,6 +62,14 @@ export interface IndexWatcherSpec {
 		/** Logged if the rebuild fails. */
 		failureMessage: string;
 	};
+	/**
+	 * The parent-mod half, rebuilt when `parentModPaths` changes. It shares the workspace rebuild's
+	 * message and telemetry: to the user it is the same kind of rebuild.
+	 */
+	rebuildParent?: {
+		reset: () => void;
+		build: (size: [number], progress: IndexProgress) => Promise<void>;
+	};
 }
 
 export interface IndexWatchers {
@@ -73,6 +81,8 @@ export interface IndexWatchers {
 	 */
 	handlers: {
 		onChangeWorkspaceFolders(e: vscode.WorkspaceFoldersChangeEvent): void;
+		/** What a change to `parentModPaths` runs: a rebuild of the parent half. */
+		onChangeParentMods(): void;
 		onChangeTextDocument(e: vscode.TextDocumentChangeEvent): void;
 		onCloseTextDocument(document: vscode.TextDocument): void;
 		onCreateFiles(e: vscode.FileCreateEvent): void;
@@ -91,7 +101,12 @@ export interface IndexWatchers {
 export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	const { extension, hasStarted, gate } = spec;
 
-	function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
+	function rebuild(
+		halves: readonly {
+			reset: () => void;
+			build: (size: [number], progress: IndexProgress) => Promise<void>;
+		}[],
+	) {
 		if (!hasStarted()) {
 			return;
 		}
@@ -99,9 +114,13 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 		const folderChangeSize: [number] = [0];
 		// Reset only after the current build; occupy the gate now so events wait.
 		const task = gate.followOn(() => {
-			spec.rebuildWorkspace.reset();
+			for (const half of halves) {
+				half.reset();
+			}
 			return withIndexProgress(spec.rebuildWorkspace.message, (progress) =>
-				spec.rebuildWorkspace.build(folderChangeSize, progress),
+				Promise.all(
+					halves.map((half) => half.build(folderChangeSize, progress)),
+				).then(() => undefined),
 			);
 		});
 		attachTaskWithErrorLogging(
@@ -114,6 +133,18 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 			spec.rebuildWorkspace.failureMessage,
 			Logger.error,
 		);
+	}
+
+	function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
+		rebuild([spec.rebuildWorkspace]);
+	}
+
+	// Only the parent half: the workspace half lists the workspace folders alone, so the parents
+	// changing leaves it as it was. An index without a parent half has nothing to do.
+	function onChangeParentMods() {
+		if (spec.rebuildParent) {
+			rebuild([spec.rebuildParent]);
+		}
 	}
 
 	// Debounced per file: an edit fires one of these per keystroke, and re-reading the file for
@@ -190,6 +221,7 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 
 	const handlers = {
 		onChangeWorkspaceFolders,
+		onChangeParentMods,
 		onChangeTextDocument,
 		onCloseTextDocument,
 		onCreateFiles,
@@ -205,11 +237,9 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 
 			return vscode.Disposable.from(
 				vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
-				// The parent mods are listed in the workspace half, so a change to them is a
-				// change to the folders as far as the index is concerned.
 				vscode.workspace.onDidChangeConfiguration((e) => {
 					if (e.affectsConfiguration(`${ConfigurationKey}.parentModPaths`)) {
-						onChangeWorkspaceFolders({ added: [], removed: [] });
+						onChangeParentMods();
 					}
 				}),
 				vscode.workspace.onDidChangeTextDocument(onChangeTextDocument),

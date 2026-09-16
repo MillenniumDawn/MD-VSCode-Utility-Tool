@@ -4,6 +4,8 @@ import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
+import { FileSourceOptions, ListFilesOptions } from "./fileloader";
+import { getParentModUris } from "./parentmods";
 import {
 	buildIndexHalf,
 	readIndexFileContent,
@@ -23,6 +25,10 @@ import {
 type LocalisationData = Record<string, Record<string, string>>;
 
 const globalLocalisationIndex: LocalisationData = {};
+// A half of its own for the parent mods, for the same reason the gfx index has one: within a half
+// the last file parsed wins, so a key the workspace overrides in a differently named .yml would
+// otherwise show the parent's text on some builds.
+let parentLocalisationIndex: LocalisationData = {};
 let workspaceLocalisationIndex: LocalisationData = {};
 
 // Tracks which localisation keys came from which file, per language
@@ -48,6 +54,7 @@ const builder = createIndexBuilder({
 		estimatedSize = [0];
 		return Promise.all([
 			buildGlobalLocalisationIndex(estimatedSize, progress),
+			buildParentLocalisationIndex(estimatedSize, progress),
 			buildWorkspaceLocalisationIndex(estimatedSize, progress),
 		]);
 	},
@@ -58,7 +65,7 @@ const builder = createIndexBuilder({
 
 const buildGate = builder.gate;
 
-function ensureIndexBuilt(): Promise<[void, void]> {
+function ensureIndexBuilt(): Promise<[void, void, void]> {
 	return builder.ensureBuilt();
 }
 
@@ -91,17 +98,24 @@ export async function getLocalisedText(
 	const langKey = ymlSuffixByIso[language.toLowerCase()] || defaultYmlSuffix;
 	const defaultLangKey = defaultYmlSuffix;
 
-	let text =
+	return (
+		lookupLocalisation(langKey, localisationKey) ??
+		lookupLocalisation(defaultLangKey, localisationKey) ??
+		localisationKey
+	);
+}
+
+/** The game's order: the working mod, then the mods it extends, then vanilla. */
+function lookupLocalisation(
+	langKey: string,
+	localisationKey: string,
+): string | undefined {
+	return (
+		workspaceLocalisationIndex[langKey]?.[localisationKey] ||
+		parentLocalisationIndex[langKey]?.[localisationKey] ||
 		globalLocalisationIndex[langKey]?.[localisationKey] ||
-		workspaceLocalisationIndex[langKey]?.[localisationKey];
-
-	if (!text) {
-		text =
-			globalLocalisationIndex[defaultLangKey]?.[localisationKey] ||
-			workspaceLocalisationIndex[defaultLangKey]?.[localisationKey];
-	}
-
-	return text ?? localisationKey;
+		undefined
+	);
 }
 
 const LOC_CACHE_VERSION = 1;
@@ -136,13 +150,33 @@ async function buildGlobalLocalisationIndex(
 	);
 }
 
+async function buildParentLocalisationIndex(
+	estimatedSize: [number],
+	progress: IndexProgress,
+): Promise<void> {
+	// No parents, no half: a mod that extends nothing pays no listing and writes no cache for it.
+	if (getParentModUris().length === 0) {
+		return;
+	}
+	// No per-file key map, like the global half: a parent file is outside the workspace, so nothing
+	// ever re-indexes or removes it on its own.
+	await buildLocalisationIndexHalf(
+		"localisationIndex.parent",
+		{ workspace: false, hoi4: false, recursively: true },
+		parentLocalisationIndex,
+		null,
+		estimatedSize,
+		progress,
+	);
+}
+
 async function buildWorkspaceLocalisationIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
 	await buildLocalisationIndexHalf(
 		"localisationIndex.workspace",
-		{ mod: true, hoi4: false, recursively: true },
+		{ mod: true, parent: false, hoi4: false, recursively: true },
 		workspaceLocalisationIndex,
 		workspaceLocalisationFileMap,
 		estimatedSize,
@@ -152,7 +186,7 @@ async function buildWorkspaceLocalisationIndex(
 
 async function buildLocalisationIndexHalf(
 	cacheName: string,
-	options: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
+	options: ListFilesOptions,
 	targetIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
 	estimatedSize: [number],
@@ -233,10 +267,7 @@ async function fillLocalisationItems(
 	localisationFile: IndexFile,
 	localisationIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
-	options: {
-		mod?: boolean;
-		hoi4?: boolean;
-	},
+	options: FileSourceOptions,
 	estimatedSize?: [number],
 ): Promise<boolean> {
 	const filePath = localisationFile.path;
@@ -359,14 +390,16 @@ async function reindexWorkspaceLocalisationFile(
 		return;
 	}
 
-	// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
+	// No URI: a re-index reaches one file, so resolving it the usual way costs nothing. Workspace
+	// only: a re-index that fires after the file was deleted must not read the parent's copy into
+	// this half.
 	const parsedIndex: LocalisationData = {};
 	const parsedFileMap: Record<string, Record<string, Set<string>>> = {};
 	const parsed = await fillLocalisationItems(
 		{ path: relative },
 		parsedIndex,
 		parsedFileMap,
-		{ hoi4: false },
+		{ parent: false, hoi4: false },
 	);
 	if (!parsed) {
 		return;
@@ -418,6 +451,12 @@ const watchers = createIndexWatchers({
 		telemetryEvent: "localisationIndex.workspace",
 		failureMessage: "Building workspace localisation index failed.",
 	},
+	rebuildParent: {
+		reset: () => {
+			parentLocalisationIndex = {};
+		},
+		build: buildParentLocalisationIndex,
+	},
 });
 
 export function registerLocalisationIndex(): vscode.Disposable {
@@ -435,6 +474,7 @@ export function __resetLocalisationIndexForTests(): void {
 	for (const key of Object.keys(globalLocalisationIndex)) {
 		delete globalLocalisationIndex[key];
 	}
+	parentLocalisationIndex = {};
 	workspaceLocalisationIndex = {};
 	for (const key of Object.keys(workspaceLocalisationFileMap)) {
 		delete workspaceLocalisationFileMap[key];

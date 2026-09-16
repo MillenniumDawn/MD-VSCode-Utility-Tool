@@ -1233,4 +1233,92 @@ describe("util/fileloader parent mods", function () {
 			["chain.gfx", "override.gfx", "shared.gfx", "subonly.gfx", "vanilla.gfx"],
 		);
 	});
+
+	// How an index reads the parents into a half of their own.
+	it("lists and resolves the parents alone under workspace: false", async function () {
+		configure([parentDir, grandparentDir]);
+
+		const entries = await listFileEntriesFromModOrHOI4("interface", {
+			workspace: false,
+			hoi4: false,
+			recursively: true,
+		});
+		assert.deepStrictEqual(
+			entries.map((e) => e.relativePath).sort(),
+			["chain.gfx", "deep.gfx", "override.gfx", "shared.gfx"],
+		);
+		// The parent's copy, not the workspace's, and the first parent's for a name both have.
+		const override = entries.find((e) => e.relativePath === "override.gfx")!;
+		assert.strictEqual(
+			nodePath.resolve(realPathOf(override.uri)),
+			nodePath.resolve(parentDir, "interface", "override.gfx"),
+		);
+		assert.strictEqual(
+			entries.filter((e) => e.relativePath === "chain.gfx").length,
+			1,
+		);
+
+		assert.strictEqual(
+			resolvedPath(
+				await getFilePathFromModOrHOI4("interface/override.gfx", {
+					workspace: false,
+					hoi4: false,
+				}),
+			),
+			nodePath.resolve(parentDir, "interface", "override.gfx"),
+		);
+		assert.strictEqual(
+			await getFilePathFromModOrHOI4("interface/subonly.gfx", {
+				workspace: false,
+				hoi4: false,
+			}),
+			undefined,
+		);
+	});
+
+	it("keeps the parents out of the workspace half under parent: false", async function () {
+		assert.deepStrictEqual(
+			(
+				await listFileEntriesFromModOrHOI4("interface", {
+					parent: false,
+					hoi4: false,
+					recursively: true,
+				})
+			)
+				.map((e) => e.relativePath)
+				.sort(),
+			["override.gfx", "subonly.gfx"],
+		);
+	});
+
+	// The game applies a replace_path from any loaded mod's descriptor. A submod of Millennium Dawn
+	// that declares none of its own still never sees vanilla's focus trees, because MD's descriptor
+	// took them out.
+	it("honours the parent's own descriptor.mod replace_path against vanilla", async function () {
+		await write(
+			nodePath.join(parentDir, "descriptor.mod"),
+			'name="parent"\nreplace_path="interface"\n',
+		);
+		await clearDlcZipCache();
+
+		assert.strictEqual(
+			await getFilePathFromModOrHOI4("interface/vanilla.gfx"),
+			undefined,
+		);
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/shared.gfx")),
+			nodePath.resolve(parentDir, "interface", "shared.gfx"),
+		);
+		assert.deepStrictEqual(
+			(await listFilesFromModOrHOI4("interface")).sort(),
+			["chain.gfx", "override.gfx", "shared.gfx", "subonly.gfx"],
+		);
+	});
+
+	it("treats a parent without a descriptor as replacing nothing", async function () {
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/vanilla.gfx")),
+			nodePath.resolve(gameDir, "interface", "vanilla.gfx"),
+		);
+	});
 });

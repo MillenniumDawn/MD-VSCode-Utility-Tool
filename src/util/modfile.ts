@@ -23,6 +23,13 @@ export const workspaceModFilesCache = new PromiseCache({
 	life: 10 * 1000,
 });
 
+// What the item last showed, so a redraw for a reason unrelated to the mod file -- the parent list
+// changed -- keeps the error marker rather than resetting it to "fine" until the next real check.
+let lastStatus: { modFile: vscode.Uri | undefined; error: boolean } = {
+	modFile: undefined,
+	error: false,
+};
+
 export function registerModFile(): vscode.Disposable {
 	const disposables: vscode.Disposable[] = [];
 	disposables.push(
@@ -54,6 +61,7 @@ export function updateSelectedModFileStatus(
 	modFile: vscode.Uri | undefined,
 	error: boolean = false,
 ): void {
+	lastStatus = { modFile, error };
 	if (modFileStatusContainer.current) {
 		const modName = modFileStatusContainer.current;
 		const parents = getParentModUris();
@@ -93,6 +101,11 @@ export function updateSelectedModFileStatus(
 	}
 }
 
+/** Redraws the item with the mod file and error state it last showed. */
+export function redrawSelectedModFileStatus(): void {
+	updateSelectedModFileStatus(lastStatus.modFile, lastStatus.error);
+}
+
 function onChangeWorkspaceConfiguration(
 	e: vscode.ConfigurationChangeEvent,
 ): void {
@@ -104,7 +117,7 @@ function onChangeWorkspaceConfiguration(
 		// This listener is registered ahead of the one in hoifs.ts that owns the cache, so drop
 		// it here too or the item redraws with the old list.
 		clearParentModCache();
-		updateSelectedModFileStatus(fileOrUriStringToUri(getConfiguration().modFile));
+		redrawSelectedModFileStatus();
 	}
 }
 

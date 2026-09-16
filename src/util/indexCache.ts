@@ -3,6 +3,7 @@ import { contextContainer } from '../context';
 import { Logger } from './logger';
 import { fnv1a64Hex } from './hash';
 import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration } from './vsccommon';
+import { normalizeParentModPathSetting } from './parentmods';
 
 interface CacheManifest {
     version: number;
@@ -73,7 +74,7 @@ function cacheNamespace(): string {
     try {
         const conf = getConfiguration();
         modFile = conf.modFile as string | undefined;
-        parentModPaths = (conf.parentModPaths ?? []).filter((p): p is string => typeof p === 'string');
+        parentModPaths = normalizeParentModPathSetting(conf.parentModPaths);
     } catch {
         modFile = undefined;
         parentModPaths = [];

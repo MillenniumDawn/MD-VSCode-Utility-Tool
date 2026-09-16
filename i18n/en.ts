@@ -254,6 +254,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"ideapreview.targeted": "Targeted",
 	infile: "In file {0}:\n",
 	"index.mod": "[Mod]",
+	"index.parent": "[Parent mod]",
 	"index.parseFailure": "Parsing failed! Please check if the file has issues!",
 	"index.vanilla": "[Vanilla]",
 	"inlay.anonymous": "<anonymous inlay>",

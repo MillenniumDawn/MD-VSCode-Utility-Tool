@@ -49,6 +49,13 @@ export interface FileSourceOptions {
 	mod?: boolean;
 	hoi4?: boolean;
 	/**
+	 * The opened workspace folders, searched first. Part of the `mod` half: `mod: false` skips them
+	 * too. Default true. `{ workspace: false, hoi4: false }` is how an index reads the parent mods on
+	 * their own, into a half of their own, so that a key both define resolves to the workspace's copy
+	 * by construction rather than by whichever file happened to parse last.
+	 */
+	workspace?: boolean;
+	/**
 	 * The mods this workspace extends (`parentModPaths`), searched after the workspace folders.
 	 * Part of the `mod` half: `mod: false` skips them too. Default true.
 	 */
@@ -198,9 +205,7 @@ function isBooleanOrNull(value: unknown): value is boolean | null {
 	return value === null || typeof value === "boolean";
 }
 
-function isCacheOptionsObject(
-	value: unknown,
-): value is { mod?: boolean; hoi4?: boolean; recursively?: boolean } {
+function isCacheOptionsObject(value: unknown): value is ListFilesOptions {
 	if (value === null || typeof value !== "object") {
 		return false;
 	}
@@ -208,42 +213,40 @@ function isCacheOptionsObject(
 		return false;
 	}
 
-	const options = value as {
-		mod?: unknown;
-		hoi4?: unknown;
-		recursively?: unknown;
-	};
-	if (options.mod !== undefined && typeof options.mod !== "boolean") {
-		return false;
-	}
-	if (options.hoi4 !== undefined && typeof options.hoi4 !== "boolean") {
-		return false;
-	}
-	if (
-		options.recursively !== undefined &&
-		typeof options.recursively !== "boolean"
-	) {
-		return false;
+	const options = value as Record<keyof ListFilesOptions, unknown>;
+	for (const field of [
+		"mod",
+		"hoi4",
+		"workspace",
+		"parent",
+		"recursively",
+	] as const) {
+		if (options[field] !== undefined && typeof options[field] !== "boolean") {
+			return false;
+		}
 	}
 	return true;
 }
 
 function parseFilePathCacheKey(
 	key: string,
-): [string, boolean | null, boolean | null, boolean | null] | undefined {
+):
+	| [string, boolean | null, boolean | null, boolean | null, boolean | null]
+	| undefined {
 	const parsed = parseJsonTuple(key);
 	if (
 		!parsed ||
-		parsed.length !== 4 ||
+		parsed.length !== 5 ||
 		typeof parsed[0] !== "string" ||
 		!isBooleanOrNull(parsed[1]) ||
 		!isBooleanOrNull(parsed[2]) ||
-		!isBooleanOrNull(parsed[3])
+		!isBooleanOrNull(parsed[3]) ||
+		!isBooleanOrNull(parsed[4])
 	) {
 		return undefined;
 	}
 
-	return [parsed[0], parsed[1], parsed[2], parsed[3]];
+	return [parsed[0], parsed[1], parsed[2], parsed[3], parsed[4]];
 }
 
 function parseParseCacheKey(
@@ -266,7 +269,7 @@ function parseParseCacheKey(
 function parseListCacheKey(
 	key: string,
 ):
-	| [string, { mod?: boolean; hoi4?: boolean; recursively?: boolean } | null]
+	| [string, ListFilesOptions | null]
 	| undefined {
 	const parsed = parseJsonTuple(key);
 	if (
@@ -284,8 +287,8 @@ function parseListCacheKey(
 // Every icon lookup and every expiry-token check resolves a path through here, doing several
 // fs.stats each; a single render does this hundreds of times over the same paths. Collapse the
 // repeats to one resolution per path/options within the 500ms window getLastModifiedMemo
-// uses. Keyed only on the mod/hoi4/parent fields the resolver reads, so unrelated option fields
-// and key order don't split the cache. Cleared by clearDlcZipCache on folder/config change.
+// uses. Keyed only on the mod/hoi4/workspace/parent fields the resolver reads, so unrelated option
+// fields and key order don't split the cache. Cleared by clearDlcZipCache on folder/config change.
 const getFilePathMemo = memoizeWithTtl(
 	(key: string): Promise<vscode.Uri | undefined> => {
 		const parsed = parseFilePathCacheKey(key);
@@ -295,7 +298,8 @@ const getFilePathMemo = memoizeWithTtl(
 		return getFilePathFromModOrHOI4Impl(parsed[0], {
 			mod: parsed[1] ?? undefined,
 			hoi4: parsed[2] ?? undefined,
-			parent: parsed[3] ?? undefined,
+			workspace: parsed[3] ?? undefined,
+			parent: parsed[4] ?? undefined,
 		});
 	},
 	{ ttl: 500, maxSize: 1000 },
@@ -331,6 +335,7 @@ export function getFilePathFromModOrHOI4(
 			normalizedPath,
 			options?.mod ?? null,
 			options?.hoi4 ?? null,
+			options?.workspace ?? null,
 			options?.parent ?? null,
 		]),
 	);
@@ -348,7 +353,7 @@ async function getFilePathFromModOrHOI4Impl(
 
 	if (options?.mod !== false) {
 		// Find in opened workspace folders
-		if (vscode.workspace.workspaceFolders) {
+		if (options?.workspace !== false && vscode.workspace.workspaceFolders) {
 			for (const folder of vscode.workspace.workspaceFolders) {
 				const findPath = vscode.Uri.joinPath(folder.uri, relativePath);
 				if (await isFile(findPath)) {
@@ -1005,7 +1010,7 @@ async function visitFileSources(
 	let visitedParent = false;
 	if (options?.mod !== false) {
 		// Find in opened workspace folders
-		if (vscode.workspace.workspaceFolders) {
+		if (options?.workspace !== false && vscode.workspace.workspaceFolders) {
 			for (const folder of vscode.workspace.workspaceFolders) {
 				const findPath = vscode.Uri.joinPath(folder.uri, relativePath);
 				if (await isDirectory(findPath)) {
@@ -1161,7 +1166,42 @@ const modListSchema: SchemaDef<ModFile> = {
 	},
 };
 
+/**
+ * Every `replace_path` in force: the working mod's, plus those of the parent mods it extends. The
+ * game applies a `replace_path` from any loaded mod's descriptor, so a submod of Millennium Dawn
+ * that declares none of its own still never sees vanilla's focus trees -- MD's descriptor took them
+ * out. Without the parents' share, the listings held submod + parent + vanilla for every folder the
+ * parent replaces, and the indexes resolved ids the game never loads.
+ *
+ * Undefined only when the working mod has no readable descriptor, as before; a parent without a
+ * `descriptor.mod` is an ordinary checkout and simply contributes nothing.
+ */
 async function getReplacePaths(): Promise<string[] | undefined> {
+	const own = await getOwnReplacePaths();
+	if (own === undefined) {
+		return undefined;
+	}
+
+	const parents = getParentModUris();
+	if (parents.length === 0) {
+		return own;
+	}
+
+	const merged = [...own];
+	for (const parent of parents) {
+		const descriptor = vscode.Uri.joinPath(parent, "descriptor.mod");
+		try {
+			if (await isFile(descriptor)) {
+				merged.push(...(await replacePathsCache.get(descriptor.toString())));
+			}
+		} catch (e) {
+			error(e);
+		}
+	}
+	return merged;
+}
+
+async function getOwnReplacePaths(): Promise<string[] | undefined> {
 	const conf = getConfiguration();
 	let modFile = fileOrUriStringToUri(conf.modFile);
 

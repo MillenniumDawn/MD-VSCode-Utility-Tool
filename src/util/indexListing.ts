@@ -93,7 +93,14 @@ export async function listIndexFiles(
 	if (undated.length > 0) {
 		// The slow path, and on a desktop install it does not run at all: resolve and stat each of
 		// these the way every build used to do for every file it listed.
-		const resolveOptions = { mod: options.mod, hoi4: options.hoi4 };
+		// All four source switches, not just mod/hoi4: a parent-only listing that resolved through
+		// the default options would date the workspace's copy of a file it never listed.
+		const resolveOptions = {
+			mod: options.mod,
+			hoi4: options.hoi4,
+			workspace: options.workspace,
+			parent: options.parent,
+		};
 		const resolved = await getFileMtimes(undated, (relativePath) =>
 			getFilePathFromModOrHOI4(relativePath, resolveOptions),
 		);

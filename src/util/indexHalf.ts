@@ -9,7 +9,7 @@ import {
 } from "./indexCache";
 import { indexParseQueue, IndexProgress } from "./indexBuild";
 import { IndexFile, IndexListing, toIndexFiles } from "./indexListing";
-import { readFileFromModOrHOI4 } from "./fileloader";
+import { FileSourceOptions, readFileFromModOrHOI4 } from "./fileloader";
 import { localize } from "./i18n";
 import { Logger } from "./logger";
 
@@ -128,7 +128,7 @@ async function buildIndexHalfWithTimer<TCache>(
 export async function readIndexFileContent(
 	indexName: string,
 	file: IndexFile,
-	options: { mod?: boolean; hoi4?: boolean },
+	options: FileSourceOptions,
 ): Promise<Buffer | undefined> {
 	try {
 		const [buffer] = await readFileFromModOrHOI4(file.path, options, file.uri);
@@ -164,7 +164,7 @@ export function describeParseFailure(cause: unknown): string {
 
 /**
  * Reports a file that was read but could not be parsed, saying whether it came from the vanilla
- * install or the mod.
+ * install, a parent mod or the mod itself.
  *
  * The message was written out separately by each index, against its own copy of the same three
  * localisation keys -- and the gfx index had no message at all, only a UserError sent to the debug
@@ -172,12 +172,14 @@ export function describeParseFailure(cause: unknown): string {
  */
 export function reportIndexParseFailure(
 	filePath: string,
-	options: { hoi4?: boolean },
+	options: FileSourceOptions,
 	cause: unknown,
 ): void {
 	const source = options.hoi4
 		? localize("index.vanilla", "[Vanilla]")
-		: localize("index.mod", "[Mod]");
+		: options.workspace === false
+			? localize("index.parent", "[Parent mod]")
+			: localize("index.mod", "[Mod]");
 	const failure = localize(
 		"index.parseFailure",
 		"Parsing failed! Please check if the file has issues!",

@@ -4,6 +4,8 @@ import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
+import { FileSourceOptions, ListFilesOptions } from "./fileloader";
+import { getParentModUris } from "./parentmods";
 import {
 	buildIndexHalf,
 	readIndexFileContent,
@@ -22,10 +24,14 @@ interface FocusIndex {
 }
 
 const globalFocusIndex: FocusIndex = {};
+// The parent mods' own half, so a focus the workspace redefines in a differently named file resolves
+// to the workspace's file by construction, not by which of the two parsed last.
+let parentFocusIndex: FocusIndex = {};
 let workspaceFocusIndex: FocusIndex = {};
 
 // Reverse maps for O(1) lookup: focusKey -> filename
 const globalFocusKeyToFile = new Map<string, string>();
+const parentFocusKeyToFile = new Map<string, string>();
 const workspaceFocusKeyToFile = new Map<string, string>();
 
 
@@ -43,6 +49,7 @@ const builder = createIndexBuilder({
 		estimatedSize = [0];
 		return Promise.all([
 			buildGlobalFocusIndex(estimatedSize, progress),
+			buildParentFocusIndex(estimatedSize, progress),
 			buildWorkspaceFocusIndex(estimatedSize, progress),
 		]);
 	},
@@ -53,7 +60,7 @@ const builder = createIndexBuilder({
 
 const buildGate = builder.gate;
 
-function ensureIndexBuilt(): Promise<[void, void]> {
+function ensureIndexBuilt(): Promise<[void, void, void]> {
 	return builder.ensureBuilt();
 }
 
@@ -75,13 +82,31 @@ async function buildGlobalFocusIndex(
 	);
 }
 
+async function buildParentFocusIndex(
+	estimatedSize: [number],
+	progress: IndexProgress,
+): Promise<void> {
+	// No parents, no half: a mod that extends nothing pays no listing and writes no cache for it.
+	if (getParentModUris().length === 0) {
+		return;
+	}
+	await buildFocusIndexHalf(
+		"sharedFocusIndex.parent",
+		{ workspace: false, hoi4: false, recursively: true },
+		parentFocusIndex,
+		parentFocusKeyToFile,
+		estimatedSize,
+		progress,
+	);
+}
+
 async function buildWorkspaceFocusIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
 	await buildFocusIndexHalf(
 		"sharedFocusIndex.workspace",
-		{ mod: true, hoi4: false, recursively: true },
+		{ mod: true, parent: false, hoi4: false, recursively: true },
 		workspaceFocusIndex,
 		workspaceFocusKeyToFile,
 		estimatedSize,
@@ -91,7 +116,7 @@ async function buildWorkspaceFocusIndex(
 
 async function buildFocusIndexHalf(
 	cacheName: string,
-	options: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
+	options: ListFilesOptions,
 	focusIndex: FocusIndex,
 	reverseMap: Map<string, string>,
 	estimatedSize: [number],
@@ -129,7 +154,7 @@ async function fillFocusItems(
 	focusFile: IndexFile,
 	focusIndex: FocusIndex,
 	reverseMap: Map<string, string>,
-	options: { mod?: boolean; hoi4?: boolean },
+	options: FileSourceOptions,
 	estimatedSize?: [number],
 ): Promise<void> {
 	const ids = await readFocusIds(focusFile, options, estimatedSize);
@@ -147,7 +172,7 @@ async function fillFocusItems(
  */
 async function readFocusIds(
 	focusFile: IndexFile,
-	options: { mod?: boolean; hoi4?: boolean },
+	options: FileSourceOptions,
 	estimatedSize?: [number],
 ): Promise<string[] | undefined> {
 	const filePath = focusFile.path;
@@ -227,7 +252,12 @@ export async function findFileByFocusKey(
 		return undefined;
 	}
 	await ensureIndexBuilt().catch(() => undefined);
-	return workspaceFocusKeyToFile.get(key) ?? globalFocusKeyToFile.get(key);
+	// The game's order: the working mod, then the mods it extends, then vanilla.
+	return (
+		workspaceFocusKeyToFile.get(key) ??
+		parentFocusKeyToFile.get(key) ??
+		globalFocusKeyToFile.get(key)
+	);
 }
 
 function removeWorkspaceFocusFile(relative: string): void {
@@ -251,7 +281,12 @@ async function reindexWorkspaceFocusFile(file: vscode.Uri): Promise<void> {
 	// readFocusIds reports both an unreadable file and a parse failure as undefined, logging either
 	// itself, so there is nothing to catch here: the previously indexed ids stay in place.
 	// No URI: a re-index reaches one file, so resolving it the usual way costs nothing worth avoiding.
-	const ids = await readFocusIds({ path: relative }, { hoi4: false });
+	// Workspace only: a re-index that fires after the file was deleted must not read the parent's
+	// copy into this half.
+	const ids = await readFocusIds(
+		{ path: relative },
+		{ parent: false, hoi4: false },
+	);
 	if (ids === undefined) {
 		return;
 	}
@@ -286,6 +321,13 @@ const watchers = createIndexWatchers({
 		telemetryEvent: "sharedFocusIndex.workspace",
 		failureMessage: "Building workspace Focus index failed.",
 	},
+	rebuildParent: {
+		reset: () => {
+			parentFocusIndex = {};
+			parentFocusKeyToFile.clear();
+		},
+		build: buildParentFocusIndex,
+	},
 });
 
 export function registerSharedFocusIndex(): vscode.Disposable {
@@ -298,8 +340,10 @@ export function __resetSharedFocusIndexForTests(): void {
 	for (const file of Object.keys(globalFocusIndex)) {
 		delete globalFocusIndex[file];
 	}
+	parentFocusIndex = {};
 	workspaceFocusIndex = {};
 	globalFocusKeyToFile.clear();
+	parentFocusKeyToFile.clear();
 	workspaceFocusKeyToFile.clear();
 }
 
