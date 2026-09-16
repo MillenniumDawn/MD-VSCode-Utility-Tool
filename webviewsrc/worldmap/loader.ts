@@ -38,6 +38,18 @@ interface ExtraMapData {
 	supplyNodesCount: number;
 }
 
+// Warning indices into `warnings`, bucketed by source. Each bucket is ascending and holds a
+// warning at most once, so merging buckets only has to dedupe across them.
+type WarningBuckets = Record<number, number[] | undefined>;
+interface WarningIndex {
+	provinceId: WarningBuckets;
+	provinceColor: WarningBuckets;
+	state: WarningBuckets;
+	strategicRegion: WarningBuckets;
+	supplyArea: WarningBuckets;
+	river: WarningBuckets;
+}
+
 // Uniform grid over the provinces' bounding boxes, in map coordinates. Each cell lists the
 // provinces whose bounding box overlaps it, in forEachProvince order so that the first match
 // is the same province a full scan would have returned.
@@ -83,10 +95,17 @@ interface FEWorldMapClassExtra {
 		strategicRegion?: StrategicRegion,
 		supplyArea?: SupplyArea,
 	): string[];
+	hasProvinceWarnings(
+		province?: Province,
+		state?: State,
+		strategicRegion?: StrategicRegion,
+		supplyArea?: SupplyArea,
+	): boolean;
 	getStateWarnings(state: State, supplyArea?: SupplyArea): string[];
 	getStrategicRegionWarnings(strategicRegion: StrategicRegion): string[];
 	getSupplyAreaWarnings(supplyArea: SupplyArea): string[];
 	getRiverWarnings(riverIndex: number): string[];
+	hasRiverWarnings(riverIndex: number): boolean;
 
 	forEachProvince(callback: (province: Province) => boolean | void): void;
 	forEachState(callback: (state: State) => boolean | void): void;
@@ -471,6 +490,7 @@ export class FEWorldMapClass implements FEWorldMap {
 		| Record<number, SupplyNode | undefined>
 		| undefined = undefined;
 	private provinceGridMemo: ProvinceGrid | undefined = undefined;
+	private warningIndexMemo: WarningIndex | undefined = undefined;
 
 	constructor(worldMap?: WorldMapData & ExtraMapData) {
 		Object.assign(
@@ -760,66 +780,140 @@ export class FEWorldMapClass implements FEWorldMap {
 		}
 	}
 
+	private getWarningIndex(): WarningIndex {
+		if (this.warningIndexMemo === undefined) {
+			const index: WarningIndex = {
+				provinceId: {},
+				provinceColor: {},
+				state: {},
+				strategicRegion: {},
+				supplyArea: {},
+				river: {},
+			};
+			const add = (buckets: WarningBuckets, key: number, i: number) => {
+				const bucket = (buckets[key] ??= []);
+				if (bucket[bucket.length - 1] !== i) {
+					bucket.push(i);
+				}
+			};
+			this.warnings.forEach((warning, i) => {
+				for (const source of warning.source) {
+					switch (source.type) {
+						case "province":
+							if (source.id !== null) {
+								add(index.provinceId, source.id, i);
+							}
+							add(index.provinceColor, source.color, i);
+							break;
+						case "state":
+							add(index.state, source.id, i);
+							break;
+						case "strategicregion":
+							add(index.strategicRegion, source.id, i);
+							break;
+						case "supplyarea":
+							add(index.supplyArea, source.id, i);
+							break;
+						case "river":
+							add(index.river, source.index, i);
+							break;
+						default:
+							break;
+					}
+				}
+			});
+			this.warningIndexMemo = index;
+		}
+		return this.warningIndexMemo;
+	}
+
+	private collectWarningTexts(
+		...buckets: (number[] | undefined)[]
+	): string[] {
+		let single: number[] | undefined;
+		let merged: Set<number> | undefined;
+		for (const bucket of buckets) {
+			if (bucket === undefined) {
+				continue;
+			}
+			if (single === undefined) {
+				single = bucket;
+			} else {
+				const target = (merged ??= new Set(single));
+				for (const i of bucket) {
+					target.add(i);
+				}
+			}
+		}
+		const indices =
+			merged !== undefined
+				? [...merged].sort((a, b) => a - b)
+				: (single ?? []);
+		return indices.map((i) => this.warnings[i]?.text ?? "");
+	}
+
 	public getProvinceWarnings(
 		province?: Province,
 		state?: State,
 		strategicRegion?: StrategicRegion,
 		supplyArea?: SupplyArea,
 	): string[] {
-		return this.warnings
-			.filter((v) =>
-				v.source.some(
-					(s) =>
-						(province &&
-							s.type === "province" &&
-							(s.id === province.id || s.color === province.color)) ||
-						(state && s.type === "state" && s.id === state.id) ||
-						(strategicRegion &&
-							s.type === "strategicregion" &&
-							s.id === strategicRegion.id) ||
-						(supplyArea && s.type === "supplyarea" && s.id === supplyArea.id),
-				),
-			)
-			.map((v) => v.text);
+		const index = this.getWarningIndex();
+		return this.collectWarningTexts(
+			province && index.provinceId[province.id],
+			province && index.provinceColor[province.color],
+			state && index.state[state.id],
+			strategicRegion && index.strategicRegion[strategicRegion.id],
+			supplyArea && index.supplyArea[supplyArea.id],
+		);
+	}
+
+	public hasProvinceWarnings(
+		province?: Province,
+		state?: State,
+		strategicRegion?: StrategicRegion,
+		supplyArea?: SupplyArea,
+	): boolean {
+		const index = this.getWarningIndex();
+		return (
+			(province !== undefined &&
+				(index.provinceId[province.id] !== undefined ||
+					index.provinceColor[province.color] !== undefined)) ||
+			(state !== undefined && index.state[state.id] !== undefined) ||
+			(strategicRegion !== undefined &&
+				index.strategicRegion[strategicRegion.id] !== undefined) ||
+			(supplyArea !== undefined &&
+				index.supplyArea[supplyArea.id] !== undefined)
+		);
 	}
 
 	public getStateWarnings(state: State, supplyArea?: SupplyArea): string[] {
-		return this.warnings
-			.filter((v) =>
-				v.source.some(
-					(s) =>
-						(s.type === "state" && s.id === state.id) ||
-						(supplyArea && s.type === "supplyarea" && s.id === supplyArea.id),
-				),
-			)
-			.map((v) => v.text);
+		const index = this.getWarningIndex();
+		return this.collectWarningTexts(
+			index.state[state.id],
+			supplyArea && index.supplyArea[supplyArea.id],
+		);
 	}
 
 	public getStrategicRegionWarnings(
 		strategicRegion: StrategicRegion,
 	): string[] {
-		return this.warnings
-			.filter((v) =>
-				v.source.some(
-					(s) => s.type === "strategicregion" && s.id === strategicRegion.id,
-				),
-			)
-			.map((v) => v.text);
+		return this.collectWarningTexts(
+			this.getWarningIndex().strategicRegion[strategicRegion.id],
+		);
 	}
 
 	public getSupplyAreaWarnings(supplyArea: SupplyArea): string[] {
-		return this.warnings
-			.filter((v) =>
-				v.source.some((s) => s.type === "supplyarea" && s.id === supplyArea.id),
-			)
-			.map((v) => v.text);
+		return this.collectWarningTexts(
+			this.getWarningIndex().supplyArea[supplyArea.id],
+		);
 	}
 
 	public getRiverWarnings(riverIndex: number): string[] {
-		return this.warnings
-			.filter((v) =>
-				v.source.some((s) => s.type === "river" && s.index === riverIndex),
-			)
-			.map((v) => v.text);
+		return this.collectWarningTexts(this.getWarningIndex().river[riverIndex]);
+	}
+
+	public hasRiverWarnings(riverIndex: number): boolean {
+		return this.getWarningIndex().river[riverIndex] !== undefined;
 	}
 }

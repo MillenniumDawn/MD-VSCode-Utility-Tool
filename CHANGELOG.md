@@ -6,6 +6,7 @@ Unreleased
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
 - [ World Map Previewer ] The country colour set pans and zooms smoothly on a full-size map. Each province's owner colour was searched through every country tag on every redraw; the table is now built once per redraw. Issue #214.
 - [ World Map Previewer ] State, strategic region and supply area labels no longer stall panning on a full-size map. The province under each label was searched through every province on every redraw; provinces are now indexed by position once per map load. Issue #215.
+- [ World Map Previewer ] The warnings colour set and the hover tooltip no longer stall panning on a map with many warnings. Every province used to be checked against every warning on every redraw; warnings are now indexed by province, state, strategic region, supply area and river once per map load. Issue #216.
 
   Bugfixes:
 
