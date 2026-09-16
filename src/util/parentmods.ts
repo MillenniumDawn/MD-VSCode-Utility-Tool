@@ -15,18 +15,28 @@ const parentModsContainer: {
 	current: vscode.Uri[] | null;
 	resolved: vscode.Uri[];
 	unresolved: string[];
-	// What the listeners last heard, so a refresh that lands on the same list stays quiet.
-	lastPublished: string[];
+	// What the listeners last heard, so a refresh that lands on the same outcome stays quiet.
+	lastPublished: { folders: string[]; unresolved: string[] };
 } = {
 	current: null,
 	resolved: [],
 	unresolved: [],
-	lastPublished: [],
+	lastPublished: { folders: [], unresolved: [] },
 };
+
+/**
+ * What a resolution changed. The indexes act on `folders` alone: a name that resolved to nothing
+ * coming or going changes no file the parent half reads. The status bar redraws on either, because
+ * its tooltip lists the unresolved names.
+ */
+export interface ParentModsChangeEvent {
+	folders: boolean;
+	unresolved: boolean;
+}
 
 // A plain listener set rather than a vscode.EventEmitter: the indexes and the status bar subscribe
 // to it, and the tests drive it, without going through the editor.
-const listeners = new Set<() => void>();
+const listeners = new Set<(e: ParentModsChangeEvent) => void>();
 
 /**
  * The setting as a list of non-blank strings, whatever settings.json actually holds. The schema says
@@ -119,35 +129,44 @@ export function getUnresolvedDependencies(): string[] {
 	return parentModsContainer.unresolved;
 }
 
-export function onDidChangeParentMods(listener: () => void): vscode.Disposable {
+export function onDidChangeParentMods(
+	listener: (e: ParentModsChangeEvent) => void,
+): vscode.Disposable {
 	listeners.add(listener);
 	return new vscode.Disposable(() => {
 		listeners.delete(listener);
 	});
 }
 
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+	return a.length === b.length && a.every((entry, i) => entry === b[i]);
+}
+
 /**
- * Tells the listeners when the effective list differs from what they last heard. Called at the
- * end of every resolution, whichever setting or file started it, so the indexes rebuild their
- * parent half once with the final list rather than once per input.
+ * Tells the listeners when the effective list, or the names that resolved to nothing, differ from
+ * what they last heard. Called at the end of every resolution, whichever setting or file started
+ * it, so the indexes rebuild their parent half once with the final list rather than once per
+ * input.
  *
- * @returns whether anything changed.
+ * @returns whether the folder list changed -- what the file caches depend on.
  */
 export function publishParentMods(): boolean {
-	const current = getParentModUris().map((uri) => uri.toString());
+	const folders = getParentModUris().map((uri) => uri.toString());
+	const unresolved = [...parentModsContainer.unresolved];
 	const previous = parentModsContainer.lastPublished;
-	if (
-		current.length === previous.length &&
-		current.every((uri, i) => uri === previous[i])
-	) {
+	const event: ParentModsChangeEvent = {
+		folders: !sameList(folders, previous.folders),
+		unresolved: !sameList(unresolved, previous.unresolved),
+	};
+	if (!event.folders && !event.unresolved) {
 		return false;
 	}
 
-	parentModsContainer.lastPublished = current;
+	parentModsContainer.lastPublished = { folders, unresolved };
 	for (const listener of listeners) {
-		listener();
+		listener(event);
 	}
-	return true;
+	return event.folders;
 }
 
 /** Test hook: forgets the resolved dependencies, the listeners and what was last published. */
@@ -155,7 +174,7 @@ export function resetParentModsForTest(): void {
 	parentModsContainer.current = null;
 	parentModsContainer.resolved = [];
 	parentModsContainer.unresolved = [];
-	parentModsContainer.lastPublished = [];
+	parentModsContainer.lastPublished = { folders: [], unresolved: [] };
 	listeners.clear();
 }
 

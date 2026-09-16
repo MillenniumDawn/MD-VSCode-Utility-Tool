@@ -7,6 +7,7 @@ import {
     getUnresolvedDependencies,
     normalizeParentModPathSetting,
     onDidChangeParentMods,
+    ParentModsChangeEvent,
     publishParentMods,
     resetParentModsForTest,
     setResolvedDependencies,
@@ -121,10 +122,33 @@ describe('util/parentmods', () => {
             assert.strictEqual(publishParentMods(), false);
             setResolvedDependencies([vscode.Uri.file('D:/b')], []);
             assert.strictEqual(publishParentMods(), true);
-            setResolvedDependencies([vscode.Uri.file('D:/b')], ['x']);
+            setResolvedDependencies([vscode.Uri.file('D:/b')], []);
             assert.strictEqual(publishParentMods(), false);
 
             assert.strictEqual(heard, 2);
+        });
+
+        // The tooltip lists the names that resolved to nothing, so a name added or dropped has to
+        // reach the status bar; the return value stays with the folders, which is what the file
+        // caches depend on.
+        it('tells the listeners about a change of the unresolved names, without calling it a list change', () => {
+            const events: ParentModsChangeEvent[] = [];
+            onDidChangeParentMods((e) => { events.push(e); });
+            config = { parentModPaths: [] };
+            setResolvedDependencies([vscode.Uri.file('D:/b')], []);
+            publishParentMods();
+
+            setResolvedDependencies([vscode.Uri.file('D:/b')], ['x']);
+            assert.strictEqual(publishParentMods(), false);
+            assert.strictEqual(publishParentMods(), false);
+            setResolvedDependencies([vscode.Uri.file('D:/c')], ['x', 'y']);
+            assert.strictEqual(publishParentMods(), true);
+
+            assert.deepStrictEqual(events, [
+                { folders: true, unresolved: false },
+                { folders: false, unresolved: true },
+                { folders: true, unresolved: true },
+            ]);
         });
 
         it('stays quiet for an empty list that was empty before', () => {

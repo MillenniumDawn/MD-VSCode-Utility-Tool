@@ -248,6 +248,17 @@ describe("util/indexWatchers parent list change", function () {
 		assert.strictEqual(parentRebuilds, 1);
 	});
 
+	// A name that resolved to nothing names no folder the half reads; only the status bar cares.
+	it("leaves both halves alone when only the unresolved names changed", async function () {
+		handlers.onChangeParentMods({ folders: false, unresolved: true });
+		await waitForAsyncTasks();
+
+		assert.strictEqual(parentResets, 0);
+		assert.strictEqual(parentRebuilds, 0);
+		assert.strictEqual(resets, 0);
+		assert.strictEqual(rebuilds, 0);
+	});
+
 	it("leaves the parent half alone when a workspace folder changes", async function () {
 		handlers.onChangeWorkspaceFolders({ added: [], removed: [] });
 		await waitForAsyncTasks();

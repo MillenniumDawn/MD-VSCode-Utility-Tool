@@ -13,6 +13,7 @@ import { IndexFile, IndexListing, toIndexFiles } from "./indexListing";
 import { FileSourceOptions, readFileFromModOrHOI4 } from "./fileloader";
 import { localize } from "./i18n";
 import { Logger } from "./logger";
+import { whenModDependenciesSettled } from "./moddependencies";
 
 /*
  * One build of one half of one index.
@@ -66,6 +67,11 @@ async function buildIndexHalfWithTimer<TCache>(
 	timer: IndexTimer,
 ): Promise<void> {
 	const { cacheName, version } = spec;
+
+	// The parent list feeds both the listing and the cache namespace, so a build must not read it
+	// while the `.mod` dependencies are still being resolved -- a preview restored at activation
+	// starts its build before that first resolution lands.
+	await whenModDependenciesSettled();
 
 	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
 	// install it is now the directory walk and the mtimes together, which is where a slow cold build

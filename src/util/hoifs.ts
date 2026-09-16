@@ -50,6 +50,9 @@ export function registerHoiFs(): vscode.Disposable {
 	disposables.push(
 		vscode.workspace.onDidSaveTextDocument(onSaveTextDocument),
 	);
+	disposables.push(
+		vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
+	);
 	void checkParentModPaths();
 	void refreshModDependencies();
 
@@ -108,6 +111,13 @@ function onChangeParentModPaths(e: vscode.ConfigurationChangeEvent): void {
 	) {
 		void refreshModDependencies();
 	}
+}
+
+// With `modFile` unset the selected `.mod` is the first one found in the workspace folders, so a
+// folder added or removed can change which file the dependencies come from, and where the
+// launcher's registry is looked for above it.
+function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent): void {
+	void refreshModDependencies();
 }
 
 // An edited `dependencies` block takes effect on save, not on the next reload.

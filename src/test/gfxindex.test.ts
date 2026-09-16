@@ -536,11 +536,23 @@ describe("parent mods", function () {
 		await getIndexedGfxNames();
 		listedOptions = [];
 
-		__testHandlers.onChangeParentMods();
+		__testHandlers.onChangeParentMods({ folders: true, unresolved: false });
 		await waitForAsyncTasks();
 		await waitForAsyncTasks();
 
 		assert.deepStrictEqual(listedHalves(), ["parent"]);
+	});
+
+	it("rebuilds nothing when only the unresolved dependency names change", async function () {
+		releaseParentReads();
+		await getIndexedGfxNames();
+		listedOptions = [];
+
+		__testHandlers.onChangeParentMods({ folders: false, unresolved: true });
+		await waitForAsyncTasks();
+		await waitForAsyncTasks();
+
+		assert.deepStrictEqual(listedHalves(), []);
 	});
 });
 

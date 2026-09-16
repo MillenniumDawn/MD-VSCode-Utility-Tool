@@ -4,7 +4,7 @@ import { debounceByInput } from "./common";
 import { IndexProgress, withIndexProgress } from "./indexBuild";
 import { attachTaskWithErrorLogging, BuildGate } from "./promiseUtils";
 import { Logger } from "./logger";
-import { onDidChangeParentMods } from "./parentmods";
+import { onDidChangeParentMods, ParentModsChangeEvent } from "./parentmods";
 import { sendEvent } from "./telemetry";
 
 /**
@@ -82,7 +82,7 @@ export interface IndexWatchers {
 	handlers: {
 		onChangeWorkspaceFolders(e: vscode.WorkspaceFoldersChangeEvent): void;
 		/** What a change to the parent list runs: a rebuild of the parent half. */
-		onChangeParentMods(): void;
+		onChangeParentMods(e: ParentModsChangeEvent): void;
 		onChangeTextDocument(e: vscode.TextDocumentChangeEvent): void;
 		onCloseTextDocument(document: vscode.TextDocument): void;
 		onCreateFiles(e: vscode.FileCreateEvent): void;
@@ -140,9 +140,10 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	}
 
 	// Only the parent half: the workspace half lists the workspace folders alone, so the parents
-	// changing leaves it as it was. An index without a parent half has nothing to do.
-	function onChangeParentMods() {
-		if (spec.rebuildParent) {
+	// changing leaves it as it was. An index without a parent half has nothing to do, and neither
+	// does a change to the unresolved names alone: those name no folder the half reads.
+	function onChangeParentMods(e: ParentModsChangeEvent) {
+		if (spec.rebuildParent && e.folders) {
 			rebuild([spec.rebuildParent]);
 		}
 	}

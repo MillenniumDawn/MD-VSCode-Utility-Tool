@@ -104,12 +104,32 @@ async function isUserDataDir(dir: vscode.Uri): Promise<boolean> {
 	return false;
 }
 
+// Slashes and case folded, and a trailing slash so `D:/ws` does not claim `D:/ws2`.
+function folderKey(uri: vscode.Uri): string {
+	return (
+		uriToFilePathWhenPossible(uri).replace(/\\+/g, "/").replace(/\/+$/, "") +
+		"/"
+	).toLowerCase();
+}
+
+// A repository controls everything under its own folder, so a `mod/` and a `dlc_load.json` in a
+// workspace folder are that repository's files, not the launcher's. Taking them for the registry
+// would let a checked-out repo -- an untrusted one included, since the restricted settings say
+// nothing about files -- name any folder on the machine as a parent mod and have the extension
+// read it. Only a directory outside every workspace folder can be the user data directory.
+function isInsideWorkspace(dir: vscode.Uri): boolean {
+	const key = folderKey(dir);
+	return (vscode.workspace.workspaceFolders ?? []).some((folder) =>
+		key.startsWith(folderKey(folder.uri)),
+	);
+}
+
 async function findUserDataDirUpwards(
 	start: vscode.Uri,
 ): Promise<vscode.Uri | undefined> {
 	let dir = start;
 	for (;;) {
-		if (await isUserDataDir(dir)) {
+		if (!isInsideWorkspace(dir) && (await isUserDataDir(dir))) {
 			return dir;
 		}
 		const parent = dirUri(dir);
@@ -152,8 +172,10 @@ function defaultUserDataDirs(): vscode.Uri[] {
 /**
  * The game's user data directory, where the launcher keeps its mod registry. The setting when it
  * is given; else the nearest ancestor of the selected `.mod` or of a workspace folder that looks
- * like one, which covers a mod checked out under `<user data>/mod/` and a Documents folder that
- * Windows has moved elsewhere; else the platform default.
+ * like one and lies outside the workspace, which covers a mod checked out under `<user data>/mod/`
+ * and a Documents folder that Windows has moved elsewhere; else the platform default. The setting
+ * is exempt from the workspace check: it is a restricted setting, so an untrusted workspace cannot
+ * supply it.
  */
 export async function findUserDataDir(
 	modFile: vscode.Uri | undefined,
@@ -313,6 +335,16 @@ async function resolveDependencies(): Promise<void> {
 
 let inFlight: Promise<void> | null = null;
 let rerun = false;
+
+/**
+ * Settles once the resolution in flight, if any, has published. An index build waits on this
+ * before it lists or caches anything: both read the parent list, and a build that ran while the
+ * list was being resolved listed the explicit parents alone and cached under a namespace that
+ * never recurs. Never rejects, and resolves at once when nothing is in flight.
+ */
+export function whenModDependenciesSettled(): Promise<void> {
+	return inFlight ?? Promise.resolve();
+}
 
 /**
  * Re-reads the selected `.mod`'s `dependencies` and the launcher's registry, and tells the parent

@@ -75,7 +75,8 @@ function cacheNamespace(): string {
         const conf = getConfiguration();
         modFile = conf.modFile as string | undefined;
         // The effective list, dependencies included: two `.mod` files that resolve differently
-        // under the same setting must not share a cache.
+        // under the same setting must not share a cache. Stable by the time a build reads it:
+        // buildIndexHalf waits for a resolution in flight before it gets here.
         parentModPaths = getParentModUris().map(uriToFilePathWhenPossible);
     } catch {
         modFile = undefined;

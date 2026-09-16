@@ -1,12 +1,16 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { clearDlcZipCache, getFilePathFromModOrHOI4 } from "../util/fileloader";
-import { refreshModDependencies } from "../util/moddependencies";
+import {
+	refreshModDependencies,
+	whenModDependenciesSettled,
+} from "../util/moddependencies";
 import { workspaceModFilesCache } from "../util/modfile";
 import {
 	getParentModUris,
 	getUnresolvedDependencies,
 	onDidChangeParentMods,
+	ParentModsChangeEvent,
 	resetParentModsForTest,
 } from "../util/parentmods";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
@@ -26,15 +30,10 @@ describe("util/moddependencies", function () {
 	let modFile: string;
 	let config: Record<string, unknown>;
 	let published: number;
+	let events: ParentModsChangeEvent[];
 
 	function realPathOf(uri: unknown): string {
-		const raw = String(
-			(uri as { fsPath?: string; path?: string }).fsPath ??
-				(uri as { path?: string }).path ??
-				"",
-		);
-		// The stub's Uri.parse keeps the scheme in fsPath, and joinPath then prefixes it again.
-		return raw.replace(/^(file:\/\/)+/, "");
+		return String((uri as { fsPath: string }).fsPath);
 	}
 
 	function resolvedPaths(uris: readonly vscode.Uri[]): string[] {
@@ -78,6 +77,7 @@ describe("util/moddependencies", function () {
 		parentDir = nodePath.join(root, "parent");
 		modFile = nodePath.join(workspaceDir, "descriptor.mod");
 		published = 0;
+		events = [];
 		await write(nodePath.join(workspaceDir, "interface", "subonly.gfx"), "ws");
 		await write(nodePath.join(parentDir, "interface", "shared.gfx"), "parent");
 		await write(nodePath.join(parentDir, "descriptor.mod"), 'name="Parent Mod"\n');
@@ -126,10 +126,24 @@ describe("util/moddependencies", function () {
 			},
 			readFile: async (uri: unknown) => nodeFs.readFile(realPathOf(uri)),
 		});
-		onDidChangeParentMods(() => {
+		onDidChangeParentMods((e) => {
 			published++;
+			events.push(e);
 		});
 	});
+
+	/** Points the platform default user data directory somewhere empty for one test. */
+	async function withoutDefaultUserDataDir(body: () => Promise<void>): Promise<void> {
+		const home = { USERPROFILE: process.env.USERPROFILE, HOME: process.env.HOME };
+		process.env.USERPROFILE = root;
+		process.env.HOME = root;
+		try {
+			await body();
+		} finally {
+			process.env.USERPROFILE = home.USERPROFILE;
+			process.env.HOME = home.HOME;
+		}
+	}
 
 	afterEach(async function () {
 		restoreVscodeStubs();
@@ -296,6 +310,50 @@ describe("util/moddependencies", function () {
 		]);
 	});
 
+	// The repository controls everything under its own folder. A launcher layout in there -- the
+	// markers, a registry entry naming any folder on the machine, a `.mod` depending on it -- would
+	// otherwise make the extension read that folder, in an untrusted workspace too, since the
+	// restricted settings say nothing about files.
+	it("ignores a launcher layout inside the workspace itself", async function () {
+		await withoutDefaultUserDataDir(async () => {
+			await write(nodePath.join(workspaceDir, "dlc_load.json"), '{"enabled_mods":[]}');
+			await write(
+				nodePath.join(workspaceDir, "mod", "evil.mod"),
+				`name="Parent Mod"\npath="${toModPath(parentDir)}"\n`,
+			);
+			await writeOwnModFile(["Parent Mod"]);
+			config.userDataPath = "";
+
+			await refreshModDependencies();
+
+			assert.deepStrictEqual(getParentModUris(), []);
+			assert.deepStrictEqual(getUnresolvedDependencies(), ["Parent Mod"]);
+		});
+	});
+
+	it("still finds the user data directory above a workspace that carries the markers too", async function () {
+		const nestedWorkspace = nodePath.join(userDataDir, "mod", "nested-sub");
+		await write(
+			nodePath.join(nestedWorkspace, "descriptor.mod"),
+			'name="nested"\ndependencies={ "Parent Mod" }\n',
+		);
+		await write(nodePath.join(nestedWorkspace, "dlc_load.json"), '{"enabled_mods":[]}');
+		await write(
+			nodePath.join(nestedWorkspace, "mod", "evil.mod"),
+			`name="Parent Mod"\npath="${toModPath(nodePath.join(root, "evil"))}"\n`,
+		);
+		await nodeFs.mkdir(nodePath.join(root, "evil"), { recursive: true });
+		await registerMod("ugc_1", "Parent Mod", toModPath(parentDir));
+		config.userDataPath = "";
+		stubVscode({ workspaceFolders: [{ uri: vscode.Uri.file(nestedWorkspace) }] });
+
+		await refreshModDependencies();
+
+		assert.deepStrictEqual(resolvedPaths(getParentModUris()), [
+			nodePath.resolve(parentDir),
+		]);
+	});
+
 	it("keeps the setting's entries and reports every name when there is no registry", async function () {
 		const plainCheckout = nodePath.join(root, "plain");
 		await nodeFs.mkdir(plainCheckout, { recursive: true });
@@ -330,6 +388,49 @@ describe("util/moddependencies", function () {
 		await refreshModDependencies();
 		await refreshModDependencies();
 
+		assert.strictEqual(published, 1);
+	});
+
+	it("tells the listeners when only the unresolved names change", async function () {
+		await writeOwnModFile(["Parent Mod"]);
+		await registerMod("ugc_1", "Parent Mod", toModPath(parentDir));
+		await refreshModDependencies();
+
+		// Past the descriptor cache's grace period, with an mtime it cannot mistake for the old one.
+		const now = Date.now();
+		stubVscode({ now: () => now + 5000 });
+		await writeOwnModFile(["Parent Mod", "Typo Mod"]);
+		await nodeFs.utimes(modFile, new Date(now + 5000), new Date(now + 5000));
+
+		await refreshModDependencies();
+
+		assert.deepStrictEqual(resolvedPaths(getParentModUris()), [
+			nodePath.resolve(parentDir),
+		]);
+		assert.deepStrictEqual(getUnresolvedDependencies(), ["Typo Mod"]);
+		assert.deepStrictEqual(events, [
+			{ folders: true, unresolved: false },
+			{ folders: false, unresolved: true },
+		]);
+	});
+
+	it("lets a build wait for the resolution in flight, and not at all when there is none", async function () {
+		await writeOwnModFile(["Parent Mod"]);
+		await registerMod("ugc_1", "Parent Mod", toModPath(parentDir));
+
+		let settled = false;
+		void whenModDependenciesSettled().then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		assert.strictEqual(settled, true, "nothing in flight settles at once");
+
+		void refreshModDependencies();
+		await whenModDependenciesSettled();
+
+		assert.deepStrictEqual(resolvedPaths(getParentModUris()), [
+			nodePath.resolve(parentDir),
+		]);
 		assert.strictEqual(published, 1);
 	});
 
