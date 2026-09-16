@@ -710,12 +710,20 @@ describe("previewdef/worldmap/loader provincemap", () => {
 			assert.strictEqual(result.result.height, 10);
 			assert.strictEqual(result.result.continents.length, 2);
 			assert.ok(result.result.badProvincesCount >= 1);
+			assert.strictEqual(
+				result.result.provinces.filter((province: any) => province?.color === 0).length,
+				1,
+			);
 
 			const texts = result.warnings.map((w: any) => w.text);
 			const has = (s: string) => texts.some((t: string) => t.includes(s));
 			assert.ok(has("has conflict color"), texts.join("\n"));
 			assert.ok(has("doesn't exist on map"), texts.join("\n"));
 			assert.ok(has("doesn't exist in definitions"), texts.join("\n"));
+			assert.ok(
+				!texts.some((text: string) => text.includes("Province with color (0, 0, 0)")),
+				texts.join("\n"),
+			);
 			assert.ok(has("must belong to a continent"), texts.join("\n"));
 			assert.ok(has("is not defined"), texts.join("\n"));
 			assert.ok(has("more than one rows for province id"), texts.join("\n"));
