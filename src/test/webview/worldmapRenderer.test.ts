@@ -1144,6 +1144,49 @@ describe("webview/worldmap/colors extra sets", function () {
 		);
 	});
 
+	it("resolves the owner while the countries array still has holes", function () {
+		assert.strictEqual(
+			getColorByColorSet(
+				"country",
+				province({ id: 1 }),
+				emptyMap({
+					states: [undefined, { id: 1, owner: "GER", provinces: [1] }],
+					statesCount: 2,
+					countries: [undefined, { tag: "GER", color: 0x112233 }],
+				}),
+				context({ provinceToState: { 1: 1 } }),
+			),
+			0x112233,
+		);
+	});
+
+	it("builds the tag to colour table once per render context", function () {
+		const map = emptyMap({
+			states: [
+				undefined,
+				{ id: 1, owner: "GER", provinces: [1] },
+				{ id: 2, owner: "FRA", provinces: [2] },
+			],
+			statesCount: 3,
+			countries: [
+				{ tag: "GER", color: 0x112233 },
+				{ tag: "FRA", color: 0x445566 },
+			],
+		});
+		const ctx = context({ provinceToState: { 1: 1, 2: 2 } });
+		assert.strictEqual(
+			getColorByColorSet("country", province({ id: 1 }), map, ctx),
+			0x112233,
+		);
+		const table = ctx.extraState;
+		assert.deepStrictEqual(table, { GER: 0x112233, FRA: 0x445566 });
+		assert.strictEqual(
+			getColorByColorSet("country", province({ id: 2 }), map, ctx),
+			0x445566,
+		);
+		assert.strictEqual(ctx.extraState, table);
+	});
+
 	it("falls back when the owner country is missing", function () {
 		assert.strictEqual(
 			getColorByColorSet(

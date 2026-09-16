@@ -35,11 +35,17 @@ export function getColorByColorSet(
 						: 0x00007f) | (province.coastal ? 0x7f0000 : 0)
 			);
 		case "country": {
-			const stateId = provinceToState[province.id];
+			if (renderContext.extraState === undefined) {
+				renderContext.extraState = countryColorsByTag(worldMap);
+			}
+
+			const owner = worldMap.getStateById(provinceToState[province.id])?.owner;
 			return (
-				worldMap.countries.find(
-					(c) => c && c.tag === worldMap.getStateById(stateId)?.owner,
-				)?.color ?? defaultColor(province)
+				(owner !== undefined
+					? (renderContext.extraState as Record<string, number | undefined>)[
+							owner
+						]
+					: undefined) ?? defaultColor(province)
 			);
 		}
 		case "terrain": {
@@ -217,6 +223,20 @@ export function getHighConstrastColor(color: number): number {
 	const g = (color >> 8) & 0xff;
 	const b = color & 0xff;
 	return r * 0.7 + g * 2 + b * 0.3 > 3 * 0x7f ? 0 : 0xffffff;
+}
+
+// `countries` has holes while the loader is still filling it in chunks, and the first entry
+// wins for a duplicated tag, so this is not `arrayToMap`.
+function countryColorsByTag(
+	worldMap: FEWorldMap,
+): Record<string, number | undefined> {
+	const result: Record<string, number | undefined> = {};
+	for (const country of worldMap.countries) {
+		if (country && result[country.tag] === undefined) {
+			result[country.tag] = country.color;
+		}
+	}
+	return result;
 }
 
 function highestContinent(worldMap: FEWorldMap): number {
