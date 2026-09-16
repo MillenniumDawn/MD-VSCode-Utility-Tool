@@ -2,7 +2,7 @@ import { chain } from 'lodash';
 import * as vscode from 'vscode';
 import { ContainerWindowType } from '../../hoiformat/gui';
 import { HOIPartial } from '../../hoiformat/schema';
-import { arrayToMap } from '../../util/common';
+import { arrayToMap, jsonForScript } from '../../util/common';
 import { debug } from '../../util/debug';
 import { renderStandaloneWindow } from '../../util/hoi4gui/window';
 import { html, previewedFileUriScript, errorPage } from '../../util/html';
@@ -34,7 +34,9 @@ export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webv
             baseContent,
             [
                 previewedFileUriScript(uri),
-                { content: 'window.containerWindowToggles = ' + JSON.stringify(makeToggleContainerWindowCheckboxes(containerWindows, styleTable)) + ';' },
+                // jsonForScript, not JSON.stringify: the map is keyed by window names read from the
+                // workspace, and one containing `</script` would end the inline script.
+                { content: 'window.containerWindowToggles = ' + jsonForScript(makeToggleContainerWindowCheckboxes(containerWindows, styleTable)) + ';' },
                 'common.js',
                 'guipreview.js',
             ],

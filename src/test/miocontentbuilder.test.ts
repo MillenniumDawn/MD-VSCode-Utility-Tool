@@ -72,6 +72,53 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
         assert.ok(rendered.html.includes('window.toolbarHeight = 52'));
     });
 
+    // The parser accepts quoted identifiers, so an organization or trait id is workspace text. The
+    // HTML parser ends the script at the first `</script`, whatever the JavaScript around it means.
+    it('escapes an id that would otherwise end the inline script', async () => {
+        const hostileId = 'mio_</script><img src=x>';
+        const trait = {
+            id: hostileId,
+            name: hostileId,
+            icon: undefined,
+            anyParent: [],
+            allParents: [],
+            exclusive: [],
+            parent: undefined,
+            x: 0,
+            y: 0,
+            relativePositionId: undefined,
+            visible: true,
+            hasVisible: false,
+            specialTraitBackground: false,
+            effects: [],
+            token: undefined,
+            file: 'common/military_industrial_organization/organizations/test.txt',
+            sourceMioId: hostileId,
+        };
+        const loader: any = {
+            file: trait.file,
+            load: async () => ({
+                result: {
+                    mios: [{ id: hostileId, traits: { [hostileId]: trait }, textHeaders: [{ text: hostileId, x: 0 }], conditionExprs: [], warnings: [] }],
+                    gfxFiles: [],
+                    frame: undefined,
+                },
+            }),
+        };
+        const rendered = await renderMioFile(loader, uri, webview) as LoaderRenderResult;
+
+        for (const name of ['mios', 'renderedTrait', 'renderedHeaders']) {
+            const script = new RegExp(`window\\.${name} = (.*?)</script>`, 's').exec(rendered.html);
+            assert.ok(script, `expected the ${name} payload script`);
+            assert.ok(!script![1]!.includes('</script'), script![1]!);
+        }
+        const mios = JSON.parse(/window\.mios = (.*?)<\/script>/s.exec(rendered.html)![1]!);
+        assert.strictEqual(mios[0].id, hostileId);
+        assert.strictEqual(mios[0].traits[hostileId].id, hostileId);
+        const renderedTrait = JSON.parse(/window\.renderedTrait = (.*?)<\/script>/s.exec(rendered.html)![1]!);
+        assert.ok(renderedTrait[hostileId]?.[hostileId], Object.keys(renderedTrait).join(','));
+    });
+
     // The toolbar toggles are stored by the host, because the webview's own state dies with the
     // panel. The page cannot read globalState, so it is rendered in.
     it('hands the page the stored toolbar options', async () => {

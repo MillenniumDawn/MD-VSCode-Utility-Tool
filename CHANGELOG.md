@@ -4,6 +4,10 @@ Unreleased
 
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
 
+  Bugfixes:
+
+- A focus id, MIO trait id, GUI window name or country tag containing `</script>` can no longer break out of the preview page or inject markup into it: the focus tree, MIO, GUI and technology previews now escape their data the way the other previews already did. Issue #209.
+
 v1.1.35
 
   Functionality:
