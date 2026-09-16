@@ -9,6 +9,10 @@ v1.1.36
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run.
 - Rewrite the README as a user-facing page: what each preview does, no release internals.
 
+  Bugfixes:
+
+- A focus id, MIO trait id, GUI window name or country tag containing `</script>` can no longer break out of the preview page or inject markup into it: the focus tree, MIO, GUI and technology previews now escape their data the way the other previews already did. Issue #209.
+
 v1.1.35
 
   Functionality:

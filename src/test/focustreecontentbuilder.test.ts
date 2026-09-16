@@ -191,6 +191,33 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(html.includes("focustreecontent"));
 	});
 
+	it("buildFocusTreeHtml escapes a focus id that would otherwise end the inline script", async () => {
+		// The parser accepts quoted identifiers, so a focus id is workspace text. The HTML parser ends
+		// the script at the first `</script`, whatever the JavaScript around it means.
+		const hostileId = "focus_</script><img src=x>";
+		const tree = minimalFocusTree({ focus: { id: hostileId } });
+		tree.focuses = { [hostileId]: tree.focuses.focus_a };
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([tree]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+
+		// The rendered focus html escapes the id for markup, so the tag can only reach the page raw
+		// through the focus data; the rendered map is still keyed by it.
+		for (const name of ["focusTrees", "renderedFocus"]) {
+			const script = new RegExp(`window\\.${name} = (.*?)</script>`, "s").exec(html);
+			assert.ok(script, `expected the ${name} payload script`);
+			assert.ok(!script![1]!.includes("</script"), script![1]!);
+		}
+		const trees = JSON.parse(/window\.focusTrees = (.*?)<\/script>/s.exec(html)![1]!);
+		assert.strictEqual(trees[0].focuses[hostileId].id, hostileId);
+		const rendered = JSON.parse(/window\.renderedFocus = (.*?)<\/script>/s.exec(html)![1]!);
+		assert.ok(rendered[hostileId], Object.keys(rendered).join(","));
+	});
+
 	it("buildFocusTreeHtml renders the wheel setting the zoom reads", async () => {
 		// html() puts it into every preview, so the webview's shared zoom code has it without each
 		// contentbuilder carrying a copy. The stubbed configuration has no value for it, which is

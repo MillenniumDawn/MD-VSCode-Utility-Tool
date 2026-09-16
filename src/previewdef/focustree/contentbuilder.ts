@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { FocusTree, Focus } from './schema';
 import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconResolveStats } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
-import { forceError, randomString, mapLimit } from '../../util/common';
+import { forceError, randomString, mapLimit, jsonForScript } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { GridBoxType, IconType, ButtonType } from '../../hoiformat/gui';
@@ -163,11 +163,13 @@ export async function loadFocusTreesOnly(loader: FocusTreeLoader): Promise<Focus
  */
 export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.Webview, uri: vscode.Uri): string {
     const jsCodes: string[] = [];
-    jsCodes.push('window.focusTrees = ' + JSON.stringify(payload.focusTrees));
-    jsCodes.push('window.renderedFocus = ' + JSON.stringify(payload.renderedFocus));
-    jsCodes.push('window.renderedInlayWindows = ' + JSON.stringify(payload.renderedInlayWindows));
-    jsCodes.push('window.gridBox = ' + JSON.stringify(payload.gridBox));
-    jsCodes.push('window.styleNonce = ' + JSON.stringify(payload.styleNonce));
+    // jsonForScript, not JSON.stringify: focus ids come straight from the workspace, and one
+    // containing `</script` would end the inline script and spill the rest into the document.
+    jsCodes.push('window.focusTrees = ' + jsonForScript(payload.focusTrees));
+    jsCodes.push('window.renderedFocus = ' + jsonForScript(payload.renderedFocus));
+    jsCodes.push('window.renderedInlayWindows = ' + jsonForScript(payload.renderedInlayWindows));
+    jsCodes.push('window.gridBox = ' + jsonForScript(payload.gridBox));
+    jsCodes.push('window.styleNonce = ' + jsonForScript(payload.styleNonce));
     jsCodes.push('window.useConditionInFocus = ' + payload.useConditionInFocus);
     jsCodes.push('window.xGridSize = ' + payload.xGridSize);
     jsCodes.push(i18nTableAsScript());
