@@ -137,6 +137,12 @@ ${entries
 			4, // one CSS rule plus one class reference per card
 			"all three sprites should still be rendered",
 		);
+		assert.strictEqual(
+			countOccurrences(result.html, 'aria-hidden="true"'),
+			3,
+			"each CSS texture should be hidden because its caption names the sprite",
+		);
+		assert.ok(!result.html.includes("<img"), "GFX textures stay CSS backgrounds");
 	});
 
 	it("keeps distinct textures apart", async function () {
