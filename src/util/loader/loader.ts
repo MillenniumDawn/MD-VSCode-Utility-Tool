@@ -329,7 +329,7 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 		}
 
 		let content: string | undefined = undefined;
-		let errorValue: any = undefined;
+		let errorValue: unknown = undefined;
 		try {
 			content =
 				this.contentProvider === undefined
@@ -365,7 +365,7 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 	protected abstract postLoad(
 		content: string | undefined,
 		dependencies: Dependency[],
-		error: any,
+		error: unknown,
 		session: LoaderSession,
 	): Promise<LoadResultOD<T, E>>;
 }
@@ -388,7 +388,7 @@ class LoaderDependencies {
 	public getOrCreate<R extends Loader<unknown, unknown>>(
 		key: string,
 		factory: (key: string) => R,
-		type: { new (...args: any[]): R },
+		type: { new (file: string): R },
 	): R {
 		const loader = this.current[key];
 		if (loader && loader instanceof type) {
@@ -404,7 +404,7 @@ class LoaderDependencies {
 	public async loadMultiple<R extends Loader<unknown, unknown>>(
 		dependencies: string[],
 		session: LoaderSession,
-		type: { new (...args: any[]): R },
+		type: { new (file: string): R },
 	) {
 		type Result = PromiseValue<ReturnType<R["load"]>>;
 		const loadDep = async (dep: string) => {
@@ -445,12 +445,12 @@ class LoaderDependencies {
 
 export function mergeInLoadResult<
 	K extends string,
-	T extends { [k in K]: any[] },
+	T extends { [k in K]: unknown[] },
 >(loadResults: T[], key: K): T[K] {
 	// One array, pushed into. `reduce` with `concat` allocated a fresh array holding everything so
 	// far on every step, so merging n results cost n^2/2 element copies -- and the world map merges
 	// one result per state file, of which a large mod has around a thousand.
-	const merged: any[] = [];
+	const merged: unknown[] = [];
 	for (const loadResult of loadResults) {
 		const values = loadResult[key];
 		for (const value of values) {

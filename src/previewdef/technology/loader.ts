@@ -39,7 +39,7 @@ const guiFilePath = [
 ];
 
 export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResult> {
-    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: any, session: LoaderSession): Promise<LoadResultOD<TechnologyTreeLoaderResult>> {
+    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: unknown, session: LoaderSession): Promise<LoadResultOD<TechnologyTreeLoaderResult>> {
         if (error || (content === undefined)) {
             throw error;
         }
