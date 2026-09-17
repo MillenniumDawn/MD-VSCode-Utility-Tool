@@ -190,11 +190,13 @@ async function scanReferencesForEvents(editor: vscode.TextEditor) {
 	).filter(
 		(
 			e,
-		): e is { file: string; result: Record<string, Record<string, string>> } =>
-			e !== undefined &&
-			e.result !== undefined &&
-			typeof e.result[language] === "object" &&
-			!Array.isArray(e.result[language]),
+		): e is { file: string; result: Record<string, Record<string, string>> } => {
+			if (e === undefined || typeof e.result !== "object" || e.result === null) {
+				return false;
+			}
+			const section = (e.result as Record<string, unknown>)[language];
+			return typeof section === "object" && !Array.isArray(section);
+		},
 	);
 
 	const existingLocalizationDependency = existingDependency

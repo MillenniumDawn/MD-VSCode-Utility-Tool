@@ -220,8 +220,9 @@ const focusSchema: SchemaDef<FocusDef> = {
 		},
 		_type: "array",
 	},
+	// Refers back to this schema, which is assigned below the literal.
 	focus: {
-		_innerType: undefined as any,
+		_innerType: undefined as unknown as SchemaDef<FocusDef>,
 		_type: "array",
 	},
 	text: "string",
