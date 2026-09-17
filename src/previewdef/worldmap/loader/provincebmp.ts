@@ -63,17 +63,13 @@ async function loadProvincesBmp(
 		),
 	);
 
-	const {
-		colorByPosition,
-		provinces: colorOnlyProvinces,
-		colorToProvince,
-	} = getProvincesByPosition(provinceMapImage);
+	const { colorByPosition, provinces: colorOnlyProvinces } =
+		getProvincesByPosition(provinceMapImage);
 
 	const width = provinceMapImage.width;
 	const height = provinceMapImage.height;
 	const provincesWithZone = fillProvinceZones(
 		colorOnlyProvinces,
-		colorToProvince,
 		colorByPosition,
 		width,
 		height,
@@ -88,9 +84,9 @@ async function loadProvincesBmp(
 		),
 	);
 
-	const provinces = fillEdges(
+	// The annotation is the check that the two stages add up to a ProvinceGraph.
+	const provinces: ProvinceGraph[] = fillEdges(
 		provincesWithZone,
-		colorToProvince as Record<number, ColorContainer & ProvinceZoneDef>,
 		colorByPosition,
 		width,
 		height,
@@ -102,19 +98,24 @@ async function loadProvincesBmp(
 		width,
 		height,
 		colorByPosition,
-		colorToProvince: colorToProvince as unknown as Record<
-			number,
-			ProvinceGraph
-		>,
+		colorToProvince: byColor(provinces),
 		provinces,
 	};
 }
 
-type ColorContainer = { color: number; warnings: [] };
+type ColorContainer = { color: number };
+
+function byColor<T extends ColorContainer>(provinces: T[]): Record<number, T> {
+	const result: Record<number, T> = {};
+	for (const province of provinces) {
+		result[province.color] = province;
+	}
+	return result;
+}
+
 function getProvincesByPosition(provinceMapImage: BMP): {
 	colorByPosition: Uint32Array;
 	provinces: ColorContainer[];
-	colorToProvince: Record<number, ColorContainer>;
 } {
 	if (
 		provinceMapImage.width % 256 !== 0 ||
@@ -155,7 +156,7 @@ function getProvincesByPosition(provinceMapImage: BMP): {
 			const color = (blue << 16) | (green << 8) | red;
 			const province = colorToProvince[color];
 			if (province === undefined) {
-				const newProvince: ColorContainer = { color, warnings: [] };
+				const newProvince: ColorContainer = { color };
 
 				provinces.push(newProvince);
 				colorToProvince[color] = newProvince;
@@ -168,21 +169,19 @@ function getProvincesByPosition(provinceMapImage: BMP): {
 
 	return {
 		colorByPosition,
-		colorToProvince,
 		provinces,
 	};
 }
 
-type ProvinceZoneDef = { coverZones: Zone[] } & Region;
-function fillProvinceZones<T extends ColorContainer>(
-	provincesWithoutCoverZones: (T & Partial<ProvinceZoneDef>)[],
-	colorToProvince: Record<number, T & Partial<ProvinceZoneDef>>,
+type ProvinceWithZones = ColorContainer & Region & { coverZones: Zone[] };
+function fillProvinceZones(
+	provincesWithoutCoverZones: ColorContainer[],
 	colorByPosition: Uint32Array,
 	width: number,
 	height: number,
 	file: string,
 	warnings: WorldMapWarning[],
-): (T & ProvinceZoneDef)[] {
+): ProvinceWithZones[] {
 	const blockStack: Zone[] = [];
 	const blockSize = 256;
 	for (let x = 0; x < width; x += blockSize) {
@@ -191,12 +190,10 @@ function fillProvinceZones<T extends ColorContainer>(
 		}
 	}
 
+	const coverZonesByColor = new Map<number, Zone[]>();
 	for (const province of provincesWithoutCoverZones) {
-		province.coverZones = [];
+		coverZonesByColor.set(province.color, []);
 	}
-
-	const provinces = provincesWithoutCoverZones as (T &
-		Partial<ProvinceZoneDef> & { coverZones: Zone[] })[];
 
 	while (blockStack.length > 0) {
 		const block = blockStack.pop()!;
@@ -219,10 +216,7 @@ function fillProvinceZones<T extends ColorContainer>(
 		}
 
 		if (sameColor) {
-			const province = colorToProvince[color];
-			if (province) {
-				province.coverZones!.push(block);
-			}
+			coverZonesByColor.get(color)?.push(block);
 		} else {
 			const blockSize = block.w >> 1;
 			blockStack.push({ ...block, w: blockSize, h: blockSize });
@@ -247,11 +241,14 @@ function fillProvinceZones<T extends ColorContainer>(
 		}
 	}
 
-	for (const provinceWithoutRegion of provinces) {
-		const province = Object.assign(
-			provinceWithoutRegion,
-			mergeRegions(provinceWithoutRegion.coverZones, width),
-		);
+	const provinces: ProvinceWithZones[] = provincesWithoutCoverZones.map(
+		(province) => {
+			const coverZones = coverZonesByColor.get(province.color) ?? [];
+			return { ...province, coverZones, ...mergeRegions(coverZones, width) };
+		},
+	);
+
+	for (const province of provinces) {
 		if (
 			province.boundingBox.w > width / 2 ||
 			province.boundingBox.h > height / 2
@@ -269,28 +266,23 @@ function fillProvinceZones<T extends ColorContainer>(
 		}
 	}
 
-	return provinces as (T & ProvinceZoneDef)[];
+	return provinces;
 }
 
 type EdgeDef = { edges: ProvinceEdgeGraph[] };
 export function fillEdges<T extends ColorContainer>(
-	provincesWithoutEdges: (T & Partial<EdgeDef>)[],
-	colorToProvinceWithoutEdges: Record<number, T & Partial<EdgeDef>>,
+	provincesWithoutEdges: T[],
 	colorByPosition: Uint32Array,
 	width: number,
 	height: number,
 ): (T & EdgeDef)[] {
 	const accessedPixels = new Uint8Array(colorByPosition.length);
 
-	for (const province of provincesWithoutEdges) {
-		province.edges = [];
-	}
-
-	const provinces = provincesWithoutEdges as (T & EdgeDef)[];
-	const colorToProvince = colorToProvinceWithoutEdges as Record<
-		number,
-		T & EdgeDef
-	>;
+	const provinces: (T & EdgeDef)[] = provincesWithoutEdges.map((province) => ({
+		...province,
+		edges: [],
+	}));
+	const colorToProvince = byColor(provinces);
 
 	for (let y = 0, yi = 0; y < height; y++, yi += width) {
 		for (let x = 0, xi = yi; x < width; x++, xi++) {
@@ -309,7 +301,7 @@ export function fillEdges<T extends ColorContainer>(
 		}
 	}
 
-	return provinces as (T & EdgeDef)[];
+	return provinces;
 }
 
 export function fillEdgesOfProvince<T extends EdgeDef>(

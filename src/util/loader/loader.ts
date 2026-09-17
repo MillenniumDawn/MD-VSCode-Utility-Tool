@@ -465,9 +465,8 @@ function checkLoaderSessionLoadingFile(session: LoaderSession, file: string) {
 	for (let i = 0; i < length; i++) {
 		const loader = session.loadingLoader[i];
 		if (
-			loader !== undefined &&
-			"file" in loader &&
-			(loader as any).file === file
+			(loader instanceof FileLoader || loader instanceof ContentLoader) &&
+			loader.file === file
 		) {
 			throw new UserError(
 				"Circular dependency when loading file. Loading loaders: " +
