@@ -47,6 +47,11 @@ function buildStub() {
         parse(v: string) {
             const match = /^([a-zA-Z0-9+.-]+):\/\/(.*)$/.exec(v);
             const scheme = match ? match[1] : (v.startsWith('hoi4:/') ? 'hoi4' : 'file');
+            // What `Uri.file(p).toString()` produced parses back to `Uri.file(p)`, as it does in
+            // the editor; a `file://` left in fsPath used to get prefixed again by every joinPath.
+            if (match && scheme === 'file') {
+                return Uri.file(match[2]);
+            }
             return {
                 fsPath: v,
                 path: v,
@@ -89,12 +94,14 @@ function buildStub() {
         onDidChangeTextDocument: disposable,
         onDidCloseTextDocument: disposable,
         onDidChangeWorkspaceFolders: disposable,
+        onDidSaveTextDocument: disposable,
         onDidCreateFiles: disposable,
         onDidDeleteFiles: disposable,
         onDidRenameFiles: disposable,
         textDocuments: [],
         openTextDocument: async () => undefined,
         registerTextDocumentContentProvider: () => disposable(),
+        registerFileSystemProvider: () => disposable(),
         fs: {
             stat: async () => ({ type: FileType.File, mtime: 0, ctime: 0, size: 0 }),
             readDirectory: async () => [],
@@ -263,6 +270,7 @@ const pristine = {
     getConfiguration: stub.workspace.getConfiguration,
     workspaceFolders: stub.workspace.workspaceFolders as unknown,
     onDidChangeConfiguration: stub.workspace.onDidChangeConfiguration,
+    onDidChangeWorkspaceFolders: stub.workspace.onDidChangeWorkspaceFolders,
     stat: stub.workspace.fs.stat,
     readDirectory: stub.workspace.fs.readDirectory,
     readFile: stub.workspace.fs.readFile,
@@ -290,6 +298,8 @@ export interface VscodeStubOverrides {
     getConfiguration?: () => any;
     workspaceFolders?: unknown;
     onDidChangeConfiguration?: (handler: any) => { dispose(): void };
+    /** Captures the folder-change handler a suite's `register()` call installs, to drive it directly. */
+    onDidChangeWorkspaceFolders?: (handler: any) => { dispose(): void };
     stat?: (uri: any) => Promise<any>;
     readDirectory?: (uri: any) => Promise<[string, number][]>;
     readFile?: (uri: any) => Promise<Uint8Array>;
@@ -340,6 +350,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     }
     if (overrides.onDidChangeConfiguration !== undefined) {
         workspace.onDidChangeConfiguration = overrides.onDidChangeConfiguration;
+    }
+    if (overrides.onDidChangeWorkspaceFolders !== undefined) {
+        workspace.onDidChangeWorkspaceFolders = overrides.onDidChangeWorkspaceFolders;
     }
     if (overrides.stat !== undefined) {
         fs.stat = overrides.stat;
@@ -394,6 +407,7 @@ export function restoreVscodeStubs(): void {
     workspace.getConfiguration = pristine.getConfiguration;
     workspace.workspaceFolders = pristine.workspaceFolders;
     workspace.onDidChangeConfiguration = pristine.onDidChangeConfiguration;
+    workspace.onDidChangeWorkspaceFolders = pristine.onDidChangeWorkspaceFolders;
     fs.stat = pristine.stat;
     fs.readDirectory = pristine.readDirectory;
     fs.readFile = pristine.readFile;

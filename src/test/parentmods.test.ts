@@ -1,6 +1,17 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { checkParentModPaths, clearParentModCache, getParentModUris, normalizeParentModPathSetting } from '../util/parentmods';
+import {
+    checkParentModPaths,
+    clearParentModCache,
+    getParentModUris,
+    getUnresolvedDependencies,
+    normalizeParentModPathSetting,
+    onDidChangeParentMods,
+    ParentModsChangeEvent,
+    publishParentMods,
+    resetParentModsForTest,
+    setResolvedDependencies,
+} from '../util/parentmods';
 import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 describe('util/parentmods', () => {
@@ -10,13 +21,13 @@ describe('util/parentmods', () => {
 
     beforeEach(() => {
         stubVscode({ getConfiguration: () => config });
-        clearParentModCache();
+        resetParentModsForTest();
     });
 
     afterEach(() => {
         restoreVscodeStubs();
         config = {};
-        clearParentModCache();
+        resetParentModsForTest();
     });
 
     describe('getParentModUris', () => {
@@ -71,6 +82,113 @@ describe('util/parentmods', () => {
         });
     });
 
+    // The `.mod` dependencies come after the setting: an explicit folder is the one the user chose,
+    // and it must win the lookup over the registry's copy of the same mod.
+    describe('resolved dependencies', () => {
+        it('follow the setting entries, in their own order', () => {
+            config = { parentModPaths: ['D:/explicit'] };
+            setResolvedDependencies([vscode.Uri.file('D:/second'), vscode.Uri.file('D:/first')], []);
+
+            assert.deepStrictEqual(getParentModUris().map(u => u.fsPath), ['D:/explicit', 'D:/second', 'D:/first']);
+        });
+
+        it('deduplicates parent paths with platform-sensitive case rules', () => {
+            config = { parentModPaths: ['d:\\Mods\\Parent'] };
+            setResolvedDependencies([vscode.Uri.file('D:/mods/parent'), vscode.Uri.file('D:/other')], []);
+
+            const paths = getParentModUris().map(u => u.fsPath);
+            if (process.platform === 'win32') {
+                assert.deepStrictEqual(paths, ['d:\\Mods\\Parent', 'D:/other']);
+            } else {
+                assert.deepStrictEqual(paths, ['d:\\Mods\\Parent', 'D:/mods/parent', 'D:/other']);
+            }
+        });
+
+        it('keeps case-distinct Linux parent folders separate', () => {
+            config = { parentModPaths: ['/mods/Parent'] };
+            setResolvedDependencies([vscode.Uri.file('/mods/parent')], []);
+
+            const paths = getParentModUris().map(u => u.fsPath);
+            assert.deepStrictEqual(paths, process.platform === 'win32'
+                ? ['/mods/Parent']
+                : ['/mods/Parent', '/mods/parent']);
+        });
+
+        it('survive a clear of the cached list, which a setting change causes', () => {
+            config = { parentModPaths: [] };
+            setResolvedDependencies([vscode.Uri.file('D:/resolved')], ['Missing Mod']);
+            assert.deepStrictEqual(getParentModUris().map(u => u.fsPath), ['D:/resolved']);
+
+            config = { parentModPaths: ['D:/added'] };
+            clearParentModCache();
+
+            assert.deepStrictEqual(getParentModUris().map(u => u.fsPath), ['D:/added', 'D:/resolved']);
+            assert.deepStrictEqual(getUnresolvedDependencies(), ['Missing Mod']);
+        });
+    });
+
+    describe('publishParentMods', () => {
+        it('tells the listeners once per change of the list, not once per call', () => {
+            let heard = 0;
+            onDidChangeParentMods(() => { heard++; });
+            config = { parentModPaths: ['D:/a'] };
+
+            assert.strictEqual(publishParentMods(), true);
+            assert.strictEqual(publishParentMods(), false);
+            setResolvedDependencies([vscode.Uri.file('D:/b')], []);
+            assert.strictEqual(publishParentMods(), true);
+            setResolvedDependencies([vscode.Uri.file('D:/b')], []);
+            assert.strictEqual(publishParentMods(), false);
+
+            assert.strictEqual(heard, 2);
+        });
+
+        // The tooltip lists the names that resolved to nothing, so a name added or dropped has to
+        // reach the status bar; the return value stays with the folders, which is what the file
+        // caches depend on.
+        it('tells the listeners about a change of the unresolved names, without calling it a list change', () => {
+            const events: ParentModsChangeEvent[] = [];
+            onDidChangeParentMods((e) => { events.push(e); });
+            config = { parentModPaths: [] };
+            setResolvedDependencies([vscode.Uri.file('D:/b')], []);
+            publishParentMods();
+
+            setResolvedDependencies([vscode.Uri.file('D:/b')], ['x']);
+            assert.strictEqual(publishParentMods(), false);
+            assert.strictEqual(publishParentMods(), false);
+            setResolvedDependencies([vscode.Uri.file('D:/c')], ['x', 'y']);
+            assert.strictEqual(publishParentMods(), true);
+
+            assert.deepStrictEqual(events, [
+                { folders: true, unresolved: false },
+                { folders: false, unresolved: true },
+                { folders: true, unresolved: true },
+            ]);
+        });
+
+        it('stays quiet for an empty list that was empty before', () => {
+            let heard = 0;
+            onDidChangeParentMods(() => { heard++; });
+            config = { parentModPaths: [] };
+
+            assert.strictEqual(publishParentMods(), false);
+            assert.strictEqual(heard, 0);
+        });
+
+        it('stops telling a listener that was disposed', () => {
+            let heard = 0;
+            const subscription = onDidChangeParentMods(() => { heard++; });
+            config = { parentModPaths: ['D:/a'] };
+            publishParentMods();
+            subscription.dispose();
+            config = { parentModPaths: ['D:/b'] };
+            clearParentModCache();
+            publishParentMods();
+
+            assert.strictEqual(heard, 1);
+        });
+    });
+
     // Shared with the index cache namespace, which used to `.filter` the raw value: on a string that
     // threw, was swallowed, and dropped modFile from the namespace along with it.
     describe('normalizeParentModPathSetting', () => {
@@ -112,6 +230,17 @@ describe('util/parentmods', () => {
             assert.ok(messages[0].includes('D:\\missing'), messages[0]);
             assert.ok(!messages[0].includes('"'), messages[0]);
             assert.ok(messages[1].includes('D:\\isfile'), messages[1]);
+        });
+
+        it('leaves the resolved dependencies alone: they were checked to be folders when resolved', async () => {
+            config = { parentModPaths: [] };
+            setResolvedDependencies([vscode.Uri.file('D:\resolved')], []);
+            stubVscode({ stat: () => Promise.reject(new Error('ENOENT')) });
+            const messages = recordErrorMessages();
+
+            await checkParentModPaths();
+
+            assert.deepStrictEqual(messages, []);
         });
 
         it('stays silent when nothing is configured', async () => {

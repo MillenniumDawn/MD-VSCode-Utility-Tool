@@ -8,9 +8,10 @@ import { uniq } from "lodash";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions, ListFilesOptions } from "./fileloader";
-import { getParentModUris } from "./parentmods";
 import {
 	buildIndexHalf,
+	captureIndexBuildContext,
+	IndexBuildContext,
 	readIndexFileContent,
 	reportIndexParseFailure,
 } from "./indexHalf";
@@ -52,12 +53,13 @@ let estimatedSize: [number] = [0];
 const builder = createIndexBuilder({
 	name: "gfxIndex",
 	message: localize("gfxindex.building", "Building GFX index..."),
-	build: (progress) => {
+	build: async (progress) => {
 		estimatedSize = [0];
+		const context = await captureIndexBuildContext();
 		return Promise.all([
-			buildGlobalGfxIndex(estimatedSize, progress),
-			buildParentGfxIndex(estimatedSize, progress),
-			buildWorkspaceGfxIndex(estimatedSize, progress),
+			buildGlobalGfxIndex(estimatedSize, progress, context),
+			buildParentGfxIndex(estimatedSize, progress, context),
+			buildWorkspaceGfxIndex(estimatedSize, progress, context),
 		]);
 	},
 	onSuccess: () => {
@@ -132,6 +134,7 @@ const isGfxFile = (relativePath: string) =>
 async function buildGlobalGfxIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context: IndexBuildContext,
 ): Promise<void> {
 	// The global half keeps no file-to-keys map: nothing invalidates a vanilla file per-file, so
 	// building one only ever wrote an empty object into the cache.
@@ -142,14 +145,17 @@ async function buildGlobalGfxIndex(
 		null,
 		estimatedSize,
 		progress,
+		context,
 	);
 }
 
 async function buildParentGfxIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context?: IndexBuildContext,
 ): Promise<void> {
-	const parents = getParentModUris();
+	const buildContext = context ?? (await captureIndexBuildContext());
+	const parents = buildContext.parentModUris;
 	parentGfxIndexes = parents.map(() => ({}));
 	// No parents, no half: a mod that extends nothing pays no listing and writes no cache for it.
 	if (parents.length === 0) {
@@ -169,6 +175,7 @@ async function buildParentGfxIndex(
 				null,
 				estimatedSize,
 				progress,
+				buildContext,
 			),
 		),
 	);
@@ -177,7 +184,9 @@ async function buildParentGfxIndex(
 async function buildWorkspaceGfxIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context?: IndexBuildContext,
 ): Promise<void> {
+	const buildContext = context ?? (await captureIndexBuildContext());
 	await buildGfxIndexHalf(
 		"gfxIndex.workspace",
 		{ parent: false, hoi4: false, recursively: true },
@@ -185,6 +194,7 @@ async function buildWorkspaceGfxIndex(
 		workspaceGfxFileToKeys,
 		estimatedSize,
 		progress,
+		buildContext,
 	);
 }
 
@@ -195,11 +205,14 @@ async function buildGfxIndexHalf(
 	fileToKeysMap: Map<string, string[]> | null,
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context: IndexBuildContext,
 ): Promise<void> {
 	await buildIndexHalf<GfxCacheData>(
 		{
 			cacheName,
 			version: GFX_CACHE_VERSION,
+			cacheScope: context.cacheScope,
+			dependencyGeneration: context.dependencyGeneration,
 			listFiles: (token) =>
 				listIndexFiles({
 					roots: [gfxRoot],

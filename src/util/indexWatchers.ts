@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import { ConfigurationKey } from "../constants";
 import { debounceByInput } from "./common";
 import { IndexProgress, withIndexProgress } from "./indexBuild";
 import { attachTaskWithErrorLogging, BuildGate } from "./promiseUtils";
 import { Logger } from "./logger";
+import { onDidChangeParentMods, ParentModsChangeEvent } from "./parentmods";
 import { sendEvent } from "./telemetry";
 
 /**
@@ -63,7 +63,7 @@ export interface IndexWatcherSpec {
 		failureMessage: string;
 	};
 	/**
-	 * The parent-mod half, rebuilt when `parentModPaths` changes. It shares the workspace rebuild's
+	 * The parent-mod half, rebuilt when the parent list changes. It shares the workspace rebuild's
 	 * message and telemetry: to the user it is the same kind of rebuild.
 	 */
 	rebuildParent?: {
@@ -81,8 +81,8 @@ export interface IndexWatchers {
 	 */
 	handlers: {
 		onChangeWorkspaceFolders(e: vscode.WorkspaceFoldersChangeEvent): void;
-		/** What a change to `parentModPaths` runs: a rebuild of the parent half. */
-		onChangeParentMods(): void;
+		/** What a change to the parent list runs: a rebuild of the parent half. */
+		onChangeParentMods(e: ParentModsChangeEvent): void;
 		onChangeTextDocument(e: vscode.TextDocumentChangeEvent): void;
 		onCloseTextDocument(document: vscode.TextDocument): void;
 		onCreateFiles(e: vscode.FileCreateEvent): void;
@@ -140,9 +140,10 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	}
 
 	// Only the parent half: the workspace half lists the workspace folders alone, so the parents
-	// changing leaves it as it was. An index without a parent half has nothing to do.
-	function onChangeParentMods() {
-		if (spec.rebuildParent) {
+	// changing leaves it as it was. An index without a parent half has nothing to do, and neither
+	// does a change to the unresolved names alone: those name no folder the half reads.
+	function onChangeParentMods(e: ParentModsChangeEvent) {
+		if (spec.rebuildParent && e.folders) {
 			rebuild([spec.rebuildParent]);
 		}
 	}
@@ -237,11 +238,9 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 
 			return vscode.Disposable.from(
 				vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
-				vscode.workspace.onDidChangeConfiguration((e) => {
-					if (e.affectsConfiguration(`${ConfigurationKey}.parentModPaths`)) {
-						onChangeParentMods();
-					}
-				}),
+				// The published list, not the raw setting: it changes once, after the `.mod`
+				// dependencies have been resolved against the new setting.
+				onDidChangeParentMods(onChangeParentMods),
 				vscode.workspace.onDidChangeTextDocument(onChangeTextDocument),
 				vscode.workspace.onDidCloseTextDocument(onCloseTextDocument),
 				vscode.workspace.onDidCreateFiles(onCreateFiles),

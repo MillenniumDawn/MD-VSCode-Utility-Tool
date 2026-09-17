@@ -24,11 +24,14 @@ describe('util/indexCache', () => {
             );
         });
 
-        it('reads the same mod file whichever slashes and case it is written with', () => {
-            assert.strictEqual(
-                cacheNamespaceFor('D:\\Mods\\Alpha.mod', []),
-                cacheNamespaceFor('d:/mods/alpha.mod', []),
-            );
+        it('normalizes mod path identity for the host platform', () => {
+            const upper = cacheNamespaceFor('D:\\Mods\\Alpha.mod', []);
+            const lower = cacheNamespaceFor('d:/mods/alpha.mod', []);
+            if (process.platform === 'win32') {
+                assert.strictEqual(upper, lower);
+            } else {
+                assert.notStrictEqual(upper, lower);
+            }
         });
 
         it('treats an unset, empty and whitespace-only mod file as the same', () => {
@@ -73,11 +76,14 @@ describe('util/indexCache', () => {
             );
         });
 
-        it('reads the same parent mod whichever slashes and case it is written with, and skips blanks', () => {
-            assert.strictEqual(
-                cacheNamespaceFor(undefined, [], ['D:\\Mods\\Parent', '', '  ']),
-                cacheNamespaceFor(undefined, [], ['d:/mods/parent']),
-            );
+        it('normalizes parent path identity for the host platform and skips blanks', () => {
+            const upper = cacheNamespaceFor(undefined, [], ['D:\\Mods\\Parent', '', '  ']);
+            const lower = cacheNamespaceFor(undefined, [], ['d:/mods/parent']);
+            if (process.platform === 'win32') {
+                assert.strictEqual(upper, lower);
+            } else {
+                assert.notStrictEqual(upper, lower);
+            }
             assert.strictEqual(
                 cacheNamespaceFor(undefined, ['file:///ws'], []),
                 cacheNamespaceFor(undefined, ['file:///ws']),

@@ -5,9 +5,10 @@ import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions, ListFilesOptions } from "./fileloader";
-import { getParentModUris } from "./parentmods";
 import {
 	buildIndexHalf,
+	captureIndexBuildContext,
+	IndexBuildContext,
 	readIndexFileContent,
 	reportIndexParseFailure,
 } from "./indexHalf";
@@ -41,12 +42,13 @@ const builder = createIndexBuilder({
 		"sharedFocusIndex.building",
 		"Building Shared Focus index...",
 	),
-	build: (progress) => {
+	build: async (progress) => {
 		estimatedSize = [0];
+		const context = await captureIndexBuildContext();
 		return Promise.all([
-			buildGlobalFocusIndex(estimatedSize, progress),
-			buildParentFocusIndex(estimatedSize, progress),
-			buildWorkspaceFocusIndex(estimatedSize, progress),
+			buildGlobalFocusIndex(estimatedSize, progress, context),
+			buildParentFocusIndex(estimatedSize, progress, context),
+			buildWorkspaceFocusIndex(estimatedSize, progress, context),
 		]);
 	},
 	onSuccess: () => {
@@ -67,6 +69,7 @@ const focusRoot = "common/national_focus";
 async function buildGlobalFocusIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context: IndexBuildContext,
 ): Promise<void> {
 	await buildFocusIndexHalf(
 		"sharedFocusIndex.global",
@@ -75,14 +78,17 @@ async function buildGlobalFocusIndex(
 		globalFocusKeyToFile,
 		estimatedSize,
 		progress,
+		context,
 	);
 }
 
 async function buildParentFocusIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context?: IndexBuildContext,
 ): Promise<void> {
-	const parents = getParentModUris();
+	const buildContext = context ?? (await captureIndexBuildContext());
+	const parents = buildContext.parentModUris;
 	parentFocusIndexes = parents.map(() => ({}));
 	parentFocusKeyToFiles.length = parents.length;
 	// No parents, no half: a mod that extends nothing pays no listing and writes no cache for it.
@@ -105,6 +111,7 @@ async function buildParentFocusIndex(
 				reverseMap,
 				estimatedSize,
 				progress,
+				buildContext,
 			);
 		}),
 	);
@@ -113,7 +120,9 @@ async function buildParentFocusIndex(
 async function buildWorkspaceFocusIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context?: IndexBuildContext,
 ): Promise<void> {
+	const buildContext = context ?? (await captureIndexBuildContext());
 	await buildFocusIndexHalf(
 		"sharedFocusIndex.workspace",
 		{ mod: true, parent: false, hoi4: false, recursively: true },
@@ -121,6 +130,7 @@ async function buildWorkspaceFocusIndex(
 		workspaceFocusKeyToFile,
 		estimatedSize,
 		progress,
+		buildContext,
 	);
 }
 
@@ -131,11 +141,14 @@ async function buildFocusIndexHalf(
 	reverseMap: Map<string, string>,
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context: IndexBuildContext,
 ): Promise<void> {
 	await buildIndexHalf<FocusIndex>(
 		{
 			cacheName,
 			version: FOCUS_CACHE_VERSION,
+			cacheScope: context.cacheScope,
+			dependencyGeneration: context.dependencyGeneration,
 			listFiles: (token) =>
 				listIndexFiles({ roots: [focusRoot], options: { ...options, token } }),
 			hydrate: (cached, skipFiles) => {
