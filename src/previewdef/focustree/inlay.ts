@@ -9,8 +9,9 @@ import { findContainerWindows, listGfxFilesFromConfiguredRoots, listGuiFiles, li
 import { describeParseFailure } from "../../util/indexHalf";
 import { Logger } from "../../util/logger";
 import { getConfiguration } from "../../util/vsccommon";
-import { getSpriteTypes } from "../../hoiformat/spritetype";
 import { getGfxContainerFile } from "../../util/gfxindex";
+import { getGfxSpriteMap } from "../../util/image/imagecache";
+import { scanCandidatesUntilResolved } from "../../util/candidateScan";
 import { uniq } from "lodash";
 
 interface ParsedInlayFile {
@@ -272,23 +273,19 @@ export async function resolveInlayGfxFiles(inlays: FocusTreeInlay[]): Promise<In
     const candidateFiles = await listGfxFilesFromConfiguredRoots(getConfiguration().inlayWindowGfxRoots ?? [], "mdHoi4Utilities.inlayWindowGfxRoots");
     candidateFiles.push(...await listGuiGfxFiles());
 
-    for (const candidateFile of uniq(candidateFiles)) {
-        if (unresolved.size === 0) {
-            break;
-        }
-        try {
-            const spriteTypes = getSpriteTypes(await parseHoi4FileCached(candidateFile, { keepTokens: false }));
-            for (const spriteType of spriteTypes) {
-                if (unresolved.has(spriteType.name) && !(spriteType.name in gfxFileByName)) {
-                    gfxFileByName[spriteType.name] = candidateFile;
-                    unresolved.delete(spriteType.name);
+    await scanCandidatesUntilResolved(
+        uniq(candidateFiles),
+        unresolved,
+        getGfxSpriteMap,
+        (candidateFile, spriteMap) => {
+            for (const name of [...unresolved]) {
+                if (spriteMap[name] !== undefined) {
+                    gfxFileByName[name] = candidateFile;
+                    unresolved.delete(name);
                 }
             }
-        } catch (e) {
-            Logger.error(`Cannot parse ${candidateFile} while resolving inlay sprites: ${describeParseFailure(e)}`);
-            continue;
-        }
-    }
+        },
+    );
 
     const resolvedFiles = new Set<string>();
     for (const inlay of inlays) {
