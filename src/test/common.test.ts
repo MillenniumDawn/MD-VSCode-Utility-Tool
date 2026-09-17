@@ -221,9 +221,37 @@ describe('util/common', function () {
             assert.strictEqual(err.message, 'foo');
         });
 
-        it('wraps plain objects', function () {
-            const err = forceError({ foo: 1 });
+        it('wraps plain objects with a message that shows the value and keeps it as the cause', function () {
+            const thrown = { foo: 1 };
+            const err = forceError(thrown);
             assert.ok(err instanceof Error);
+            assert.match(err.message, /\{"foo":1\}/);
+            assert.strictEqual(err.cause, thrown);
+        });
+
+        it('never produces an empty message for primitives', function () {
+            for (const value of [null, undefined, 42, true, Symbol('s')]) {
+                const err = forceError(value);
+                assert.ok(err.message.length > 0, `empty message for ${String(value)}`);
+                assert.notStrictEqual(err.toString(), 'Error');
+            }
+        });
+
+        it('falls back to a type description when the value cannot be serialised', function () {
+            const circular: { self?: unknown } = {};
+            circular.self = circular;
+            const err = forceError(circular);
+            assert.match(err.message, /\[object Object\]/);
+            assert.strictEqual(err.cause, circular);
+        });
+    });
+
+    describe('UserError', function () {
+        it('keeps the cause it is given', function () {
+            const inner = new Error('inner');
+            const err = new UserError('outer', { cause: inner });
+            assert.strictEqual(err.name, 'UserError');
+            assert.strictEqual(err.cause, inner);
         });
     });
 
