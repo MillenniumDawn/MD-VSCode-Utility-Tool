@@ -434,7 +434,7 @@ window.addEventListener('load', tryRun(async function() {
         conditions = new DivDropdown(conditionsElement, true);
         
         conditions.selectedValues$.next(selectedExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
-        conditions.selectedValues$.subscribe(async (selection) => {
+        conditions.selectedValues$.subscribe(tryRun(async (selection) => {
             selectedExprs = selection.map<ConditionItem>(selection => {
                 const index = selection.indexOf('!|');
                 if (index === -1) {
@@ -453,7 +453,7 @@ window.addEventListener('load', tryRun(async function() {
             setState({ selectedExprs });
             
             await buildContent();
-        });
+        }));
     }
 
     // Zoom. The anchor is the toolbar strip's height, which the host owns.
