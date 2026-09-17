@@ -19,6 +19,19 @@ interface DdsOptions {
 	caps?: number;
 	caps2?: number;
 	bitsPerPixel?: number;
+	pixelFormatFlags?: number;
+	fourCC?: string;
+}
+
+const DDPF_FOURCC = 0x4;
+const DDSCAPS_MIPMAP = 0x400000;
+const DDSCAPS2_CUBEMAP = 0x200;
+const DDSCAPS2_VOLUME = 0x200000;
+const DXGI_FORMAT_UNKNOWN = 0;
+const DXGI_FORMAT_BC4_UNORM = 80;
+
+function fourCC(code: string): number {
+	return Buffer.from(code, "ascii").readInt32LE(0);
 }
 
 function makeDdsHeader(
@@ -39,7 +52,12 @@ function makeDdsHeader(
 	setInt(6, options.depth ?? 0); // dwDepth
 	setInt(7, options.mipmapCount ?? 0); // dwMipMapCount
 	setInt(19, 32); // ddspf.dwSize
-	setInt(20, 0x40 | 0x1); // ddspf.dwFlags: DDPF_RGB | DDPF_ALPHA
+	if (options.fourCC !== undefined) {
+		setInt(20, options.pixelFormatFlags ?? DDPF_FOURCC);
+		setInt(21, fourCC(options.fourCC));
+	} else {
+		setInt(20, options.pixelFormatFlags ?? (0x40 | 0x1)); // ddspf.dwFlags: DDPF_RGB | DDPF_ALPHA
+	}
 	setInt(22, options.bitsPerPixel ?? 32); // dwRGBBitCount
 	setInt(23, 0x00ff0000); // R mask
 	setInt(24, 0x0000ff00); // G mask
@@ -50,12 +68,18 @@ function makeDdsHeader(
 	return buf;
 }
 
+interface Dx10Options {
+	arraySize?: number;
+	dxgiFormat?: number;
+	pixelBytes?: number;
+}
+
 function makeDdsDx10Header(
 	width: number,
 	height: number,
-	arraySize: number,
+	options: Dx10Options = {},
 ): Buffer {
-	const buf = Buffer.alloc(148);
+	const buf = Buffer.alloc(148 + (options.pixelBytes ?? 0));
 	const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 	const setInt = (intIndex: number, value: number) =>
 		dv.setInt32(intIndex * 4, value, true);
@@ -65,17 +89,25 @@ function makeDdsDx10Header(
 	setInt(3, height);
 	setInt(4, width);
 	setInt(19, 32); // ddspf.dwSize
-	setInt(20, 0x4); // ddspf.dwFlags: DDPF_FOURCC
-	setInt(21, 0x30315844); // DX10
+	setInt(20, DDPF_FOURCC);
+	setInt(21, fourCC("DX10"));
 	setInt(27, 0x1000); // dwCaps: DDSCAPS_TEXTURE
-	setInt(32, 28); // DXGI_FORMAT_R8G8B8A8_UNORM
+	setInt(32, options.dxgiFormat ?? 28); // DXGI_FORMAT_R8G8B8A8_UNORM
 	setInt(33, 3); // DDS_DIMENSION_TEXTURE2D
-	setInt(35, arraySize);
+	setInt(35, options.arraySize ?? 1);
 	return buf;
 }
 
 function parseDds(buf: Buffer): DDS {
 	return DDS.parse(buf.buffer as ArrayBuffer, buf.byteOffset);
+}
+
+// A copy of the first `length` bytes in its own ArrayBuffer, so the parser sees the
+// shortened length rather than the original allocation behind a subarray.
+function truncate(buf: Buffer, length: number): Buffer {
+	const out = Buffer.alloc(length);
+	buf.copy(out, 0, 0, length);
+	return out;
 }
 
 // A bare 18-byte uncompressed true-colour (type 2, 32 bpp) TGA header with no pixel data.
@@ -190,7 +222,10 @@ describe("DDS dimension bound", () => {
 
 	it("refuses DX10 arrays over the surface count bound", () => {
 		assert.throws(
-			() => parseDds(makeDdsDx10Header(1, 1, MAX_IMAGE_DIMENSION + 1)),
+			() =>
+				parseDds(
+					makeDdsDx10Header(1, 1, { arraySize: MAX_IMAGE_DIMENSION + 1 }),
+				),
 			isUserError(/DX10 array size .* is not valid/),
 		);
 	});
@@ -205,6 +240,176 @@ describe("DDS dimension bound", () => {
 				),
 			isUserError(/decoded surface pixel work .* exceeds/),
 		);
+	});
+});
+
+describe("DDS malformed input", () => {
+	it("refuses an empty buffer", () => {
+		assert.throws(
+			() => parseDds(Buffer.alloc(0)),
+			isUserError(/header is truncated/),
+		);
+	});
+
+	it("refuses a buffer shorter than the 128-byte header", () => {
+		assert.throws(
+			() => parseDds(Buffer.alloc(8)),
+			isUserError(/header is truncated/),
+		);
+		assert.throws(
+			() => parseDds(truncate(makeDdsHeader(2, 2, 16), 127)),
+			isUserError(/header is truncated/),
+		);
+	});
+
+	it("refuses a header with the wrong magic number", () => {
+		const buf = makeDdsHeader(2, 2, 16);
+		buf.write("PNG ", 0, "ascii");
+		assert.throws(() => parseDds(buf), isUserError(/Invalid magic number/));
+	});
+
+	it("refuses an unknown FourCC", () => {
+		assert.throws(
+			() => parseDds(makeDdsHeader(4, 4, 64, { fourCC: "ABCD" })),
+			isUserError(/fourCC value not supported/),
+		);
+	});
+
+	it("refuses pixel format flags that name no channel layout", () => {
+		assert.throws(
+			() => parseDds(makeDdsHeader(2, 2, 16, { pixelFormatFlags: 0 })),
+			isUserError(/Unknown pixel format flags/),
+		);
+	});
+
+	it("refuses a DX10 header cut off after the standard header", () => {
+		assert.throws(
+			() => parseDds(truncate(makeDdsDx10Header(2, 2), 128)),
+			isUserError(/DX10 header is truncated/),
+		);
+	});
+
+	it("refuses an unsupported DXGI format", () => {
+		assert.throws(
+			() =>
+				parseDds(
+					makeDdsDx10Header(2, 2, { dxgiFormat: DXGI_FORMAT_UNKNOWN }),
+				),
+			isUserError(/Not supported DXGI format/),
+		);
+	});
+
+	it("refuses a main image that overruns the buffer", () => {
+		assert.throws(
+			() => parseDds(makeDdsHeader(4, 4, 0)),
+			isUserError(/Main image .* exceeds buffer size/),
+		);
+	});
+
+	it("refuses a mipmap chain that overruns the buffer", () => {
+		assert.throws(
+			() =>
+				parseDds(
+					makeDdsHeader(4, 4, 64, {
+						mipmapCount: 3,
+						caps: 0x1000 | DDSCAPS_MIPMAP,
+					}),
+				),
+			isUserError(/Mipmap #1 .* exceeds buffer size/),
+		);
+	});
+
+	it("refuses a DXT1 mipmap chain that overruns the buffer", () => {
+		assert.throws(
+			() =>
+				parseDds(
+					makeDdsHeader(8, 8, 32, {
+						fourCC: "DXT1",
+						mipmapCount: 4,
+						caps: 0x1000 | DDSCAPS_MIPMAP,
+					}),
+				),
+			isUserError(/Mipmap #1 .* exceeds buffer size/),
+		);
+	});
+
+	it("refuses a mipmap flag without a mipmap count", () => {
+		assert.throws(
+			() =>
+				parseDds(
+					makeDdsHeader(4, 4, 64, {
+						mipmapCount: 0,
+						caps: 0x1000 | DDSCAPS_MIPMAP,
+					}),
+				),
+			isUserError(/mipmap count 0 is not valid/),
+		);
+	});
+
+	it("refuses a texture flagged as both cubemap and volume", () => {
+		assert.throws(
+			() =>
+				parseDds(
+					makeDdsHeader(2, 2, 16, {
+						caps2: DDSCAPS2_CUBEMAP | DDSCAPS2_VOLUME,
+					}),
+				),
+			isUserError(/at same time/),
+		);
+	});
+
+	it("reports an unimplemented block compression at decode time", () => {
+		const dds = parseDds(
+			makeDdsDx10Header(4, 4, {
+				dxgiFormat: DXGI_FORMAT_BC4_UNORM,
+				pixelBytes: 8,
+			}),
+		);
+		assert.strictEqual(dds.images.length, 1);
+		assert.throws(
+			() => ddsToPng(dds),
+			isUserError(/Compress format not implemented/),
+		);
+	});
+
+	it("still decodes a complete mipmap chain", () => {
+		const dds = parseDds(
+			makeDdsHeader(4, 4, 64 + 16 + 4, {
+				mipmapCount: 3,
+				caps: 0x1000 | DDSCAPS_MIPMAP,
+			}),
+		);
+		assert.strictEqual(dds.images.length, 3);
+		assert.strictEqual(ddsToPng(dds).width, 4);
+	});
+});
+
+describe("TGA malformed input", () => {
+	it("refuses an image type the decoder does not handle", () => {
+		const buf = makeTgaHeader(2, 2);
+		buf.writeInt8(1, 2); // colour-mapped
+		const originalConsoleError = console.error;
+		console.error = () => undefined;
+		try {
+			assert.throws(() => tgaToPng(buf), isUserError(/Unsupported tga format/));
+		} finally {
+			console.error = originalConsoleError;
+		}
+	});
+
+	it("refuses uncompressed pixel data cut short", () => {
+		const buf = Buffer.concat([makeTgaHeader(2, 2), Buffer.alloc(8)]);
+		assert.throws(
+			() => tgaToPng(buf),
+			isUserError(/pixel data is truncated/),
+		);
+	});
+
+	it("still decodes uncompressed pixel data of exactly the right length", () => {
+		const buf = Buffer.concat([makeTgaHeader(2, 2), Buffer.alloc(16, 0x7f)]);
+		const png = tgaToPng(buf);
+		assert.strictEqual(png.width, 2);
+		assert.strictEqual(png.height, 2);
 	});
 });
 
