@@ -9,6 +9,7 @@ Unreleased
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
 - [ World Map Previewer ] The country colour set pans and zooms smoothly on a full-size map. Each province's owner colour was searched through every country tag on every redraw; the table is now built once per redraw. Issue #214.
 - [ World Map Previewer ] State, strategic region and supply area labels no longer stall panning on a full-size map. The province under each label was searched through every province on every redraw; provinces are now indexed by position once per map load. Issue #215.
+- [ Focus Tree Previewer ] Refreshing a focus tree or decision preview no longer re-reads every file under `interface/` each time: the window names and sprites each file defines are remembered between refreshes, and the search stops as soon as the ones the preview needs are found. Issue #178.
 
   Bugfixes:
 
