@@ -21,24 +21,31 @@ import { getGfxContainerFile } from "../gfxindex";
 import { gfxIndex } from "../featureflags";
 export { Sprite, Image };
 
-// Decoded PNG buffers are the heaviest thing in memory; bound the image cache by total bytes
-// (least-recently-accessed eviction) so large texture packs can't grow it without limit. The
-// smaller caches use an entry-count cap. (Entry sizes vary ~1000x for images, so a count cap
-// alone would not bound their RAM.)
+// Decoded PNG buffers are the heaviest thing in memory; bound the image and sprite caches by
+// total bytes (least-recently-accessed eviction) so large texture packs can't grow them without
+// limit. An entry weighs everything it retains -- the PNG buffer, the memoized data URI, and for
+// a sprite its split frames and tiles -- and is re-weighed on access, since those are built
+// lazily after the entry is cached. (Entry sizes vary ~1000x for images, so a count cap alone
+// would not bound their RAM; the gfx map cache keeps one.)
 const imageCacheMaxBytes = 128 * 1024 * 1024;
 const imageCache = new PromiseCache<Image | undefined>({
 	expireWhenChange: hoiFileExpiryToken,
 	factory: getImage,
 	life: 10 * 60 * 1000,
 	maxBytes: imageCacheMaxBytes,
-	weigher: (image) => (image ? image.pngBuffer.length : 0),
+	weigher: (image) => image?.retainedBytes ?? 0,
 });
 
-const spriteCache = new PromiseCache({
+// A sprite's weight includes its base image, which also sits in imageCache: the sprite keeps it
+// alive after imageCache evicts it, so the two caps overlap rather than add.
+const spriteCacheMaxBytes = 128 * 1024 * 1024;
+const spriteCache = new PromiseCache<Sprite | undefined>({
 	expireWhenChange: spriteCacheExpiryToken,
 	factory: getSpriteByKey,
 	life: 10 * 60 * 1000,
 	maxSize: 128,
+	maxBytes: spriteCacheMaxBytes,
+	weigher: (sprite) => sprite?.retainedBytes ?? 0,
 });
 
 const gfxMapCache = new PromiseCache({
