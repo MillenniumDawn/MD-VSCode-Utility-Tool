@@ -1,5 +1,6 @@
 import "./setup";
 import * as assert from "assert";
+import { waitFor } from "../waitfor";
 import {
 	EffectTooltipOptions,
 	clampBelowToolbar,
@@ -20,7 +21,9 @@ const sections = [
 	},
 ];
 
-// The panel waits out a hover delay before it appears, so the tests that drive it have to wait too.
+// The panel waits out a hover delay before it appears. A test that expects it polls until it is
+// there; a test that expects nothing has to wait the delay out, with a margin, since there is no
+// moment at which "nothing appeared" becomes true.
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const hoverDelay = 150;
 
@@ -43,6 +46,7 @@ describe("webview/util/hovertooltip", () => {
 	});
 
 	const panels = () => document.querySelectorAll("." + options.className);
+	const opened = () => waitFor(() => panels().length > 0, { message: "the panel never opened" });
 	const enter = () => host.dispatchEvent(new (window as any).Event("mouseenter"));
 	const leave = () => host.dispatchEvent(new (window as any).Event("mouseleave"));
 
@@ -52,14 +56,14 @@ describe("webview/util/hovertooltip", () => {
 		enter();
 		assert.strictEqual(panels().length, 0);
 
-		await wait(hoverDelay + 30);
+		await opened();
 		assert.strictEqual(panels().length, 1);
 	});
 
 	it("typesets the panel like a condition panel and heads each block", async () => {
 		wireEffectTooltip(host, sections, options);
 		enter();
-		await wait(hoverDelay + 30);
+		await opened();
 
 		const panel = panels()[0]!;
 		assert.ok(panel.classList.contains("ev-cond"));
@@ -72,7 +76,7 @@ describe("webview/util/hovertooltip", () => {
 	it("takes the panel away when the pointer leaves", async () => {
 		wireEffectTooltip(host, sections, options);
 		enter();
-		await wait(hoverDelay + 30);
+		await opened();
 		assert.strictEqual(panels().length, 1);
 
 		leave();
