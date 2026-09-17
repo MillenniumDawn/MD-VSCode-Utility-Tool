@@ -405,7 +405,7 @@
 		"util": "^0.12.5"
 	},
 	"allowScripts": {
-		"@vscode/vsce-sign": true,
+		"@vscode/vsce-sign@2.0.9": true,
 		"keytar": false
 	}
 }
