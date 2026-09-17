@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- Scan references on a mod with thousands of events no longer freezes the editor for minutes and no longer holds every event and localisation file in memory at once; an event or localisation file that cannot be read is now reported in the output log instead of being skipped silently. Issue #194.
+
 v1.1.36
 
   Functionality:

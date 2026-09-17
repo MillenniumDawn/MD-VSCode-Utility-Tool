@@ -18,6 +18,8 @@ import {
 } from "./vsccommon";
 import { flatMap, flatten } from "lodash";
 import { parseYaml } from "./yaml";
+import { indexParseQueue } from "./indexBuild";
+import { Logger } from "./logger";
 
 export type Dependency = { type: string; path: string };
 
@@ -80,26 +82,130 @@ async function scanReferences(): Promise<void> {
 	}
 }
 
+/**
+ * Loads `files` through the shared index parse queue, so a scan over a mod's whole `events/` or
+ * `localisation/` folder holds a handful of buffers at a time rather than all of them at once.
+ * A file whose `load` throws is logged and dropped; `undefined` results are dropped quietly.
+ */
+export async function loadBounded<T>(
+	files: string[],
+	load: (file: string) => Promise<T | undefined>,
+): Promise<T[]> {
+	const loaded = await indexParseQueue.map(files, async (file) => {
+		try {
+			return await load(file);
+		} catch (e) {
+			Logger.warn(`[ScanReferences] can't read ${file}: ${e}`);
+			return undefined;
+		}
+	});
+	return loaded.filter((e): e is T => e !== undefined);
+}
+
+function childIdsOf(event: HOIEvent): string[] {
+	return flatMap([event.immediate, ...event.options], (o) => o.childEvents).map(
+		(ce) => ce.eventName,
+	);
+}
+
+/**
+ * Walks the event graph both ways from `mainEvents` -- the events they fire, the events that fire
+ * them, and so on -- and reports the files those events live in. Every event is visited once and
+ * every link followed once, which is what keeps a mod with thousands of events off the host thread
+ * for seconds rather than minutes.
+ */
+export function collectLinkedEvents(
+	mainEvents: HOIEvent[],
+	eventItems: HOIEvent[],
+): { includedEventFiles: string[]; searchedEvents: HOIEvent[] } {
+	const childrenById = new Map<string, string[]>();
+	const eventsById = new Map<string, HOIEvent[]>();
+	const parentsById = new Map<string, HOIEvent[]>();
+	for (const event of eventItems) {
+		const children = childIdsOf(event);
+		childrenById.set(event.id, children);
+		pushTo(eventsById, event.id, event);
+		for (const childId of children) {
+			pushTo(parentsById, childId, event);
+		}
+	}
+	for (const event of mainEvents) {
+		childrenById.set(event.id, childIdsOf(event));
+	}
+
+	const searched = new Set<string>(mainEvents.map((e) => e.id));
+	const includedFileSet = new Set<string>();
+	const includedEventFiles: string[] = [];
+	const searchingEvents: HOIEvent[] = [...mainEvents];
+	const searchedEvents: HOIEvent[] = [];
+
+	const reach = (ei: HOIEvent) => {
+		searchingEvents.push(ei);
+		if (!includedFileSet.has(ei.file)) {
+			includedFileSet.add(ei.file);
+			includedEventFiles.push(ei.file);
+		}
+	};
+
+	while (searchingEvents.length > 0) {
+		const event = searchingEvents.pop()!;
+		for (const childId of childrenById.get(event.id) ?? []) {
+			if (searched.has(childId)) {
+				continue;
+			}
+			searched.add(childId);
+			// Two files can define the same id; each one is included, the way the old scan did.
+			(eventsById.get(childId) ?? []).forEach(reach);
+		}
+		for (const parent of parentsById.get(event.id) ?? []) {
+			if (!searched.has(parent.id)) {
+				searched.add(parent.id);
+				reach(parent);
+			}
+		}
+		searchedEvents.push(event);
+	}
+
+	return { includedEventFiles, searchedEvents };
+}
+
+function pushTo<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+	const list = map.get(key);
+	if (list === undefined) {
+		map.set(key, [value]);
+	} else {
+		list.push(value);
+	}
+}
+
+/** The localisation keys a set of events shows: each title and each option name. */
+export function localisationKeysOf(events: HOIEvent[]): Set<string> {
+	const keys = new Set<string>();
+	for (const event of events) {
+		if (event.title) {
+			keys.add(event.title);
+		}
+		for (const option of event.options) {
+			if (option.name) {
+				keys.add(option.name);
+			}
+		}
+	}
+	return keys;
+}
+
 async function scanReferencesForEvents(editor: vscode.TextEditor) {
 	const eventFiles = await listFilesFromModOrHOI4("events");
 	const document = editor.document;
-	const events = (
-		await Promise.all(
-			eventFiles.map(async (file) => {
-				try {
-					const filePath = "events/" + file;
-					const [buffer, realPath] = await readFileFromModOrHOI4(filePath);
-					const realPathUri = getHoiOpenedFileOriginalUri(realPath);
-					if (isSameUri(document.uri, realPathUri)) {
-						return undefined;
-					}
-					return getEvents(parseHoi4File(buffer.toString()), filePath);
-				} catch (e) {
-					return undefined;
-				}
-			}),
-		)
-	).filter((e): e is HOIEvents => e !== undefined);
+	const events = await loadBounded<HOIEvents>(eventFiles, async (file) => {
+		const filePath = "events/" + file;
+		const [buffer, realPath] = await readFileFromModOrHOI4(filePath);
+		const realPathUri = getHoiOpenedFileOriginalUri(realPath);
+		if (isSameUri(document.uri, realPathUri)) {
+			return undefined;
+		}
+		return getEvents(parseHoi4File(buffer.toString()), filePath);
+	});
 
 	if (document.isClosed) {
 		return;
@@ -108,7 +214,6 @@ async function scanReferencesForEvents(editor: vscode.TextEditor) {
 	const eventItems = flatMap(events, (e) =>
 		flatten(Object.values(e.eventItemsByNamespace)),
 	);
-	const includedEventFiles: string[] = [];
 
 	const relativePath = getRelativePathInWorkspace(document.uri);
 	const content = document.getText();
@@ -117,43 +222,11 @@ async function scanReferencesForEvents(editor: vscode.TextEditor) {
 			getEvents(parseHoi4File(content), relativePath).eventItemsByNamespace,
 		),
 	);
-	const searchingEvents: HOIEvent[] = [...mainEvents];
 
-	const searched: Record<string, boolean> = {};
-	const searchedEvents: HOIEvent[] = [];
-	const childrenById: Record<string, string[]> = {};
-	[...eventItems, ...mainEvents].forEach((event) => {
-		childrenById[event.id] = flatMap(
-			[event.immediate, ...event.options],
-			(o) => o.childEvents,
-		).map((ce) => ce.eventName);
-	});
-
-	while (searchingEvents.length > 0) {
-		const event = searchingEvents.pop()!;
-		const children = childrenById[event.id] ?? [];
-		eventItems.forEach((ei) => {
-			if (searched[ei.id]) {
-				return;
-			}
-			if (children.includes(ei.id)) {
-				searchingEvents.push(ei);
-				if (!includedEventFiles.includes(ei.file)) {
-					includedEventFiles.push(ei.file);
-				}
-			}
-			const eiChildren = childrenById[ei.id] ?? [];
-			if (eiChildren.includes(event.id)) {
-				searchingEvents.push(ei);
-				if (!includedEventFiles.includes(ei.file)) {
-					includedEventFiles.push(ei.file);
-				}
-			}
-		});
-
-		searched[event.id] = true;
-		searchedEvents.push(event);
-	}
+	const { includedEventFiles, searchedEvents } = collectLinkedEvents(
+		mainEvents,
+		eventItems,
+	);
 
 	if (document.isClosed) {
 		return;
@@ -169,57 +242,45 @@ async function scanReferencesForEvents(editor: vscode.TextEditor) {
 		.map((f) => `#!event:${f}\n`)
 		.join("");
 
-	const localizationFiles = await listFilesFromModOrHOI4("localisation");
+	const existingLocalizationDependency = new Set(
+		existingDependency
+			.filter((d) => d.type.match(/^locali[zs]ation$/))
+			.map((d) => d.path.replace(/\\+/g, "/")),
+	);
+	const wantedKeys = localisationKeysOf(searchedEvents);
 	const language = getLanguageIdInYml();
-	const localizations = (
-		await Promise.all(
-			localizationFiles.map(async (file) => {
-				try {
-					const filePath = "localisation/" + file;
-					const [buffer, realPath] = await readFileFromModOrHOI4(filePath);
-					const realPathUri = getHoiOpenedFileOriginalUri(realPath);
-					if (isSameUri(document.uri, realPathUri)) {
-						return undefined;
-					}
-					return { file: filePath, result: parseYaml(buffer.toString()) };
-				} catch (e) {
-					return undefined;
-				}
-			}),
-		)
-	).filter(
-		(
-			e,
-		): e is { file: string; result: Record<string, Record<string, string>> } => {
-			if (e === undefined || typeof e.result !== "object" || e.result === null) {
-				return false;
+	const localizationFiles = (await listFilesFromModOrHOI4("localisation"))
+		.map((file) => "localisation/" + file)
+		.filter((filePath) => !existingLocalizationDependency.has(filePath));
+	// Only the file name comes back: the parsed yml is checked against the wanted keys inside
+	// the callback and dropped, so no more than the queue's worth of them is ever alive.
+	const localizations = await loadBounded<string>(
+		localizationFiles,
+		async (filePath) => {
+			const [buffer, realPath] = await readFileFromModOrHOI4(filePath);
+			const realPathUri = getHoiOpenedFileOriginalUri(realPath);
+			if (isSameUri(document.uri, realPathUri)) {
+				return undefined;
 			}
-			const section = (e.result as Record<string, unknown>)[language];
-			return typeof section === "object" && !Array.isArray(section);
+			const result: unknown = parseYaml(buffer.toString());
+			if (typeof result !== "object" || result === null) {
+				return undefined;
+			}
+			const section = (result as Record<string, unknown>)[language];
+			if (typeof section !== "object" || section === null || Array.isArray(section)) {
+				return undefined;
+			}
+			for (const key of wantedKeys) {
+				if (key in section) {
+					return filePath;
+				}
+			}
+			return undefined;
 		},
 	);
 
-	const existingLocalizationDependency = existingDependency
-		.filter((d) => d.type.match(/^locali[zs]ation$/))
-		.map((d) => d.path.replace(/\\+/g, "/"));
 	const moreLocalizationDependencyContent = localizations
-		.filter((lf) => {
-			if (existingLocalizationDependency.includes(lf.file)) {
-				return false;
-			}
-			for (const event of searchedEvents) {
-				const languageResult = lf.result[language] ?? {};
-				if (
-					[event.title, ...event.options.map((o) => o.name)].some(
-						(n) => n && n in languageResult,
-					)
-				) {
-					return true;
-				}
-			}
-			return false;
-		})
-		.map((lf) => `#!localisation:${lf.file}\n`)
+		.map((lf) => `#!localisation:${lf}\n`)
 		.join("");
 
 	if (document.isClosed) {
