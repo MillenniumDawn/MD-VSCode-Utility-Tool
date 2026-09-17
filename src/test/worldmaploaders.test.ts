@@ -473,6 +473,11 @@ describe("previewdef/worldmap/loader missing files (0% → smoke)", () => {
 				result.result.map((c) => c.tag),
 				["AAA", "CCC"],
 			);
+			assert.strictEqual(result.warnings.length, 1);
+			assert.deepStrictEqual(result.warnings[0]?.relatedFiles, [
+				"common/countries/gone.txt",
+			]);
+			assert.ok(result.warnings[0]?.text.includes("Failed to load"));
 		} finally {
 			fileloader.readFileFromModOrHOI4AsJson = origJson;
 			fileloader.listFilesFromModOrHOI4 = origList;

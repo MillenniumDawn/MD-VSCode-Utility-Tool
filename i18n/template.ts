@@ -415,6 +415,7 @@ const table: Partial<typeof __table> = {
     "worldmap.warnings.adjacencynotexist": "Adjacency not from or to an existing province: {0}, {1}",
     "worldmap.warnings.adjacencythroughnotexist": "Adjacency not through an existing province: {0}",
     "worldmap.warnings.continentnotdefined": "Continent {0} is not defined.",
+    "worldmap.warnings.fileloadfailed": "Failed to load \"{0}\": {1}",
     "worldmap.warnings.navalterrainnotdefined": "Naval terrain \"{0}\" is not defined.",
     "worldmap.warnings.nowarnings": "No warnings.",
     "worldmap.warnings.provincecolorconflict": "Province {0} has conflict color with province {1}.",

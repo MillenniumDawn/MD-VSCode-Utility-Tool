@@ -2,7 +2,7 @@ Unreleased
 
   Functionality:
 
-- [ World Map Previewer ] A folder of files such as `history/states` or the country files behind `common/country_tags` is read a few files at a time instead of all at once, so a large mod no longer holds every file in memory during a load, and a single file that cannot be read is logged and skipped instead of failing the whole preview. Issue #193.
+- [ World Map Previewer ] A folder of files such as `history/states` or the country files behind `common/country_tags` is read a few files at a time instead of all at once, so a large mod no longer holds every file in memory during a load, and a single file that cannot be read is skipped and listed under the map's warnings instead of failing the whole preview. Issue #193.
 
 v1.1.36
 

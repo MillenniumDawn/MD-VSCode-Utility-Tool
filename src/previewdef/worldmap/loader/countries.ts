@@ -5,7 +5,7 @@ import {
 	SchemaDef,
 	HOIPartial,
 } from "../../../hoiformat/schema";
-import { Country } from "../definitions";
+import { Country, WorldMapWarning } from "../definitions";
 import { readFileFromModOrHOI4AsJson } from "../../../util/fileloader";
 import { error } from "../../../util/debug";
 import {
@@ -16,6 +16,7 @@ import {
 	LoadResultOD,
 	mergeInLoadResult,
 	convertColor,
+	fileLoadFailureWarning,
 } from "./common";
 import { localize } from "../../../util/i18n";
 import {
@@ -108,14 +109,17 @@ export class CountriesLoader extends Loader<Country[]> {
 		this.countryLoaders = newCountryLoaders;
 
 		// A tag whose country file is missing rejects before loadCountry gets to catch it; that
-		// tag is skipped rather than costing the map every other country.
+		// tag is skipped and listed as a warning rather than costing the map every other country.
+		const failureWarnings: WorldMapWarning[] = [];
 		const countriesResult = (
 			await mapLimit(countryTags, FOLDER_LOAD_CONCURRENCY, async (tag) => {
+				const countryLoader = newCountryLoaders[tag.tag]!;
 				try {
-					return await newCountryLoaders[tag.tag]!.load(session);
+					return await countryLoader.load(session);
 				} catch (e) {
 					session.throwIfCancelled();
 					error(e);
+					failureWarnings.push(fileLoadFailureWarning(countryLoader.file, e));
 					return undefined;
 				}
 			})
@@ -135,7 +139,10 @@ export class CountriesLoader extends Loader<Country[]> {
 		return {
 			result: countries,
 			dependencies: mergeInLoadResult(allResults, "dependencies"),
-			warnings: mergeInLoadResult(allResults, "warnings"),
+			warnings: [
+				...mergeInLoadResult(allResults, "warnings"),
+				...failureWarnings,
+			],
 		};
 	}
 
@@ -173,7 +180,7 @@ class CountryTagsLoader extends FolderLoader<Tag[], Tag[]> {
 		super(countryTagsFolder, CountryTagLoader);
 	}
 
-	protected mergeFiles(
+	protected mergeLoadedFiles(
 		fileResults: LoadResult<Tag[]>[],
 	): Promise<LoadResult<Tag[]>> {
 		return Promise.resolve<LoadResult<Tag[]>>({
