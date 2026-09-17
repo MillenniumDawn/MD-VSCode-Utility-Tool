@@ -1,7 +1,7 @@
 import { HOIPartial } from "../../hoiformat/schema";
 import { ParentInfo, calculateBBox, normalizeNumberLike, RenderCommonOptions, getWidth, getHeight } from "./common";
 import { NumberSize, NumberPosition } from "../common";
-import { StyleTable } from '../styletable';
+import { StyleTable, normalizeForStyle } from '../styletable';
 import { escapeAttr } from '../escape';
 import { GridBoxType, Format, Background } from "../../hoiformat/gui";
 import { map, flatMap } from "lodash";
@@ -109,13 +109,8 @@ export async function renderGridBoxCommon(
             class="
                 ${item.classNames ? item.classNames : ''}
                 ${options.styleTable.style('positionAbsolute', () => `position: absolute;`)}
-                ${options.styleTable.oneTimeStyle('gridbox-item', () => `
-                    left: ${position.x}px;
-                    top: ${position.y}px;
-                    width: ${xSlotSize}px;
-                    height: ${ySlotSize}px;
-                `)}
-            ">
+            "
+            style="${boxStyle(position.x, position.y, xSlotSize, ySlotSize)}">
                 ${children}
             </div>`;
     }));
@@ -160,6 +155,12 @@ export function renderLineConnections(items: Record<string, GridBoxItem>, format
     ).join('');
 }
 
+// Geometry that is unique to one element goes in its style attribute: a class used exactly once costs
+// a rule to parse and match and buys nothing, and a tech tree has ten thousand of them.
+function boxStyle(left: number, top: number, width: number, height: number): string {
+    return `left: ${left}px; top: ${top}px; width: ${width}px; height: ${height}px;`;
+}
+
 function renderConnectionBox(
     diag: string,
     classNames: string | undefined,
@@ -170,19 +171,16 @@ function renderConnectionBox(
     height: number,
     border: string,
 ): string {
+    // The border stays a class, shared by every line drawn the same way: the focus tree recolours a
+    // traced line through a selector on the connection, which an inline border would beat.
     return `<div${diag}
         class="
             ${classNames ? classNames : ''}
             ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
-            ${styleTable.oneTimeStyle('gridbox-connection', () => `
-                left: ${left}px;
-                top: ${top}px;
-                width: ${width}px;
-                height: ${height}px;
-                ${border}
-            `)}
+            ${styleTable.style('gridbox-connection-' + normalizeForStyle(border), () => border)}
             ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
-        "></div>`;
+        "
+        style="${boxStyle(left, top, width, height)}"></div>`;
 }
 
 export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, style: string, type: GridBoxConnectionType, format: Format['_name'], gridSize: NumberSize, classNames: string | undefined, styleTable: StyleTable, cornerPosition: number = 1.5, fromId: string = '', toId: string = ''): string {
@@ -294,14 +292,9 @@ async function renderControlConnections(
                 return `<div${diag}
                     class="
                         ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
-                        ${styleTable.oneTimeStyle('gridbox-connection', () => `
-                            left: ${position.x}px;
-                            top: ${position.y}px;
-                            width: ${xSlotSize}px;
-                            height: ${ySlotSize}px;
-                        `)}
                         ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
-                    ">
+                    "
+                    style="${boxStyle(position.x, position.y, xSlotSize, ySlotSize)}">
                         ${children}
                     </div>`;
             })

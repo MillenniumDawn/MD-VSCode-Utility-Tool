@@ -14,6 +14,7 @@ import {
 import { createIndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
 import { Node, parseHoi4File } from "../hoiformat/hoiparser";
 import { ideaSwapIndex } from "./featureflags";
+import { Logger } from "./logger";
 
 /*
  * Where every `swap_ideas` in the workspace is written, so an idea preview can say which idea an
@@ -350,7 +351,9 @@ export async function getIdeaSwaps(ideaIds: string[]): Promise<IdeaSwap[]> {
 		return [];
 	}
 
-	await ensureIndexBuilt().catch(() => undefined);
+	await ensureIndexBuilt().catch((e: unknown) => {
+		Logger.warn(`[Index] ideaSwap: lookup for ${ideaIds.length} idea(s) served without the index: ${e}`);
+	});
 
 	const byIdea = buildLookup();
 	const seen = new Set<string>();

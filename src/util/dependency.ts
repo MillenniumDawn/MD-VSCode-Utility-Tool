@@ -53,7 +53,7 @@ async function scanReferences(): Promise<void> {
 
 	const editor = vscode.window.activeTextEditor;
 	if (!editor) {
-		vscode.window.showErrorMessage(
+		void vscode.window.showErrorMessage(
 			localize("scanref.noeditor", "No opened editor."),
 		);
 		return;
@@ -64,11 +64,11 @@ async function scanReferences(): Promise<void> {
 			contextContainer.contextValue[ContextName.Hoi4PreviewType] === "event"
 		) {
 			await scanReferencesForEvents(editor);
-			vscode.window.showInformationMessage(
+			void vscode.window.showInformationMessage(
 				localize("scanref.done", "Scan reference done."),
 			);
 		} else {
-			vscode.window.showErrorMessage(
+			void vscode.window.showErrorMessage(
 				localize(
 					"scanref.unsupportedtype",
 					"Unsupported file type to scan references.",
