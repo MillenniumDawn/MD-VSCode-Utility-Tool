@@ -203,7 +203,7 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		// Without retainContextWhenHidden the webview is torn down when hidden and reloaded from
 		// panel.webview.html on show. In-place updates don't touch that property, so flush the latest
 		// html into it when the panel goes hidden to keep the next show current.
-		this.panel.onDidChangeViewState(() => {
+		this.subscriptions.push(this.panel.onDidChangeViewState(() => {
 			if (this.isDisposed) {
 				return;
 			}
@@ -219,7 +219,7 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 				this.panel.webview.html = this.latestHtml;
 				this.htmlPropertyStale = false;
 			}
-		});
+		}));
 	}
 
 	// Render the document to the webview's html plus an optional in-place update payload. Previews
