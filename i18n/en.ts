@@ -341,6 +341,8 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"worldmap.error.multiply256":
 		"Height and width of map image must be multiply of 256: {0}x{1}.",
 	"worldmap.error.provinceidtoolarge": "Max province id is too large: {0}.",
+	"worldmap.error.provinceimagebpp":
+		"The provinces image should be 24 bits per pixel, but it is {0}.",
 	"worldmap.export.error": "Can't export world map: {0}.",
 	"worldmap.export.error.imgformat":
 		"Can't export world map: Image is not in correct format.",
