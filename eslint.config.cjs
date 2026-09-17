@@ -51,4 +51,24 @@ module.exports = [
 			"@typescript-eslint/no-explicit-any": "warn",
 		},
 	},
+	// The release scripts and the build config run on every push to main and every pull request,
+	// and used to be the one part of the tree nothing linted. Same style rules as the extension;
+	// plain CommonJS, so no TypeScript parser.
+	{
+		files: ["scripts/**/*.js", "webpack.config.js", "eslint.config.cjs"],
+		languageOptions: {
+			ecmaVersion: 2022,
+			sourceType: "commonjs",
+		},
+		rules: {
+			curly: "error",
+			eqeqeq: "error",
+			"no-throw-literal": "error",
+			semi: "error",
+			"no-unused-vars": [
+				"error",
+				{ argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" },
+			],
+		},
+	},
 ];

@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- [ CI ] The extension package no longer ships developer files (contributor notes, lint and duplication configuration, stray log and temp files), and every CI job now has a time limit so a stuck publish cannot block later releases for hours. Issue #202.
+
 v1.1.36
 
   Functionality:
