@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- [ CI ] A release no longer fails outright when Open VSX is briefly unavailable: the publish is retried for up to half an hour, and a fix pull request is only opened once that has given up too.
+
 v1.1.36
 
   Functionality:

@@ -359,7 +359,7 @@ jobs:
       VSIX: ${{ needs.build-pre-release.outputs.vsix }}
     steps:
     # vsce is a dev dependency, so this job needs the tree even though it publishes a .vsix that
-    # was built elsewhere. The other two publish jobs need neither a checkout nor node.
+    # was built elsewhere. The GitHub job needs neither a checkout nor node.
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
@@ -373,11 +373,14 @@ jobs:
     # The script checks the token, retries a gallery timeout, and treats a version that is already
     # up as done. A missing token is an error that says what to create, never a green skip.
     - name: Publish to VS Code Marketplace
-      run: node scripts/publish-marketplace.js --vsix "$VSIX" --pre-release
+      run: node scripts/publish-extension.js --registry marketplace --vsix "$VSIX" --pre-release
 
-  # No preRelease input: ovsx answers "Ignoring option '--pre-release' for prepackaged extension"
-  # and reads the flag out of the manifest instead, where `vsce package --pre-release` already put
-  # it. extensionFile is the input that takes a built .vsix; packagePath is a directory to package.
+  # The same script as the Marketplace, with ovsx behind it instead of vsce: a missing token is an
+  # error that says what to create (it used to skip the step and leave the job green, which is how
+  # the extension went months without ever reaching Open VSX while every run said success), and a
+  # registry that is briefly unwell is retried. No --pre-release here: ovsx reads the flag out of
+  # the manifest, where `vsce package --pre-release` already put it. Only the quick retries for a
+  # pre-release -- the next push to main supersedes it anyway.
   pre-release-open-vsx:
     name: "Pre-release: Open VSX"
     needs: build-pre-release
@@ -386,28 +389,20 @@ jobs:
       contents: read
     env:
       OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+      VSIX: ${{ needs.build-pre-release.outputs.vsix }}
     steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version-file: .nvmrc
+        cache: 'npm'
+    - name: Install dependencies
+      run: npm ci
     - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
       with:
         name: pre-release-vsix
-    # A missing token used to skip the publish step and leave the job green, which is how the
-    # extension went months without ever reaching Open VSX while every run said success. Nothing
-    # here is optional any more: no token is a failure, and it says what to do about it.
-    - name: Check the Open VSX token
-      run: |
-        if [ -z "$OPEN_VSX_TOKEN" ]; then
-          echo "::error::OPEN_VSX_TOKEN is not set, so nothing can reach Open VSX. Create an access"
-          echo "::error::token at https://open-vsx.org/user-settings/tokens and add it as the"
-          echo "::error::repository secret OPEN_VSX_TOKEN. The publisher namespace has to exist"
-          echo "::error::first: npx ovsx create-namespace MilleniumDawnModTeam -p <token>."
-          exit 1
-        fi
     - name: Publish to Open VSX Registry
-      uses: HaaLeo/publish-vscode-extension@ca5561daa085dee804bf9f37fe0165785a9b14db # v2
-      with:
-        extensionFile: ${{ needs.build-pre-release.outputs.vsix }}
-        pat: ${{ env.OPEN_VSX_TOKEN }}
-        registryUrl: https://open-vsx.org
+      run: node scripts/publish-extension.js --registry open-vsx --vsix "$VSIX"
 
   pre-release-github:
     name: "Pre-release: GitHub prerelease"
@@ -512,11 +507,14 @@ jobs:
     # request -- answers once the version is there, which is what makes publishing a half-finished
     # release again safe. A missing token is an error that says what to create, never a green skip.
     - name: Publish to VS Code Marketplace
-      run: node scripts/publish-marketplace.js --vsix "$VSIX"
+      run: node scripts/publish-extension.js --registry marketplace --vsix "$VSIX"
 
-  # extensionFile, not packagePath: packagePath is a directory the action packages itself, and
-  # pointing it at a .vsix made it read <file>.vsix/package.json and fail. Both registries get the
-  # same bytes, out of the same artifact.
+  # Both registries get the same bytes, out of the same artifact, through the same script: a
+  # missing token is an error that says what to create, a version Open VSX already has is done
+  # rather than an error (which is what the merge of the fix pull request does when it was another
+  # registry that failed), and a registry that is briefly unwell is retried. When even the retries
+  # fail on something that reads like an outage, the job says so in its `transient` output and
+  # the job below takes over; a failure that would only fail again (a rejected token) sets nothing.
   release-open-vsx:
     name: "Release: Open VSX"
     needs: build-release
@@ -525,28 +523,55 @@ jobs:
       contents: read
     env:
       OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+      VSIX: ${{ needs.build-release.outputs.vsix }}
+    outputs:
+      transient: ${{ steps.publish.outputs.transient }}
     steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version-file: .nvmrc
+        cache: 'npm'
+    - name: Install dependencies
+      run: npm ci
     - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
       with:
         name: release-vsix
-    - name: Check the Open VSX token
-      run: |
-        if [ -z "$OPEN_VSX_TOKEN" ]; then
-          echo "::error::OPEN_VSX_TOKEN is not set, so nothing can reach Open VSX. Create an access"
-          echo "::error::token at https://open-vsx.org/user-settings/tokens and add it as the"
-          echo "::error::repository secret OPEN_VSX_TOKEN. The publisher namespace has to exist"
-          echo "::error::first: npx ovsx create-namespace MilleniumDawnModTeam -p <token>."
-          exit 1
-        fi
-    # skipDuplicate: publishing a version Open VSX already has is what the merge of the fix pull
-    # request does when it was another registry that failed, and that is done, not an error.
     - name: Publish to Open VSX Registry
-      uses: HaaLeo/publish-vscode-extension@ca5561daa085dee804bf9f37fe0165785a9b14db # v2
+      id: publish
+      run: node scripts/publish-extension.js --registry open-vsx --vsix "$VSIX"
+
+  # v1.1.36 failed to publish on nothing but Open VSX answering 503 to one request, and a fix pull
+  # request was opened for a build that had nothing wrong with it. An outage there outlasts the
+  # minute of retries above, so this job asks again later -- five, ten and fifteen minutes on --
+  # and only when it gives up too does the fix pull request open. It waits inside the run rather
+  # than dispatching another one because a dispatched run would sit in the same `publish`
+  # concurrency group while it waited, so nothing would be gained; the cost is that a push to main
+  # in that half hour queues behind it, and is never cancelled.
+  release-open-vsx-retry:
+    name: "Release: Open VSX (retry later)"
+    needs: [build-release, release-open-vsx]
+    if: ${{ always() && needs['release-open-vsx'].result == 'failure' && needs['release-open-vsx'].outputs.transient == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
+      VSIX: ${{ needs.build-release.outputs.vsix }}
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
-        extensionFile: ${{ needs.build-release.outputs.vsix }}
-        pat: ${{ env.OPEN_VSX_TOKEN }}
-        registryUrl: https://open-vsx.org
-        skipDuplicate: true
+        node-version-file: .nvmrc
+        cache: 'npm'
+    - name: Install dependencies
+      run: npm ci
+    - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      with:
+        name: release-vsix
+    - name: Publish to Open VSX Registry, patiently
+      run: node scripts/publish-extension.js --registry open-vsx --vsix "$VSIX" --schedule patient
 
   # Publishing again with the tag and release already there updates the release in place and
   # replaces the .vsix on it (overwrite_files defaults to true), so this job needs no duplicate
@@ -586,14 +611,24 @@ jobs:
   # publishes the version again, so the fix does not wait on a second release pull request.
   #
   # Only a release gets one. A pre-release runs on every push to main and the next push supersedes
-  # it, so a pull request per failed pre-release would be noise.
+  # it, so a pull request per failed pre-release would be noise. And an Open VSX outage gets one
+  # only once the patient retry has given up too: the first Open VSX job going red is what starts
+  # that retry, not a problem to fix, so it counts here only when the retry did not succeed --
+  # failed, or skipped because the failure was never transient.
   release-failed:
     name: "Release: Open a fix pull request"
-    needs: [check, verify, build-release, release-marketplace, release-open-vsx, release-github]
+    needs: [check, verify, build-release, release-marketplace, release-open-vsx, release-open-vsx-retry, release-github]
     # `failure` only, and never `cancelled`: a run someone stopped by hand is not a problem to fix.
-    # The join is how a job id with a hyphen in it stays out of the expression -- `needs.*.result`
-    # covers exactly the jobs listed above.
-    if: ${{ always() && needs.check.outputs.release == 'true' && contains(join(needs.*.result, ','), 'failure') }}
+    # Folded, so the expression reaches the runner as one line: a more-indented line would keep
+    # its newline.
+    if: >-
+      ${{ always() && needs.check.outputs.release == 'true' &&
+      (needs.verify.result == 'failure' ||
+      needs['build-release'].result == 'failure' ||
+      needs['release-marketplace'].result == 'failure' ||
+      needs['release-github'].result == 'failure' ||
+      needs['release-open-vsx-retry'].result == 'failure' ||
+      (needs['release-open-vsx'].result == 'failure' && needs['release-open-vsx-retry'].result != 'success')) }}
     runs-on: ubuntu-latest
     # Everything below writes as the bot, through GH_TOKEN and the checkout token.
     permissions:
@@ -659,8 +694,8 @@ jobs:
           echo
           echo "A target that says \`success\` is already published. Re-running just the failed job"
           echo "from [the run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
-          echo "republishes only that one; the Marketplace step treats a version that is already up"
-          echo "as done rather than as an error."
+          echo "republishes only that one; both registries treat a version that is already up as"
+          echo "done rather than as an error."
         } > "$body"
         echo "body=$body" >> "$GITHUB_OUTPUT"
     - name: Open or update the fix pull request

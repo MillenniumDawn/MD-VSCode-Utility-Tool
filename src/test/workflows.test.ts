@@ -28,6 +28,8 @@ interface Job {
     concurrency?: unknown;
     permissions?: unknown;
     env?: Record<string, string>;
+    outputs?: Record<string, string>;
+    'timeout-minutes'?: number;
 }
 
 interface Workflow {
@@ -188,8 +190,12 @@ describe('.github/workflows', function () {
                 assert.ok(jobs[job]?.name, `${job} has no name to show in the Actions graph`);
             }
             // One registry must never be reachable only through the other.
-            assert.strictEqual(usesIn(workflow, 'release-marketplace', 'HaaLeo/publish-vscode-extension'), undefined);
-            assert.strictEqual(runsIn(workflow, 'release-open-vsx', 'vsce publish'), undefined);
+            assert.doesNotMatch(runsIn(workflow, 'release-marketplace', 'scripts/publish-extension.js')?.run ?? '', /open-vsx/);
+            assert.doesNotMatch(runsIn(workflow, 'release-open-vsx', 'scripts/publish-extension.js')?.run ?? '', /marketplace/);
+            // The publish action made one request and died on a 503; the script retries.
+            for (const job of Object.keys(jobs)) {
+                assert.strictEqual(usesIn(workflow, job, 'HaaLeo/publish-vscode-extension'), undefined, `${job} still publishes through the action`);
+            }
         });
 
         it('skips the pre-release on the push that is a release', function () {
@@ -203,12 +209,14 @@ describe('.github/workflows', function () {
             assert.ok(
                 runsIn(workflow, 'build-pre-release', 'package:pre-release'),
                 'nothing packages the VSIX with --pre-release');
-            assert.match(runsIn(workflow, 'pre-release-marketplace', 'scripts/publish-marketplace.js')?.run ?? '', /--pre-release/);
+            assert.match(runsIn(workflow, 'pre-release-marketplace', 'scripts/publish-extension.js')?.run ?? '', /--pre-release/);
             assert.strictEqual(
                 usesIn(workflow, 'pre-release-github', 'softprops/action-gh-release')?.with?.prerelease, true);
+            // Not Open VSX: ovsx ignores --pre-release for a built .vsix and reads the manifest.
+            assert.doesNotMatch(runsIn(workflow, 'pre-release-open-vsx', 'scripts/publish-extension.js')?.run ?? '', /--pre-release/);
 
             // The release goes out as a release: no --pre-release anywhere on that side.
-            assert.doesNotMatch(runsIn(workflow, 'release-marketplace', 'scripts/publish-marketplace.js')?.run ?? '', /--pre-release/);
+            assert.doesNotMatch(runsIn(workflow, 'release-marketplace', 'scripts/publish-extension.js')?.run ?? '', /--pre-release/);
             assert.strictEqual(
                 usesIn(workflow, 'release-github', 'softprops/action-gh-release')?.with?.prerelease, undefined);
         });
@@ -222,30 +230,58 @@ describe('.github/workflows', function () {
         it('fails when a registry token is missing instead of skipping and reporting success', function () {
             // A missing OPEN_VSX_TOKEN used to skip the publish step and leave the job green, which is
             // how the extension reached no one on Open VSX for months while every run said success.
-            // The Marketplace side hands the token to the script, which exits 1 without it.
-            for (const job of ['pre-release-marketplace', 'release-marketplace']) {
-                assert.strictEqual(jobs[job]?.env?.VSCE_PAT, '${{ secrets.VSCE_PAT }}');
-                const publish = runsIn(workflow, job, 'scripts/publish-marketplace.js');
-                assert.ok(publish, `${job} does not publish through the script`);
-                assert.strictEqual(publish?.if, undefined, `${job} still skips itself when VSCE_PAT is missing`);
-            }
-            for (const job of ['pre-release-open-vsx', 'release-open-vsx']) {
-                assert.strictEqual(jobs[job]?.env?.OPEN_VSX_TOKEN, '${{ secrets.OPEN_VSX_TOKEN }}');
-                assert.strictEqual(
-                    usesIn(workflow, job, 'HaaLeo/publish-vscode-extension')?.if, undefined,
-                    `${job} still skips itself when OPEN_VSX_TOKEN is missing`);
-                assert.match(runsIn(workflow, job, '-z "$OPEN_VSX_TOKEN"')?.run ?? '', /exit 1/);
+            // Both sides hand the token to the script, which exits 1 without it.
+            const registries: [string[], string, string][] = [
+                [['pre-release-marketplace', 'release-marketplace'], 'VSCE_PAT', 'marketplace'],
+                [['pre-release-open-vsx', 'release-open-vsx', 'release-open-vsx-retry'], 'OPEN_VSX_TOKEN', 'open-vsx'],
+            ];
+            for (const [targets, token, registry] of registries) {
+                for (const job of targets) {
+                    assert.strictEqual(jobs[job]?.env?.[token], `\${{ secrets.${token} }}`);
+                    const publish = runsIn(workflow, job, 'scripts/publish-extension.js');
+                    assert.ok(publish, `${job} does not publish through the script`);
+                    assert.match(publish?.run ?? '', new RegExp(`--registry ${registry}\\b`));
+                    assert.strictEqual(publish?.if, undefined, `${job} still skips itself when ${token} is missing`);
+                    // The script runs vsce and ovsx with --no-install, out of the dev dependencies.
+                    assert.ok(runsIn(workflow, job, 'npm ci'), `${job} publishes without installing the registry client`);
+                }
             }
         });
 
-        it('hands Open VSX the VSIX that was built, not a directory to build again', function () {
-            // packagePath is a directory the action packages itself; pointing it at a .vsix made it
-            // read <file>.vsix/package.json and fail.
-            for (const job of ['pre-release-open-vsx', 'release-open-vsx']) {
-                const openVsx = usesIn(workflow, job, 'HaaLeo/publish-vscode-extension');
-                assert.ok(openVsx?.with?.extensionFile, `${job}: Open VSX needs extensionFile`);
-                assert.strictEqual(openVsx?.with?.packagePath, undefined);
+        it('hands both registries the VSIX that was built, out of the artifact', function () {
+            const chains: [string, string[]][] = [
+                ['build-pre-release', ['pre-release-marketplace', 'pre-release-open-vsx']],
+                ['build-release', ['release-marketplace', 'release-open-vsx', 'release-open-vsx-retry']],
+            ];
+            for (const [build, targets] of chains) {
+                for (const job of targets) {
+                    assert.strictEqual(jobs[job]?.env?.VSIX, `\${{ needs.${build}.outputs.vsix }}`, `${job} does not take the VSIX from ${build}`);
+                    assert.match(runsIn(workflow, job, 'scripts/publish-extension.js')?.run ?? '', /--vsix "\$VSIX"/);
+                }
             }
+        });
+
+        it('tries Open VSX again later when the first job gave up on an outage, and only then', function () {
+            // v1.1.36 failed to publish on nothing but a 503 from Open VSX, and a fix pull request
+            // was opened for a build with nothing wrong with it. The first job says whether its
+            // failure looked transient; the retry job runs on that, waits, and asks again.
+            const first = jobs['release-open-vsx'];
+            assert.strictEqual(first?.outputs?.transient, '${{ steps.publish.outputs.transient }}');
+            assert.strictEqual(runsIn(workflow, 'release-open-vsx', 'scripts/publish-extension.js')?.id, 'publish');
+            assert.doesNotMatch(runsIn(workflow, 'release-open-vsx', 'scripts/publish-extension.js')?.run ?? '', /--schedule/);
+
+            const retry = jobs['release-open-vsx-retry'];
+            assert.ok(retry, 'no retry job for Open VSX');
+            assert.ok([retry.needs ?? []].flat().includes('release-open-vsx'));
+            assert.match(retry.if ?? '', /always\(\)/);
+            assert.match(retry.if ?? '', /needs\['release-open-vsx'\]\.result == 'failure'/);
+            assert.match(retry.if ?? '', /needs\['release-open-vsx'\]\.outputs\.transient == 'true'/);
+            assert.match(runsIn(workflow, 'release-open-vsx-retry', 'scripts/publish-extension.js')?.run ?? '', /--schedule patient/);
+            // Three waits of up to fifteen minutes, and a ceiling so a hung registry cannot hold the
+            // publish concurrency group for the six hours a job is allowed.
+            assert.ok(typeof retry['timeout-minutes'] === 'number' && retry['timeout-minutes'] <= 60, 'the retry job has no sensible timeout');
+            // A pre-release is superseded by the next push, so it gets no second job.
+            assert.strictEqual(jobs['pre-release-open-vsx-retry'], undefined);
         });
 
         it('gives all three targets the same bytes, through an artifact', function () {
@@ -268,7 +304,7 @@ describe('.github/workflows', function () {
             assert.ok(failed, 'nothing reacts to a failed release');
 
             const watched = [failed.needs ?? []].flat();
-            for (const job of ['check', 'verify', 'build-release', ...releaseTargets]) {
+            for (const job of ['check', 'verify', 'build-release', ...releaseTargets, 'release-open-vsx-retry']) {
                 assert.ok(watched.includes(job), `release-failed does not watch ${job}`);
             }
             // A pre-release runs on every push and the next one supersedes it, so it stays out. So
@@ -279,9 +315,20 @@ describe('.github/workflows', function () {
             }
 
             assert.match(failed.if ?? '', /always\(\)/);
-            assert.match(failed.if ?? '', /'failure'/);
             // Never on a run someone stopped by hand -- that is not a problem to fix.
             assert.doesNotMatch(failed.if ?? '', /cancelled/);
+            // Every job whose failure is a failed release, by name: the old `contains(join(...))`
+            // over every result would have opened a pull request for the Open VSX job that only
+            // handed over to the retry.
+            for (const job of ['verify', 'build-release', 'release-marketplace', 'release-github', 'release-open-vsx-retry']) {
+                assert.match(failed.if ?? '', new RegExp(`needs(?:\\.|\\[')${job}(?:'\\])?\\.result == 'failure'`), `release-failed ignores ${job}`);
+            }
+            assert.doesNotMatch(failed.if ?? '', /join\(needs/);
+            // The first Open VSX failure counts only when the retry did not put it right: it failed
+            // too, or was skipped because the failure was never transient.
+            assert.match(failed.if ?? '', /needs\['release-open-vsx'\]\.result == 'failure' && needs\['release-open-vsx-retry'\]\.result != 'success'/);
+            // Folded into one line, or the runner sees a string rather than an expression.
+            assert.doesNotMatch(failed.if ?? '', /\n/);
 
             const open = runsIn(workflow, 'release-failed', 'gh pr create');
             assert.match(open?.run ?? '', /--draft/);
@@ -293,10 +340,12 @@ describe('.github/workflows', function () {
             // Merging fix/release-v<version> is the release, and the tag and some of the targets
             // may already be there from the failed run. Each target has to read "already
             // published" as done, or the fix would fail on what did not fail the first time.
-            assert.strictEqual(
-                usesIn(workflow, 'release-open-vsx', 'HaaLeo/publish-vscode-extension')?.with?.skipDuplicate, true);
-            const publish = fs.readFileSync(path.join(workflowDir, '..', '..', 'scripts', 'publish-marketplace.js'), 'utf8');
-            assert.match(publish, /--skip-duplicate/);
+            const publish = require(path.join(workflowDir, '..', '..', 'scripts', 'publish-extension.js'));
+            for (const registry of ['marketplace', 'open-vsx']) {
+                assert.ok(
+                    publish.commandFor({ registry, vsix: 'ext.vsix', pat: 'secret', preRelease: false }).includes('--skip-duplicate'),
+                    `${registry} fails on a version it already has`);
+            }
             // And the pull request says so, instead of sending the fixer to a release pull request.
             const summary = runsIn(workflow, 'release-failed', 'Publishing **$TAG** failed');
             assert.match(summary?.run ?? '', /merge publishes \$TAG again/);
