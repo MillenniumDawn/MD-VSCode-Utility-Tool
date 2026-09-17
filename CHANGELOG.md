@@ -1,5 +1,15 @@
 Unreleased
 
+  Functionality:
+
+- Previews drop a malformed message from their own page instead of acting on it, the condition filters in the focus tree and MIO previews show a trigger as the text it is written as, and the loading page carries a content security policy like the finished preview. Issue #201.
+- A DLC archive entry that claims an unreasonable size is refused before it is unpacked. Issue #201.
+
+  Bugfixes:
+
+- [ World Map Previewer ] A provinces or rivers BMP with a small, top-down, compressed or unusual-depth header is reported as a clear error instead of failing the preview or reading colours no province has. Issue #201.
+- A mod key named `__proto__` or `constructor` no longer vanishes from a parsed file or from a MIO's trait list. Issue #201.
+
 v1.1.36
 
   Functionality:
