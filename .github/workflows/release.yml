@@ -34,6 +34,10 @@ jobs:
   check:
     name: Check version
     runs-on: ubuntu-latest
+    # Every job here carries a time limit. Without one a job may sit for GitHub's six-hour default,
+    # and because this workflow never cancels a run, a stuck publish would park every release behind
+    # it for that long. The limits are several times what each job takes on a normal day.
+    timeout-minutes: 5
     # Reading which pull request a commit came from is how "did this merge the release pull
     # request?" is answered.
     permissions:
@@ -74,6 +78,7 @@ jobs:
   verify:
     name: Lint & test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -99,6 +104,7 @@ jobs:
     needs: check
     if: ${{ needs.check.outputs.bump == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Everything below writes as the bot, through GH_TOKEN and the checkout token, so the
     # workflow's own token needs nothing beyond reading the tree.
     permissions:
@@ -203,7 +209,10 @@ jobs:
         else
           git commit -m "Bump version to $version"
         fi
-        git push --force origin "HEAD:$RELEASE_BRANCH"
+        # A leftover branch -- closed unmerged -- is started over, but only if it still is what the
+        # checkout fetched a moment ago. --force-with-lease refuses to overwrite a push that landed
+        # in between, where a bare --force would silently discard it.
+        git push --force-with-lease origin "HEAD:$RELEASE_BRANCH"
         echo "pushed=true" >> "$GITHUB_OUTPUT"
     - name: Open the release pull request
       if: ${{ steps.existing.outputs.number == '' }}
@@ -252,8 +261,19 @@ jobs:
             gh pr comment "$PR" --body "\`main\` moved on and this branch no longer merges cleanly. Resolve the conflict here and the next push to \`main\` will pick up from there."
             exit 0
           fi
-          # Only the paths that actually conflicted -- `--ours` fails on a path git merged cleanly.
-          git checkout --ours -- $conflicts
+          # Only the paths that actually conflicted -- `checkout --ours/--theirs` fails on a path
+          # git merged cleanly. The changelog is ours, because it may have been reworded here.
+          # package.json is main's: the only thing this branch ever changed in it is the version,
+          # and merge-changelog.js writes the higher one back below, whereas taking ours wholesale
+          # would silently drop whatever a branch on main added to it -- a new command, a setting,
+          # a dependency.
+          for conflict in $conflicts; do
+            if [ "$conflict" = "package.json" ]; then
+              git checkout --theirs -- "$conflict"
+            else
+              git checkout --ours -- "$conflict"
+            fi
+          done
           git show origin/main:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
           node scripts/merge-changelog.js --theirs "$RUNNER_TEMP/main-changelog.md" --version "$higher" >/dev/null
           git add package.json CHANGELOG.md
@@ -282,6 +302,11 @@ jobs:
           exit 0
         fi
         git diff --cached --quiet || git commit -m "Catch up with main"
+        # The push comes before the body is updated on purpose. If the API fails between the two,
+        # the next merge writes these bullets once more and the changelog union drops the ones
+        # that repeat a sentence or an issue number -- a duplicate that slips past that is visible
+        # in the pull request and one edit away. The other order would record pull requests as
+        # covered whose bullets never landed, and nothing would ever write them again.
         git push origin "HEAD:$RELEASE_BRANCH"
         echo "pushed=true" >> "$GITHUB_OUTPUT"
 
@@ -302,11 +327,16 @@ jobs:
 
   # Skipped on the release push. That commit carries a version and a changelog and nothing else, so
   # publishing it to the pre-release channel as well would ship the same code twice.
+  #
+  # Builds beside `verify` rather than after it: the two share no output, and waiting cost every
+  # push to main the length of the test suite before the build could start. Nothing is published
+  # until both are green -- the publish jobs below need them both.
   build-pre-release:
     name: "Pre-release: Build"
-    needs: [check, verify]
+    needs: check
     if: ${{ needs.check.outputs.release != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     outputs:
@@ -350,8 +380,9 @@ jobs:
 
   pre-release-marketplace:
     name: "Pre-release: VS Code Marketplace"
-    needs: build-pre-release
+    needs: [build-pre-release, verify]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     env:
@@ -380,8 +411,9 @@ jobs:
   # it. extensionFile is the input that takes a built .vsix; packagePath is a directory to package.
   pre-release-open-vsx:
     name: "Pre-release: Open VSX"
-    needs: build-pre-release
+    needs: [build-pre-release, verify]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     env:
@@ -411,8 +443,9 @@ jobs:
 
   pre-release-github:
     name: "Pre-release: GitHub prerelease"
-    needs: build-pre-release
+    needs: [build-pre-release, verify]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # The prerelease is created with the bot's token, so nothing here writes as the workflow.
     permissions:
       contents: read
@@ -447,11 +480,13 @@ jobs:
 
   # --- Release: only the push that merged the release pull request. ---
 
+  # Like the pre-release build, beside `verify` rather than after it; the publish jobs need both.
   build-release:
     name: "Release: Build"
-    needs: [check, verify]
+    needs: check
     if: ${{ needs.check.outputs.release == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     outputs:
@@ -489,8 +524,9 @@ jobs:
   # failed job republishes only that target.
   release-marketplace:
     name: "Release: VS Code Marketplace"
-    needs: build-release
+    needs: [build-release, verify]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     env:
@@ -519,8 +555,9 @@ jobs:
   # same bytes, out of the same artifact.
   release-open-vsx:
     name: "Release: Open VSX"
-    needs: build-release
+    needs: [build-release, verify]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     env:
@@ -553,8 +590,9 @@ jobs:
   # handling of its own.
   release-github:
     name: "Release: GitHub release"
-    needs: [check, build-release]
+    needs: [check, build-release, verify]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # The release itself is created with the bot's token, so nothing here writes as the workflow.
     permissions:
       contents: read
@@ -595,6 +633,7 @@ jobs:
     # covers exactly the jobs listed above.
     if: ${{ always() && needs.check.outputs.release == 'true' && contains(join(needs.*.result, ','), 'failure') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Everything below writes as the bot, through GH_TOKEN and the checkout token.
     permissions:
       contents: read
@@ -685,7 +724,9 @@ jobs:
         fi
         git checkout -B "$BRANCH" "$GITHUB_SHA"
         git commit --allow-empty -m "$title"
-        git push --force origin "HEAD:$BRANCH"
+        # Nobody has a pull request open on this branch, so what is on it is a leftover -- but only
+        # overwrite what the checkout fetched, never a push that landed since.
+        git push --force-with-lease origin "HEAD:$BRANCH"
 
         # No labels: a label is what decides where a seeded changelog bullet lands, and this pull
         # request is a workspace, not a change. Whatever fix lands on it labels itself.
