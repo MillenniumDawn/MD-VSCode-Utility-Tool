@@ -1,6 +1,8 @@
 import { GuiFile, guiFileSchema, ContainerWindowType } from "../hoiformat/gui";
 import { convertNodeToJson, HOIPartial } from "../hoiformat/schema";
 import { listFilesFromModOrHOI4, parseAndResolveHoi4FileCached } from "./fileloader";
+import { describeParseFailure } from "./indexHalf";
+import { Logger } from "./logger";
 
 // Finding a `containerwindowtype` by the name a script refers to it by. A focus inlay window and a
 // decision category's `scripted_gui` both name a window and leave the reader to find it, and the
@@ -30,9 +32,42 @@ async function listInterfaceFiles(extension: string): Promise<string[]> {
 		return files
 			.filter((file) => file.toLowerCase().endsWith(extension))
 			.map((file) => `${guiInterfaceFolder}/${file}`.replace(/\/+/g, "/"));
-	} catch {
+	} catch (e) {
+		Logger.error(`Cannot list interface/ for ${extension} files: ${describeParseFailure(e)}`);
 		return [];
 	}
+}
+
+// The .gfx files under the folders a user setting names. A folder that does not exist anywhere is
+// not an error to the file listing -- it simply lists nothing -- so a typo in the setting is only
+// visible as an empty result, and that is reported here rather than left as a missing icon.
+export async function listGfxFilesFromConfiguredRoots(
+	roots: readonly (string | undefined | null)[],
+	settingName: string,
+): Promise<string[]> {
+	const gfxFiles: string[] = [];
+	for (const configuredRoot of roots) {
+		if (!configuredRoot || configuredRoot.trim() === "") {
+			continue;
+		}
+		const root = configuredRoot.replace(/\\+/g, "/");
+		try {
+			const files = await listFilesFromModOrHOI4(root, { recursively: true });
+			let found = 0;
+			for (const file of files) {
+				if (file.toLowerCase().endsWith(".gfx")) {
+					gfxFiles.push(`${root}/${file}`.replace(/\/+/g, "/"));
+					found++;
+				}
+			}
+			if (found === 0) {
+				Logger.warn(`${settingName}: "${configuredRoot}" contains no .gfx files in the mod, its parent mods or the game install -- check the path`);
+			}
+		} catch (e) {
+			Logger.error(`${settingName}: cannot list "${configuredRoot}": ${describeParseFailure(e)}`);
+		}
+	}
+	return gfxFiles;
 }
 
 // Resolves the given window names against the interface tree. Parsing stops as soon as every name
@@ -66,7 +101,8 @@ export async function findContainerWindows(
 					unresolved.delete(name);
 				}
 			}
-		} catch {
+		} catch (e) {
+			Logger.error(`Cannot parse ${guiFile} while looking for window(s) ${[...unresolved].join(", ")}: ${describeParseFailure(e)}`);
 			continue;
 		}
 	}
