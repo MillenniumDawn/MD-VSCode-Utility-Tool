@@ -33,7 +33,7 @@ export function tgaToPng(buffer: Buffer): PNG {
 	// An uncompressed image has a known size; the library reads it straight after the header
 	// and reads past the end of a short buffer without complaint, returning garbage pixels.
 	if (buffer[2] === TGA_TYPE_UNCOMPRESSED) {
-		const pixelBytes = width * height * Math.ceil(buffer[16] / 8);
+		const pixelBytes = width * height * Math.ceil(buffer.readUInt8(16) / 8);
 		if (TGA_HEADER_LENGTH + pixelBytes > buffer.length) {
 			throw new UserError("TGA pixel data is truncated");
 		}
