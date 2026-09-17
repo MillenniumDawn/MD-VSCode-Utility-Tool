@@ -187,7 +187,7 @@ export function resetParentModsForTest(): void {
 export async function checkParentModPaths(): Promise<void> {
 	for (const parent of getExplicitParentModUris()) {
 		if (!(await isDirectory(parent))) {
-			vscode.window.showErrorMessage(
+			void vscode.window.showErrorMessage(
 				localize(
 					"parentmods.notdirectory",
 					"Parent mod path does not exist: {0}",

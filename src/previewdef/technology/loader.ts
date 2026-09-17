@@ -9,6 +9,7 @@ import { flatMap, chain, uniq } from "lodash";
 import { GuiFileLoader } from "../gui/loader";
 import { hoiFilesExpiryToken, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
 import { getConfiguration } from "../../util/vsccommon";
+import { listGfxFilesFromConfiguredRoots } from "../../util/guiwindowindex";
 import { localisationIndex, technologyCountryIcons } from "../../util/featureflags";
 import { debug } from "../../util/debug";
 import { PromiseCache } from "../../util/cache";
@@ -48,20 +49,7 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
         const technologyTrees = getTechnologyTrees(parseHoi4File(content, localize('infile', 'In file {0}:\n', this.file)));
         const guiDependencies = [...guiFilePath, ...dependencies.filter(d => d.type === 'gui').map(d => d.path)];
 
-        const configRoots = (getConfiguration().technologyGfxRoots ?? []).filter((r): r is string => !!r && r.trim() !== '');
-        const extraGfxFiles: string[] = [];
-        for (const root of configRoots) {
-            try {
-                const normalizedRoot = root.replace(/\\+/g, '/');
-                const files = await listFilesFromModOrHOI4(normalizedRoot, { recursively: true });
-                for (const file of files) {
-                    if (file.toLowerCase().endsWith('.gfx')) {
-                        extraGfxFiles.push(`${normalizedRoot}/${file}`.replace(/\/+/g, '/'));
-                    }
-                }
-            } catch {
-            }
-        }
+        const extraGfxFiles = await listGfxFilesFromConfiguredRoots(getConfiguration().technologyGfxRoots ?? [], 'mdHoi4Utilities.technologyGfxRoots');
 
         const guiDepFiles = await this.loaderDependencies.loadMultiple(guiDependencies, session, GuiFileLoader);
 

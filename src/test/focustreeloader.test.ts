@@ -4,6 +4,7 @@ import { FocusTreeLoader } from '../previewdef/focustree/loader';
 import { LoaderSession } from '../util/loader/loader';
 import { listGuiGfxFiles, resolveInlayGuiWindows, resolveInlayGfxFiles } from '../previewdef/focustree/inlay';
 import { clearDlcZipCache } from '../util/fileloader';
+import { Logger } from '../util/logger';
 import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 // Drives FocusTreeLoader.postLoad against a stubbed interface/ tree (two .gfx, one .gui) served from
@@ -87,5 +88,26 @@ describe('previewdef/focustree/loader inlay short-circuit', function () {
         assert.deepStrictEqual(gui.gfxFiles, listed);
         assert.deepStrictEqual(gfx.resolvedFiles, []);
         assert.deepStrictEqual(listed, ['interface/a.gfx', 'interface/b.gfx']);
+    });
+
+    it('a misspelled inlayWindowGfxRoots entry is reported in the output channel and the interface tree is still scanned', async function () {
+        const warnings: string[] = [];
+        const originalWarn = Logger.warn;
+        Logger.warn = (message: string) => {
+            warnings.push(message);
+        };
+        try {
+            stubVscode({ configuration: { modFile: '', loadDlcContents: false, inlayWindowGfxRoots: ['interfaec'] } });
+            const gfx = await resolveInlayGfxFiles([{
+                id: 'my_inlay',
+                scriptedImages: [{ gfxOptions: [{ gfxName: 'GFX_not_defined_anywhere' }] }],
+            } as any]);
+            assert.deepStrictEqual(gfx.resolvedFiles, []);
+        } finally {
+            Logger.warn = originalWarn;
+        }
+        assert.strictEqual(warnings.length, 1, warnings.join('; '));
+        assert.ok(warnings[0].includes('mdHoi4Utilities.inlayWindowGfxRoots'), warnings[0]);
+        assert.ok(warnings[0].includes('"interfaec"'), warnings[0]);
     });
 });

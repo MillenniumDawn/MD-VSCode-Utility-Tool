@@ -71,8 +71,8 @@ class FocusTreePreview extends UpdateablePreviewBase {
             getRelativePathInWorkspace(this.uri),
             () => Promise.resolve(getDocumentByUri(this.uri)?.getText() ?? this.content ?? ''),
         );
-        this.focusTreeLoader.onLoadDone(r => this.updateDependencies(r.dependencies));
-        this.panel.webview.onDidReceiveMessage(msg => {
+        this.subscriptions.push(this.focusTreeLoader.onLoadDone(r => this.updateDependencies(r.dependencies)));
+        this.subscriptions.push(this.panel.webview.onDidReceiveMessage(msg => {
             if (msg?.command === 'ready') {
                 this.signalWebviewReady();
                 // Bug #36: the webview re-posts `ready` after VS Code reloads it (e.g. on hide->show),
@@ -83,18 +83,18 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 this.repostLatestUpdate();
                 this.repushCachedIconStyles();
             }
-        });
+        }));
         // Belt-and-suspenders for bug #36: also restore icons when the panel becomes visible again.
-        this.panel.onDidChangeViewState(() => {
+        this.subscriptions.push(this.panel.onDidChangeViewState(() => {
             if (this.panel.visible) {
                 this.repushCachedIconStyles();
             }
-        });
+        }));
     }
 
     private repushCachedIconStyles(): void {
         if (this.lastPushedIconCss !== undefined && this.lastPushedIconGeneration === this.iconRenderGeneration && !this.isDisposed) {
-            this.panel.webview.postMessage({ type: 'iconStyles', css: this.lastPushedIconCss });
+            void this.panel.webview.postMessage({ type: 'iconStyles', css: this.lastPushedIconCss });
         }
     }
 
@@ -172,7 +172,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         // Progress is only reported for a full render: a partial update patches a tree that is
         // already on screen, so its spinner would be noise.
         const progress = options.partial ? undefined : (message: string, current?: number, total?: number) => {
-            this.panel.webview.postMessage({ type: 'progress', message, current, total });
+            void this.panel.webview.postMessage({ type: 'progress', message, current, total });
         };
         this.focusTreeLoader.setProgressListener(progress);
         try {
@@ -331,7 +331,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
             const css = full.styleTable.toRawCss();
             this.lastPushedIconCss = css;
             this.lastPushedIconGeneration = generation;
-            this.panel.webview.postMessage({ type: 'iconStyles', css });
+            void this.panel.webview.postMessage({ type: 'iconStyles', css });
         } catch (e) {
             error(e);
         }
@@ -362,7 +362,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         const css = full.styleTable.toRawCss();
         this.lastPushedIconCss = css;
         this.lastPushedIconGeneration = generation;
-        this.panel.webview.postMessage({ type: 'iconStyles', css });
+        void this.panel.webview.postMessage({ type: 'iconStyles', css });
     }
 }
 
