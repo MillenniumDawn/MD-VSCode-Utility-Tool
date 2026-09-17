@@ -9,7 +9,9 @@ import {
 	parseAndResolveHoi4FileCached,
 	readFileFromModOrHOI4,
 } from "./fileloader";
+import { describeParseFailure } from "./indexHalf";
 import { localize } from "./i18n";
+import { Logger } from "./logger";
 
 // Finding a `containerwindowtype` by the name a script refers to it by. A focus inlay window and a
 // decision category's `scripted_gui` both name a window and leave the reader to find it, and the
@@ -39,9 +41,42 @@ async function listInterfaceFiles(extension: string): Promise<string[]> {
 		return files
 			.filter((file) => file.toLowerCase().endsWith(extension))
 			.map((file) => `${guiInterfaceFolder}/${file}`.replace(/\/+/g, "/"));
-	} catch {
+	} catch (e) {
+		Logger.error(`Cannot list interface/ for ${extension} files: ${describeParseFailure(e)}`);
 		return [];
 	}
+}
+
+// The .gfx files under the folders a user setting names. A folder that does not exist anywhere is
+// not an error to the file listing -- it simply lists nothing -- so a typo in the setting is only
+// visible as an empty result, and that is reported here rather than left as a missing icon.
+export async function listGfxFilesFromConfiguredRoots(
+	roots: readonly (string | undefined | null)[],
+	settingName: string,
+): Promise<string[]> {
+	const gfxFiles: string[] = [];
+	for (const configuredRoot of roots) {
+		if (!configuredRoot || configuredRoot.trim() === "") {
+			continue;
+		}
+		const root = configuredRoot.replace(/\\+/g, "/");
+		try {
+			const files = await listFilesFromModOrHOI4(root, { recursively: true });
+			let found = 0;
+			for (const file of files) {
+				if (file.toLowerCase().endsWith(".gfx")) {
+					gfxFiles.push(`${root}/${file}`.replace(/\/+/g, "/"));
+					found++;
+				}
+			}
+			if (found === 0) {
+				Logger.warn(`${settingName}: "${configuredRoot}" contains no .gfx files in the mod, its parent mods or the game install -- check the path`);
+			}
+		} catch (e) {
+			Logger.error(`${settingName}: cannot list "${configuredRoot}": ${describeParseFailure(e)}`);
+		}
+	}
+	return gfxFiles;
 }
 
 // The window names each .gui file defines, which is all the scan below looks at. The interface tree
@@ -89,7 +124,14 @@ export async function findContainerWindows(
 	await scanCandidatesUntilResolved(
 		guiFiles ?? (await listGuiFiles()),
 		unresolved,
-		(guiFile) => guiWindowNamesCache.get(guiFile),
+		async (guiFile) => {
+			try {
+				return await guiWindowNamesCache.get(guiFile);
+			} catch (e) {
+				Logger.error(`Cannot parse ${guiFile} while looking for window(s) ${[...unresolved].join(", ")}: ${describeParseFailure(e)}`);
+				throw e;
+			}
+		},
 		(guiFile, windowNames) => {
 			for (const name of windowNames) {
 				if (unresolved.delete(name)) {
@@ -106,7 +148,8 @@ export async function findContainerWindows(
 			try {
 				const guiNode = await parseAndResolveHoi4FileCached(guiFile);
 				windows = collectContainerWindows(convertNodeToJson<GuiFile>(guiNode, guiFileSchema));
-			} catch {
+			} catch (e) {
+				Logger.error(`Cannot parse ${guiFile} while resolving the container windows it names: ${describeParseFailure(e)}`);
 				windows = {};
 			}
 			windowsByFile.set(guiFile, windows);
