@@ -317,7 +317,9 @@ function convertMap(
 	innerSchema: AnySchemaDef,
 	constants: Record<string, NodeValue>,
 ): CustomMap<unknown> {
-	const result: CustomMap<unknown> = { _map: {}, _token: undefined };
+	// The keys are whatever the file wrote. On a plain object a child named __proto__ would
+	// reassign the prototype instead of becoming an entry, so the map has no prototype at all.
+	const result: CustomMap<unknown> = { _map: emptyMap(), _token: undefined };
 	const map = result._map;
 
 	forEachNodeValue(node, (child) => {
@@ -360,6 +362,11 @@ function convertDetailValue(
 
 // The seed loop in convertObject creates every accumulating field the schema declares, so a
 // miss here is a converter bug: fail loudly rather than drop the value.
+/** A map keyed by names from the file, with no prototype for one of them to land on. */
+export function emptyMap<T>(): Record<string, T> {
+	return Object.create(null) as Record<string, T>;
+}
+
 function seeded<V>(slots: Map<string, V>, key: string): V {
 	const slot = slots.get(key);
 	if (slot === undefined) {
@@ -388,7 +395,7 @@ function convertObject(
 			isContainerSchemaDef(childSchema)
 		) {
 			if (childSchema._type === "map") {
-				const slot: CustomMap<unknown> = { _map: {}, _token: undefined };
+				const slot: CustomMap<unknown> = { _map: emptyMap(), _token: undefined };
 				maps.set(key, slot);
 				result[key] = slot;
 			} else if (childSchema._type === "array") {
@@ -411,7 +418,11 @@ function convertObject(
 
 		const childName = child.name.toLowerCase();
 
-		const childSchemaDef = schema[childName];
+		// Own fields only: a child named constructor would otherwise find Object's on the
+		// schema literal's prototype and be converted against it.
+		const childSchemaDef = Object.prototype.hasOwnProperty.call(schema, childName)
+			? schema[childName]
+			: undefined;
 		if (!childSchemaDef) {
 			return;
 		}

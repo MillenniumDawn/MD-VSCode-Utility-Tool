@@ -4,6 +4,7 @@ import {
 	Enum,
 	SchemaDef,
 	HOIPartial,
+	emptyMap,
 } from "../../../hoiformat/schema";
 import { Country } from "../definitions";
 import { readFileFromModOrHOI4AsJson } from "../../../util/fileloader";
@@ -200,7 +201,7 @@ class ColorsLoader extends FileLoader<HOIPartial<ColorsFile>> {
 		} catch (e) {
 			error(e);
 			return {
-				result: { _map: {}, _token: undefined },
+				result: { _map: emptyMap(), _token: undefined },
 				warnings: [],
 			};
 		}

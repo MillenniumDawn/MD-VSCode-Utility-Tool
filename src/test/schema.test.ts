@@ -206,6 +206,32 @@ describe('hoiformat/schema', () => {
             assert.strictEqual(result.y._value, 4);
         });
 
+        // A file names its entries; one named after a prototype slot has to be an entry like
+        // any other, not a change to the object the entries live on.
+        it('keeps a map entry named __proto__ or constructor as an ordinary entry', () => {
+            const root = parseHoi4File([
+                'items = {',
+                '    __proto__ = { x = 1 y = 2 }',
+                '    constructor = { x = 3 y = 4 }',
+                '    plain = { x = 5 y = 6 }',
+                '}',
+            ].join('\n'));
+            const schema = { _innerType: positionSchema, _type: 'map' } as SchemaDef<any>;
+
+            const result = convertNodeToJson(child(root, 'items'), schema) as any;
+            assert.deepStrictEqual(Object.keys(result._map).sort(), ['__proto__', 'constructor', 'plain']);
+            assert.strictEqual(result._map['__proto__']._value.x._value, 1);
+            assert.strictEqual(result._map['constructor']._value.x._value, 3);
+            assert.strictEqual(Object.getPrototypeOf(result._map), null);
+        });
+
+        it('ignores an object child named after a prototype slot the schema does not declare', () => {
+            const root = parseHoi4File('pos = { constructor = 7 x = 1 y = 2 }');
+            const result = convertNodeToJson(child(root, 'pos'), positionSchema) as any;
+            assert.strictEqual(Object.prototype.hasOwnProperty.call(result, 'constructor'), false);
+            assert.strictEqual(result.x._value, 1);
+        });
+
         it('throws for an unknown string schema', () => {
             const root = parseHoi4File('a = 1');
             assert.throws(() => convertNodeToJson(child(root, 'a'), 'totally-not-a-schema' as any), /Unknown schema/);
