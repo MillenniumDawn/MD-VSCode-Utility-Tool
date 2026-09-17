@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- [ CI ] The GitHub release and its version tag are only created once the build reached the VS Code Marketplace or Open VSX, so a release that reached neither no longer burns its version number. Issue #197.
+
 v1.1.36
 
   Functionality:
