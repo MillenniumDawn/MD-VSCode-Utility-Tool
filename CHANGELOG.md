@@ -18,6 +18,7 @@ v1.1.36
 - [ World Map Previewer ] The warnings colour set and the hover tooltip no longer stall panning on a map with many warnings. Every province used to be checked against every warning on every redraw; warnings are now indexed by province, state, strategic region, supply area and river once per map load. Issue #216.
 - [ Focus Tree Previewer ] Refreshing a focus tree or decision preview no longer re-reads every file under `interface/` each time: the window names and sprites each file defines are remembered between refreshes, and the search stops as soon as the ones the preview needs are found. Issue #178.
 - Opening a large DDS or TGA texture uses far less memory: the decoded image is handed to the viewer as raw bytes instead of being embedded in the page as base64 text. Issue #176.
+- [ Focus Tree Previewer ] Focus tree, technology tree and MIO previews position each node and connection line directly on the element instead of through a one-off CSS rule, so a large tree ships far less CSS and opens faster. Issue #179.
 
   Bugfixes:
 
