@@ -3,7 +3,12 @@ import * as path from "path";
 import { ConfigurationKey, Commands } from "../constants";
 import { PromiseCache } from "./cache";
 import { localize } from "./i18n";
-import { clearParentModCache, getParentModUris } from "./parentmods";
+import {
+	clearParentModCache,
+	getParentModUris,
+	getUnresolvedDependencies,
+	onDidChangeParentMods,
+} from "./parentmods";
 import {
 	basename,
 	fileOrUriStringToUri,
@@ -44,6 +49,7 @@ export function registerModFile(): vscode.Disposable {
 	disposables.push(
 		vscode.workspace.onDidChangeConfiguration(onChangeWorkspaceConfiguration),
 	);
+	disposables.push(onDidChangeParentMods(redrawSelectedModFileStatus));
 	disposables.push(
 		new vscode.Disposable(() => {
 			modFileStatusContainer.current = null;
@@ -68,13 +74,25 @@ export function updateSelectedModFileStatus(
 		// The parent mods ride along on this item rather than getting one of their own: they are
 		// part of what "the working mod" resolves to, and a second item costs status bar space.
 		const parentSuffix = parents.length > 0 ? ` +${parents.length}` : "";
-		const parentTooltip = parents
-			.map(
-				(parent) =>
-					"\n" +
-					localize("modfile.extends", "Extends: {0}", uriToFilePathWhenPossible(parent)),
-			)
-			.join("");
+		const parentTooltip =
+			parents
+				.map(
+					(parent) =>
+						"\n" +
+						localize("modfile.extends", "Extends: {0}", uriToFilePathWhenPossible(parent)),
+				)
+				.join("") +
+			getUnresolvedDependencies()
+				.map(
+					(name) =>
+						"\n" +
+						localize(
+							"modfile.unresolveddependency",
+							"Unresolved dependency: {0}",
+							name,
+						),
+				)
+				.join("");
 		if (modFile) {
 			const modFileName = basename(modFile, ".mod");
 			modName.command = Commands.SelectModFile;
@@ -115,7 +133,8 @@ function onChangeWorkspaceConfiguration(
 		);
 	} else if (e.affectsConfiguration(`${ConfigurationKey}.parentModPaths`)) {
 		// This listener is registered ahead of the one in hoifs.ts that owns the cache, so drop
-		// it here too or the item redraws with the old list.
+		// it here too or the item redraws with the old list. The resolved dependencies redraw
+		// through onDidChangeParentMods once hoifs.ts has re-resolved them.
 		clearParentModCache();
 		redrawSelectedModFileStatus();
 	}
@@ -227,6 +246,31 @@ async function selectModFile(): Promise<void> {
 			modPath ? fileOrUriStringToUri(modPath) : undefined,
 		);
 	}
+}
+
+/**
+ * The `.mod` file the extension works from: the `modFile` setting when set, else the first `.mod`
+ * in the first workspace folder that has one. Undefined when there is neither; the file is not
+ * checked to exist here.
+ */
+export async function getSelectedModFileUri(): Promise<vscode.Uri | undefined> {
+	const conf = getConfiguration();
+	if (conf.modFile !== "") {
+		return fileOrUriStringToUri(conf.modFile);
+	}
+
+	if (vscode.workspace.workspaceFolders) {
+		for (const workspaceFolder of vscode.workspace.workspaceFolders) {
+			const mods = await workspaceModFilesCache.get(
+				workspaceFolder.uri.toString(),
+			);
+			if (mods.length > 0) {
+				return mods[0];
+			}
+		}
+	}
+
+	return undefined;
 }
 
 async function getWorkspaceModFiles(uriString: string): Promise<vscode.Uri[]> {

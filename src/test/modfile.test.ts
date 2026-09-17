@@ -5,7 +5,7 @@ import {
     redrawSelectedModFileStatus,
     updateSelectedModFileStatus,
 } from '../util/modfile';
-import { clearParentModCache } from '../util/parentmods';
+import { clearParentModCache, resetParentModsForTest, setResolvedDependencies } from '../util/parentmods';
 import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 describe('util/modfile status item', () => {
@@ -55,6 +55,18 @@ describe('util/modfile status item', () => {
         assert.ok(item.text.startsWith('$(error) '), item.text);
         assert.ok(item.text.endsWith(' +1'), item.text);
         assert.ok(String(item.tooltip).startsWith('Error reading this file: '), String(item.tooltip));
+    });
+
+    it('counts the resolved dependencies as parents and names the ones that did not resolve', () => {
+        config = { parentModPaths: ['D:/mods/parent'] };
+        setResolvedDependencies([vscode.Uri.file('D:/workshop/123')], ['Gone Mod']);
+
+        updateSelectedModFileStatus(vscode.Uri.file('D:/mods/sub/sub.mod'));
+
+        assert.ok(item.text.endsWith('sub +2'), item.text);
+        assert.ok(String(item.tooltip).includes('Extends: D:/workshop/123'), String(item.tooltip));
+        assert.ok(String(item.tooltip).includes('Unresolved dependency: Gone Mod'), String(item.tooltip));
+        resetParentModsForTest();
     });
 
     it('redraws the no-descriptor state as it was', () => {

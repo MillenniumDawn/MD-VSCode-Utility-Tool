@@ -303,6 +303,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"modfile.select": "Browse a .mod file...",
 	"modfile.selectworkingmod": "Select working mod",
 	"modfile.type": "Mod file",
+	"modfile.unresolveddependency": "Unresolved dependency: {0}",
 	"modfile.workspacesetting": "Workspace setting",
 	"parentmods.notdirectory": "Parent mod path does not exist: {0}",
 	pngfile: "PNG file",

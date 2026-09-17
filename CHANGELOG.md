@@ -6,6 +6,8 @@ v1.1.36
 
 - Navigate preview definitions with Tab, Enter or Space. Issue #192.
 - New `mdHoi4Utilities.parentModPaths` setting for submods: list the folders of the mods the workspace extends, and every preview and index reads shared files from them before falling back to the game install and DLCs, and a parent's own `replace_path` hides vanilla files the way it does in the game. The status bar mod item shows how many parents are active. Issue #291.
+- The mods named in the selected `.mod` file's `dependencies` are found through the launcher's mod registry and read as parent mods, so a submod no longer needs `mdHoi4Utilities.parentModPaths` on every machine it is checked out on. An entry in that setting still wins for the same mod, and a name the registry does not know is listed in the status bar tooltip. The new `mdHoi4Utilities.userDataPath` setting points at the game's user data folder when it is not found automatically. Issue #292.
+- The `.mod` dependencies are read again when a workspace folder is added or removed, the status bar tooltip follows the names that stopped or started resolving, and a `mod` folder with a `dlc_load.json` inside the workspace itself is never taken for the game's user data folder, so a checked-out repository cannot point the parent mods at an arbitrary folder. Issue #292.
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
 - [ CI ] Release v1.1.35 failed to publish.
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run.
@@ -15,6 +17,7 @@ v1.1.36
 
   Bugfixes:
 
+- Opening a DDS or TGA file whose header claims an absurd size (for example 65535x65535) no longer freezes or crashes the extension: the image viewer now refuses it with a message instead of trying to allocate gigabytes of pixels. Issue #174.
 - A focus id, MIO trait id, GUI window name or country tag containing `</script>` can no longer break out of the preview page or inject markup into it: the focus tree, MIO, GUI and technology previews now escape their data the way the other previews already did. Issue #209.
 - A GUI container-window name or technology folder name containing quotes or angle brackets can no longer break out of the folder selector or inject markup into the GUI and technology previews. Issue #210.
 - A MIO trait token or a localisation value containing quotes or angle brackets can no longer inject markup into the MIO and technology previews. Issue #211.

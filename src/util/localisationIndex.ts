@@ -5,9 +5,10 @@ import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions, ListFilesOptions } from "./fileloader";
-import { getParentModUris } from "./parentmods";
 import {
 	buildIndexHalf,
+	captureIndexBuildContext,
+	IndexBuildContext,
 	readIndexFileContent,
 	reportIndexParseFailure,
 } from "./indexHalf";
@@ -57,12 +58,13 @@ const builder = createIndexBuilder({
 		"localisationIndex.building",
 		"Building Localisation index...",
 	),
-	build: (progress) => {
+	build: async (progress) => {
 		estimatedSize = [0];
+		const context = await captureIndexBuildContext();
 		return Promise.all([
-			buildGlobalLocalisationIndex(estimatedSize, progress),
-			buildParentLocalisationIndex(estimatedSize, progress),
-			buildWorkspaceLocalisationIndex(estimatedSize, progress),
+			buildGlobalLocalisationIndex(estimatedSize, progress, context),
+			buildParentLocalisationIndex(estimatedSize, progress, context),
+			buildWorkspaceLocalisationIndex(estimatedSize, progress, context),
 		]);
 	},
 	onSuccess: () => {
@@ -146,6 +148,7 @@ const isLocalisationFile = (relativePath: string) =>
 async function buildGlobalLocalisationIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context: IndexBuildContext,
 ): Promise<void> {
 	await buildLocalisationIndexHalf(
 		"localisationIndex.global",
@@ -154,14 +157,17 @@ async function buildGlobalLocalisationIndex(
 		globalLocalisationFileMap,
 		estimatedSize,
 		progress,
+		context,
 	);
 }
 
 async function buildParentLocalisationIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context?: IndexBuildContext,
 ): Promise<void> {
-	const parents = getParentModUris();
+	const buildContext = context ?? (await captureIndexBuildContext());
+	const parents = buildContext.parentModUris;
 	parentLocalisationIndexes = parents.map(() => ({}));
 	parentLocalisationFileMaps.length = parents.length;
 	await Promise.all(
@@ -180,6 +186,7 @@ async function buildParentLocalisationIndex(
 				fileMap,
 				estimatedSize,
 				progress,
+				buildContext,
 			);
 		}),
 	);
@@ -188,7 +195,9 @@ async function buildParentLocalisationIndex(
 async function buildWorkspaceLocalisationIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context?: IndexBuildContext,
 ): Promise<void> {
+	const buildContext = context ?? (await captureIndexBuildContext());
 	await buildLocalisationIndexHalf(
 		"localisationIndex.workspace",
 		{ mod: true, parent: false, hoi4: false, recursively: true },
@@ -196,6 +205,7 @@ async function buildWorkspaceLocalisationIndex(
 		workspaceLocalisationFileMap,
 		estimatedSize,
 		progress,
+		buildContext,
 	);
 }
 
@@ -206,11 +216,14 @@ async function buildLocalisationIndexHalf(
 	fileMap: Record<string, Record<string, Set<string>>> | null,
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context: IndexBuildContext,
 ): Promise<void> {
 	await buildIndexHalf<LocCacheData>(
 		{
 			cacheName,
 			version: LOC_CACHE_VERSION,
+			cacheScope: context.cacheScope,
+			dependencyGeneration: context.dependencyGeneration,
 			fullRebuildOnAnyChange: true,
 			listFiles: (token) =>
 				listIndexFiles({

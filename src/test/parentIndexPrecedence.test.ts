@@ -15,7 +15,12 @@ import {
 	getIdeaSwaps,
 	__resetIdeaSwapIndexForTests,
 } from "../util/ideaSwapIndex";
-import { clearParentModCache } from "../util/parentmods";
+import {
+	clearParentModCache,
+	resetParentModsForTest,
+} from "../util/parentmods";
+import { refreshModDependencies } from "../util/moddependencies";
+import { captureCacheScope } from "../util/indexCache";
 import { __resetIndexProgressForTests } from "../util/indexBuild";
 import { restoreVscodeStubs, stubVscode } from "./_vscode_stub";
 
@@ -233,6 +238,153 @@ describe("ordered parent index precedence", function () {
 		assert.deepStrictEqual(
 			swaps.map((swap) => [swap.from, swap.to, swap.file]),
 			[["parent_precedence_from", "parent_precedence_to_0", "common/same.txt"]],
+		);
+	});
+
+	it("captures the settled parent before listing and writing its cache", async function () {
+		kind = "gfx";
+		const config: Record<string, unknown> = {
+			modFile: "/ws/sub.mod",
+			userDataPath: "/userdata",
+			parentModPaths: ["/parent-one"],
+			gfxIndex: true,
+			localisationIndex: false,
+			sharedFocusIndex: false,
+			ideaSwapIndex: false,
+		};
+		const cacheWrites: string[] = [];
+		const cacheStore = new Map<string, Uint8Array>();
+		const directories = new Set(["/userdata/mod", "/parent-two"]);
+		const descriptorContents = new Map([
+			["/ws/sub.mod", 'name="sub"\ndependencies={ "Parent Mod" }\n'],
+			["/userdata/dlc_load.json", '{"enabled_mods":[]}'],
+			["/userdata/mod/parent.mod", 'name="Parent Mod"\npath="/parent-two"\n'],
+		]);
+		let registryReadStarted = false;
+		let releaseRegistry: () => void = () => undefined;
+		const registryReady = new Promise<void>((resolve) => {
+			releaseRegistry = resolve;
+		});
+		const releaseParentCacheData = deferred();
+		let parentCacheDataStarted = false;
+
+		contextContainer.current = {
+			globalStorageUri: vscode.Uri.file("/storage"),
+		} as unknown as vscode.ExtensionContext;
+		resetParentModsForTest();
+		stubVscode({
+			getConfiguration: () => config,
+			workspaceFolders: [WORKSPACE_FOLDER],
+			stat: async (uri: unknown) => {
+				const path = String((uri as { fsPath: string }).fsPath);
+				if (!directories.has(path) && !descriptorContents.has(path)) {
+					throw new Error("ENOENT");
+				}
+				return {
+					type: directories.has(path)
+						? vscode.FileType.Directory
+						: vscode.FileType.File,
+					mtime: 1,
+					ctime: 1,
+					size: 1,
+				};
+			},
+			readDirectory: async (uri: unknown) => {
+				const path = String((uri as { fsPath: string }).fsPath);
+				if (path === "/userdata/mod") {
+					registryReadStarted = true;
+					await registryReady;
+					return [["parent.mod", vscode.FileType.File]];
+				}
+				return [];
+			},
+			readFile: async (uri: unknown) => {
+				const path = String((uri as { fsPath: string }).fsPath);
+				const descriptor = descriptorContents.get(path);
+				if (descriptor !== undefined) {
+					return Buffer.from(descriptor);
+				}
+				const cached = cacheStore.get(String((uri as { path: string }).path));
+				if (cached !== undefined) {
+					return cached;
+				}
+				throw new Error("ENOENT");
+			},
+			writeFile: async (uri: unknown, content: Uint8Array) => {
+				const path = String((uri as { path: string }).path);
+				cacheWrites.push(path);
+				if (path.includes("gfxIndex.parent.0.data")) {
+					parentCacheDataStarted = true;
+					await releaseParentCacheData.promise;
+				}
+				cacheStore.set(path, content);
+			},
+			createDirectory: async () => undefined,
+		});
+
+		const pending = refreshModDependencies();
+		const lookup = getGfxContainerFile("GFX_parent_precedence");
+		for (let attempt = 0; attempt < 100 && !registryReadStarted; attempt++) {
+			await waitForAsyncTasks();
+		}
+		assert.strictEqual(registryReadStarted, true);
+		config.parentModPaths = ["/parent-two"];
+		clearParentModCache();
+		const corrective = refreshModDependencies();
+		releaseRegistry();
+
+		assert.strictEqual(await lookup, "interface/second.gfx");
+		await Promise.all([pending, corrective]);
+		for (let attempt = 0; attempt < 100 && !parentCacheDataStarted; attempt++) {
+			await waitForAsyncTasks();
+		}
+		assert.strictEqual(parentCacheDataStarted, true);
+		assert.strictEqual(
+			cacheWrites.some((path) =>
+				path.includes("gfxIndex.parent.0.manifest"),
+			),
+			false,
+		);
+
+		// Start a new dependency generation while the old generation's data write is blocked.
+		// The corrective build must wait, then write both halves after the stale manifest is skipped.
+		await refreshModDependencies();
+		__resetGfxIndexForTests();
+		secondParentReadStarted = false;
+		const rebuilt = getGfxContainerFile("GFX_parent_precedence");
+		for (let attempt = 0; attempt < 5; attempt++) {
+			await waitForAsyncTasks();
+		}
+		assert.strictEqual(secondParentReadStarted, false);
+		releaseParentCacheData.resolve();
+		assert.strictEqual(await rebuilt, "interface/second.gfx");
+
+		for (let attempt = 0; attempt < 100; attempt++) {
+			if (
+				cacheWrites.some((path) => path.includes("gfxIndex.parent.0.manifest"))
+			) {
+				break;
+			}
+			await waitForAsyncTasks();
+		}
+
+		const expectedScope = captureCacheScope([vscode.Uri.file("/parent-two")]);
+		const settledScope = captureCacheScope();
+		if (!expectedScope || !settledScope) {
+			throw new Error("cache scope was not captured");
+		}
+		assert.strictEqual(settledScope.path, expectedScope.path);
+		const parentWrites = cacheWrites.filter((path) =>
+			path.includes("gfxIndex.parent.0."),
+		);
+		assert.deepStrictEqual(
+			parentWrites.map((path) =>
+				path.endsWith(".data.json") ? "data" : "manifest",
+			),
+			["data", "data", "manifest"],
+		);
+		assert.ok(
+			parentWrites.every((path) => path.startsWith(expectedScope.path)),
 		);
 	});
 });
