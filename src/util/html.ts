@@ -102,15 +102,18 @@ export function html(webview: vscode.Webview, body: string, scripts: (string | D
  * keep the initial message while the spinner animates.
  *
  * This is a self-contained HTML document assigned directly to `webview.html`
- * (not routed through `html()`), so inline <style>/<script> are used without a CSP.
+ * (not routed through `html()`). It loads nothing from outside, so its policy allows
+ * only its own <style> and <script>, each by nonce.
  */
 export function loadingShellHtml(message?: string): string {
     const initialText = htmlEscape(message ?? localize('preview.loading', 'Loading preview...'));
+    const nonce = randomString(32);
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<style>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+<style nonce="${nonce}">
     html, body { margin: 0; padding: 0; height: 100%; background: var(--vscode-editor-background); }
     .preview-loading {
         position: fixed; inset: 0;
@@ -137,7 +140,7 @@ export function loadingShellHtml(message?: string): string {
     <div class="preview-spinner" aria-hidden="true"></div>
     <div class="preview-status"><span id="loading-message">${initialText}</span><span id="loading-counter" class="preview-counter"></span></div>
 </div>
-<script>
+<script nonce="${nonce}">
 (function () {
     var msgEl = document.getElementById('loading-message');
     var counterEl = document.getElementById('loading-counter');
