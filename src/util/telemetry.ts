@@ -14,7 +14,7 @@ export interface TelemetryReporterInterface {
     }, measurements?: {
         [key: string]: number;
     }): void;
-    dispose(): Promise<any>;
+    dispose(): Promise<unknown>;
 }
 
 let telemetryReporter: TelemetryReporterInterface | undefined = undefined;
@@ -22,7 +22,7 @@ let telemetryReporter: TelemetryReporterInterface | undefined = undefined;
 export interface TelemetryMessage {
     command: 'telemetry';
     telemetryType: 'event' | 'error' | 'exception';
-    args: any[];
+    args: unknown[];
 }
 
 export function registerTelemetryReporter() {
@@ -56,13 +56,15 @@ export function sendByMessage(message: TelemetryMessage) {
             sendError(...(message.args as Parameters<typeof sendError>));
             break;
         case 'exception':
-            const args = [...message.args];
-            const error = new Error();
-            error.message = args[0].message;
-            error.name = args[0].name;
-            error.stack = args[0].stack;
-            args[0] = error;
-            sendException(...(args as Parameters<typeof sendException>));
+            const [serialized, properties, measurements] = message.args as [
+                Partial<Pick<Error, 'message' | 'name' | 'stack'>> | undefined,
+                Record<string, string> | undefined,
+                Record<string, number> | undefined,
+            ];
+            const error = new Error(serialized?.message);
+            error.name = serialized?.name ?? error.name;
+            error.stack = serialized?.stack;
+            sendException(error, properties, measurements);
             break;
     }
 }

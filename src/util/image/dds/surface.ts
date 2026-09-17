@@ -126,7 +126,7 @@ export class Surface {
 
 		const bitsPerPixel = pixelFormat.bitsPerPixel;
 		const bitsPerRow = bitsPerPixel * this.width;
-		const pitch = (bitsPerRow + 7) >>> 3;
+		const pitch = Math.ceil(bitsPerRow / 8);
 
 		let resultOffset = 0;
 
@@ -171,7 +171,7 @@ export class Surface {
 		const blockSize = getBlockSize(pixelFormat.compressFormat);
 		const width = this.width;
 		const height = this.height;
-		const blocksPerLine = (width + 3) >> 2;
+		const blocksPerLine = Math.ceil(width / 4);
 
 		for (let i = 0, k = 0; i < length; i += blockSize, k++) {
 			switch (pixelFormat.compressFormat) {
@@ -497,18 +497,22 @@ function unormSrgbNormalizer(value: number, max: number): number {
 	return Math.pow(value / max, 2.2);
 }
 
+type ChannelBuffer = Uint8Array | Uint16Array | Uint32Array | Float32Array;
+
 // Don't use js clossure for better performance
 interface ChannelReader {
-	reader: (
-		buffer: any,
+	// Method shorthand on purpose: its parameters are bivariant, so a reader written for one
+	// buffer type still fits, and readerState is the buffer it was written for.
+	reader(
+		buffer: ChannelBuffer,
 		offset: number,
 		bitOffset: number,
 		channelStart: number[],
 		channelLength: number[],
 		channelMask: number[],
 		rawPixel: Float64Array,
-	) => void;
-	readerState: unknown;
+	): void;
+	readerState: ChannelBuffer;
 }
 function getChannelReader(
 	inputBuffer: ArrayBuffer,

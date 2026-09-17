@@ -24,11 +24,14 @@ describe('util/indexCache', () => {
             );
         });
 
-        it('reads the same mod file whichever slashes and case it is written with', () => {
-            assert.strictEqual(
-                cacheNamespaceFor('D:\\Mods\\Alpha.mod', []),
-                cacheNamespaceFor('d:/mods/alpha.mod', []),
-            );
+        it('normalizes mod path identity for the host platform', () => {
+            const upper = cacheNamespaceFor('D:\\Mods\\Alpha.mod', []);
+            const lower = cacheNamespaceFor('d:/mods/alpha.mod', []);
+            if (process.platform === 'win32') {
+                assert.strictEqual(upper, lower);
+            } else {
+                assert.notStrictEqual(upper, lower);
+            }
         });
 
         it('treats an unset, empty and whitespace-only mod file as the same', () => {
@@ -54,6 +57,39 @@ describe('util/indexCache', () => {
                 cacheNamespaceFor(undefined, ['file:///a', 'file:///b']),
             );
         });
+
+        it('gives two parent mod lists two different namespaces', () => {
+            assert.notStrictEqual(
+                cacheNamespaceFor(undefined, ['file:///ws'], ['d:/mods/parent']),
+                cacheNamespaceFor(undefined, ['file:///ws'], ['d:/mods/other']),
+            );
+            assert.notStrictEqual(
+                cacheNamespaceFor(undefined, ['file:///ws']),
+                cacheNamespaceFor(undefined, ['file:///ws'], ['d:/mods/parent']),
+            );
+        });
+
+        it('changes when the parent mods are reordered, because the order is the precedence', () => {
+            assert.notStrictEqual(
+                cacheNamespaceFor(undefined, ['file:///ws'], ['d:/a', 'd:/b']),
+                cacheNamespaceFor(undefined, ['file:///ws'], ['d:/b', 'd:/a']),
+            );
+        });
+
+        it('normalizes parent path identity for the host platform and skips blanks', () => {
+            const upper = cacheNamespaceFor(undefined, [], ['D:\\Mods\\Parent', '', '  ']);
+            const lower = cacheNamespaceFor(undefined, [], ['d:/mods/parent']);
+            if (process.platform === 'win32') {
+                assert.strictEqual(upper, lower);
+            } else {
+                assert.notStrictEqual(upper, lower);
+            }
+            assert.strictEqual(
+                cacheNamespaceFor(undefined, ['file:///ws'], []),
+                cacheNamespaceFor(undefined, ['file:///ws']),
+            );
+        });
+
     });
 
     describe('computeStaleFiles', () => {

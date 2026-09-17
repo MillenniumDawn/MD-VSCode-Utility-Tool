@@ -24,7 +24,7 @@ describe('util/yaml', () => {
 
         it('parses a value that contains an unescaped double quote', () => {
             // js-yaml's plain-scalar rules let this through with a literal `"` in the value.
-            const result = parseYaml('k: "a "b" c"');
+            const result = parseYaml('k: "a "b" c"') as { k: string };
             assert.strictEqual(result.k, 'a "b" c');
         });
 
