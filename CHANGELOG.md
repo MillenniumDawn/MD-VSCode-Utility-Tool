@@ -23,6 +23,7 @@ v1.1.36
 - [ CI ] The integration tests run against a pinned VS Code version that is cached between runs, so a pull request no longer downloads the latest release every time or turns red when VS Code ships a regression. Issue #183.
 - [ CI ] A pull request builds and type-checks the extension once instead of twice: the integration smoke test now runs in the same job as the unit tests, against the packaged build. Issue #184.
 - [ CI ] Every release and version-check job now runs on the same pinned Node version as the tests, read from one `.nvmrc`, instead of whatever the GitHub runner image happens to ship. Issue #185.
+- [ CI ] Every pull request is now checked for test coverage on the lines it changes, on top of the whole-suite thresholds, which have been raised to the real figures. Issue #187.
 
   Bugfixes:
 
