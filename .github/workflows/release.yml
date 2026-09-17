@@ -51,6 +51,9 @@ jobs:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         fetch-depth: 0
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version-file: .nvmrc
     # `release` is true when this push merged the release pull request and its version has no tag
     # yet, or when it merged the fix pull request that a failed publish opened below -- then the
     # version goes out again, tag or no tag. `bump` is true when the extension itself changed since
@@ -77,7 +80,7 @@ jobs:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
-        node-version: 24
+        node-version-file: .nvmrc
         cache: 'npm'
     - name: Install dependencies
       run: npm ci
@@ -129,6 +132,9 @@ jobs:
       with:
         fetch-depth: 0
         token: ${{ steps.app-token.outputs.token }}
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version-file: .nvmrc
     # From the last version that shipped, which is the tag itself unless a branch bumped
     # package.json by hand -- then that version has no tag yet and the range starts one release back.
     #
@@ -311,7 +317,7 @@ jobs:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
-        node-version: 24
+        node-version-file: .nvmrc
         cache: 'npm'
     - name: Install dependencies
       run: npm ci
@@ -357,7 +363,7 @@ jobs:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
-        node-version: 24
+        node-version-file: .nvmrc
         cache: 'npm'
     - name: Install dependencies
       run: npm ci
@@ -454,7 +460,7 @@ jobs:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
-        node-version: 24
+        node-version-file: .nvmrc
         cache: 'npm'
     - name: Install dependencies
       run: npm ci
@@ -494,7 +500,7 @@ jobs:
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
-        node-version: 24
+        node-version-file: .nvmrc
         cache: 'npm'
     - name: Install dependencies
       run: npm ci

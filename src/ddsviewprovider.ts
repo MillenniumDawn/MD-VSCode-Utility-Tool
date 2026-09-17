@@ -5,6 +5,22 @@ import { sendEvent } from './util/telemetry';
 import { readFile } from './util/vsccommon';
 import { decodeImageToPng } from './util/image/imagedecoder';
 
+// Runs in the viewer page: asks the host for the image bytes and shows them through a blob URL.
+const textureScript = `
+(function () {
+    var vscode = acquireVsCodeApi();
+    var img = document.getElementById('texture');
+    window.addEventListener('message', function (event) {
+        var message = event.data;
+        if (!message || message.type !== 'image') { return; }
+        var url = URL.createObjectURL(new Blob([message.data], { type: 'image/png' }));
+        img.onload = function () { URL.revokeObjectURL(url); };
+        img.src = url;
+    });
+    vscode.postMessage({ command: 'ready' });
+})();
+`;
+
 abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider {
     public async openCustomDocument(uri: vscode.Uri) {
         // Don't try opening it as text
@@ -42,12 +58,30 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
             const { pngBuffer, width, height } = decoded;
             const styleTable = new StyleTable();
 
+            // The PNG is posted to the page as raw bytes and turned into a blob URL there, rather
+            // than inlined as base64 in the html: a 4096x4096 texture would otherwise be copied
+            // three times over (base64 string, template literal, IPC) and kept by the panel.
+            // The page asks with `ready`, and asks again whenever VS Code reloads it (hide -> show),
+            // so the bytes stay referenced until the panel is disposed.
+            let pngBytes: Uint8Array | null = new Uint8Array(pngBuffer.buffer, pngBuffer.byteOffset, pngBuffer.byteLength);
+            const messageListener = webviewPanel.webview.onDidReceiveMessage((msg: { command?: string } | undefined) => {
+                if (msg?.command === 'ready' && pngBytes !== null) {
+                    void webviewPanel.webview.postMessage({ type: 'image', data: pngBytes });
+                }
+            });
+            webviewPanel.onDidDispose(() => {
+                pngBytes = null;
+                messageListener.dispose();
+            });
+
+            // Custom editor webviews start with scripts disabled, and the page needs one to build the blob URL.
+            webviewPanel.webview.options = { enableScripts: true };
             webviewPanel.webview.html = html(
                 webviewPanel.webview,
                 `<div class="${styleTable.oneTimeStyle('imagePreview', () => `width:${width}px;height:${height}px;`)}">
-                    <img src="data:image/png;base64,${pngBuffer.toString('base64')}" alt="${this.imageKind.toUpperCase()} texture preview"/>
+                    <img id="texture" alt="${this.imageKind.toUpperCase()} texture preview"/>
                 </div>`,
-                [],
+                [{ content: textureScript }],
                 [styleTable]
             );
         } catch (e) {

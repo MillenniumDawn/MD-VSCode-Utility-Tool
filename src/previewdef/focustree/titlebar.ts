@@ -2,6 +2,8 @@ import { convertNodeToJson, SchemaDef } from "../../hoiformat/schema";
 import { getSpriteByGfxName, Image } from "../../util/image/imagecache";
 import { parseHoi4FileCached } from "../../util/fileloader";
 import { nationalFocusViewGfxFile } from "../../util/hoi4gui/exclusivelinkimages";
+import { describeParseFailure } from "../../util/indexHalf";
+import { Logger } from "../../util/logger";
 
 export const focusTitlebarStylesFile = 'common/national_focus/00_titlebar_styles.txt';
 export const goalsOverlaysGfxFile = 'interface/goals_overlays.gfx';
@@ -45,7 +47,8 @@ export async function loadFocusTitlebarStyles(): Promise<Record<string, string>>
         }
 
         return result;
-    } catch {
+    } catch (e) {
+        Logger.error(`Cannot read ${focusTitlebarStylesFile}; focus text icons are disabled: ${describeParseFailure(e)}`);
         return {};
     }
 }

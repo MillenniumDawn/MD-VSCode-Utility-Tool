@@ -22,6 +22,8 @@ import { registerWarningStyles, warningListClass } from "./warningstyles";
 import { registerTraceStyles } from "./tracestyles";
 import { registerExclusiveLinkStyles } from "../../util/hoi4gui/exclusivelink";
 import { loadExclusiveLinkImages } from "../../util/hoi4gui/exclusivelinkimages";
+import { describeParseFailure } from "../../util/indexHalf";
+import { Logger } from "../../util/logger";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
 
@@ -151,7 +153,8 @@ export async function loadFocusTreesOnly(loader: FocusTreeLoader): Promise<Focus
     try {
         const r = await loader.load(new LoaderSession(false));
         return r.result.focusTrees.length ? r.result.focusTrees : null;
-    } catch {
+    } catch (e) {
+        Logger.warn(`Focus tree structure check skipped, load failed: ${describeParseFailure(e)}`);
         return null;
     }
 }

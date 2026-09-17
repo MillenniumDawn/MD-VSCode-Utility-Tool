@@ -54,7 +54,7 @@ export async function checkInstallPath(): Promise<void> {
     }
 
     if (!(await isDirectory(installPath))) {
-        vscode.window.showErrorMessage(
+        void vscode.window.showErrorMessage(
             localize('installpath.notdirectory', "Hearts of Iron IV install path does not exist: {0}", uriToFilePathWhenPossible(installPath)));
     }
 }

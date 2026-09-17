@@ -15,13 +15,20 @@ export class Image {
 	// GFX preview re-renders every sprite on each edit, so re-encoding the unchanged ones was the
 	// hot path (per keystroke for a texture atlas). Memoizing on the instance is safe because Image
 	// is immutable and the image cache keys instances by file path + change token, so a texture that
-	// changes produces a fresh instance with a fresh buffer rather than a stale URI. Memory stays
-	// bounded by the image cache's own cap.
+	// changes produces a fresh instance with a fresh buffer rather than a stale URI. The URI counts
+	// towards the image cache's byte cap through retainedBytes, so memoizing it stays bounded.
 	public get uri(): string {
 		if (this.cachedUri === undefined) {
 			this.cachedUri = toDataUrl(this.pngBuffer);
 		}
 		return this.cachedUri;
+	}
+
+	// Bytes this image keeps alive: the PNG buffer plus the memoized data URI once it exists. The
+	// caches weigh entries by this, and re-weigh on access, so the URI is counted from the render
+	// that materializes it.
+	public get retainedBytes(): number {
+		return this.pngBuffer.length + (this.cachedUri?.length ?? 0);
 	}
 }
 
@@ -58,6 +65,18 @@ export class Sprite {
 		return (this.cachedFrames = result);
 	}
 
+	// The base image plus every per-frame image split off it. A single-frame sprite's frames array
+	// is just [image], so it is not counted twice.
+	public get retainedBytes(): number {
+		let bytes = this.image.retainedBytes;
+		if (this.noOfFrames > 1 && this.cachedFrames) {
+			for (const frame of this.cachedFrames) {
+				bytes += frame.retainedBytes;
+			}
+		}
+		return bytes;
+	}
+
 	public get width(): number {
 		return this.image.width / this.noOfFrames;
 	}
@@ -78,6 +97,16 @@ export class CorneredTileSprite extends Sprite {
 		readonly borderSize: NumberPosition,
 	) {
 		super(id, image, noOfFrames);
+	}
+
+	public get retainedBytes(): number {
+		let bytes = super.retainedBytes;
+		for (const tiles of Object.values(this.cachedTiles)) {
+			for (const tile of tiles) {
+				bytes += tile.retainedBytes;
+			}
+		}
+		return bytes;
 	}
 
 	public getTiles(frameId: number = 0): Image[] {
