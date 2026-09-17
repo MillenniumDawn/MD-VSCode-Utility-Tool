@@ -18,7 +18,11 @@ import {
 	convertColor,
 } from "./common";
 import { localize } from "../../../util/i18n";
-import { LoaderSession } from "../../../util/loader/loader";
+import {
+	FOLDER_LOAD_CONCURRENCY,
+	LoaderSession,
+} from "../../../util/loader/loader";
+import { mapLimit } from "../../../util/common";
 import { flatMap } from "lodash";
 import { Tag, countryTagsFolder, loadCountryTagsFile } from "../../../util/countrytags";
 
@@ -71,8 +75,10 @@ export class CountriesLoader extends Loader<Country[]> {
 		}
 
 		return (
-			await Promise.all(
-				Object.values(this.countryLoaders).map((l) => l.shouldReload(session)),
+			await mapLimit(
+				Object.values(this.countryLoaders),
+				FOLDER_LOAD_CONCURRENCY,
+				(l) => l.shouldReload(session),
 			)
 		).some((v) => v);
 	}
@@ -86,8 +92,6 @@ export class CountriesLoader extends Loader<Country[]> {
 
 		const tagsResult = await this.countryTagsLoader.load(session);
 		const countryTags = tagsResult.result;
-		const countryResultPromises: Promise<LoadResult<Country | undefined>>[] =
-			[];
 		const newCountryLoaders: Record<string, CountryLoader> = {};
 
 		for (const tag of countryTags) {
@@ -98,13 +102,26 @@ export class CountriesLoader extends Loader<Country[]> {
 				countryLoader.onProgress((e) => this.onProgressEmitter.fire(e));
 			}
 
-			countryResultPromises.push(countryLoader.load(session));
 			newCountryLoaders[tag.tag] = countryLoader;
 		}
 
 		this.countryLoaders = newCountryLoaders;
 
-		const countriesResult = await Promise.all(countryResultPromises);
+		// A tag whose country file is missing rejects before loadCountry gets to catch it; that
+		// tag is skipped rather than costing the map every other country.
+		const countriesResult = (
+			await mapLimit(countryTags, FOLDER_LOAD_CONCURRENCY, async (tag) => {
+				try {
+					return await newCountryLoaders[tag.tag]!.load(session);
+				} catch (e) {
+					session.throwIfCancelled();
+					error(e);
+					return undefined;
+				}
+			})
+		).filter(
+			(r): r is LoadResult<Country | undefined> => r !== undefined,
+		);
 		const colorsFileResult = await this.colorsLoader.load(session);
 
 		const countries = countriesResult

@@ -1,8 +1,11 @@
 import * as assert from 'assert';
+import * as path from 'path';
 import {
-    Loader, ContentLoader, LoaderSession, LoadResult, LoadResultOD, mergeInLoadResult,
+    Loader, ContentLoader, FileLoader, FolderLoader, FolderFileFailure, FOLDER_LOAD_CONCURRENCY,
+    LoaderSession, LoadResult, LoadResultOD, mergeInLoadResult,
 } from '../util/loader/loader';
 import { UserError } from '../util/common';
+import * as fileloader from '../util/fileloader';
 
 // RecordingLoader counts loadImpl calls and can stall mid-load so concurrent load() calls
 // overlap in the dedup window. disableTelemetry is forced on so the test never depends on
@@ -332,6 +335,152 @@ describe('util/loader/loader', () => {
             session.loadingLoader.push(new CapturingContentLoader('cycle.txt', async () => 'x', false));
 
             await assert.rejects(loader.load(session), (e: unknown) => e instanceof UserError);
+        });
+    });
+
+    describe('FolderLoader', () => {
+        // The folder's file list and every file's expiry token come from the fileloader module;
+        // both are swapped on the module object, which is what the compiled `import` reads
+        // through. `error()` writes to console.error, which is silenced per test.
+        type FileTable = Record<string, string | Error>;
+        let files: FileTable = {};
+        let tokens: Record<string, string | Error> = {};
+        let inFlight = 0;
+        let peakInFlight = 0;
+        let gate: { promise: Promise<void>; resolve(v: void): void } | undefined;
+
+        class StubFileLoader extends FileLoader<string> {
+            protected async loadFromFile(): Promise<LoadResultOD<string>> {
+                inFlight++;
+                peakInFlight = Math.max(peakInFlight, inFlight);
+                try {
+                    if (gate) {
+                        await gate.promise;
+                    }
+                    const name = path.basename(this.file);
+                    const value = files[name];
+                    if (value instanceof Error) {
+                        throw value;
+                    }
+                    return { result: value ?? '' };
+                } finally {
+                    inFlight--;
+                }
+            }
+        }
+
+        class StubFolderLoader extends FolderLoader<string[], string> {
+            public failures: FolderFileFailure[] = [];
+            constructor() {
+                super('folder', StubFileLoader);
+                this.disableTelemetry = true;
+            }
+            protected async mergeFiles(
+                fileResults: LoadResult<string>[],
+                _session: LoaderSession,
+                failures: FolderFileFailure[],
+            ): Promise<LoadResult<string[]>> {
+                this.failures = failures;
+                return { result: fileResults.map((r) => r.result), dependencies: [this.folder + '/*'] };
+            }
+        }
+
+        const original = {
+            list: fileloader.listFilesFromModOrHOI4,
+            token: fileloader.hoiFileExpiryToken,
+            consoleError: console.error,
+        };
+
+        beforeEach(() => {
+            files = {};
+            tokens = {};
+            inFlight = 0;
+            peakInFlight = 0;
+            gate = undefined;
+            (fileloader as any).listFilesFromModOrHOI4 = async () => Object.keys(files);
+            (fileloader as any).hoiFileExpiryToken = async (file: string) => {
+                const name = path.basename(file);
+                const token = tokens[name];
+                if (token instanceof Error) {
+                    throw token;
+                }
+                return token ?? 'v1';
+            };
+            console.error = () => undefined;
+        });
+
+        afterEach(() => {
+            (fileloader as any).listFilesFromModOrHOI4 = original.list;
+            (fileloader as any).hoiFileExpiryToken = original.token;
+            console.error = original.consoleError;
+        });
+
+        it('loads at most FOLDER_LOAD_CONCURRENCY files at once and keeps their order', async () => {
+            for (let i = 0; i < 20; i++) {
+                files[`${i}.txt`] = `content ${i}`;
+            }
+            gate = deferred<void>();
+            const loader = new StubFolderLoader();
+
+            const pending = loader.load(new LoaderSession(false));
+            // Let the first wave of loads reach loadFromFile before releasing them.
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.strictEqual(inFlight, FOLDER_LOAD_CONCURRENCY);
+            gate.resolve();
+            const result = await pending;
+
+            assert.strictEqual(peakInFlight, FOLDER_LOAD_CONCURRENCY);
+            assert.deepStrictEqual(result.result, Object.values(files));
+        });
+
+        it('skips a file whose loader rejects and reports it to mergeFiles', async () => {
+            const boom = new Error('boom');
+            files = { 'a.txt': 'A', 'b.txt': boom, 'c.txt': 'C' };
+            const loader = new StubFolderLoader();
+
+            const result = await loader.load(new LoaderSession(false));
+
+            assert.deepStrictEqual(result.result, ['A', 'C']);
+            assert.strictEqual(loader.failures.length, 1);
+            assert.strictEqual(loader.failures[0].file, path.join('folder', 'b.txt'));
+            assert.strictEqual(loader.failures[0].error, boom);
+        });
+
+        it('skips a file whose expiry token cannot be read', async () => {
+            files = { 'a.txt': 'A', 'gone.txt': 'never read' };
+            tokens['gone.txt'] = new UserError("Can't find file folder/gone.txt");
+            const loader = new StubFolderLoader();
+
+            const result = await loader.load(new LoaderSession(false));
+
+            assert.deepStrictEqual(result.result, ['A']);
+            assert.strictEqual(loader.failures.length, 1);
+        });
+
+        it('still rejects when the session was cancelled', async () => {
+            files = { 'a.txt': 'A', 'b.txt': new Error('boom') };
+            let cancelled = false;
+            const session = new LoaderSession(false, () => cancelled);
+            const loader = new StubFolderLoader();
+            // Cancel between the file list and the loads, the way a closed panel does mid-load.
+            (fileloader as any).listFilesFromModOrHOI4 = async () => {
+                cancelled = true;
+                return Object.keys(files);
+            };
+
+            await assert.rejects(loader.load(session), (e: unknown) =>
+                e instanceof UserError && /cancelled/.test(e.message));
+        });
+
+        it('shouldReload is true when any one file changed on disk', async () => {
+            files = { 'a.txt': 'A', 'b.txt': 'B', 'c.txt': 'C' };
+            const loader = new StubFolderLoader();
+            await loader.load(new LoaderSession(false));
+
+            assert.strictEqual(await loader.shouldReload(new LoaderSession(false)), false);
+
+            tokens['b.txt'] = 'v2';
+            assert.strictEqual(await loader.shouldReload(new LoaderSession(false)), true);
         });
     });
 
