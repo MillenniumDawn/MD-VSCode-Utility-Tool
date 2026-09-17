@@ -9,6 +9,8 @@ import {
 	getInstallPathUri,
 	setInstallPathUri,
 } from "./installpath";
+import { refreshModDependencies } from "./moddependencies";
+import { checkParentModPaths, clearParentModCache } from "./parentmods";
 import { sendEvent } from "./telemetry";
 import { getConfiguration, isFileScheme } from "./vsccommon";
 
@@ -41,6 +43,18 @@ export function registerHoiFs(): vscode.Disposable {
 		);
 		void checkInstallPath();
 	}
+
+	disposables.push(
+		vscode.workspace.onDidChangeConfiguration(onChangeParentModPaths),
+	);
+	disposables.push(
+		vscode.workspace.onDidSaveTextDocument(onSaveTextDocument),
+	);
+	disposables.push(
+		vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
+	);
+	void checkParentModPaths();
+	void refreshModDependencies();
 
 	return vscode.Disposable.from(...disposables);
 }
@@ -80,6 +94,36 @@ function onChangeWorkspaceConfiguration(
 		clearInstallPathCache();
 		void clearDlcZipCache();
 		void checkInstallPath();
+	}
+}
+
+// Every input to the parent list ends in one resolution of the `.mod` dependencies, which tells
+// the indexes and the status bar once the list is final rather than once per input.
+function onChangeParentModPaths(e: vscode.ConfigurationChangeEvent): void {
+	if (e.affectsConfiguration(`${ConfigurationKey}.parentModPaths`)) {
+		clearParentModCache();
+		void clearDlcZipCache();
+		void checkParentModPaths();
+		void refreshModDependencies();
+	} else if (
+		e.affectsConfiguration(`${ConfigurationKey}.modFile`) ||
+		e.affectsConfiguration(`${ConfigurationKey}.userDataPath`)
+	) {
+		void refreshModDependencies();
+	}
+}
+
+// With `modFile` unset the selected `.mod` is the first one found in the workspace folders, so a
+// folder added or removed can change which file the dependencies come from, and where the
+// launcher's registry is looked for above it.
+function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent): void {
+	void refreshModDependencies();
+}
+
+// An edited `dependencies` block takes effect on save, not on the next reload.
+function onSaveTextDocument(document: vscode.TextDocument): void {
+	if (document.uri.path.endsWith(".mod")) {
+		void refreshModDependencies();
 	}
 }
 
