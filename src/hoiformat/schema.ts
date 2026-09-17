@@ -122,7 +122,7 @@ export type SchemaDef<T> = T extends boolean
 /**
  * Runtime shape of a `SchemaDef<T>` once its conditional type is erased. The converter
  * below walks schemas reflectively and cannot keep `T`, so it narrows against this
- * instead of falling back to `any`.
+ * union on `_type` instead of casting.
  */
 type SchemaPrimitive =
 	| "boolean"
@@ -132,12 +132,34 @@ type SchemaPrimitive =
 	| "numberlike"
 	| "enum"
 	| "raw";
-type SchemaContainer = {
-	_innerType: AnySchemaDef;
-	_type: "map" | "detailvalue" | "array";
-};
-type SchemaObject = { [key: string]: AnySchemaDef };
-type AnySchemaDef = SchemaPrimitive | SchemaContainer | SchemaObject;
+type MapSchemaDef = { _type: "map"; _innerType: AnySchemaDef };
+type ArraySchemaDef = { _type: "array"; _innerType: AnySchemaDef };
+type DetailValueSchemaDef = { _type: "detailvalue"; _innerType: AnySchemaDef };
+type ContainerSchemaDef = MapSchemaDef | ArraySchemaDef | DetailValueSchemaDef;
+type ObjectSchemaDef = { [key: string]: AnySchemaDef };
+type AnySchemaDef = SchemaPrimitive | ContainerSchemaDef | ObjectSchemaDef;
+
+function isContainerSchemaDef(
+	schema: ContainerSchemaDef | ObjectSchemaDef,
+): schema is ContainerSchemaDef {
+	const type = schema._type;
+	return type === "map" || type === "array" || type === "detailvalue";
+}
+
+/**
+ * Everything the converter can produce for one node. The token and, inside an array, the
+ * index are stamped onto any object result after conversion.
+ */
+type ConvertedObject = (
+	| NumberLike
+	| StringIgnoreCase<string>
+	| Enum
+	| Raw
+	| CustomMap<unknown>
+	| DetailValue<unknown>
+	| Record<string, unknown>
+) & { _index?: number };
+type ConvertedValue = string | number | boolean | undefined | ConvertedObject;
 
 //#endregion
 
@@ -290,12 +312,12 @@ function convertEnum(node: Node): HOIPartial<Enum> {
 		: { _values: [], _token: undefined };
 }
 
-function convertMap<T>(
+function convertMap(
 	node: Node,
-	innerSchema: SchemaDef<T>,
-	constants: Record<string, NodeValue> = {},
-): HOIPartial<CustomMap<T>> {
-	const result: HOIPartial<CustomMap<T>> = { _map: {}, _token: undefined };
+	innerSchema: AnySchemaDef,
+	constants: Record<string, NodeValue>,
+): CustomMap<unknown> {
+	const result: CustomMap<unknown> = { _map: {}, _token: undefined };
 	const map = result._map;
 
 	forEachNodeValue(node, (child) => {
@@ -311,7 +333,7 @@ function convertMap<T>(
 		}
 
 		map[childName] = {
-			_value: convertNodeToJson(child, innerSchema, constants),
+			_value: convertNode(child, innerSchema, constants),
 			_key: childName,
 		};
 	});
@@ -319,11 +341,11 @@ function convertMap<T>(
 	return result;
 }
 
-function convertDetailValue<T>(
+function convertDetailValue(
 	node: Node,
-	innerSchema: SchemaDef<T>,
-	constants: Record<string, NodeValue> = {},
-): HOIPartial<DetailValue<T>> {
+	innerSchema: AnySchemaDef,
+	constants: Record<string, NodeValue>,
+): DetailValue<unknown> {
 	return {
 		_attachment: node.valueAttachment?.name,
 		_attachmentToken: node.valueAttachmentToken ?? undefined,
@@ -332,28 +354,48 @@ function convertDetailValue<T>(
 		_startToken: node.valueStartToken ?? undefined,
 		_endToken: node.valueEndToken ?? undefined,
 		_token: node.nameToken ?? undefined,
-		_value: convertNodeToJson(node, innerSchema, constants),
+		_value: convertNode(node, innerSchema, constants),
 	};
 }
 
-function convertObject<T>(
-	node: Node,
-	schemaDef: SchemaDef<T>,
-	constants: Record<string, NodeValue> = {},
-): HOIPartial<T> {
-	const result: Record<string, unknown> = {};
-	const schema = schemaDef as unknown as SchemaObject;
+// The seed loop in convertObject creates every accumulating field the schema declares, so a
+// miss here is a converter bug: fail loudly rather than drop the value.
+function seeded<V>(slots: Map<string, V>, key: string): V {
+	const slot = slots.get(key);
+	if (slot === undefined) {
+		throw new Error("Schema field was not seeded: " + key);
+	}
+	return slot;
+}
 
-	for (const childSchemaEntry of Object.entries(schema)) {
-		if (typeof childSchemaEntry[1] === "object") {
-			const type = childSchemaEntry[1]._type;
-			if (type === "map") {
-				result[childSchemaEntry[0]] = { _map: {}, _token: undefined };
-			} else if (type === "array") {
-				result[childSchemaEntry[0]] = [];
+function convertObject(
+	node: Node,
+	schema: ObjectSchemaDef,
+	constants: Record<string, NodeValue>,
+): Record<string, unknown> {
+	const result: Record<string, unknown> = {};
+	const arrays = new Map<string, unknown[]>();
+	const maps = new Map<string, CustomMap<unknown>>();
+	const enums = new Map<string, Enum>();
+
+	for (const [key, childSchema] of Object.entries(schema)) {
+		if (childSchema === "enum") {
+			const slot: Enum = { _values: [], _token: undefined };
+			enums.set(key, slot);
+			result[key] = slot;
+		} else if (
+			typeof childSchema === "object" &&
+			isContainerSchemaDef(childSchema)
+		) {
+			if (childSchema._type === "map") {
+				const slot: CustomMap<unknown> = { _map: {}, _token: undefined };
+				maps.set(key, slot);
+				result[key] = slot;
+			} else if (childSchema._type === "array") {
+				const slot: unknown[] = [];
+				arrays.set(key, slot);
+				result[key] = slot;
 			}
-		} else if (childSchemaEntry[1] === "enum") {
-			result[childSchemaEntry[0]] = { _values: [], _token: undefined };
 		}
 	}
 
@@ -374,52 +416,43 @@ function convertObject<T>(
 			return;
 		}
 
-		let setChildValue = true;
-		if (typeof childSchemaDef === "object") {
-			const type = childSchemaDef._type;
-
-			if (type === "map") {
-				const mapData = convertNodeToJson<unknown>(
-					child,
-					childSchemaDef as SchemaDef<unknown>,
-					constants,
-				) as CustomMap<unknown>;
-				Object.assign(
-					(result[childName] as CustomMap<unknown>)._map,
-					mapData._map,
-				);
-			} else if (type === "array") {
-				const innerType = childSchemaDef._innerType as SchemaDef<unknown>;
-				const convertedChild = convertNodeToJson(child, innerType, constants);
-				if (typeof convertedChild === "object") {
-					(convertedChild as { _index?: number })._index = index;
-				}
-
-				(result[childName] as unknown[]).push(convertedChild);
-			} else {
-				setChildValue = false;
-			}
-		} else if (childSchemaDef === "enum") {
-			const enums = convertNodeToJson<unknown>(
-				child,
-				childSchemaDef as SchemaDef<unknown>,
-				constants,
-			) as Enum;
-			(result[childName] as Enum)._values.push(...enums._values);
-		} else {
-			setChildValue = false;
-		}
-
-		if (!setChildValue) {
-			result[childName] = convertNodeToJson(
-				child,
-				childSchemaDef as SchemaDef<unknown>,
-				constants,
+		if (childSchemaDef === "enum") {
+			seeded(enums, childName)._values.push(
+				...convertEnum(child)._values,
 			);
+		} else if (
+			typeof childSchemaDef === "object" &&
+			isContainerSchemaDef(childSchemaDef)
+		) {
+			switch (childSchemaDef._type) {
+				case "map":
+					Object.assign(
+						seeded(maps, childName)._map,
+						convertMap(child, childSchemaDef._innerType, constants)._map,
+					);
+					break;
+				case "array": {
+					const convertedChild = convertNode(
+						child,
+						childSchemaDef._innerType,
+						constants,
+					);
+					if (typeof convertedChild === "object") {
+						convertedChild._index = index;
+					}
+					seeded(arrays, childName).push(convertedChild);
+					break;
+				}
+				case "detailvalue":
+					result[childName] = convertNode(child, childSchemaDef, constants);
+					break;
+			}
+		} else {
+			result[childName] = convertNode(child, childSchemaDef, constants);
 		}
 	});
 
-	return result as HOIPartial<T>;
+	return result;
 }
 
 function tryParseVariable(str: string, isNumber: true): number | undefined;
@@ -451,58 +484,71 @@ export function convertNodeToJson<T>(
 	schemaDef: SchemaDef<T>,
 	constants: Record<string, NodeValue> = {},
 ): HOIPartial<T> {
-	const schema = schemaDef as unknown as AnySchemaDef;
-	let result: HOIPartial<T>;
+	// `SchemaDef<T>` and `HOIPartial<T>` are conditional types that only resolve for a
+	// concrete `T`, so neither can be related to the runtime unions generically. This is the
+	// one place the typed public surface meets the reflective converter.
+	return convertNode(
+		node,
+		schemaDef as unknown as AnySchemaDef,
+		constants,
+	) as HOIPartial<T>;
+}
+
+function convertNode(
+	node: Node,
+	schema: AnySchemaDef,
+	constants: Record<string, NodeValue>,
+): ConvertedValue {
+	let result: ConvertedValue;
 	node = applyConstantsToNode(node, constants);
 
 	if (typeof schema === "string") {
 		switch (schema) {
 			case "string":
-				result = convertString(node) as HOIPartial<T>;
+				result = convertString(node);
 				break;
 			case "number":
-				result = convertNumber(node) as HOIPartial<T>;
+				result = convertNumber(node);
 				break;
 			case "numberlike":
-				result = convertNumberLike(node) as HOIPartial<T>;
+				result = convertNumberLike(node);
 				break;
 			case "stringignorecase":
-				result = convertStringIgnoreCase(node) as HOIPartial<T>;
+				result = convertStringIgnoreCase(node);
 				break;
 			case "boolean":
-				result = convertBoolean(node) as HOIPartial<T>;
+				result = convertBoolean(node);
 				break;
 			case "enum":
-				result = convertEnum(node) as HOIPartial<T>;
+				result = convertEnum(node);
 				break;
 			case "raw":
-				result = { _raw: node } as HOIPartial<T>;
+				result = { _raw: node, _token: undefined };
 				break;
 			default:
 				throw new Error("Unknown schema " + schema);
 		}
 	} else if (typeof schema === "object") {
-		const type = schema._type;
-		if (type === "map") {
-			result = convertMap(node, schema._innerType, constants) as HOIPartial<T>;
-		} else if (type === "array") {
-			throw new Error("Array can't be here.");
-		} else if (type === "detailvalue") {
-			result = convertDetailValue(
-				node,
-				schema._innerType,
-				constants,
-			) as HOIPartial<T>;
+		if (isContainerSchemaDef(schema)) {
+			switch (schema._type) {
+				case "map":
+					result = convertMap(node, schema._innerType, constants);
+					break;
+				case "array":
+					throw new Error("Array can't be here.");
+				case "detailvalue":
+					result = convertDetailValue(node, schema._innerType, constants);
+					break;
+			}
 		} else {
-			result = convertObject(node, schema as unknown as SchemaDef<T>, constants);
+			result = convertObject(node, schema, constants);
 		}
 	} else {
 		throw new Error("Bad schema " + schema);
 	}
 
 	if (typeof result === "object") {
-		(result as { _token: Token | undefined })._token =
-			node.nameToken ?? undefined;
+		result._token = node.nameToken ?? undefined;
 	}
 
 	return result;

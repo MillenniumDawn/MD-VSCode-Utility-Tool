@@ -29,7 +29,7 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
         this.progressListener?.(message, current, total);
     }
 
-    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: any, session: LoaderSession): Promise<LoadResultOD<FocusTreeLoaderResult>> {
+    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: unknown, session: LoaderSession): Promise<LoadResultOD<FocusTreeLoaderResult>> {
         if (error || (content === undefined)) {
             throw error;
         }

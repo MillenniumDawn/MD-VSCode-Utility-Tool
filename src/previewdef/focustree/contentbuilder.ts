@@ -552,7 +552,7 @@ async function renderInlayOverrideChild<T extends keyof RenderChildTypeMap>(
         return undefined;
     }
 
-    const iconLikeChild = child as any as IconType & ButtonType;
+    const iconLikeChild = child as unknown as IconType & ButtonType;
     let [x, y] = calculateBBox(iconLikeChild, parentInfo);
     if (iconLikeChild.centerposition) {
         x -= sprite.width / 2;

@@ -1,7 +1,7 @@
 import { sendException } from "./telemetry";
 import { forceError, UserError } from "./common";
 
-export function debug(message: any, ...args: any[]): void {
+export function debug(message: unknown, ...args: unknown[]): void {
     if (process.env.NODE_ENV !== 'production') {
         console.log(message, ...args);
     }
