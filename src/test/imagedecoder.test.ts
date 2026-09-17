@@ -10,6 +10,7 @@ import {
 	_terminateImageWorkerForTest,
 	_getWorkerCountForTest,
 } from "../util/image/imagedecoder";
+import { UserError } from "../util/common";
 // Imported only so tsc emits the worker file into this test's outDir; it is import-safe on the main
 // thread (its message handler attaches only when actually run as a worker_threads worker).
 import "../util/image/imageWorker";
@@ -112,8 +113,11 @@ describe("util/image/imagedecoder", () => {
 			assert.deepStrictEqual(Array.from(decoded.data), [74, 37, 0, 111]);
 		});
 
-		it("throws for a malformed DDS buffer (behavior preserved for getImage catch)", () => {
-			assert.throws(() => decodeImageToPngSync(Buffer.alloc(8), "dds"));
+		it("throws a UserError for a malformed DDS buffer (behavior preserved for getImage catch)", () => {
+			assert.throws(
+				() => decodeImageToPngSync(Buffer.alloc(8), "dds"),
+				(e: unknown) => e instanceof UserError && /truncated/.test(e.message),
+			);
 		});
 	});
 
@@ -176,7 +180,10 @@ describe("util/image/imagedecoder", () => {
 			const originalConsoleError = console.error;
 			console.error = () => undefined;
 			try {
-				await assert.rejects(decodeImageToPng(Buffer.alloc(8), "dds"));
+				await assert.rejects(
+					decodeImageToPng(Buffer.alloc(8), "dds"),
+					(e: unknown) => e instanceof UserError && /truncated/.test(e.message),
+				);
 				// Worker survives a decode error: a subsequent valid decode still succeeds.
 				const ok = await decodeImageToPng(makeTga(), "tga");
 				assert.strictEqual(ok.width, 2);
