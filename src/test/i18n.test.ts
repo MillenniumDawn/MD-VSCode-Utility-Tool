@@ -24,6 +24,19 @@ describe('util/i18n', () => {
         it('reuses an arg referenced by multiple placeholders', () => {
             assert.strictEqual(localize(unknownKey, '{0}-{0}', 'x'), 'x-x');
         });
+
+        it('leaves braces alone when there are no args', () => {
+            assert.strictEqual(localize(unknownKey, 'a {} b {0}'), 'a {} b {0}');
+        });
+
+        it('substitutes correctly when the argument count changes between calls', () => {
+            // The pattern is kept per argument count; a call with two must not reuse the one built
+            // for one, nor the other way round, and a global pattern must be reusable.
+            assert.strictEqual(localize(unknownKey, '{0} {1}', 'a', 'b'), 'a b');
+            assert.strictEqual(localize(unknownKey, '{0} {1}', 'c'), 'c {1}');
+            assert.strictEqual(localize(unknownKey, '{1} {0} {1}', 'd', 'e'), 'e d e');
+            assert.strictEqual(localize(unknownKey, '{0} {1}', 'f', 'g'), 'f g');
+        });
     });
 
     describe('localizeText', () => {

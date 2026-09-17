@@ -1,5 +1,15 @@
 Unreleased
 
+  Functionality:
+
+- Indexing and file listings read mod, game and DLC folders several directories at a time instead of one after another, and the DLC archives are checked together instead of one by one, so a large mod indexes and its previews open faster. Issue #200.
+- Previews do less work on every refresh: an unchanged document is recognised without re-hashing it, effects are grouped under their conditions without rescanning, and translated text no longer rebuilds its placeholder pattern per message. Issue #200.
+
+  Bugfixes:
+
+- [ World Map Previewer ] Exporting the map no longer leaves mouse handlers behind that made panning heavier after every export, hovering the selected province no longer paints the hover highlight over the selection, resource icons load once per map instead of on every progress update, and the warnings list is only rebuilt when the warnings change. Issue #200.
+- Dragging to pan a preview scrolls once per frame instead of once per mouse event, and a decision chain routed through several hidden decisions is bridged without repeating the same walk. Issue #200.
+
 v1.1.36
 
   Functionality:

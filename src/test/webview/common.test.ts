@@ -361,6 +361,58 @@ describe('webview/util/common', function () {
         });
     });
 
+    describe('drag to pan', function () {
+        it('scrolls once per frame to where the last mouse position points, not once per event', async function () {
+            document.body.innerHTML = '<div id="dragger"></div>';
+            const calls: [number, number][] = [];
+            const orig = window.scroll;
+            (window as any).scroll = (x: number, y: number) => { calls.push([x, y]); };
+            try {
+                // initCommon wires the dragger on load; this is the one call in this file, so the
+                // listener it registers is not doubled by the describe below.
+                initCommon();
+                window.dispatchEvent(new Event('load'));
+                calls.length = 0; // the load handler restores the saved scroll position first
+                const dragger = document.getElementById('dragger')!;
+
+                const move = (clientX: number, clientY: number) =>
+                    document.body.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX, clientY }));
+                const frame = () => new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
+
+                dragger.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 100, clientY: 50 }));
+                move(90, 45);
+                move(80, 40);
+                assert.deepStrictEqual(calls, []);
+
+                await frame();
+                // jsdom has no scroll offset, so pageX at press time equals clientX: the target is
+                // press position minus the latest pointer position. Other suites sharing this page
+                // may have wired the dragger too, so the count is per wiring rather than one.
+                assert.ok(calls.length >= 1);
+                assert.ok(calls.every(c => c[0] === 20 && c[1] === 10), JSON.stringify(calls));
+                const perFrame = calls.length;
+
+                move(70, 35);
+                move(60, 30);
+                move(50, 25);
+                await frame();
+                assert.strictEqual(calls.length, perFrame * 2);
+                assert.ok(calls.slice(perFrame).every(c => c[0] === 50 && c[1] === 25), JSON.stringify(calls));
+
+                document.body.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                move(0, 0);
+                await frame();
+                assert.strictEqual(calls.length, perFrame * 2);
+            } finally {
+                // Whatever happened above, the shared page must not be left mid-drag for the other
+                // suites, which read the panning signal.
+                document.body.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                window.scroll = orig;
+                document.body.innerHTML = '';
+            }
+        });
+    });
+
     describe('initCommon', function () {
         it('does not throw on repeated calls', function () {
             assert.doesNotThrow(initCommon);

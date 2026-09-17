@@ -39,11 +39,28 @@ interface CacheEntry<V> {
 
 export class Cache<V> {
 	protected _cache: Record<string, CacheEntry<V>> = {};
+	// Kept alongside the record so a count-only limit check does not have to materialise every
+	// key on every miss. Every write to _cache goes through setEntry/deleteEntry to keep it right.
+	private _size = 0;
 	private _intervalToken: NodeJS.Timeout | null = null;
 	private _accessCounter = 0;
 
 	protected nextAccessSeq(): number {
 		return ++this._accessCounter;
+	}
+
+	protected setEntry(key: string, entry: CacheEntry<V>): void {
+		if (this._cache[key] === undefined) {
+			this._size++;
+		}
+		this._cache[key] = entry;
+	}
+
+	private deleteEntry(key: string): void {
+		if (this._cache[key] !== undefined) {
+			delete this._cache[key];
+			this._size--;
+		}
 	}
 
 	constructor(protected readonly options: CacheOptions<V>) {
@@ -98,21 +115,22 @@ export class Cache<V> {
 			weigh,
 		};
 
-		this._cache[key] = newEntry;
+		this.setEntry(key, newEntry);
 		this.enforceLimits();
 		return newEntry.value;
 	}
 
 	public remove(key: string = ""): void {
-		delete this._cache[key];
+		this.deleteEntry(key);
 	}
 
 	public clear(): void {
 		this._cache = {};
+		this._size = 0;
 	}
 
 	public dispose(): void {
-		this._cache = {};
+		this.clear();
 		if (this._intervalToken) {
 			clearInterval(this._intervalToken);
 		}
@@ -122,7 +140,7 @@ export class Cache<V> {
 		const now = Date.now();
 		for (const [key, entry] of Object.entries(this._cache)) {
 			if (entry.lastAccess + this.options.life < now) {
-				delete this._cache[key];
+				this.deleteEntry(key);
 			}
 		}
 	}
@@ -143,6 +161,11 @@ export class Cache<V> {
 	protected enforceLimits(): void {
 		const { maxSize, maxBytes } = this.options;
 		if (maxSize === undefined && maxBytes === undefined) {
+			return;
+		}
+		// Only a byte limit needs every entry re-weighed; a count limit that is not exceeded is
+		// answered from the running size.
+		if (maxBytes === undefined && this._size <= maxSize!) {
 			return;
 		}
 
@@ -183,7 +206,7 @@ export class Cache<V> {
 				continue;
 			}
 			totalBytes -= entry.weight;
-			delete this._cache[key];
+			this.deleteEntry(key);
 			count--;
 		}
 	}
@@ -242,7 +265,7 @@ export class PromiseCache<V> extends Cache<Promise<V>> {
 			weight: 0,
 		};
 
-		this._cache[key] = newEntry;
+		this.setEntry(key, newEntry);
 
 		// The weight is only known once the promise resolves; update it then and re-check limits.
 		const weigher = this.pweigher;

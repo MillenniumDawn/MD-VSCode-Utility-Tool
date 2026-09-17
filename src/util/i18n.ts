@@ -55,14 +55,32 @@ export function localize(
 		message = table[key] ?? message;
 	}
 
-	const regex = new RegExp(
-		"\\{(" + args.map((_, i) => i.toString()).join("|") + ")\\}",
-		"g",
-	);
+	if (args.length === 0) {
+		return message;
+	}
 	return message.replace(
-		regex,
-		(_, group1) => String(args[parseInt(group1)] ?? ""),
+		placeholderPattern(args.length),
+		(_, group1) => String(args[parseInt(group1, 10)] ?? ""),
 	);
+}
+
+// One pattern per argument count, built on first use: localize runs tens of thousands of times
+// during an index build, and compiling the same regex on each call was most of what it did. The
+// pattern only names the placeholders that have an argument, so `{1}` with a single argument is
+// left in the text as it always was.
+const placeholderPatterns: RegExp[] = [];
+
+function placeholderPattern(arity: number): RegExp {
+	let pattern = placeholderPatterns[arity];
+	if (pattern === undefined) {
+		const indexes: string[] = [];
+		for (let i = 0; i < arity; i++) {
+			indexes.push(i.toString());
+		}
+		pattern = new RegExp("\\{(" + indexes.join("|") + ")\\}", "g");
+		placeholderPatterns[arity] = pattern;
+	}
+	return pattern;
 }
 
 export function localizeText(text: string): string {
