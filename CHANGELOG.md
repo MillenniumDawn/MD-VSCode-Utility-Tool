@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- The trigger and effect evaluators behind every preview now have their own tests, so a wrong branch shown for an `if`/`else`, `NOT` or `count_triggers` block is caught before release. Issue #199.
+
 v1.1.36
 
   Functionality:
