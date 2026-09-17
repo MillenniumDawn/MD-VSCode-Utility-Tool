@@ -21,32 +21,59 @@ import { getGfxContainerFile } from "../gfxindex";
 import { gfxIndex } from "../featureflags";
 export { Sprite, Image };
 
-// Decoded PNG buffers are the heaviest thing in memory; bound the image cache by total bytes
-// (least-recently-accessed eviction) so large texture packs can't grow it without limit. The
-// smaller caches use an entry-count cap. (Entry sizes vary ~1000x for images, so a count cap
-// alone would not bound their RAM.)
+// Decoded PNG buffers are the heaviest thing in memory; bound the image and sprite caches by
+// total bytes (least-recently-accessed eviction) so large texture packs can't grow them without
+// limit. An entry weighs everything it retains -- the PNG buffer, the memoized data URI, and for
+// a sprite its split frames and tiles -- and is re-weighed on access, since those are built
+// lazily after the entry is cached. (Entry sizes vary ~1000x for images, so a count cap alone
+// would not bound their RAM; the gfx map cache keeps one.)
 const imageCacheMaxBytes = 128 * 1024 * 1024;
 const imageCache = new PromiseCache<Image | undefined>({
 	expireWhenChange: hoiFileExpiryToken,
 	factory: getImage,
 	life: 10 * 60 * 1000,
 	maxBytes: imageCacheMaxBytes,
-	weigher: (image) => (image ? image.pngBuffer.length : 0),
+	weigher: (image) => image?.retainedBytes ?? 0,
 });
 
-const spriteCache = new PromiseCache({
+// A sprite's weight includes its base image, which also sits in imageCache: the sprite keeps it
+// alive after imageCache evicts it, so the two caps overlap rather than add.
+const spriteCacheMaxBytes = 128 * 1024 * 1024;
+const spriteCache = new PromiseCache<Sprite | undefined>({
 	expireWhenChange: spriteCacheExpiryToken,
 	factory: getSpriteByKey,
 	life: 10 * 60 * 1000,
 	maxSize: 128,
+	maxBytes: spriteCacheMaxBytes,
+	weigher: (sprite) => sprite?.retainedBytes ?? 0,
 });
 
-const gfxMapCache = new PromiseCache({
+type GfxMap = Record<string, SpriteType | CorneredTileSpriteType>;
+
+// Sized to hold every .gfx under interface/ across the mod, the game and its DLCs: the icon
+// fallback scan and the inlay sprite scan each walk that whole list, and with a cap below its
+// length the first file was evicted before the scan reached the last, so every icon parsed the
+// tree again. The maps are small (a name and a texture path per sprite; the whole tree of
+// Millennium Dawn plus vanilla is ~80k sprites, ~25 MB) but not fixed in size, so a byte limit
+// backs the count. A map's weight is fixed when it is built, so it is computed once there.
+const gfxMapWeights = new WeakMap<GfxMap, number>();
+const gfxMapCache = new PromiseCache<GfxMap>({
 	expireWhenChange: hoiFileExpiryToken,
 	factory: loadGfxMap,
 	life: 10 * 60 * 1000,
-	maxSize: 64,
+	maxSize: 1024,
+	maxBytes: 64 * 1024 * 1024,
+	weigher: (gfxMap) => gfxMapWeights.get(gfxMap) ?? 0,
 });
+
+/**
+ * The sprites a .gfx file defines, by name. Shared with the icon resolution, so a scan that
+ * reads a file here leaves it warm for the sprites drawn from it later in the same render. The
+ * map is shared and read-only; a file that fails to parse yields an empty map.
+ */
+export function getGfxSpriteMap(gfxFilePath: string): Promise<Readonly<GfxMap>> {
+	return gfxMapCache.get(gfxFilePath);
+}
 
 // Diagnostic counters for profiling focus-tree icon resolution (plan Stap 1). They separate
 // "searching" cost (index misses + fallback-scan iterations) from "conversion" cost (DDS/TGA->PNG
@@ -264,10 +291,9 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
 	}
 }
 
-async function loadGfxMap(
-	path: string,
-): Promise<Record<string, SpriteType | CorneredTileSpriteType>> {
-	const gfxMap: Record<string, SpriteType> = {};
+async function loadGfxMap(path: string): Promise<GfxMap> {
+	const gfxMap: GfxMap = {};
+	let weight = 0;
 	try {
 		iconResolveStats.gfxMapParses++;
 		const [buffer, realPath] = await readFileFromModOrHOI4(path);
@@ -278,10 +304,14 @@ async function loadGfxMap(
 		);
 		const spriteTypes = getSpriteTypes(node);
 
-		spriteTypes.forEach((st) => (gfxMap[st.name] = st));
+		for (const spriteType of spriteTypes) {
+			gfxMap[spriteType.name] = spriteType;
+			weight += (spriteType.name.length + spriteType.texturefile.length) * 2 + 96;
+		}
 	} catch (e) {
 		error(e);
 	}
 
+	gfxMapWeights.set(gfxMap, weight);
 	return gfxMap;
 }
