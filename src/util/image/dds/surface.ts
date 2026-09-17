@@ -126,7 +126,7 @@ export class Surface {
 
 		const bitsPerPixel = pixelFormat.bitsPerPixel;
 		const bitsPerRow = bitsPerPixel * this.width;
-		const pitch = (bitsPerRow + 7) >>> 3;
+		const pitch = Math.ceil(bitsPerRow / 8);
 
 		let resultOffset = 0;
 
@@ -171,7 +171,7 @@ export class Surface {
 		const blockSize = getBlockSize(pixelFormat.compressFormat);
 		const width = this.width;
 		const height = this.height;
-		const blocksPerLine = (width + 3) >> 2;
+		const blocksPerLine = Math.ceil(width / 4);
 
 		for (let i = 0, k = 0; i < length; i += blockSize, k++) {
 			switch (pixelFormat.compressFormat) {

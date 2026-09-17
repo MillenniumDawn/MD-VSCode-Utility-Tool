@@ -25,6 +25,11 @@ import {
 	getImageSizeInBytes,
 } from "./pixelformat";
 import { UserError } from "../../common";
+import {
+	assertImageDimensions,
+	MAX_IMAGE_DIMENSION,
+	MAX_IMAGE_PIXELS,
+} from "../imagelimits";
 
 export class DDS {
 	private constructor(
@@ -37,19 +42,31 @@ export class DDS {
 	) {}
 
 	public static parse(buffer: ArrayBuffer, byteOffset: number): DDS {
+		if (
+			!Number.isSafeInteger(byteOffset) ||
+			byteOffset < 0 ||
+			byteOffset + HEADER_LENGTH_INT * 4 > buffer.byteLength
+		) {
+			throw new UserError("DDS header is truncated");
+		}
 		const headerArray = new Int32Array(buffer, byteOffset, HEADER_LENGTH_INT);
 		if (headerArray[0] !== DDS_MAGIC) {
 			throw new UserError("Invalid magic number in DDS header");
 		}
 
 		const header = extractHeader(headerArray);
+		assertImageDimensions(header.dwWidth, header.dwHeight, "DDS");
 		if (
 			header.ddspf.dwFlags === DDPF_FOURCC &&
 			header.ddspf.dwFourCC === FOURCC_DX10
 		) {
+			const dxt10Offset = byteOffset + HEADER_LENGTH_INT * 4;
+			if (dxt10Offset + HEADER_DXT10_LENGTH_INT * 4 > buffer.byteLength) {
+				throw new UserError("DDS DX10 header is truncated");
+			}
 			const dxt10HeaderArray = new Int32Array(
 				buffer,
-				byteOffset + HEADER_LENGTH_INT * 4,
+				dxt10Offset,
 				HEADER_DXT10_LENGTH_INT,
 			);
 			const dxt10Header = extractDxt10Header(dxt10HeaderArray);
@@ -75,8 +92,7 @@ export class DDS {
 			);
 		}
 
-		const mipmapCount =
-			header.dwCaps & DDSCAPS_MIPMAP ? header.dwMipMapCount - 1 : 0;
+		const mipmapCount = getMipmapCount(header);
 		const offset = byteOffset + HEADER_LENGTH_INT * 4;
 
 		let images: Surface[];
@@ -101,6 +117,14 @@ export class DDS {
 				cubeMaps.push("Z-");
 			}
 
+			validateSurfaceWork(
+				pixelFormat,
+				header.dwWidth,
+				header.dwHeight,
+				mipmapCount,
+				1,
+				cubeMaps.length,
+			);
 			[images] = parseCubeMap(
 				buffer,
 				offset,
@@ -111,6 +135,14 @@ export class DDS {
 				mipmapCount,
 			);
 		} else if (volume) {
+			validateSurfaceWork(
+				pixelFormat,
+				header.dwWidth,
+				header.dwHeight,
+				mipmapCount,
+				header.dwDepth,
+				1,
+			);
 			[images] = parseVolumeTexture(
 				buffer,
 				offset,
@@ -121,6 +153,14 @@ export class DDS {
 				mipmapCount,
 			);
 		} else {
+			validateSurfaceWork(
+				pixelFormat,
+				header.dwWidth,
+				header.dwHeight,
+				mipmapCount,
+				1,
+				1,
+			);
 			[images] = parseTexture(
 				buffer,
 				offset,
@@ -160,18 +200,29 @@ export class DDS {
 			);
 		}
 
-		const mipmapCount =
-			header.dwCaps & DDSCAPS_MIPMAP ? header.dwMipMapCount - 1 : 0;
-		let offset = byteOffset + (HEADER_LENGTH_INT + HEADER_DXT10_LENGTH_INT) * 4;
-
-		const allImages: Surface[] = [];
-		const cubeMaps: string[] = ["X+", "X-", "Y+", "Y-", "Z+", "Z-"];
+		const mipmapCount = getMipmapCount(header);
 		const arraySize = dxt10Header.arraySize;
+		if (volume && arraySize !== 1) {
+			throw new UserError("DX10 volume textures must have one array item");
+		}
 		const height =
 			dxt10Header.resourceDimension ===
 			ResourceDimension.DDS_DIMENSION_TEXTURE1D
 				? 1
 				: header.dwHeight;
+		const cubeMaps: string[] = ["X+", "X-", "Y+", "Y-", "Z+", "Z-"];
+		validateSurfaceWork(
+			pixelFormat,
+			header.dwWidth,
+			height,
+			mipmapCount,
+			volume ? header.dwDepth : 1,
+			cubeMap ? cubeMaps.length : 1,
+			arraySize,
+		);
+		let offset = byteOffset + (HEADER_LENGTH_INT + HEADER_DXT10_LENGTH_INT) * 4;
+
+		const allImages: Surface[] = [];
 
 		for (let i = 0; i < arraySize; i++) {
 			let images: Surface[];
@@ -218,6 +269,106 @@ export class DDS {
 			mipmapCount,
 		);
 	}
+}
+
+function getMipmapCount(header: DDSHeader): number {
+	if (!(header.dwCaps & DDSCAPS_MIPMAP)) {
+		return 0;
+	}
+	if (!Number.isSafeInteger(header.dwMipMapCount) || header.dwMipMapCount < 1) {
+		throw new UserError(
+			`DDS mipmap count ${header.dwMipMapCount} is not valid`,
+		);
+	}
+	return header.dwMipMapCount - 1;
+}
+
+function validateSurfaceWork(
+	pixelFormat: PixelFormat,
+	width: number,
+	height: number,
+	mipmapCount: number,
+	depth: number,
+	faces: number,
+	arraySize: number = 1,
+): void {
+	assertImageDimensions(width, height, "DDS");
+	validateCount(depth, "depth");
+	validateCount(faces, "cubemap face count");
+	validateCount(arraySize, "DX10 array size");
+	if (
+		mipmapCount < 0 ||
+		mipmapCount > Math.floor(Math.log2(Math.max(width, height)))
+	) {
+		throw new UserError(
+			`DDS mipmap count ${mipmapCount} is not valid for ${width}x${height}`,
+		);
+	}
+
+	let totalPixels = 0;
+	let levelWidth = width;
+	let levelHeight = height;
+	let levelDepth = depth;
+	for (let level = 0; level <= mipmapCount; level++) {
+		getImageSizeInBytes(pixelFormat, levelWidth, levelHeight);
+		const levelPixels = checkedProduct(
+			levelWidth,
+			levelHeight,
+			"DDS surface pixel count",
+		);
+		const surfacePixels = checkedProduct(
+			checkedProduct(levelPixels, levelDepth, "DDS surface pixel count"),
+			checkedProduct(faces, arraySize, "DDS surface count"),
+			"DDS surface pixel count",
+		);
+		totalPixels = checkedSum(
+			totalPixels,
+			surfacePixels,
+			"DDS decoded pixel work",
+		);
+		if (totalPixels > MAX_IMAGE_PIXELS) {
+			throw new UserError(
+				`DDS decoded surface pixel work ${totalPixels} exceeds the supported maximum (${MAX_IMAGE_PIXELS} pixels)`,
+			);
+		}
+		levelWidth = Math.max(1, Math.floor(levelWidth / 2));
+		levelHeight = Math.max(1, Math.floor(levelHeight / 2));
+		levelDepth = Math.max(1, Math.floor(levelDepth / 2));
+	}
+}
+
+function validateCount(value: number, name: string): void {
+	if (
+		!Number.isSafeInteger(value) ||
+		value < 1 ||
+		value > MAX_IMAGE_DIMENSION
+	) {
+		throw new UserError(`DDS ${name} ${value} is not valid`);
+	}
+}
+
+function checkedProduct(left: number, right: number, name: string): number {
+	if (
+		!Number.isSafeInteger(left) ||
+		!Number.isSafeInteger(right) ||
+		left < 0 ||
+		right < 0 ||
+		(left !== 0 && right > Number.MAX_SAFE_INTEGER / left)
+	) {
+		throw new UserError(`${name} is too large`);
+	}
+	return left * right;
+}
+
+function checkedSum(left: number, right: number, name: string): number {
+	if (
+		!Number.isSafeInteger(left) ||
+		!Number.isSafeInteger(right) ||
+		left > Number.MAX_SAFE_INTEGER - right
+	) {
+		throw new UserError(`${name} is too large`);
+	}
+	return left + right;
 }
 
 function extractHeader(headerArray: Int32Array): DDSHeader {
@@ -302,24 +453,26 @@ function parseCubeMap(
 	const result: Surface[] = [];
 
 	for (const cubeMap of cubeMaps) {
+		let mipWidth = width;
+		let mipHeight = height;
 		offset = pushSurface(
 			result,
 			buffer,
 			offset,
-			width,
-			height,
+			mipWidth,
+			mipHeight,
 			pixelFormat,
 			cubeMap,
 		);
 		for (let i = 0; i < mipmapCount; i++) {
-			width = Math.max(1, Math.floor(width / 2));
-			height = Math.max(1, Math.floor(height / 2));
+			mipWidth = Math.max(1, Math.floor(mipWidth / 2));
+			mipHeight = Math.max(1, Math.floor(mipHeight / 2));
 			offset = pushSurface(
 				result,
 				buffer,
 				offset,
-				width,
-				height,
+				mipWidth,
+				mipHeight,
 				pixelFormat,
 				`Mipmap of ${cubeMap} #${i + 1}`,
 			);
