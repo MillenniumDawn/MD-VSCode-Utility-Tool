@@ -355,7 +355,7 @@ export class WorldMap {
 
 		const prefix = "data:image/png;base64,";
 		if (!dataUrl || !dataUrl.startsWith(prefix)) {
-			vscode.window.showErrorMessage(
+			void vscode.window.showErrorMessage(
 				localize(
 					"worldmap.export.error.imgformat",
 					"Can't export world map: Image is not in correct format.",
@@ -374,12 +374,12 @@ export class WorldMap {
 			if (this.lastRequestedExportRequestId === requestId) {
 				this.lastRequestedExportUri = undefined;
 			}
-			vscode.window.showInformationMessage(
+			void vscode.window.showInformationMessage(
 				localize("worldmap.export.success", "Successfully exported world map."),
 			);
 		} catch (e) {
 			error(e);
-			vscode.window.showErrorMessage(
+			void vscode.window.showErrorMessage(
 				localize("worldmap.export.error", "Can't export world map: {0}.", e),
 			);
 		} finally {

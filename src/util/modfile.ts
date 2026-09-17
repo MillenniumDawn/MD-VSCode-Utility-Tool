@@ -152,7 +152,7 @@ async function checkAndUpdateModFileStatus(
 
 	updateSelectedModFileStatus(modFile, error);
 	if (error) {
-		vscode.window.showErrorMessage(
+		void vscode.window.showErrorMessage(
 			localize("modfile.filenotexist", "Mod file not exist: {0}", modFile),
 		);
 	}
@@ -237,9 +237,9 @@ async function selectModFile(): Promise<void> {
 		}
 
 		if (modPath === modFileInspect?.globalValue) {
-			conf.update("modFile", undefined, vscode.ConfigurationTarget.Workspace);
+			await conf.update("modFile", undefined, vscode.ConfigurationTarget.Workspace);
 		} else {
-			conf.update("modFile", modPath, vscode.ConfigurationTarget.Workspace);
+			await conf.update("modFile", modPath, vscode.ConfigurationTarget.Workspace);
 		}
 
 		void checkAndUpdateModFileStatus(

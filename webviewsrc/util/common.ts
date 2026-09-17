@@ -105,6 +105,14 @@ export function subscribeNavigators() {
 	}
 }
 
+// An async function comes back as a void-returning wrapper: its rejection is caught and reported
+// here, so the promise can never reject and a listener API expecting `() => void` may take it.
+export function tryRun<A extends any[]>(
+	func: (...args: A) => Promise<unknown>,
+): (...args: A) => void;
+export function tryRun<T extends (...args: any[]) => any>(
+	func: T,
+): (...args: Parameters<T>) => ReturnType<T> | undefined;
 export function tryRun<T extends (...args: any[]) => any>(
 	func: T,
 ): (...args: Parameters<T>) => ReturnType<T> | undefined {

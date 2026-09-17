@@ -137,9 +137,9 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         if (document === undefined) {
             if (requestUri === undefined) {
-                vscode.window.showErrorMessage(localize('preview.noactivedoc', "No active document."));
+                void vscode.window.showErrorMessage(localize('preview.noactivedoc', "No active document."));
             } else {
-                vscode.window.showErrorMessage(localize('preview.cantfinddoc', "Can't find opened document {0}.", requestUri?.toString()));
+                void vscode.window.showErrorMessage(localize('preview.cantfinddoc', "Can't find opened document {0}.", requestUri?.toString()));
             }
             panel?.dispose();
             debug(`dispose panel ${requestUri} because document not opened`);
@@ -158,7 +158,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         const previewProvider = this.findPreviewProvider(document);
         if (!previewProvider) {
-            vscode.window.showInformationMessage(
+            void vscode.window.showInformationMessage(
                 localize('preview.cantpreviewfile', "Can't preview this file.\nValid types: {0}.", Object.keys(this._previewProvidersMap).join(', ')));
             panel?.dispose();
             debug(`dispose panel ${uri} because no preview provider`);
