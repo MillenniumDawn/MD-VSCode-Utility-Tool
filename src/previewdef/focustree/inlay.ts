@@ -5,7 +5,9 @@ import { convertNodeToJson, positionSchema, Position } from "../../hoiformat/sch
 import { localize } from "../../util/i18n";
 import type { FocusInlayGfxOption, FocusInlayImageSlot, FocusTreeInlay, FocusTreeInlayButtonMeta, FocusTreeInlayRef, FocusWarning } from "./schema";
 import { listFilesFromModOrHOI4, parseHoi4FileCached } from "../../util/fileloader";
-import { findContainerWindows, listGuiFiles, listGuiGfxFiles } from "../../util/guiwindowindex";
+import { findContainerWindows, listGfxFilesFromConfiguredRoots, listGuiFiles, listGuiGfxFiles } from "../../util/guiwindowindex";
+import { describeParseFailure } from "../../util/indexHalf";
+import { Logger } from "../../util/logger";
 import { getConfiguration } from "../../util/vsccommon";
 import { getGfxContainerFile } from "../../util/gfxindex";
 import { getGfxSpriteMap } from "../../util/image/imagecache";
@@ -36,6 +38,7 @@ export async function loadFocusInlayWindows(): Promise<ParsedInlayFile> {
             inlays.push(...parsed.inlays);
             warnings.push(...parsed.warnings);
         } catch (e) {
+            Logger.error(`Failed to parse inlay window file ${relativePath}\n${describeParseFailure(e)}`);
             warnings.push({
                 text: localize("inlay.parseFailed", "Failed to parse inlay window file {0}: {1}", relativePath, e instanceof Error ? e.message : String(e)),
                 source: relativePath,
@@ -267,20 +270,7 @@ export async function resolveInlayGfxFiles(inlays: FocusTreeInlay[]): Promise<In
     // 2. Parse .gfx files for the rest: user-configured roots first, then the whole interface tree
     //    (where inlay sprites such as inner_circle.gfx / _leader_portraits.gfx live). Stop once
     //    every needed sprite is resolved so we don't parse the entire tree unnecessarily.
-    const roots = (getConfiguration().inlayWindowGfxRoots ?? []).filter((root): root is string => !!root && root.trim() !== "");
-    const candidateFiles: string[] = [];
-    for (const root of roots) {
-        try {
-            const files = await listFilesFromModOrHOI4(root.replace(/\\+/g, "/"), { recursively: true });
-            for (const file of files) {
-                if (file.toLowerCase().endsWith(".gfx")) {
-                    candidateFiles.push(`${root.replace(/\\+/g, "/")}/${file}`.replace(/\/+/g, "/"));
-                }
-            }
-        } catch {
-            continue;
-        }
-    }
+    const candidateFiles = await listGfxFilesFromConfiguredRoots(getConfiguration().inlayWindowGfxRoots ?? [], "mdHoi4Utilities.inlayWindowGfxRoots");
     candidateFiles.push(...await listGuiGfxFiles());
 
     await scanCandidatesUntilResolved(

@@ -17,6 +17,8 @@ import { Sprite, Image, CorneredTileSprite } from "./sprite";
 import { localize } from "../i18n";
 import { debug, error } from "../debug";
 import { UserError } from "../common";
+import { describeParseFailure } from "../indexHalf";
+import { Logger } from "../logger";
 import { getGfxContainerFile } from "../gfxindex";
 import { gfxIndex } from "../featureflags";
 export { Sprite, Image };
@@ -309,6 +311,10 @@ async function loadGfxMap(path: string): Promise<GfxMap> {
 			weight += (spriteType.name.length + spriteType.texturefile.length) * 2 + 96;
 		}
 	} catch (e) {
+		// The output channel is the only trace a broken .gfx leaves when the icon fallback scan or
+		// the inlay sprite scan reads through this cache (issue #182); the error call keeps the
+		// console/telemetry line.
+		Logger.error(`Cannot parse ${path}: ${describeParseFailure(e)}`);
 		error(e);
 	}
 
