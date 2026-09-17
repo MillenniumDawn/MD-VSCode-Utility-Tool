@@ -67,9 +67,9 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         return vscode.Disposable.from(...disposables);
     }
 
-    public async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: any): Promise<void> {
-        const uriStr = state?.uri as string | undefined;
-        if (!uriStr) {
+    public async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: unknown): Promise<void> {
+        const uriStr = (state as { uri?: unknown } | undefined)?.uri;
+        if (typeof uriStr !== 'string' || !uriStr) {
             panel.dispose();
             debug(`dispose panel ??? because uri not exist`);
             return;
