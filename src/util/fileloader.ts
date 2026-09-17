@@ -709,6 +709,9 @@ export async function readFileFromModOrHOI4AsJson<T>(
 // fresh tree in the factory under its own key and never touches a plain entry. Keyed by relativePath
 // + parse options + resolve flag; opened/dirty documents bypass this cache (see
 // parseHoi4FileCachedImpl). Node trees run ~5-10x the file size, so this is bounded by entry count.
+// Sized for the files a preview reads by name, not for a walk: the interface-tree scans
+// (guiwindowindex, imagecache) keep name-only caches of their own and must not be routed through
+// this one, or a scan of several hundred files evicts everything the preview itself parsed.
 const parseCache = new PromiseCache<Node>({
 	factory: parseHoi4FileForCache,
 	expireWhenChange: (key) => {
