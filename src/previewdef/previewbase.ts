@@ -18,6 +18,9 @@ export abstract class PreviewBase {
     public onDispose = this.disposeEmitter.event;
 
     private disposed = false;
+    // Everything subscribed on the panel. Released in dispose() so a closed panel stops holding
+    // the preview (and its cached dependencies) through its emitters.
+    protected readonly subscriptions: vscode.Disposable[] = [];
     protected panelInitialized = false;
 
     constructor(
@@ -59,6 +62,11 @@ export abstract class PreviewBase {
     }
     
     public dispose(): void {
+        if (this.disposed) {
+            return;
+        }
+        vscode.Disposable.from(...this.subscriptions).dispose();
+        this.subscriptions.length = 0;
         this.dependencyChangedEmitter.dispose();
         this.disposed = true;
         this.disposeEmitter.fire(undefined);
@@ -83,7 +91,7 @@ export abstract class PreviewBase {
     }
 
     protected registerEvents(panel: vscode.WebviewPanel): void {
-        panel.webview.onDidReceiveMessage((msg) => {
+        this.subscriptions.push(panel.webview.onDidReceiveMessage((msg) => {
             switch (msg.command) {
                 case 'navigate':
                     if (msg.start !== undefined) {
@@ -116,11 +124,11 @@ export abstract class PreviewBase {
                     }
                     break;
             }
-        });
-        
-        panel.onDidDispose(() => {
+        }));
+
+        this.subscriptions.push(panel.onDidDispose(() => {
             this.dispose();
-        });
+        }));
     }
     
     /**

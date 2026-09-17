@@ -11,8 +11,46 @@ const mutableImageDecoder = imageDecoder as {
 	decodeImageToPng: typeof imageDecoder.decodeImageToPng;
 };
 
-function panel(): { webview: { html: string; cspSource: string } } {
-	return { webview: { html: "", cspSource: "vscode-resource:" } };
+interface StubPanel {
+	webview: {
+		html: string;
+		cspSource: string;
+		options: { enableScripts?: boolean };
+		postMessage(msg: unknown): Promise<boolean>;
+		onDidReceiveMessage(listener: (msg: unknown) => void): { dispose(): void };
+	};
+	onDidDispose(listener: () => void): { dispose(): void };
+	posted: unknown[];
+	receive(msg: unknown): void;
+	dispose(): void;
+}
+
+function panel(): StubPanel {
+	const posted: unknown[] = [];
+	let messageListener: ((msg: unknown) => void) | undefined;
+	let disposeListener: (() => void) | undefined;
+	return {
+		webview: {
+			html: "",
+			cspSource: "vscode-resource:",
+			options: {},
+			postMessage: async (msg: unknown) => {
+				posted.push(msg);
+				return true;
+			},
+			onDidReceiveMessage: (listener) => {
+				messageListener = listener;
+				return { dispose: () => { messageListener = undefined; } };
+			},
+		},
+		onDidDispose: (listener) => {
+			disposeListener = listener;
+			return { dispose: () => undefined };
+		},
+		posted,
+		receive: (msg) => messageListener?.(msg),
+		dispose: () => disposeListener?.(),
+	};
 }
 
 function token(): { onCancellationRequested: () => { dispose(): void } } {
@@ -29,7 +67,7 @@ describe("DDS and TGA custom editor providers", () => {
 		document.dispose();
 	});
 
-	it("renders a decoded image with its dimensions", async () => {
+	async function openDecodedImage(): Promise<StubPanel> {
 		const originalReadFile = mutableVscodeCommon.readFile;
 		const originalDecode = mutableImageDecoder.decodeImageToPng;
 		mutableVscodeCommon.readFile = async () => Buffer.from("source");
@@ -45,14 +83,47 @@ describe("DDS and TGA custom editor providers", () => {
 				view as any,
 				token() as any,
 			);
-
-			assert.ok(view.webview.html.includes("width:2px;height:3px;"));
-			assert.ok(view.webview.html.includes("data:image/png;base64,AQI="));
-			assert.ok(view.webview.html.includes('alt="TGA texture preview"'));
+			return view;
 		} finally {
 			mutableVscodeCommon.readFile = originalReadFile;
 			mutableImageDecoder.decodeImageToPng = originalDecode;
 		}
+	}
+
+	function postedImageBytes(view: StubPanel): number[][] {
+		return view.posted.map((msg) => {
+			const image = msg as { type: string; data: Uint8Array };
+			assert.strictEqual(image.type, "image");
+			return Array.from(image.data);
+		});
+	}
+
+	it("renders a sized page and posts the decoded bytes once the page is ready", async () => {
+		const view = await openDecodedImage();
+
+		assert.ok(view.webview.html.includes("width:2px;height:3px;"));
+		assert.ok(view.webview.html.includes('alt="TGA texture preview"'));
+		assert.ok(!view.webview.html.includes("data:image/png;base64"));
+		assert.ok(view.webview.html.includes("img-src data: blob:"));
+		assert.strictEqual(view.webview.options.enableScripts, true);
+		assert.deepStrictEqual(view.posted, []);
+
+		view.receive({ command: "ready" });
+
+		assert.deepStrictEqual(postedImageBytes(view), [[1, 2]]);
+	});
+
+	it("posts the bytes again when the page reloads, and not after the panel is disposed", async () => {
+		const view = await openDecodedImage();
+
+		view.receive({ command: "ready" });
+		view.receive({ command: "other" });
+		view.receive({ command: "ready" });
+		assert.deepStrictEqual(postedImageBytes(view), [[1, 2], [1, 2]]);
+
+		view.dispose();
+		view.receive({ command: "ready" });
+		assert.strictEqual(view.posted.length, 2);
 	});
 
 	it("renders an error page when image loading fails", async () => {

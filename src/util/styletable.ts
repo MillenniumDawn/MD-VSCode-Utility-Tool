@@ -56,8 +56,8 @@ export class StyleTable {
     public toRawCss(): string {
         // Every content builder asks for this twice -- once for the <style> block and once for the
         // in-place update's styleCss -- and building it walks every rule with a multiline regex. A
-        // tech tree mints a unique class per grid item and per connection segment, so that is well
-        // over ten thousand rules to walk, twice, for an identical answer.
+        // tech tree still mints a class per sprite, text box and container of every node, so that is
+        // thousands of rules to walk, twice, for an identical answer.
         if (this.cachedCss === undefined) {
             this.cachedCss =
                 Object.entries(this.records).map(([k, v]) => `.${k} { ${v.replace(/^\s+/gm, '')} }\n`).join('') +
