@@ -92,11 +92,26 @@ describe('util/parentmods', () => {
             assert.deepStrictEqual(getParentModUris().map(u => u.fsPath), ['D:/explicit', 'D:/second', 'D:/first']);
         });
 
-        it('are dropped when the setting already lists the folder, whichever slashes and case it used', () => {
+        it('deduplicates parent paths with platform-sensitive case rules', () => {
             config = { parentModPaths: ['d:\\Mods\\Parent'] };
             setResolvedDependencies([vscode.Uri.file('D:/mods/parent'), vscode.Uri.file('D:/other')], []);
 
-            assert.deepStrictEqual(getParentModUris().map(u => u.fsPath), ['d:\\Mods\\Parent', 'D:/other']);
+            const paths = getParentModUris().map(u => u.fsPath);
+            if (process.platform === 'win32') {
+                assert.deepStrictEqual(paths, ['d:\\Mods\\Parent', 'D:/other']);
+            } else {
+                assert.deepStrictEqual(paths, ['d:\\Mods\\Parent', 'D:/mods/parent', 'D:/other']);
+            }
+        });
+
+        it('keeps case-distinct Linux parent folders separate', () => {
+            config = { parentModPaths: ['/mods/Parent'] };
+            setResolvedDependencies([vscode.Uri.file('/mods/parent')], []);
+
+            const paths = getParentModUris().map(u => u.fsPath);
+            assert.deepStrictEqual(paths, process.platform === 'win32'
+                ? ['/mods/Parent']
+                : ['/mods/Parent', '/mods/parent']);
         });
 
         it('survive a clear of the cached list, which a setting change causes', () => {

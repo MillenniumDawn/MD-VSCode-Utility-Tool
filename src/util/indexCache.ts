@@ -39,6 +39,11 @@ const CACHE_ROOT = 'indexCache';
  * once. That is a few seconds of the shared parse queue, and it buys one identity rule instead of
  * two.
  */
+function normalizePathIdentity(value: string): string {
+    const normalized = value.replace(/\\+/g, '/');
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
 export function cacheNamespaceFor(
     modFile: string | undefined,
     workspaceFolderUris: readonly string[],
@@ -48,7 +53,7 @@ export function cacheNamespaceFor(
 
     const mod = modFile?.trim();
     if (mod) {
-        parts.push('mod:' + mod.replace(/\\+/g, '/').toLowerCase());
+        parts.push('mod:' + normalizePathIdentity(mod));
     }
 
     // Sorted, so that dragging a folder up the explorer does not throw the cache away.
@@ -59,7 +64,7 @@ export function cacheNamespaceFor(
     for (const parent of parentModPaths) {
         const trimmed = parent.trim();
         if (trimmed) {
-            parts.push('parent:' + trimmed.replace(/\\+/g, '/').toLowerCase());
+            parts.push('parent:' + normalizePathIdentity(trimmed));
         }
     }
 
@@ -68,16 +73,17 @@ export function cacheNamespaceFor(
 
 
 /** The inputs to `cacheNamespaceFor`, each read defensively -- none is worth failing over. */
-function cacheNamespace(): string {
+function cacheNamespace(parentModUris?: readonly vscode.Uri[]): string {
     let modFile: string | undefined;
     let parentModPaths: string[] = [];
     try {
         const conf = getConfiguration();
         modFile = conf.modFile as string | undefined;
         // The effective list, dependencies included: two `.mod` files that resolve differently
-        // under the same setting must not share a cache. Stable by the time a build reads it:
-        // buildIndexHalf waits for a resolution in flight before it gets here.
-        parentModPaths = getParentModUris().map(uriToFilePathWhenPossible);
+        // under the same setting must not share a cache. A supplied list is the snapshot captured
+        // by an index build, so a later dependency refresh cannot mix its namespace with its files.
+        parentModPaths = (parentModUris ?? getParentModUris())
+            .map(uriToFilePathWhenPossible);
     } catch {
         modFile = undefined;
         parentModPaths = [];
@@ -95,12 +101,14 @@ function cacheNamespace(): string {
 
 export type CacheScope = vscode.Uri | null;
 
-export function captureCacheScope(): CacheScope {
+export function captureCacheScope(
+    parentModUris?: readonly vscode.Uri[],
+): CacheScope {
     const ctx = contextContainer.current;
     if (!ctx || IS_WEB_EXT) {
         return null;
     }
-    return vscode.Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT, cacheNamespace());
+    return vscode.Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT, cacheNamespace(parentModUris));
 }
 
 // Keyed on the directory rather than memoized once, because the namespace can change inside a

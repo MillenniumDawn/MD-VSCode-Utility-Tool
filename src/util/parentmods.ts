@@ -77,10 +77,12 @@ export function getExplicitParentModUris(): vscode.Uri[] {
 	return uris;
 }
 
-// Slashes and case folded, so the setting's `D:\mods\parent` and the registry's `D:/mods/parent`
-// count as the one folder they are.
+// Slashes normalized, so the setting's `D:\mods\parent` and the registry's `D:/mods/parent`
+// count as the one folder on Windows. Linux keeps case because `/mods/Parent` and `/mods/parent`
+// are distinct folders there.
 function uriKey(uri: vscode.Uri): string {
-	return uriToFilePathWhenPossible(uri).replace(/\\+/g, "/").toLowerCase();
+	const normalized = uriToFilePathWhenPossible(uri).replace(/\\+/g, "/");
+	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
 /**

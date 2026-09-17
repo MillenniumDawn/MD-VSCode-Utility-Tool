@@ -2,6 +2,7 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { clearDlcZipCache, getFilePathFromModOrHOI4 } from "../util/fileloader";
 import {
+	findUserDataDir,
 	refreshModDependencies,
 	whenModDependenciesSettled,
 } from "../util/moddependencies";
@@ -277,6 +278,50 @@ describe("util/moddependencies", function () {
 		assert.deepStrictEqual(resolvedPaths(getParentModUris()), [
 			nodePath.resolve(parentDir),
 		]);
+	});
+
+	it("uses case-sensitive enabled registry paths on Linux", async function () {
+		if (process.platform !== "linux") {
+			this.skip();
+		}
+		const workshopDir = nodePath.join(root, "workshop");
+		await nodeFs.mkdir(workshopDir, { recursive: true });
+		await writeOwnModFile(["Parent Mod"]);
+		await registerMod("Parent", "Parent Mod", toModPath(parentDir));
+		await registerMod("parent", "Parent Mod", toModPath(workshopDir));
+		await write(
+			nodePath.join(userDataDir, "dlc_load.json"),
+			'{"enabled_mods":["mod/parent.mod"],"disabled_dlcs":[]}',
+		);
+
+		await refreshModDependencies();
+
+		assert.deepStrictEqual(resolvedPaths(getParentModUris()), [
+			nodePath.resolve(workshopDir),
+		]);
+	});
+
+	it("keeps case-distinct workspace and user-data folders separate on Linux", async function () {
+		const userDataCasePath = nodePath.join(root, "Parent");
+		const workspaceCasePath = nodePath.join(root, "parent");
+		const nestedModFile = nodePath.join(userDataCasePath, "sub", "descriptor.mod");
+		await write(nodePath.join(userDataCasePath, "mod", "marker.mod"), "");
+		await write(nodePath.join(userDataCasePath, "dlc_load.json"), "{}");
+		await write(nestedModFile, "");
+		config.userDataPath = "";
+		config.modFile = nestedModFile;
+		stubVscode({
+			workspaceFolders: [{ uri: vscode.Uri.file(workspaceCasePath) }],
+		});
+
+		await withoutDefaultUserDataDir(async () => {
+			const found = await findUserDataDir(vscode.Uri.file(nestedModFile));
+			if (process.platform === "win32") {
+				assert.strictEqual(found, undefined);
+			} else {
+				assert.strictEqual(realPathOf(found), nodePath.resolve(userDataCasePath));
+			}
+		});
 	});
 
 	it("finds the user data directory above a workspace checked out under its mod folder", async function () {

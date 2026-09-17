@@ -4,9 +4,10 @@ import { localize } from "./i18n";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions } from "./fileloader";
-import { getParentModUris } from "./parentmods";
 import {
 	buildIndexHalf,
+	captureIndexBuildContext,
+	IndexBuildContext,
 	readIndexFileContent,
 	reportIndexParseFailure,
 } from "./indexHalf";
@@ -69,12 +70,13 @@ let estimatedSize: [number] = [0];
 const builder = createIndexBuilder({
 	name: "ideaSwapIndex",
 	message: localize("ideaSwapIndex.building", "Building idea swap index..."),
-	build: (progress) => {
+	build: async (progress) => {
 		estimatedSize = [0];
+		const context = await captureIndexBuildContext();
 		return Promise.all([
-			buildGlobalSwapIndex(estimatedSize, progress),
-			buildParentSwapIndex(estimatedSize, progress),
-			buildWorkspaceSwapIndex(estimatedSize, progress),
+			buildGlobalSwapIndex(estimatedSize, progress, context),
+			buildParentSwapIndex(estimatedSize, progress, context),
+			buildWorkspaceSwapIndex(estimatedSize, progress, context),
 		]);
 	},
 	onSuccess: () => {
@@ -107,6 +109,7 @@ function listSwapFiles(
 async function buildGlobalSwapIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context: IndexBuildContext,
 ): Promise<void> {
 	await buildSwapIndexHalf(
 		"ideaSwapIndex.global",
@@ -114,14 +117,17 @@ async function buildGlobalSwapIndex(
 		globalSwapIndex,
 		estimatedSize,
 		progress,
+		context,
 	);
 }
 
 async function buildParentSwapIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context?: IndexBuildContext,
 ): Promise<void> {
-	const parents = getParentModUris();
+	const buildContext = context ?? (await captureIndexBuildContext());
+	const parents = buildContext.parentModUris;
 	parentSwapIndexes = parents.map(() => ({}));
 	// No parents, no half: a mod that extends nothing pays no listing and writes no cache for it.
 	if (parents.length === 0) {
@@ -139,6 +145,7 @@ async function buildParentSwapIndex(
 				parentSwapIndexes[index]!,
 				estimatedSize,
 				progress,
+				buildContext,
 			),
 		),
 	);
@@ -147,13 +154,16 @@ async function buildParentSwapIndex(
 async function buildWorkspaceSwapIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context?: IndexBuildContext,
 ): Promise<void> {
+	const buildContext = context ?? (await captureIndexBuildContext());
 	await buildSwapIndexHalf(
 		"ideaSwapIndex.workspace",
 		{ mod: true, parent: false, hoi4: false },
 		workspaceSwapIndex,
 		estimatedSize,
 		progress,
+		buildContext,
 	);
 }
 
@@ -163,11 +173,14 @@ async function buildSwapIndexHalf(
 	swapIndex: SwapIndex,
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context: IndexBuildContext,
 ): Promise<void> {
 	await buildIndexHalf<SwapIndex>(
 		{
 			cacheName,
 			version: SWAP_CACHE_VERSION,
+			cacheScope: context.cacheScope,
+			dependencyGeneration: context.dependencyGeneration,
 			listFiles: (token) => listSwapFiles(options, token),
 			hydrate: (cached, skipFiles) => {
 				for (const file in cached) {

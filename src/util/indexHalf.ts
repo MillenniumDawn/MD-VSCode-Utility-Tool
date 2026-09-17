@@ -7,13 +7,92 @@ import {
 	saveCacheData,
 	saveCacheManifest,
 	captureCacheScope,
+	CacheScope,
 } from "./indexCache";
 import { indexParseQueue, IndexProgress } from "./indexBuild";
 import { IndexFile, IndexListing, toIndexFiles } from "./indexListing";
 import { FileSourceOptions, readFileFromModOrHOI4 } from "./fileloader";
 import { localize } from "./i18n";
 import { Logger } from "./logger";
-import { whenModDependenciesSettled } from "./moddependencies";
+import {
+	captureModDependencySnapshot,
+	isModDependencyGenerationCurrent,
+	whenModDependenciesSettled,
+} from "./moddependencies";
+
+export interface IndexBuildContext {
+	readonly cacheScope: CacheScope;
+	readonly dependencyGeneration: number;
+	readonly parentModUris: readonly vscode.Uri[];
+}
+
+/** Captures all dependency-sensitive inputs once for the complete index build. */
+export async function captureIndexBuildContext(): Promise<IndexBuildContext> {
+	const snapshot = await captureModDependencySnapshot();
+	return {
+		cacheScope: captureCacheScope(snapshot.parentModUris),
+		dependencyGeneration: snapshot.generation,
+		parentModUris: snapshot.parentModUris,
+	};
+}
+
+const pendingCacheWrites = new Map<string, Promise<void>>();
+const cacheGenerations = new Map<string, number>();
+
+function cacheWriteKey(
+	cacheName: string,
+	scope: CacheScope,
+): string | undefined {
+	return scope ? `${scope.toString()}\n${cacheName}` : undefined;
+}
+
+async function waitForCacheWrite(key: string | undefined): Promise<void> {
+	if (key !== undefined) {
+		await pendingCacheWrites.get(key);
+	}
+}
+
+function queueCacheWrite(
+	key: string | undefined,
+	cacheName: string,
+	data: string,
+	filePaths: string[],
+	mtimes: Map<string, number>,
+	version: number,
+	scope: CacheScope,
+	generation: number | undefined,
+): void {
+	if (key === undefined) {
+		return;
+	}
+
+	const previous = pendingCacheWrites.get(key) ?? Promise.resolve();
+	const write = previous.then(async () => {
+		if (
+			generation !== undefined &&
+			!isModDependencyGenerationCurrent(generation)
+		) {
+			return;
+		}
+		await saveCacheData(cacheName, data, scope);
+		if (
+			generation !== undefined &&
+			!isModDependencyGenerationCurrent(generation)
+		) {
+			return;
+		}
+		await saveCacheManifest(cacheName, filePaths, mtimes, version, scope);
+	});
+	const tracked = write.catch((e) => {
+		Logger.error(`Cache save failed for ${cacheName}: ${e}`);
+	});
+	pendingCacheWrites.set(key, tracked);
+	void tracked.finally(() => {
+		if (pendingCacheWrites.get(key) === tracked) {
+			pendingCacheWrites.delete(key);
+		}
+	});
+}
 
 /*
  * One build of one half of one index.
@@ -46,6 +125,9 @@ export interface IndexHalfSpec<TCache> {
 	serialize: () => TCache;
 	/** Rebuild the complete current listing whenever any cached file changed. */
 	fullRebuildOnAnyChange?: boolean;
+	/** Dependency generation and scope captured before the build listed any files. */
+	dependencyGeneration?: number;
+	cacheScope?: CacheScope;
 }
 
 export async function buildIndexHalf<TCache>(
@@ -68,22 +150,36 @@ async function buildIndexHalfWithTimer<TCache>(
 ): Promise<void> {
 	const { cacheName, version } = spec;
 
-	// The parent list feeds both the listing and the cache namespace, so a build must not read it
-	// while the `.mod` dependencies are still being resolved -- a preview restored at activation
-	// starts its build before that first resolution lands.
-	await whenModDependenciesSettled();
+	// A caller with a captured context already waited and supplies the same parent snapshot to the
+	// listing and cache namespace. Standalone half builds retain the wait here.
+	if (spec.dependencyGeneration === undefined) {
+		await whenModDependenciesSettled();
+	}
 
 	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
 	// install it is now the directory walk and the mtimes together, which is where a slow cold build
 	// spends its time, and it used to happen before the timer existed.
 	// Captured before the listing so a slow walk never pairs the new namespace with an old one.
-	const cacheScope = captureCacheScope();
+	const cacheScope =
+		spec.cacheScope !== undefined ? spec.cacheScope : captureCacheScope();
+	const writeKey = cacheWriteKey(cacheName, cacheScope);
+	const dependencyChanged =
+		spec.dependencyGeneration !== undefined &&
+		writeKey !== undefined &&
+		cacheGenerations.get(writeKey) !== undefined &&
+		cacheGenerations.get(writeKey) !== spec.dependencyGeneration;
+	if (writeKey !== undefined && spec.dependencyGeneration !== undefined) {
+		cacheGenerations.set(writeKey, spec.dependencyGeneration);
+	}
+	await waitForCacheWrite(writeKey);
 
 	timer.begin("list");
 	const { filePaths, uris, mtimes } = await spec.listFiles(progress.token);
 
 	timer.begin("cache");
-	const manifest = await loadCacheManifest(cacheName, version, cacheScope);
+	const manifest = dependencyChanged
+		? null
+		: await loadCacheManifest(cacheName, version, cacheScope);
 	let filesToParse = filePaths;
 
 	if (manifest) {
@@ -131,25 +227,19 @@ async function buildIndexHalfWithTimer<TCache>(
 	);
 	timer.end(filePaths.length, filesToParse.length);
 
-	// Fire-and-forget, but data must finish before the manifest can point readers at it.
-	void (async () => {
-		try {
-			await saveCacheData(
-				cacheName,
-				JSON.stringify(spec.serialize()),
-				cacheScope,
-			);
-			await saveCacheManifest(
-				cacheName,
-				filePaths,
-				mtimes,
-				version,
-				cacheScope,
-			);
-		} catch (e) {
-			Logger.error(`Cache save failed for ${cacheName}: ${e}`);
-		}
-	})();
+	// Fire-and-forget, but data must finish before the manifest can point readers at it. The payload
+	// is captured before a follow-on rebuild resets the live index, and writes are serialized per
+	// namespace so an old generation cannot finish after its corrective build.
+	queueCacheWrite(
+		writeKey,
+		cacheName,
+		JSON.stringify(spec.serialize()),
+		filePaths,
+		mtimes,
+		version,
+		cacheScope,
+		spec.dependencyGeneration,
+	);
 }
 
 /**

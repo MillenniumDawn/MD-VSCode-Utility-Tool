@@ -8,6 +8,7 @@ import { Logger } from "./logger";
 import { getSelectedModFileUri } from "./modfile";
 import {
 	getExplicitParentModUris,
+	getParentModUris,
 	publishParentMods,
 	setResolvedDependencies,
 } from "./parentmods";
@@ -104,12 +105,13 @@ async function isUserDataDir(dir: vscode.Uri): Promise<boolean> {
 	return false;
 }
 
-// Slashes and case folded, and a trailing slash so `D:/ws` does not claim `D:/ws2`.
+// Slashes normalized, and a trailing slash so `D:/ws` does not claim `D:/ws2`. Case is folded
+// only on Windows: distinct paths such as `/mods/Parent` and `/mods/parent` are real peers on Linux.
 function folderKey(uri: vscode.Uri): string {
-	return (
+	const normalized =
 		uriToFilePathWhenPossible(uri).replace(/\\+/g, "/").replace(/\/+$/, "") +
-		"/"
-	).toLowerCase();
+		"/";
+	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
 // A repository controls everything under its own folder, so a `mod/` and a `dlc_load.json` in a
@@ -207,6 +209,11 @@ export async function findUserDataDir(
 	return undefined;
 }
 
+function registryPathKey(value: string): string {
+	const normalized = value.replace(/\\/g, "/");
+	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
 // The registry files the launcher has enabled, as `mod/<file>` relative to the user data directory.
 async function readEnabledMods(userDataDir: vscode.Uri): Promise<Set<string>> {
 	try {
@@ -221,7 +228,7 @@ async function readEnabledMods(userDataDir: vscode.Uri): Promise<Set<string>> {
 		return new Set(
 			enabled
 				.filter((entry): entry is string => typeof entry === "string")
-				.map((entry) => entry.replace(/\\/g, "/").toLowerCase()),
+				.map(registryPathKey),
 		);
 	} catch {
 		return new Set();
@@ -261,7 +268,7 @@ export async function loadModRegistry(
 			continue;
 		}
 
-		const isEnabled = enabled.has(`mod/${file}`.toLowerCase());
+		const isEnabled = enabled.has(registryPathKey(`mod/${file}`));
 		const existing = registry.get(descriptor.name);
 		if (existing === undefined) {
 			registry.set(descriptor.name, folder);
@@ -335,6 +342,13 @@ async function resolveDependencies(): Promise<void> {
 
 let inFlight: Promise<void> | null = null;
 let rerun = false;
+let dependencyGeneration = 0;
+
+/** The parent list captured after one dependency resolution generation has settled. */
+export interface ModDependencySnapshot {
+	readonly generation: number;
+	readonly parentModUris: readonly vscode.Uri[];
+}
 
 /**
  * Settles once the resolution in flight, if any, has published. An index build waits on this
@@ -344,6 +358,22 @@ let rerun = false;
  */
 export function whenModDependenciesSettled(): Promise<void> {
 	return inFlight ?? Promise.resolve();
+}
+
+/** Captures parents and their generation together, so a later refresh cannot mix build inputs. */
+export async function captureModDependencySnapshot(): Promise<ModDependencySnapshot> {
+	if (inFlight !== null) {
+		await inFlight;
+	}
+	return {
+		generation: dependencyGeneration,
+		parentModUris: [...getParentModUris()],
+	};
+}
+
+/** Whether a fire-and-forget cache write still belongs to the current dependency resolution. */
+export function isModDependencyGenerationCurrent(generation: number): boolean {
+	return generation === dependencyGeneration;
 }
 
 /**
@@ -358,6 +388,7 @@ export function refreshModDependencies(): Promise<void> {
 		return inFlight;
 	}
 
+	dependencyGeneration++;
 	inFlight = (async () => {
 		do {
 			rerun = false;
