@@ -19,6 +19,7 @@ v1.1.36
 - [ Focus Tree Previewer ] Refreshing a focus tree or decision preview no longer re-reads every file under `interface/` each time: the window names and sprites each file defines are remembered between refreshes, and the search stops as soon as the ones the preview needs are found. Issue #178.
 - Opening a large DDS or TGA texture uses far less memory: the decoded image is handed to the viewer as raw bytes instead of being embedded in the page as base64 text. Issue #176.
 - [ Focus Tree Previewer ] Focus tree, technology tree and MIO previews position each node and connection line directly on the element instead of through a one-off CSS rule, so a large tree ships far less CSS and opens faster. Issue #179.
+- An error inside a focus tree or MIO preview control (tree selector, condition filters, completed-focus checkboxes, the in-place refresh) is now logged and reported instead of being silently lost. Issue #181.
 
   Bugfixes:
 
