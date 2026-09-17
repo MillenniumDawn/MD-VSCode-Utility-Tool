@@ -193,7 +193,9 @@ describe("webview/worldmap/FEWorldMapClass reverse maps", function () {
 
 			map.getProvinceByPosition(0, 0);
 			const start = performance.now();
-			const indexed = points.map((p) => map.getProvinceByPosition(p.x, p.y)?.id);
+			const indexed = points.map(
+				(p) => map.getProvinceByPosition(p.x, p.y)?.id,
+			);
 			const elapsed = performance.now() - start;
 
 			const expected = points.map((p) => bruteForce(p.x, p.y));
@@ -251,6 +253,198 @@ describe("webview/worldmap/FEWorldMapClass reverse maps", function () {
 				b.getStateToSupplyAreaMap(),
 			);
 		});
+	});
+});
+
+describe("webview/worldmap/FEWorldMapClass warning lookups", function () {
+	const province = { id: 10, color: 0x101010 };
+	const otherProvince = { id: 11, color: 0x111111 };
+	const state = { id: 1 };
+	const strategicRegion = { id: 1 };
+	const supplyArea = { id: 1 };
+
+	function buildWarnedMap(sourceReads?: { count: number }) {
+		const warnings = [
+			{
+				text: "province by id",
+				source: [{ type: "province", id: 10, color: 0x999999 }],
+			},
+			{
+				text: "province by color",
+				source: [{ type: "province", id: null, color: 0x101010 }],
+			},
+			{
+				text: "province and its state",
+				source: [
+					{ type: "province", id: 10, color: 0x101010 },
+					{ type: "state", id: 1 },
+				],
+			},
+			{ text: "state", source: [{ type: "state", id: 1 }] },
+			{
+				text: "strategic region",
+				source: [{ type: "strategicregion", id: 1 }],
+			},
+			{ text: "supply area", source: [{ type: "supplyarea", id: 1 }] },
+			{ text: "river", source: [{ type: "river", index: 2, name: "r" }] },
+			{ text: "other state", source: [{ type: "state", id: 2 }] },
+		].map((warning) =>
+			sourceReads
+				? Object.defineProperty({ text: warning.text }, "source", {
+						get() {
+							sourceReads.count++;
+							return warning.source;
+						},
+					})
+				: warning,
+		);
+		return new FEWorldMapClass({ warnings } as any);
+	}
+
+	it("finds province warnings by id or by colour", function () {
+		const map = buildWarnedMap();
+		assert.deepStrictEqual(map.getProvinceWarnings(province as any), [
+			"province by id",
+			"province by color",
+			"province and its state",
+		]);
+		assert.deepStrictEqual(map.getProvinceWarnings(otherProvince as any), []);
+	});
+
+	it("reports a warning once when several of its sources match, in file order", function () {
+		const map = buildWarnedMap();
+		assert.deepStrictEqual(
+			map.getProvinceWarnings(
+				province as any,
+				state as any,
+				strategicRegion as any,
+				supplyArea as any,
+			),
+			[
+				"province by id",
+				"province by color",
+				"province and its state",
+				"state",
+				"strategic region",
+				"supply area",
+			],
+		);
+		assert.deepStrictEqual(map.getProvinceWarnings(), []);
+	});
+
+	it("merges all five matching buckets in warning order without duplicates", function () {
+		const map = new FEWorldMapClass({
+			warnings: [
+				{
+					text: "all sources at the start",
+					source: [
+						{ type: "province", id: 10, color: 0x101010 },
+						{ type: "state", id: 1 },
+						{ type: "strategicregion", id: 1 },
+						{ type: "supplyarea", id: 1 },
+					],
+				},
+				{ text: "not selected", source: [{ type: "river", index: 99 }] },
+				{
+					text: "province id",
+					source: [{ type: "province", id: 10, color: 0x999999 }],
+				},
+				{
+					text: "province color",
+					source: [{ type: "province", id: null, color: 0x101010 }],
+				},
+				{ text: "state", source: [{ type: "state", id: 1 }] },
+				{
+					text: "strategic region",
+					source: [{ type: "strategicregion", id: 1 }],
+				},
+				{ text: "supply area", source: [{ type: "supplyarea", id: 1 }] },
+				{
+					text: "all sources at the end",
+					source: [
+						{ type: "province", id: 10, color: 0x101010 },
+						{ type: "state", id: 1 },
+						{ type: "strategicregion", id: 1 },
+						{ type: "supplyarea", id: 1 },
+					],
+				},
+			],
+		} as any);
+
+		assert.deepStrictEqual(
+			map.getProvinceWarnings(
+				province as any,
+				state as any,
+				strategicRegion as any,
+				supplyArea as any,
+			),
+			[
+				"all sources at the start",
+				"province id",
+				"province color",
+				"state",
+				"strategic region",
+				"supply area",
+				"all sources at the end",
+			],
+		);
+	});
+
+	it("finds state, strategic region, supply area and river warnings", function () {
+		const map = buildWarnedMap();
+		assert.deepStrictEqual(map.getStateWarnings(state as any), [
+			"province and its state",
+			"state",
+		]);
+		assert.deepStrictEqual(
+			map.getStateWarnings(state as any, supplyArea as any),
+			["province and its state", "state", "supply area"],
+		);
+		assert.deepStrictEqual(
+			map.getStrategicRegionWarnings(strategicRegion as any),
+			["strategic region"],
+		);
+		assert.deepStrictEqual(map.getSupplyAreaWarnings(supplyArea as any), [
+			"supply area",
+		]);
+		assert.deepStrictEqual(map.getRiverWarnings(2), ["river"]);
+		assert.deepStrictEqual(map.getRiverWarnings(3), []);
+	});
+
+	it("answers the predicates the same as the getters", function () {
+		const map = buildWarnedMap();
+		assert.strictEqual(map.hasProvinceWarnings(province as any), true);
+		assert.strictEqual(map.hasProvinceWarnings(otherProvince as any), false);
+		assert.strictEqual(
+			map.hasProvinceWarnings(otherProvince as any, state as any),
+			true,
+		);
+		assert.strictEqual(
+			map.hasProvinceWarnings(undefined, undefined, strategicRegion as any),
+			true,
+		);
+		assert.strictEqual(
+			map.hasProvinceWarnings(
+				undefined,
+				undefined,
+				undefined,
+				supplyArea as any,
+			),
+			true,
+		);
+		assert.strictEqual(map.hasProvinceWarnings(), false);
+		assert.strictEqual(map.hasRiverWarnings(2), true);
+		assert.strictEqual(map.hasRiverWarnings(3), false);
+	});
+
+	it("reads the warning sources once per instance", function () {
+		const reads = { count: 0 };
+		const map = buildWarnedMap(reads);
+		map.hasProvinceWarnings(province as any);
+		map.getProvinceWarnings(province as any, state as any);
+		map.getStateWarnings(state as any);
+		map.hasRiverWarnings(2);
+		assert.strictEqual(reads.count, 8);
 	});
 });
 
