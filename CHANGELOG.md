@@ -20,6 +20,7 @@ v1.1.36
 - Opening a large DDS or TGA texture uses far less memory: the decoded image is handed to the viewer as raw bytes instead of being embedded in the page as base64 text. Issue #176.
 - [ Focus Tree Previewer ] Focus tree, technology tree and MIO previews position each node and connection line directly on the element instead of through a one-off CSS rule, so a large tree ships far less CSS and opens faster. Issue #179.
 - An error inside a focus tree or MIO preview control (tree selector, condition filters, completed-focus checkboxes, the in-place refresh) is now logged and reported instead of being silently lost. Issue #181.
+- [ CI ] The integration tests run against a pinned VS Code version that is cached between runs, so a pull request no longer downloads the latest release every time or turns red when VS Code ships a regression. Issue #183.
 
   Bugfixes:
 
