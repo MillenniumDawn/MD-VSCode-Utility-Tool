@@ -2,13 +2,14 @@ import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
 
-// These four settings decide where every file the extension reads comes from. The extension is
+// These settings decide where every file the extension reads comes from. The extension is
 // supported in untrusted workspaces and activates on workspaceContains:, so merely opening a
 // hostile repo activates it -- and without this declaration that repo's own .vscode/settings.json
 // could silently repoint all of those reads. Issue #221.
 const restricted = [
 	"mdHoi4Utilities.installPath",
 	"mdHoi4Utilities.modFile",
+	"mdHoi4Utilities.parentModPaths",
 	"mdHoi4Utilities.inlayWindowGfxRoots",
 	"mdHoi4Utilities.technologyGfxRoots",
 ];

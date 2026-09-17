@@ -6,10 +6,11 @@ import {
 	loadCacheManifest,
 	saveCacheData,
 	saveCacheManifest,
+	captureCacheScope,
 } from "./indexCache";
 import { indexParseQueue, IndexProgress } from "./indexBuild";
 import { IndexFile, IndexListing, toIndexFiles } from "./indexListing";
-import { readFileFromModOrHOI4 } from "./fileloader";
+import { FileSourceOptions, readFileFromModOrHOI4 } from "./fileloader";
 import { localize } from "./i18n";
 import { Logger } from "./logger";
 
@@ -42,6 +43,8 @@ export interface IndexHalfSpec<TCache> {
 	parseFile: (file: IndexFile) => Promise<void>;
 	/** The live index in the form it should be cached. */
 	serialize: () => TCache;
+	/** Rebuild the complete current listing whenever any cached file changed. */
+	fullRebuildOnAnyChange?: boolean;
 }
 
 export async function buildIndexHalf<TCache>(
@@ -67,16 +70,23 @@ async function buildIndexHalfWithTimer<TCache>(
 	// The listing runs here rather than in the caller so that the timer covers it. On a desktop
 	// install it is now the directory walk and the mtimes together, which is where a slow cold build
 	// spends its time, and it used to happen before the timer existed.
+	// Captured before the listing so a slow walk never pairs the new namespace with an old one.
+	const cacheScope = captureCacheScope();
+
 	timer.begin("list");
 	const { filePaths, uris, mtimes } = await spec.listFiles(progress.token);
 
 	timer.begin("cache");
-	const manifest = await loadCacheManifest(cacheName, version);
+	const manifest = await loadCacheManifest(cacheName, version, cacheScope);
 	let filesToParse = filePaths;
 
 	if (manifest) {
 		const staleness = computeStaleFiles(manifest, mtimes);
-		const cachedData = await loadCacheData(cacheName);
+		const hasChanges =
+			staleness.stale.length > 0 ||
+			staleness.removed.length > 0 ||
+			staleness.added.length > 0;
+		const cachedData = await loadCacheData(cacheName, cacheScope);
 
 		// Whatever is still fresh gets reused, however much of the listing changed. This used to be
 		// gated on stale + removed + added being fewer than the files listed, so a large pull -- or
@@ -86,9 +96,13 @@ async function buildIndexHalfWithTimer<TCache>(
 		if (cachedData) {
 			try {
 				const cached: TCache = JSON.parse(cachedData);
-				const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
-				spec.hydrate(cached, skipFiles);
-				filesToParse = [...staleness.stale, ...staleness.added];
+				if (spec.fullRebuildOnAnyChange && hasChanges) {
+					filesToParse = filePaths;
+				} else {
+					const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
+					spec.hydrate(cached, skipFiles);
+					filesToParse = [...staleness.stale, ...staleness.added];
+				}
 			} catch {
 				Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
 				filesToParse = filePaths;
@@ -111,11 +125,25 @@ async function buildIndexHalfWithTimer<TCache>(
 	);
 	timer.end(filePaths.length, filesToParse.length);
 
-	// fire-and-forget: write data before manifest for atomicity
-	void Promise.all([
-		saveCacheData(cacheName, JSON.stringify(spec.serialize())),
-		saveCacheManifest(cacheName, filePaths, mtimes, version),
-	]).catch((e) => Logger.error(`Cache save failed for ${cacheName}: ${e}`));
+	// Fire-and-forget, but data must finish before the manifest can point readers at it.
+	void (async () => {
+		try {
+			await saveCacheData(
+				cacheName,
+				JSON.stringify(spec.serialize()),
+				cacheScope,
+			);
+			await saveCacheManifest(
+				cacheName,
+				filePaths,
+				mtimes,
+				version,
+				cacheScope,
+			);
+		} catch (e) {
+			Logger.error(`Cache save failed for ${cacheName}: ${e}`);
+		}
+	})();
 }
 
 /**
@@ -128,7 +156,7 @@ async function buildIndexHalfWithTimer<TCache>(
 export async function readIndexFileContent(
 	indexName: string,
 	file: IndexFile,
-	options: { mod?: boolean; hoi4?: boolean },
+	options: FileSourceOptions,
 ): Promise<Buffer | undefined> {
 	try {
 		const [buffer] = await readFileFromModOrHOI4(file.path, options, file.uri);
@@ -164,7 +192,7 @@ export function describeParseFailure(cause: unknown): string {
 
 /**
  * Reports a file that was read but could not be parsed, saying whether it came from the vanilla
- * install or the mod.
+ * install, a parent mod or the mod itself.
  *
  * The message was written out separately by each index, against its own copy of the same three
  * localisation keys -- and the gfx index had no message at all, only a UserError sent to the debug
@@ -172,12 +200,14 @@ export function describeParseFailure(cause: unknown): string {
  */
 export function reportIndexParseFailure(
 	filePath: string,
-	options: { hoi4?: boolean },
+	options: FileSourceOptions,
 	cause: unknown,
 ): void {
 	const source = options.hoi4
 		? localize("index.vanilla", "[Vanilla]")
-		: localize("index.mod", "[Mod]");
+		: options.workspace === false
+			? localize("index.parent", "[Parent mod]")
+			: localize("index.mod", "[Mod]");
 	const failure = localize(
 		"index.parseFailure",
 		"Parsing failed! Please check if the file has issues!",

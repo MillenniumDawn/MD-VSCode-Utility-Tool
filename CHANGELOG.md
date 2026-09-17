@@ -5,6 +5,7 @@ v1.1.36
   Functionality:
 
 - Navigate preview definitions with Tab, Enter or Space. Issue #192.
+- New `mdHoi4Utilities.parentModPaths` setting for submods: list the folders of the mods the workspace extends, and every preview and index reads shared files from them before falling back to the game install and DLCs, and a parent's own `replace_path` hides vanilla files the way it does in the game. The status bar mod item shows how many parents are active. Issue #291.
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
 - [ CI ] Release v1.1.35 failed to publish.
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run.
