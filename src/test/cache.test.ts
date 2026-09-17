@@ -214,6 +214,42 @@ describe('Cache', () => {
         // Every weight is 0, so the byte limit is never exceeded and nothing is evicted.
         assert.deepStrictEqual(keys(cache), ['a', 'b', 'c']);
     });
+    it('re-weighs an entry on access and evicts when it grew', () => {
+        // A cached value can grow after insertion (an image memoizing its data URI); the weigher
+        // is re-run when the entry is touched so the growth counts from that access on.
+        const sizes: Record<string, number> = { a: 10, b: 10 };
+        const cache = track(new Cache<{ key: string }>({
+            factory: key => ({ key }),
+            weigher: value => sizes[value.key] ?? 0,
+            life: 60_000,
+            maxBytes: 25,
+            nonExpireLife: 10_000,
+        }));
+
+        cache.get('a');
+        cache.get('b');
+        assert.deepStrictEqual(keys(cache), ['a', 'b']);
+
+        sizes['a'] = 20;
+        cache.get('a'); // 20 + 10 -> over 25, 'b' is now the least recently used
+        assert.deepStrictEqual(keys(cache), ['a']);
+    });
+
+    it('keeps every entry when a re-weighed value did not grow', () => {
+        const cache = track(new Cache<string>({
+            factory: key => key.repeat(10),
+            weigher: value => value.length,
+            life: 60_000,
+            maxBytes: 25,
+            nonExpireLife: 10_000,
+        }));
+
+        cache.get('a');
+        cache.get('b');
+        cache.get('a');
+        cache.get('b');
+        assert.deepStrictEqual(keys(cache), ['a', 'b']);
+    });
 });
 
 describe('PromiseCache', () => {
@@ -270,6 +306,27 @@ describe('PromiseCache', () => {
         await tick();
 
         assert.deepStrictEqual(keys(cache), ['b', 'c']);
+    });
+
+    it('re-weighs a resolved entry on access and evicts when it grew', async () => {
+        const sizes: Record<string, number> = { a: 10, b: 10 };
+        const cache = track(new PromiseCache<{ key: string }>({
+            factory: async key => ({ key }),
+            weigher: value => sizes[value.key] ?? 0,
+            life: 60_000,
+            maxBytes: 25,
+            nonExpireLife: 10_000,
+        }));
+
+        await cache.get('a');
+        await cache.get('b');
+        await tick();
+        assert.deepStrictEqual(keys(cache), ['a', 'b']);
+
+        sizes['a'] = 20;
+        await cache.get('a'); // 20 + 10 -> over 25, evict LRU 'b'
+        await tick();
+        assert.deepStrictEqual(keys(cache), ['a']);
     });
 
     it('remove() forces the next get to re-invoke the factory', async () => {
