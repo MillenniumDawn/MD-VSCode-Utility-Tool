@@ -6,11 +6,10 @@ Unreleased
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
 - [ World Map Previewer ] The country colour set pans and zooms smoothly on a full-size map. Each province's owner colour was searched through every country tag on every redraw; the table is now built once per redraw. Issue #214.
 - [ World Map Previewer ] State, strategic region and supply area labels no longer stall panning on a full-size map. The province under each label was searched through every province on every redraw; provinces are now indexed by position once per map load. Issue #215.
-- The extension's source is now fully typed: lint reports no remaining untyped values, so a class of mistakes is caught at build time instead of at runtime. Issue #85.
 
   Bugfixes:
 
-- An event file with a `#!localisation:` dependency comment failed to preview: the localisation file was loaded and then rejected as "not iterable". Its keys now reach the event titles and descriptions again.
+- An event file with a `#!localisation:` dependency comment failed to preview: the localisation file was loaded and then rejected as "not iterable". Its keys now reach the event titles and descriptions again. Issue #85.
 - A focus id, MIO trait id, GUI window name or country tag containing `</script>` can no longer break out of the preview page or inject markup into it: the focus tree, MIO, GUI and technology previews now escape their data the way the other previews already did. Issue #209.
 - A GUI container-window name or technology folder name containing quotes or angle brackets can no longer break out of the folder selector or inject markup into the GUI and technology previews. Issue #210.
 - A MIO trait token or a localisation value containing quotes or angle brackets can no longer inject markup into the MIO and technology previews. Issue #211.
