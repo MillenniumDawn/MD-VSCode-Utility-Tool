@@ -14,6 +14,7 @@ Unreleased
 
   Bugfixes:
 
+- Closing a preview panel now releases everything the preview subscribed to on it, so a closed preview no longer keeps its cached data alive for as long as the panel object lives. Issue #180.
 - An event file with a `#!localisation:` dependency comment failed to preview: the localisation file was loaded and then rejected as "not iterable". Its keys now reach the event titles and descriptions again. Issue #85.
 - Opening a DDS or TGA file whose header claims an absurd size (for example 65535x65535) no longer freezes or crashes the extension: the image viewer now refuses it with a message instead of trying to allocate gigabytes of pixels. Issue #174.
 - A focus id, MIO trait id, GUI window name or country tag containing `</script>` can no longer break out of the preview page or inject markup into it: the focus tree, MIO, GUI and technology previews now escape their data the way the other previews already did. Issue #209.
