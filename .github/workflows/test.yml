@@ -29,6 +29,14 @@ jobs:
           cache: "npm"
       - name: Install dependencies
         run: npm ci
+      # @vscode/test-electron skips the download when .vscode-test/vscode-<version> already exists.
+      # Keyed on the file that carries the pinned version, so moving the pin is the only thing that
+      # fetches a new build.
+      - name: Cache VS Code build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .vscode-test/vscode-*
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('src/test/integration/runTest.ts') }}
       - name: Lint
         run: npm run lint
       # Fails only above the threshold in .jscpd.json, so the number can be walked down over time
@@ -60,28 +68,8 @@ jobs:
           name: md-vscode-utility-tool.vsix
           path: "*.vsix"
           retention-days: 5
-
-  integration:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 24
-          cache: "npm"
-      - name: Install dependencies
-        run: npm ci
-      # @vscode/test-electron skips the download when .vscode-test/vscode-<version> already exists.
-      # Keyed on the file that carries the pinned version, so moving the pin is the only thing that
-      # fetches a new build.
-      - name: Cache VS Code build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .vscode-test/vscode-*
-          key: vscode-test-${{ runner.os }}-${{ hashFiles('src/test/integration/runTest.ts') }}
-      - name: Build extension
-        run: npm run webpack
-      - name: Compile tests
-        run: npm run pretest
+      # Runs against the production bundle `npm run package` wrote to dist/ and the test build
+      # `pretest` wrote to out-test/, so nothing is installed or compiled a second time for it. It
+      # comes after the uploads so the .vsix and coverage are still there when this step fails.
       - name: Run integration smoke tests
         run: xvfb-run -a npm run test:integration
