@@ -1,4 +1,7 @@
 import * as assert from "assert";
+import * as fs from "fs/promises";
+import * as os from "os";
+import * as path from "path";
 import * as vscode from "vscode";
 import {
 	expiryToken,
@@ -9,8 +12,9 @@ import {
 	clearDlcZipCache,
 	parseHoi4FileCached,
 	parseAndResolveHoi4FileCached,
+	readFileFromModOrHOI4,
 } from "../util/fileloader";
-import { CancelledError } from "../util/common";
+import { CancelledError, UserError } from "../util/common";
 import { Node, SymbolNode } from "../hoiformat/hoiparser";
 import { clearParentModCache } from "../util/parentmods";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
@@ -802,6 +806,48 @@ describe("util/fileloader listFilesFromModOrHOI4 error branches", function () {
 // which really is on disk it comes back with real mtimes and real file: URIs from one pass, and that
 // on a root which is not -- the web build, a remote workspace, or an install path that is not set --
 // it degrades to the vscode.workspace.fs listing rather than reporting an empty folder.
+// The "Can't find file" a loader sees is a rethrow; the error it replaced said why the read
+// failed and must stay reachable through `cause`.
+describe("util/fileloader read error cause", function () {
+	let root: string;
+
+	beforeEach(async function () {
+		root = await fs.mkdtemp(path.join(os.tmpdir(), "hoi4cause-"));
+		stubVscode({});
+	});
+
+	afterEach(async function () {
+		restoreVscodeStubs();
+		await clearDlcZipCache();
+		await fs.rm(root, { recursive: true, force: true });
+	});
+
+	it("keeps the underlying error as the cause of a resolved-path read failure", async function () {
+		// A real archive that lacks the entry: the read throws the archive's own UserError, which
+		// readResolvedFile wraps.
+		const AdmZip = require("adm-zip");
+		const zip = new AdmZip();
+		zip.addFile("interface/present.gfx", Buffer.from("spriteTypes = { }"));
+		const zipPath = path.join(root, "dlc001.zip");
+		zip.writeZip(zipPath);
+		const resolvedUri = vscode.Uri.file(zipPath).with({
+			fragment: "interface/missing.gfx",
+		});
+
+		let thrown: unknown;
+		try {
+			await readFileFromModOrHOI4("interface/missing.gfx", undefined, resolvedUri);
+		} catch (e) {
+			thrown = e;
+		}
+
+		assert.ok(thrown instanceof UserError);
+		assert.match(thrown.message, /Can't find file interface\/missing\.gfx/);
+		assert.ok(thrown.cause instanceof UserError);
+		assert.notStrictEqual(thrown.cause, thrown);
+	});
+});
+
 describe("util/fileloader listFileEntriesFromModOrHOI4", function () {
 	const nodeFs = require("fs/promises") as typeof import("fs/promises");
 	const nodePath = require("path") as typeof import("path");

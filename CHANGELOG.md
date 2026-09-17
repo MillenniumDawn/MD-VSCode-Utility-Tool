@@ -5,15 +5,21 @@ Unreleased
 - Navigate preview definitions with Tab, Enter or Space. Issue #192.
 - New `mdHoi4Utilities.parentModPaths` setting for submods: list the folders of the mods the workspace extends, and every preview and index reads shared files from them before falling back to the game install and DLCs, and a parent's own `replace_path` hides vanilla files the way it does in the game. The status bar mod item shows how many parents are active. Issue #291.
 - Extension builds now type-check province map, loader and parser data without unsafe casts. Issue #52.
+- Coverage reports now list every extension source file, including the activation entry point, instead of leaving out files no test imports. Issue #188.
 - The mods named in the selected `.mod` file's `dependencies` are found through the launcher's mod registry and read as parent mods, so a submod no longer needs `mdHoi4Utilities.parentModPaths` on every machine it is checked out on. An entry in that setting still wins for the same mod, and a name the registry does not know is listed in the status bar tooltip. The new `mdHoi4Utilities.userDataPath` setting points at the game's user data folder when it is not found automatically. Issue #292.
 - The `.mod` dependencies are read again when a workspace folder is added or removed, the status bar tooltip follows the names that stopped or started resolving, and a `mod` folder with a `dlc_load.json` inside the workspace itself is never taken for the game's user data folder, so a checked-out repository cannot point the parent mods at an arbitrary folder. Issue #292.
 - [ CI ] The release pull request and the publish are one workflow, so a push to main is one run in the Actions list, and one manual run either publishes the pending version or opens the release pull request with the bump size you pick.
+- [ CI ] Every pull request is now checked for test coverage on the lines it changes, on top of the whole-suite thresholds, which have been raised to the real figures. Issue #187.
 - [ World Map Previewer ] The country colour set pans and zooms smoothly on a full-size map. Each province's owner colour was searched through every country tag on every redraw; the table is now built once per redraw. Issue #214.
 - [ World Map Previewer ] State, strategic region and supply area labels no longer stall panning on a full-size map. The province under each label was searched through every province on every redraw; provinces are now indexed by position once per map load. Issue #215.
 - [ World Map Previewer ] The warnings colour set and the hover tooltip no longer stall panning on a map with many warnings. Every province used to be checked against every warning on every redraw; warnings are now indexed by province, state, strategic region, supply area and river once per map load. Issue #216.
 - [ Focus Tree Previewer ] Refreshing a focus tree or decision preview no longer re-reads every file under `interface/` each time: the window names and sprites each file defines are remembered between refreshes, and the search stops as soon as the ones the preview needs are found. Issue #178.
 - Opening a large DDS or TGA texture uses far less memory: the decoded image is handed to the viewer as raw bytes instead of being embedded in the page as base64 text. Issue #176.
 - [ Focus Tree Previewer ] Focus tree, technology tree and MIO previews position each node and connection line directly on the element instead of through a one-off CSS rule, so a large tree ships far less CSS and opens faster. Issue #179.
+- An error inside a focus tree or MIO preview control (tree selector, condition filters, completed-focus checkboxes, the in-place refresh) is now logged and reported instead of being silently lost. Issue #181.
+- [ CI ] The integration tests run against a pinned VS Code version that is cached between runs, so a pull request no longer downloads the latest release every time or turns red when VS Code ships a regression. Issue #183.
+- [ CI ] A pull request builds and type-checks the extension once instead of twice: the integration smoke test now runs in the same job as the unit tests, against the packaged build. Issue #184.
+- [ CI ] Every release and version-check job now runs on the same pinned Node version as the tests, read from one `.nvmrc`, instead of whatever the GitHub runner image happens to ship. Issue #185.
 
   Bugfixes:
 
@@ -23,12 +29,14 @@ Unreleased
 - An event file with a `#!localisation:` dependency comment failed to preview: the localisation file was loaded and then rejected as "not iterable". Its keys now reach the event titles and descriptions again. Issue #85.
 - Opening a DDS or TGA file whose header claims an absurd size (for example 65535x65535) no longer freezes or crashes the extension: the image viewer now refuses it with a message instead of trying to allocate gigabytes of pixels. Issue #174.
 - A focus id, MIO trait id, GUI window name or country tag containing `</script>` can no longer break out of the preview page or inject markup into it: the focus tree, MIO, GUI and technology previews now escape their data the way the other previews already did. Issue #209.
+- A misspelled or empty folder in `mdHoi4Utilities.technologyGfxRoots` or `mdHoi4Utilities.inlayWindowGfxRoots`, an interface `.gui` or `.gfx` file that fails to parse, a broken `00_titlebar_styles.txt` or a failed idea-swap index now leave a message naming the file or folder in the HOI4 Modding output channel, instead of silently missing icons or windows. Issue #182.
 - A GUI container-window name or technology folder name containing quotes or angle brackets can no longer break out of the folder selector or inject markup into the GUI and technology previews. Issue #210.
 - A truncated or corrupt provinces.bmp, rivers.bmp or TGA texture is reported with a readable message instead of an internal read error or a garbled image. Issue #189.
 - A MIO trait token or a localisation value containing quotes or angle brackets can no longer inject markup into the MIO and technology previews. Issue #211.
 - [ CI ] A merged pull request labelled bug, or one closing an issue labelled bug, is now filed under Bugfixes in the release changelog instead of always landing under Functionality. Issue #212.
 - [ Focus Tree Previewer ] Ticking a completed-focus checkbox on a large tree no longer freezes the preview for seconds; the completed-focus conditions are indexed once per redraw instead of rescanned for every focus. Issue #213.
 - [ CI ] Installing the project's dependencies from source no longer ends with a warning about unreviewed install scripts. Issue #90.
+- A preview that failed with something other than a proper error no longer shows a blank "Error: Error"; the value that was thrown is shown instead. A YAML file that cannot be parsed now reports the error at the line in your file rather than in an internally rewritten copy, and a "Can't find file" error keeps the underlying reason attached. Issue #186.
 
   Bugfixes:
 

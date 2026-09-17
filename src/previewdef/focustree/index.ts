@@ -94,7 +94,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
 
     private repushCachedIconStyles(): void {
         if (this.lastPushedIconCss !== undefined && this.lastPushedIconGeneration === this.iconRenderGeneration && !this.isDisposed) {
-            this.panel.webview.postMessage({ type: 'iconStyles', css: this.lastPushedIconCss });
+            void this.panel.webview.postMessage({ type: 'iconStyles', css: this.lastPushedIconCss });
         }
     }
 
@@ -172,7 +172,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         // Progress is only reported for a full render: a partial update patches a tree that is
         // already on screen, so its spinner would be noise.
         const progress = options.partial ? undefined : (message: string, current?: number, total?: number) => {
-            this.panel.webview.postMessage({ type: 'progress', message, current, total });
+            void this.panel.webview.postMessage({ type: 'progress', message, current, total });
         };
         this.focusTreeLoader.setProgressListener(progress);
         try {
@@ -331,7 +331,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
             const css = full.styleTable.toRawCss();
             this.lastPushedIconCss = css;
             this.lastPushedIconGeneration = generation;
-            this.panel.webview.postMessage({ type: 'iconStyles', css });
+            void this.panel.webview.postMessage({ type: 'iconStyles', css });
         } catch (e) {
             error(e);
         }
@@ -362,7 +362,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         const css = full.styleTable.toRawCss();
         this.lastPushedIconCss = css;
         this.lastPushedIconGeneration = generation;
-        this.panel.webview.postMessage({ type: 'iconStyles', css });
+        void this.panel.webview.postMessage({ type: 'iconStyles', css });
     }
 }
 

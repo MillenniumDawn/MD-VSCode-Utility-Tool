@@ -37,5 +37,23 @@ describe('util/yaml', () => {
             // surface a real YAML syntax error rather than swallow it.
             assert.throws(() => parseYaml('key: [unterminated'), /end of the stream|JSON|expected/);
         });
+
+        it('reports the error against the original text, not the repaired copy', () => {
+            // The second line carries the `:N "` prefix the repair rewrites, so the repaired text
+            // fails differently (an unterminated flow collection at the end of the stream, one
+            // line further down) from the original (bad indentation). The error must be the
+            // original one, at the line the user can see.
+            const content = 'l_english:\n KEY:0 "a "b" c"\n KEY2: [x';
+            let thrown: unknown;
+            try {
+                parseYaml(content);
+            } catch (e) {
+                thrown = e;
+            }
+            const err = thrown as { name: string; reason: string; mark?: { line: number } };
+            assert.strictEqual(err.name, 'YAMLException');
+            assert.match(err.reason, /bad indentation/);
+            assert.strictEqual(err.mark?.line, 2);
+        });
     });
 });

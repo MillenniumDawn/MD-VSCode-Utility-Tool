@@ -28,7 +28,7 @@ module.exports = [
 		},
 	},
 	{
-		files: ["src/**/*.ts"],
+		files: ["src/**/*.ts", "webviewsrc/**/*.ts"],
 		ignores: ["src/test/**"],
 		languageOptions: {
 			parser: tsParser,
@@ -40,7 +40,14 @@ module.exports = [
 			},
 		},
 		rules: {
-			"@typescript-eslint/no-floating-promises": "error",
+			"@typescript-eslint/no-floating-promises": ["error", { checkThenables: true }],
+			"@typescript-eslint/no-misused-promises": "error",
+		},
+	},
+	{
+		files: ["src/**/*.ts"],
+		ignores: ["src/test/**"],
+		rules: {
 			"@typescript-eslint/no-explicit-any": "warn",
 		},
 	},

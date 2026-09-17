@@ -11,6 +11,7 @@
 		"url": "https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool"
 	},
 	"engines": {
+		"node": ">=24",
 		"vscode": "^1.74.0"
 	},
 	"categories": [
@@ -335,6 +336,7 @@
 		"pretest": "node scripts/compile-tests.js",
 		"test": "mocha --require ./out-test/src/test/_vscode_stub.js \"out-test/src/test/**/*.test.js\" \"out-test-webview/src/test/webview/**/*.test.js\" --exclude \"out-test/src/test/integration/**\"",
 		"test:coverage": "c8 --reporter=text --reporter=lcov --reports-dir=coverage mocha --require ./out-test/src/test/_vscode_stub.js \"out-test/src/test/**/*.test.js\" \"out-test-webview/src/test/webview/**/*.test.js\" --exclude \"out-test/src/test/integration/**\"",
+		"test:diff-coverage": "node scripts/diff-coverage.js",
 		"test:integration": "node ./out-test/src/test/integration/runTest.js",
 		"smoke:webviews": "node scripts/smoke-webviews.js",
 		"clean": "rimraf dist out static out-test out-test-webview",
@@ -366,8 +368,10 @@
 		],
 		"reports-dir": "coverage",
 		"check-coverage": true,
-		"lines": 55,
-		"branches": 60,
+		"statements": 76,
+		"lines": 76,
+		"functions": 74,
+		"branches": 78,
 		"per-file": false
 	},
 	"devDependencies": {
@@ -375,7 +379,7 @@
 		"@types/jsdom": "^28.0.3",
 		"@types/lodash": "^4.14.149",
 		"@types/mocha": "^10.0.10",
-		"@types/node": "^20",
+		"@types/node": "^24",
 		"@types/pngjs": "^3.4.2",
 		"@types/vscode": "~1.74.0",
 		"@typescript-eslint/eslint-plugin": "^8.62.1",
