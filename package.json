@@ -335,6 +335,7 @@
 		"pretest": "node scripts/compile-tests.js",
 		"test": "mocha --require ./out-test/src/test/_vscode_stub.js \"out-test/src/test/**/*.test.js\" \"out-test-webview/src/test/webview/**/*.test.js\" --exclude \"out-test/src/test/integration/**\"",
 		"test:coverage": "c8 --reporter=text --reporter=lcov --reports-dir=coverage mocha --require ./out-test/src/test/_vscode_stub.js \"out-test/src/test/**/*.test.js\" \"out-test-webview/src/test/webview/**/*.test.js\" --exclude \"out-test/src/test/integration/**\"",
+		"test:diff-coverage": "node scripts/diff-coverage.js",
 		"test:integration": "node ./out-test/src/test/integration/runTest.js",
 		"smoke:webviews": "node scripts/smoke-webviews.js",
 		"clean": "rimraf dist out static out-test out-test-webview",
@@ -366,8 +367,10 @@
 		],
 		"reports-dir": "coverage",
 		"check-coverage": true,
-		"lines": 55,
-		"branches": 60,
+		"statements": 76,
+		"lines": 76,
+		"functions": 74,
+		"branches": 78,
 		"per-file": false
 	},
 	"devDependencies": {
