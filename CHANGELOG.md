@@ -33,6 +33,7 @@ Unreleased
 - [ CI ] A merged pull request labelled bug, or one closing an issue labelled bug, is now filed under Bugfixes in the release changelog instead of always landing under Functionality. Issue #212.
 - [ Focus Tree Previewer ] Ticking a completed-focus checkbox on a large tree no longer freezes the preview for seconds; the completed-focus conditions are indexed once per redraw instead of rescanned for every focus. Issue #213.
 - [ CI ] Installing the project's dependencies from source no longer ends with a warning about unreviewed install scripts. Issue #90.
+- A preview that failed with something other than a proper error no longer shows a blank "Error: Error"; the value that was thrown is shown instead. A YAML file that cannot be parsed now reports the error at the line in your file rather than in an internally rewritten copy, and a "Can't find file" error keeps the underlying reason attached. Issue #186.
 
   Bugfixes:
 

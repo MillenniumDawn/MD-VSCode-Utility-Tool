@@ -562,7 +562,7 @@ export async function readFileFromPath(
 		return await fileContentCache.get(realPath.toString());
 	} catch (e) {
 		if (relativePath !== undefined && e instanceof UserError) {
-			throw new UserError("Can't find file " + relativePath);
+			throw new UserError("Can't find file " + relativePath, { cause: e });
 		}
 		throw e;
 	}
@@ -640,7 +640,7 @@ async function readResolvedFile(
 		);
 	} catch (e) {
 		if (e instanceof UserError) {
-			throw new UserError("Can't find file " + relativePath);
+			throw new UserError("Can't find file " + relativePath, { cause: e });
 		}
 		throw e;
 	}

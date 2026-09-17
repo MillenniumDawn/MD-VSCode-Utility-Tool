@@ -523,22 +523,36 @@ export function memoizeWithTtl<T>(
 }
 
 export class UserError extends Error {
-	constructor(message: string) {
-		super(message);
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
 		this.name = "UserError";
 	}
 }
 
 export function forceError(e: unknown): Error {
-	if (e instanceof Error || e instanceof UserError) {
+	if (e instanceof Error) {
 		return e;
 	}
 
 	if (typeof e === "string") {
-		return new Error(e.toString());
+		return new Error(e);
 	}
 
-	return new Error();
+	return new Error(`Non-error value thrown: ${describeThrown(e)}`, {
+		cause: e,
+	});
+}
+
+function describeThrown(e: unknown): string {
+	if (typeof e !== "object" || e === null) {
+		return String(e);
+	}
+
+	try {
+		return JSON.stringify(e);
+	} catch {
+		return Object.prototype.toString.call(e);
+	}
 }
 
 // JSON for embedding in an inline <script>. The HTML parser ends the script at the first `</script`
