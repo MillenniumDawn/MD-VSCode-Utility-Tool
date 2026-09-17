@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- Closing VS Code while a DDS or TGA image is still being decoded no longer leaves that decode waiting forever, and a decode that hangs is abandoned after 30 seconds instead of stalling the preview that asked for it. Issue #195.
+
 v1.1.36
 
   Functionality:

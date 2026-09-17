@@ -4,11 +4,14 @@ import { PNG } from "pngjs";
 import {
 	decodeImageToPng,
 	decodeImageToPngSync,
+	disposeImageDecodeWorkers,
 	resolveWorkerPoolSize,
 	_setImageWorkerPathForTest,
 	_resetImageWorkerPathForTest,
 	_terminateImageWorkerForTest,
 	_getWorkerCountForTest,
+	_setImageJobTimeoutForTest,
+	_isWorkerPoolDisabledForTest,
 } from "../util/image/imagedecoder";
 import { UserError } from "../util/common";
 // Imported only so tsc emits the worker file into this test's outDir; it is import-safe on the main
@@ -252,6 +255,80 @@ describe("util/image/imagedecoder", () => {
 			assert.strictEqual(result.width, 4);
 			assert.strictEqual(result.height, 4);
 			assertValidPng(result.pngBuffer, 4, 4);
+		});
+	});
+
+	describe("decodeImageToPng (hanging worker)", () => {
+		// Both paths log through error(); silence it for the block the same way the unusable-worker
+		// block does, since the eviction can land after the `it` has returned.
+		let originalConsoleError: typeof console.error;
+
+		before(() => {
+			originalConsoleError = console.error;
+			console.error = () => undefined;
+		});
+
+		// Each case re-arms the pool: the dispose case leaves it disabled, and the timeout case
+		// leaves it empty.
+		beforeEach(() => {
+			_setImageWorkerPathForTest(
+				path.resolve(__dirname, "hangingImageWorker.js"),
+			);
+		});
+
+		afterEach(async () => {
+			await _terminateImageWorkerForTest();
+		});
+
+		after(() => {
+			_resetImageWorkerPathForTest();
+			console.error = originalConsoleError;
+		});
+
+		it("settles a pending decode when the pool is disposed (falls back to the sync decode)", async function () {
+			// A regression here hangs forever; fail fast instead of stalling the suite.
+			this.timeout(5000);
+			const tga = makeTga();
+			const pending = decodeImageToPng(tga, "tga");
+			assert.strictEqual(_getWorkerCountForTest(), 1);
+
+			disposeImageDecodeWorkers();
+
+			const result = await pending;
+			assert.ok(
+				result.pngBuffer.equals(decodeImageToPngSync(tga, "tga").pngBuffer),
+				"disposed decode should fall back to the sync PNG",
+			);
+			assert.strictEqual(_getWorkerCountForTest(), 0);
+		});
+
+		it("rejects a decode that times out and evicts the wedged worker without disabling the pool", async function () {
+			this.timeout(5000);
+			_setImageJobTimeoutForTest(50);
+			const tga = makeTga();
+			const dds = makeDds(4, 4);
+
+			// Two concurrent jobs: the pool may spread them over two wedged workers or queue both on
+			// one; either way each caller is failed and no worker is left behind.
+			const results = await Promise.allSettled([
+				decodeImageToPng(tga, "tga"),
+				decodeImageToPng(dds, "dds"),
+			]);
+			for (const r of results) {
+				assert.strictEqual(r.status, "rejected");
+				if (r.status === "rejected") {
+					assert.ok(r.reason instanceof Error);
+					assert.strictEqual(r.reason.name, "ImageDecodeTimeoutError");
+					assert.match(r.reason.message, /timed out/);
+				}
+			}
+
+			assert.strictEqual(_getWorkerCountForTest(), 0);
+			assert.strictEqual(
+				_isWorkerPoolDisabledForTest(),
+				false,
+				"a timeout should evict one worker, not give up on the pool",
+			);
 		});
 	});
 });
