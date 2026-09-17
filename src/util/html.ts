@@ -50,34 +50,26 @@ export function html(webview: vscode.Webview, body: string, scripts: (string | D
         }
     });
 
-    const preparedStyles = styles === undefined ? [['', `'unsafe-inline'`] as [string, string]] :
-        styles.map<[string, string]>(style => {
+    // Styles are allowed with 'unsafe-inline' rather than per-element nonces: grid items and
+    // connection lines carry their geometry in a style attribute, which a nonce cannot whitelist,
+    // and a browser ignores 'unsafe-inline' the moment a nonce sits next to it in the directive.
+    // The nonce attributes on the <style> elements are kept for the webviews that address them.
+    const preparedStyles = styles === undefined ? [] :
+        styles.map<string>(style => {
             const nonce = randomString(32);
             if (style instanceof StyleTable) {
-                return [
-                    style.toStyleElement(nonce),
-                    `'nonce-${nonce}'`
-                ];
+                return style.toStyleElement(nonce);
             } else if (typeof style === 'object') {
                 if ('nonce' in style) {
-                    return [
-                        '',
-                        `'nonce-${style.nonce}'`,
-                    ];
+                    return '';
                 } else {
-                    return [
-                        `<style${style.id ? ` id="${style.id}"` : ''} nonce="${nonce}">${style.content}</style>`,
-                        `'nonce-${nonce}'`,
-                    ];
+                    return `<style${style.id ? ` id="${style.id}"` : ''} nonce="${nonce}">${style.content}</style>`;
                 }
             } else {
                 const uri = contextContainer.current ?
                     webview.asWebviewUri(vscode.Uri.joinPath(contextContainer.current.extensionUri, 'static/' + style)) :
                     "";
-                return [
-                    `<link rel="stylesheet" href="${uri}"/>`,
-                    ''
-                ];
+                return `<link rel="stylesheet" href="${uri}"/>`;
             }
         });
 
@@ -88,14 +80,14 @@ export function html(webview: vscode.Webview, body: string, scripts: (string | D
         <meta charset="UTF-8">
         <meta http-equiv="Content-Security-Policy" content="
             default-src 'none';
-            style-src ${preparedStyles.map(v => v[1]).join(' ')} ${webview.cspSource};
+            style-src 'unsafe-inline' ${webview.cspSource};
             script-src ${preparedScripts.map(v => v[1]).filter(v => v.length > 0).join(' ')} ${webview.cspSource};
             img-src data: blob: ${webview.cspSource};
             font-src ${webview.cspSource};
         ">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         ${preparedScripts.map(v => v[0]).join('')}
-        ${preparedStyles.map(v => v[0]).join('')}
+        ${preparedStyles.join('')}
     </head>
     <body>${body.replace(/\s\s+/g, ' ')}</body>
 </html>

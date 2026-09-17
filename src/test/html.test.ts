@@ -1,5 +1,7 @@
 import * as assert from 'assert';
-import { htmlEscape } from '../util/html';
+import * as vscode from 'vscode';
+import { html, htmlEscape } from '../util/html';
+import { StyleTable } from '../util/styletable';
 
 describe('util/html', () => {
     describe('htmlEscape', () => {
@@ -32,6 +34,22 @@ describe('util/html', () => {
 
         it('returns an empty string unchanged', () => {
             assert.strictEqual(htmlEscape(''), '');
+        });
+    });
+
+    describe('html', () => {
+        const webview = { asWebviewUri: (u: unknown) => u, cspSource: 'stub-csp' } as unknown as vscode.Webview;
+
+        it('allows inline style attributes and does not pin styles to a nonce', () => {
+            const table = new StyleTable();
+            table.style('x', () => 'color: red;');
+            const page = html(webview, '<div style="left: 1px;"></div>', [{ content: 'void 0;' }], [table, { nonce: 'abc' }]);
+            const styleSrc = /style-src ([^;]*);/.exec(page)?.[1] ?? '';
+            assert.ok(styleSrc.includes("'unsafe-inline'"));
+            assert.ok(styleSrc.includes('stub-csp'));
+            assert.ok(!styleSrc.includes('nonce-'));
+            assert.ok(/script-src ('nonce-[^']+' )+stub-csp/.test(page));
+            assert.ok(page.includes('.st-x { color: red; }'));
         });
     });
 });
