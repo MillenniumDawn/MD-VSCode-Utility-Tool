@@ -110,15 +110,44 @@ export function getImageSizeInBytes(
 	height: number,
 ): number {
 	if (pixelFormat.compressed) {
-		return (
-			Math.max(1, (width + 3) >> 2) *
-			Math.max(1, (height + 3) >> 2) *
-			getBlockSize(pixelFormat.compressFormat)
+		const blocksPerRow = Math.max(1, Math.ceil(width / 4));
+		const blocksPerColumn = Math.max(1, Math.ceil(height / 4));
+		return checkedProduct(
+			checkedProduct(blocksPerRow, blocksPerColumn, "DDS block count"),
+			getBlockSize(pixelFormat.compressFormat),
+			"DDS image size",
 		);
-	} else {
-		const bytesInARow = (pixelFormat.bitsPerPixel * width + 7) >>> 3;
-		return bytesInARow * height;
 	}
+
+	if (
+		!Number.isSafeInteger(pixelFormat.bitsPerPixel) ||
+		pixelFormat.bitsPerPixel < 1 ||
+		pixelFormat.bitsPerPixel > 128
+	) {
+		throw new UserError(
+			`DDS bits-per-pixel value ${pixelFormat.bitsPerPixel} is not valid`,
+		);
+	}
+	const bitsInRow = checkedProduct(
+		pixelFormat.bitsPerPixel,
+		width,
+		"DDS row bit count",
+	);
+	const bytesInARow = Math.ceil(bitsInRow / 8);
+	return checkedProduct(bytesInARow, height, "DDS image size");
+}
+
+function checkedProduct(left: number, right: number, name: string): number {
+	if (
+		!Number.isSafeInteger(left) ||
+		!Number.isSafeInteger(right) ||
+		left < 0 ||
+		right < 0 ||
+		(left !== 0 && right > Number.MAX_SAFE_INTEGER / left)
+	) {
+		throw new UserError(`${name} is too large`);
+	}
+	return left * right;
 }
 
 export function getBlockSize(compressFormat: CompressFormat): number {

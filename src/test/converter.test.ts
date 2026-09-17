@@ -4,6 +4,7 @@ import { DDS } from "../util/image/dds";
 import {
 	assertImageDimensions,
 	MAX_IMAGE_DIMENSION,
+	MAX_IMAGE_PIXELS,
 } from "../util/image/imagelimits";
 import { UserError } from "../util/common";
 
@@ -12,10 +13,19 @@ const TGA = require("tga") as typeof import("tga");
 // A 128-byte uncompressed A8R8G8B8 DDS header claiming the given size, followed by `pixelBytes`
 // bytes of pixel data. The dimension fields are written unsigned so a value with the top bit set
 // reads back negative from the parser's Int32Array view, as it would from a hostile file.
+interface DdsOptions {
+	depth?: number;
+	mipmapCount?: number;
+	caps?: number;
+	caps2?: number;
+	bitsPerPixel?: number;
+}
+
 function makeDdsHeader(
 	width: number,
 	height: number,
 	pixelBytes: number,
+	options: DdsOptions = {},
 ): Buffer {
 	const buf = Buffer.alloc(128 + pixelBytes);
 	const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
@@ -26,14 +36,41 @@ function makeDdsHeader(
 	setInt(2, 0x1 | 0x2 | 0x4 | 0x1000); // dwFlags: CAPS|HEIGHT|WIDTH|PIXELFORMAT
 	dv.setUint32(3 * 4, height, true);
 	dv.setUint32(4 * 4, width, true);
+	setInt(6, options.depth ?? 0); // dwDepth
+	setInt(7, options.mipmapCount ?? 0); // dwMipMapCount
 	setInt(19, 32); // ddspf.dwSize
 	setInt(20, 0x40 | 0x1); // ddspf.dwFlags: DDPF_RGB | DDPF_ALPHA
-	setInt(22, 32); // dwRGBBitCount
+	setInt(22, options.bitsPerPixel ?? 32); // dwRGBBitCount
 	setInt(23, 0x00ff0000); // R mask
 	setInt(24, 0x0000ff00); // G mask
 	setInt(25, 0x000000ff); // B mask
 	dv.setUint32(26 * 4, 0xff000000, true); // A mask
-	setInt(27, 0x1000); // dwCaps: DDSCAPS_TEXTURE (no mipmap)
+	setInt(27, options.caps ?? 0x1000); // dwCaps
+	setInt(28, options.caps2 ?? 0); // dwCaps2
+	return buf;
+}
+
+function makeDdsDx10Header(
+	width: number,
+	height: number,
+	arraySize: number,
+): Buffer {
+	const buf = Buffer.alloc(148);
+	const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+	const setInt = (intIndex: number, value: number) =>
+		dv.setInt32(intIndex * 4, value, true);
+	setInt(0, 0x20534444); // DDS magic 'DDS '
+	setInt(1, 124); // dwSize
+	setInt(2, 0x1 | 0x2 | 0x4 | 0x1000); // dwFlags: CAPS|HEIGHT|WIDTH|PIXELFORMAT
+	setInt(3, height);
+	setInt(4, width);
+	setInt(19, 32); // ddspf.dwSize
+	setInt(20, 0x4); // ddspf.dwFlags: DDPF_FOURCC
+	setInt(21, 0x30315844); // DX10
+	setInt(27, 0x1000); // dwCaps: DDSCAPS_TEXTURE
+	setInt(32, 28); // DXGI_FORMAT_R8G8B8A8_UNORM
+	setInt(33, 3); // DDS_DIMENSION_TEXTURE2D
+	setInt(35, arraySize);
 	return buf;
 }
 
@@ -52,14 +89,13 @@ function makeTgaHeader(width: number, height: number): Buffer {
 }
 
 function isUserError(pattern: RegExp): (e: unknown) => boolean {
-	return (e: unknown) =>
-		e instanceof UserError && pattern.test(e.message);
+	return (e: unknown) => e instanceof UserError && pattern.test(e.message);
 }
 
 describe("assertImageDimensions", () => {
 	it("accepts a wide texture within the per-side and pixel bounds", () => {
 		assert.doesNotThrow(() =>
-			assertImageDimensions(MAX_IMAGE_DIMENSION, 4096, "DDS"),
+			assertImageDimensions(MAX_IMAGE_DIMENSION, 1, "DDS"),
 		);
 	});
 
@@ -70,9 +106,11 @@ describe("assertImageDimensions", () => {
 		);
 	});
 
-	it("rejects a pixel count over the limit when each side is allowed", () => {
+	it("accepts the pixel limit and rejects one pixel over it", () => {
+		assert.doesNotThrow(() => assertImageDimensions(6000, 4000, "DDS"));
+		assert.strictEqual(6000 * 4000, MAX_IMAGE_PIXELS);
 		assert.throws(
-			() => assertImageDimensions(8193, 8192, "DDS"),
+			() => assertImageDimensions(6000, 4001, "DDS"),
 			isUserError(/exceeds the supported maximum/),
 		);
 	});
@@ -116,6 +154,58 @@ describe("DDS dimension bound", () => {
 		assert.strictEqual(png.width, 2);
 		assert.strictEqual(png.height, 2);
 	});
+
+	it("refuses malicious volume depth before entering the depth loop", () => {
+		assert.throws(
+			() =>
+				parseDds(
+					makeDdsHeader(1, 1, 0, {
+						depth: MAX_IMAGE_DIMENSION + 1,
+						caps2: 0x200000,
+					}),
+				),
+			isUserError(/depth .* is not valid/),
+		);
+	});
+
+	it("refuses an excessive mipmap count before entering the mip loop", () => {
+		assert.throws(
+			() =>
+				parseDds(
+					makeDdsHeader(4, 4, 0, {
+						mipmapCount: 100,
+						caps: 0x1000 | 0x400000,
+					}),
+				),
+			isUserError(/mipmap count .* is not valid/),
+		);
+	});
+
+	it("refuses impossible bits-per-pixel row sizing", () => {
+		assert.throws(
+			() => parseDds(makeDdsHeader(2, 2, 0, { bitsPerPixel: 0x7fffffff })),
+			isUserError(/bits-per-pixel value .* is not valid/),
+		);
+	});
+
+	it("refuses DX10 arrays over the surface count bound", () => {
+		assert.throws(
+			() => parseDds(makeDdsDx10Header(1, 1, MAX_IMAGE_DIMENSION + 1)),
+			isUserError(/DX10 array size .* is not valid/),
+		);
+	});
+
+	it("refuses cubemap surface work over the aggregate pixel bound", () => {
+		assert.throws(
+			() =>
+				parseDds(
+					makeDdsHeader(2048, 2048, 0, {
+						caps2: 0x200 | 0x400 | 0x800 | 0x1000 | 0x2000 | 0x4000 | 0x8000,
+					}),
+				),
+			isUserError(/decoded surface pixel work .* exceeds/),
+		);
+	});
 });
 
 describe("TGA dimension bound", () => {
@@ -127,10 +217,7 @@ describe("TGA dimension bound", () => {
 	});
 
 	it("refuses a truncated header with a UserError rather than a read error", () => {
-		assert.throws(
-			() => tgaToPng(Buffer.alloc(10)),
-			isUserError(/truncated/),
-		);
+		assert.throws(() => tgaToPng(Buffer.alloc(10)), isUserError(/truncated/));
 	});
 
 	it("refuses a zero width", () => {

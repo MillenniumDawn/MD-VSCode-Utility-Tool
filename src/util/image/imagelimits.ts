@@ -1,9 +1,9 @@
 import { UserError } from "../common";
 
-// The widest texture Millennium Dawn ships is 15360 px on a side and the largest is 20 Mpx; the
-// bound leaves headroom while keeping the decoded RGBA buffer at 256 MB or less.
+// Millennium Dawn's largest images are about 20 Mpx. At this limit the PNG, source RGBA, and
+// conversion copy can coexist at about 288 MB, with modest headroom for valid images.
 export const MAX_IMAGE_DIMENSION = 16384;
-export const MAX_IMAGE_PIXELS = 8192 * 8192;
+export const MAX_IMAGE_PIXELS = 24_000_000;
 
 export function assertImageDimensions(
 	width: number,
