@@ -21,6 +21,7 @@ v1.1.36
 - [ Focus Tree Previewer ] Focus tree, technology tree and MIO previews position each node and connection line directly on the element instead of through a one-off CSS rule, so a large tree ships far less CSS and opens faster. Issue #179.
 - An error inside a focus tree or MIO preview control (tree selector, condition filters, completed-focus checkboxes, the in-place refresh) is now logged and reported instead of being silently lost. Issue #181.
 - [ CI ] The integration tests run against a pinned VS Code version that is cached between runs, so a pull request no longer downloads the latest release every time or turns red when VS Code ships a regression. Issue #183.
+- [ CI ] A pull request builds and type-checks the extension once instead of twice: the integration smoke test now runs in the same job as the unit tests, against the packaged build. Issue #184.
 
   Bugfixes:
 
