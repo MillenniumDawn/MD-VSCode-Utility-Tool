@@ -828,28 +828,68 @@ export class FEWorldMapClass implements FEWorldMap {
 	}
 
 	private collectWarningTexts(
-		...buckets: (number[] | undefined)[]
+		bucket1?: number[],
+		bucket2?: number[],
+		bucket3?: number[],
+		bucket4?: number[],
+		bucket5?: number[],
 	): string[] {
-		let single: number[] | undefined;
-		let merged: Set<number> | undefined;
-		for (const bucket of buckets) {
-			if (bucket === undefined) {
-				continue;
+		let offset1 = 0;
+		let offset2 = 0;
+		let offset3 = 0;
+		let offset4 = 0;
+		let offset5 = 0;
+		let current1 = bucket1?.[0] ?? Infinity;
+		let current2 = bucket2?.[0] ?? Infinity;
+		let current3 = bucket3?.[0] ?? Infinity;
+		let current4 = bucket4?.[0] ?? Infinity;
+		let current5 = bucket5?.[0] ?? Infinity;
+		let previous: number | undefined;
+		const texts: string[] = [];
+
+		while (
+			current1 !== Infinity ||
+			current2 !== Infinity ||
+			current3 !== Infinity ||
+			current4 !== Infinity ||
+			current5 !== Infinity
+		) {
+			let index = current1;
+			if (current2 < index) {
+				index = current2;
 			}
-			if (single === undefined) {
-				single = bucket;
-			} else {
-				const target = (merged ??= new Set(single));
-				for (const i of bucket) {
-					target.add(i);
-				}
+			if (current3 < index) {
+				index = current3;
+			}
+			if (current4 < index) {
+				index = current4;
+			}
+			if (current5 < index) {
+				index = current5;
+			}
+
+			if (index !== previous) {
+				texts.push(this.warnings[index]?.text ?? "");
+				previous = index;
+			}
+
+			if (current1 === index) {
+				current1 = bucket1?.[++offset1] ?? Infinity;
+			}
+			if (current2 === index) {
+				current2 = bucket2?.[++offset2] ?? Infinity;
+			}
+			if (current3 === index) {
+				current3 = bucket3?.[++offset3] ?? Infinity;
+			}
+			if (current4 === index) {
+				current4 = bucket4?.[++offset4] ?? Infinity;
+			}
+			if (current5 === index) {
+				current5 = bucket5?.[++offset5] ?? Infinity;
 			}
 		}
-		const indices =
-			merged !== undefined
-				? [...merged].sort((a, b) => a - b)
-				: (single ?? []);
-		return indices.map((i) => this.warnings[i]?.text ?? "");
+		return texts;
 	}
 
 	public getProvinceWarnings(

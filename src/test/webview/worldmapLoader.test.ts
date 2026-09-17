@@ -193,7 +193,9 @@ describe("webview/worldmap/FEWorldMapClass reverse maps", function () {
 
 			map.getProvinceByPosition(0, 0);
 			const start = performance.now();
-			const indexed = points.map((p) => map.getProvinceByPosition(p.x, p.y)?.id);
+			const indexed = points.map(
+				(p) => map.getProvinceByPosition(p.x, p.y)?.id,
+			);
 			const elapsed = performance.now() - start;
 
 			const expected = points.map((p) => bruteForce(p.x, p.y));
@@ -330,6 +332,64 @@ describe("webview/worldmap/FEWorldMapClass warning lookups", function () {
 		assert.deepStrictEqual(map.getProvinceWarnings(), []);
 	});
 
+	it("merges all five matching buckets in warning order without duplicates", function () {
+		const map = new FEWorldMapClass({
+			warnings: [
+				{
+					text: "all sources at the start",
+					source: [
+						{ type: "province", id: 10, color: 0x101010 },
+						{ type: "state", id: 1 },
+						{ type: "strategicregion", id: 1 },
+						{ type: "supplyarea", id: 1 },
+					],
+				},
+				{ text: "not selected", source: [{ type: "river", index: 99 }] },
+				{
+					text: "province id",
+					source: [{ type: "province", id: 10, color: 0x999999 }],
+				},
+				{
+					text: "province color",
+					source: [{ type: "province", id: null, color: 0x101010 }],
+				},
+				{ text: "state", source: [{ type: "state", id: 1 }] },
+				{
+					text: "strategic region",
+					source: [{ type: "strategicregion", id: 1 }],
+				},
+				{ text: "supply area", source: [{ type: "supplyarea", id: 1 }] },
+				{
+					text: "all sources at the end",
+					source: [
+						{ type: "province", id: 10, color: 0x101010 },
+						{ type: "state", id: 1 },
+						{ type: "strategicregion", id: 1 },
+						{ type: "supplyarea", id: 1 },
+					],
+				},
+			],
+		} as any);
+
+		assert.deepStrictEqual(
+			map.getProvinceWarnings(
+				province as any,
+				state as any,
+				strategicRegion as any,
+				supplyArea as any,
+			),
+			[
+				"all sources at the start",
+				"province id",
+				"province color",
+				"state",
+				"strategic region",
+				"supply area",
+				"all sources at the end",
+			],
+		);
+	});
+
 	it("finds state, strategic region, supply area and river warnings", function () {
 		const map = buildWarnedMap();
 		assert.deepStrictEqual(map.getStateWarnings(state as any), [
@@ -364,7 +424,12 @@ describe("webview/worldmap/FEWorldMapClass warning lookups", function () {
 			true,
 		);
 		assert.strictEqual(
-			map.hasProvinceWarnings(undefined, undefined, undefined, supplyArea as any),
+			map.hasProvinceWarnings(
+				undefined,
+				undefined,
+				undefined,
+				supplyArea as any,
+			),
 			true,
 		);
 		assert.strictEqual(map.hasProvinceWarnings(), false);
