@@ -100,6 +100,7 @@ export async function listIndexFiles(
 			hoi4: options.hoi4,
 			workspace: options.workspace,
 			parent: options.parent,
+			parentModUris: options.parentModUris,
 		};
 		const resolved = await getFileMtimes(undated, (relativePath) =>
 			getFilePathFromModOrHOI4(relativePath, resolveOptions),

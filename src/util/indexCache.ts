@@ -90,7 +90,9 @@ function cacheNamespace(): string {
     return cacheNamespaceFor(modFile, folders, parentModPaths);
 }
 
-function getCacheDir(): vscode.Uri | null {
+export type CacheScope = vscode.Uri | null;
+
+export function captureCacheScope(): CacheScope {
     const ctx = contextContainer.current;
     if (!ctx || IS_WEB_EXT) {
         return null;
@@ -102,8 +104,8 @@ function getCacheDir(): vscode.Uri | null {
 // session: a workspace folder is added, or the `modFile` setting is pointed at another mod.
 const cacheDirPromises = new Map<string, Promise<vscode.Uri | null>>();
 
-function ensureCacheDir(): Promise<vscode.Uri | null> {
-    const dir = getCacheDir();
+export function ensureCacheDir(scope: CacheScope = captureCacheScope()): Promise<vscode.Uri | null> {
+    const dir = scope;
     if (!dir) {
         return Promise.resolve(null);
     }
@@ -163,8 +165,8 @@ async function removeUnnamespacedCaches(): Promise<void> {
     }
 }
 
-export async function saveCacheManifest(indexName: string, filePaths: string[], mtimes: Map<string, number>, version: number): Promise<void> {
-    const dir = await ensureCacheDir();
+export async function saveCacheManifest(indexName: string, filePaths: string[], mtimes: Map<string, number>, version: number, scope?: CacheScope): Promise<void> {
+    const dir = await ensureCacheDir(scope);
     if (!dir) { return; }
     try {
         const manifest: CacheManifest = {
@@ -175,11 +177,12 @@ export async function saveCacheManifest(indexName: string, filePaths: string[], 
         await writeFile(uri, Buffer.from(JSON.stringify(manifest)));
     } catch (e) {
         Logger.error(`Failed to save cache manifest for ${indexName}: ${e}`);
+        throw e;
     }
 }
 
-export async function loadCacheManifest(indexName: string, expectedVersion: number): Promise<CacheManifest | null> {
-    const dir = getCacheDir();
+export async function loadCacheManifest(indexName: string, expectedVersion: number, scope?: CacheScope): Promise<CacheManifest | null> {
+    const dir = scope === undefined ? captureCacheScope() : scope;
     if (!dir) { return null; }
     try {
         const uri = vscode.Uri.joinPath(dir, `${indexName}.manifest.json`);
@@ -192,19 +195,20 @@ export async function loadCacheManifest(indexName: string, expectedVersion: numb
     }
 }
 
-export async function saveCacheData(indexName: string, data: string): Promise<void> {
-    const dir = await ensureCacheDir();
+export async function saveCacheData(indexName: string, data: string, scope?: CacheScope): Promise<void> {
+    const dir = await ensureCacheDir(scope);
     if (!dir) { return; }
     try {
         const uri = vscode.Uri.joinPath(dir, `${indexName}.data.json`);
         await writeFile(uri, Buffer.from(data));
     } catch (e) {
         Logger.error(`Failed to save cache data for ${indexName}: ${e}`);
+        throw e;
     }
 }
 
-export async function loadCacheData(indexName: string): Promise<string | null> {
-    const dir = getCacheDir();
+export async function loadCacheData(indexName: string, scope?: CacheScope): Promise<string | null> {
+    const dir = scope === undefined ? captureCacheScope() : scope;
     if (!dir) { return null; }
     try {
         const uri = vscode.Uri.joinPath(dir, `${indexName}.data.json`);

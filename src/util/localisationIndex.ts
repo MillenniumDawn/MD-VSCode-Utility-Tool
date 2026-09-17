@@ -11,10 +11,7 @@ import {
 	readIndexFileContent,
 	reportIndexParseFailure,
 } from "./indexHalf";
-import {
-	createIndexWatchers,
-	toWorkspaceRelativePath,
-} from "./indexWatchers";
+import { createIndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
 import {
 	defaultYmlSuffix,
 	isoBySettingName,
@@ -25,10 +22,14 @@ import {
 type LocalisationData = Record<string, Record<string, string>>;
 
 const globalLocalisationIndex: LocalisationData = {};
+const globalLocalisationFileMap: Record<
+	string,
+	Record<string, Set<string>>
+> = {};
 // A half of its own for the parent mods, for the same reason the gfx index has one: within a half
 // the last file parsed wins, so a key the workspace overrides in a differently named .yml would
 // otherwise show the parent's text on some builds.
-let parentLocalisationIndex: LocalisationData = {};
+let parentLocalisationIndexes: LocalisationData[] = [];
 let workspaceLocalisationIndex: LocalisationData = {};
 
 // Tracks which localisation keys came from which file, per language
@@ -38,7 +39,13 @@ const workspaceLocalisationFileMap: Record<
 	Record<string, Set<string>>
 > = {};
 
-
+// The parent half's parallel map. Its cache is only worth hydrating from if it carries fileMap
+// data: without it a warm build restored no parent keys and parsed no fresh files, leaving the
+// parent half empty.
+const parentLocalisationFileMaps: Record<
+	string,
+	Record<string, Set<string>>
+>[] = [];
 
 // Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
@@ -111,9 +118,11 @@ function lookupLocalisation(
 	localisationKey: string,
 ): string | undefined {
 	return (
-		workspaceLocalisationIndex[langKey]?.[localisationKey] ||
-		parentLocalisationIndex[langKey]?.[localisationKey] ||
-		globalLocalisationIndex[langKey]?.[localisationKey] ||
+		workspaceLocalisationIndex[langKey]?.[localisationKey] ??
+		parentLocalisationIndexes
+			.map((index) => index[langKey]?.[localisationKey])
+			.find((value) => value !== undefined) ??
+		globalLocalisationIndex[langKey]?.[localisationKey] ??
 		undefined
 	);
 }
@@ -138,13 +147,11 @@ async function buildGlobalLocalisationIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	// The global half keeps no per-file key map: nothing invalidates a vanilla file on its own, so
-	// maintaining one only ever wrote an empty object into the cache.
 	await buildLocalisationIndexHalf(
 		"localisationIndex.global",
 		{ mod: false, hoi4: true, recursively: true },
 		globalLocalisationIndex,
-		null,
+		globalLocalisationFileMap,
 		estimatedSize,
 		progress,
 	);
@@ -154,19 +161,27 @@ async function buildParentLocalisationIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
-	// No parents, no half: a mod that extends nothing pays no listing and writes no cache for it.
-	if (getParentModUris().length === 0) {
-		return;
-	}
-	// No per-file key map, like the global half: a parent file is outside the workspace, so nothing
-	// ever re-indexes or removes it on its own.
-	await buildLocalisationIndexHalf(
-		"localisationIndex.parent",
-		{ workspace: false, hoi4: false, recursively: true },
-		parentLocalisationIndex,
-		null,
-		estimatedSize,
-		progress,
+	const parents = getParentModUris();
+	parentLocalisationIndexes = parents.map(() => ({}));
+	parentLocalisationFileMaps.length = parents.length;
+	await Promise.all(
+		parents.map((parent, index) => {
+			const fileMap: Record<string, Record<string, Set<string>>> = {};
+			parentLocalisationFileMaps[index] = fileMap;
+			return buildLocalisationIndexHalf(
+				`localisationIndex.parent.${index}`,
+				{
+					workspace: false,
+					hoi4: false,
+					recursively: true,
+					parentModUris: [parent],
+				},
+				parentLocalisationIndexes[index]!,
+				fileMap,
+				estimatedSize,
+				progress,
+			);
+		}),
 	);
 }
 
@@ -196,6 +211,7 @@ async function buildLocalisationIndexHalf(
 		{
 			cacheName,
 			version: LOC_CACHE_VERSION,
+			fullRebuildOnAnyChange: true,
 			listFiles: (token) =>
 				listIndexFiles({
 					roots: [localisationRoot],
@@ -242,10 +258,7 @@ async function buildLocalisationIndexHalf(
 			// index is off by default and off on the machines the hangs were reported from.
 			// Streaming the write, or caching per language, is the way out.
 			serialize: () => {
-				const serializedFileMap: Record<
-					string,
-					Record<string, string[]>
-				> = {};
+				const serializedFileMap: Record<string, Record<string, string[]>> = {};
 				if (fileMap) {
 					for (const langKey in fileMap) {
 						const perFile: Record<string, string[]> = {};
@@ -453,7 +466,8 @@ const watchers = createIndexWatchers({
 	},
 	rebuildParent: {
 		reset: () => {
-			parentLocalisationIndex = {};
+			parentLocalisationIndexes = [];
+			parentLocalisationFileMaps.length = 0;
 		},
 		build: buildParentLocalisationIndex,
 	},
@@ -474,8 +488,12 @@ export function __resetLocalisationIndexForTests(): void {
 	for (const key of Object.keys(globalLocalisationIndex)) {
 		delete globalLocalisationIndex[key];
 	}
-	parentLocalisationIndex = {};
+	for (const key of Object.keys(globalLocalisationFileMap)) {
+		delete globalLocalisationFileMap[key];
+	}
+	parentLocalisationIndexes = [];
 	workspaceLocalisationIndex = {};
+	parentLocalisationFileMaps.length = 0;
 	for (const key of Object.keys(workspaceLocalisationFileMap)) {
 		delete workspaceLocalisationFileMap[key];
 	}

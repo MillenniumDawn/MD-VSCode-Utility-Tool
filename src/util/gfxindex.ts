@@ -14,10 +14,7 @@ import {
 	readIndexFileContent,
 	reportIndexParseFailure,
 } from "./indexHalf";
-import {
-	createIndexWatchers,
-	toWorkspaceRelativePath,
-} from "./indexWatchers";
+import { createIndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
 
 interface GfxIndexItem {
 	file: string;
@@ -28,7 +25,7 @@ const globalGfxIndex: Record<string, GfxIndexItem | undefined> = {};
 // between sources is what the halves are for: inside one half the last file to parse wins, and
 // the parse queue is four wide, so a sprite the workspace redefines in a differently named .gfx
 // would resolve to the parent's file on some builds and the workspace's on others.
-let parentGfxIndex: Record<string, GfxIndexItem | undefined> = {};
+let parentGfxIndexes: Record<string, GfxIndexItem | undefined>[] = [];
 let workspaceGfxIndex: Record<string, GfxIndexItem | undefined> = {};
 
 // Reverse map for O(1) removal: file path -> sprite names from that file
@@ -85,7 +82,9 @@ export async function getGfxContainerFile(
 	await ensureIndexBuilt().catch(() => undefined);
 	return (
 		workspaceGfxIndex[gfxName] ??
-		parentGfxIndex[gfxName] ??
+		parentGfxIndexes
+			.map((index) => index[gfxName])
+			.find((item) => item !== undefined) ??
 		globalGfxIndex[gfxName]
 	)?.file;
 }
@@ -104,7 +103,7 @@ export async function getIndexedGfxNames(): Promise<string[]> {
 	await ensureIndexBuilt().catch(() => undefined);
 	return uniq([
 		...Object.keys(globalGfxIndex),
-		...Object.keys(parentGfxIndex),
+		...parentGfxIndexes.flatMap((index) => Object.keys(index)),
 		...Object.keys(workspaceGfxIndex),
 	]);
 }
@@ -150,19 +149,28 @@ async function buildParentGfxIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
+	const parents = getParentModUris();
+	parentGfxIndexes = parents.map(() => ({}));
 	// No parents, no half: a mod that extends nothing pays no listing and writes no cache for it.
-	if (getParentModUris().length === 0) {
+	if (parents.length === 0) {
 		return;
 	}
-	// Like the global half, no file-to-keys map: a parent file is outside the workspace, so nothing
-	// ever re-indexes or removes it on its own.
-	await buildGfxIndexHalf(
-		"gfxIndex.parent",
-		{ workspace: false, hoi4: false, recursively: true },
-		parentGfxIndex,
-		null,
-		estimatedSize,
-		progress,
+	await Promise.all(
+		parents.map((parent, index) =>
+			buildGfxIndexHalf(
+				`gfxIndex.parent.${index}`,
+				{
+					workspace: false,
+					hoi4: false,
+					recursively: true,
+					parentModUris: [parent],
+				},
+				parentGfxIndexes[index]!,
+				null,
+				estimatedSize,
+				progress,
+			),
+		),
 	);
 }
 
@@ -315,7 +323,7 @@ const watchers = createIndexWatchers({
 	},
 	rebuildParent: {
 		reset: () => {
-			parentGfxIndex = {};
+			parentGfxIndexes = [];
 			bumpGfxIndexVersion();
 		},
 		build: buildParentGfxIndex,
@@ -389,7 +397,7 @@ export function __resetGfxIndexForTests(): void {
 	for (const key of Object.keys(globalGfxIndex)) {
 		delete globalGfxIndex[key];
 	}
-	parentGfxIndex = {};
+	parentGfxIndexes = [];
 	workspaceGfxIndex = {};
 	workspaceGfxFileToKeys.clear();
 	bumpGfxIndexVersion();

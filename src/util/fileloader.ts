@@ -60,6 +60,8 @@ export interface FileSourceOptions {
 	 * Part of the `mod` half: `mod: false` skips them too. Default true.
 	 */
 	parent?: boolean;
+	/** When set, restricts the parent source to these URIs instead of the configured parent list. */
+	parentModUris?: readonly vscode.Uri[];
 }
 
 /** Which of the mod / parent mod / HOI4 / DLC sources a listing looks in, and how deep. */
@@ -225,28 +227,56 @@ function isCacheOptionsObject(value: unknown): value is ListFilesOptions {
 			return false;
 		}
 	}
+	if (
+		options.parentModUris !== undefined &&
+		(!Array.isArray(options.parentModUris) ||
+			options.parentModUris.some(
+				(uri) =>
+					uri === null || (typeof uri !== "object" && typeof uri !== "string"),
+			))
+	) {
+		return false;
+	}
 	return true;
 }
 
 function parseFilePathCacheKey(
 	key: string,
 ):
-	| [string, boolean | null, boolean | null, boolean | null, boolean | null]
+	| [
+			string,
+			boolean | null,
+			boolean | null,
+			boolean | null,
+			boolean | null,
+			string[] | null,
+	  ]
 	| undefined {
 	const parsed = parseJsonTuple(key);
 	if (
 		!parsed ||
-		parsed.length !== 5 ||
+		(parsed.length !== 5 && parsed.length !== 6) ||
 		typeof parsed[0] !== "string" ||
 		!isBooleanOrNull(parsed[1]) ||
 		!isBooleanOrNull(parsed[2]) ||
 		!isBooleanOrNull(parsed[3]) ||
-		!isBooleanOrNull(parsed[4])
+		!isBooleanOrNull(parsed[4]) ||
+		(parsed.length === 6 &&
+			parsed[5] !== null &&
+			(!Array.isArray(parsed[5]) ||
+				parsed[5].some((uri) => typeof uri !== "string")))
 	) {
 		return undefined;
 	}
 
-	return [parsed[0], parsed[1], parsed[2], parsed[3], parsed[4]];
+	return [
+		parsed[0],
+		parsed[1],
+		parsed[2],
+		parsed[3],
+		parsed[4],
+		(parsed.length === 6 ? parsed[5] : null) as string[] | null,
+	];
 }
 
 function parseParseCacheKey(
@@ -268,9 +298,7 @@ function parseParseCacheKey(
 
 function parseListCacheKey(
 	key: string,
-):
-	| [string, ListFilesOptions | null]
-	| undefined {
+): [string, ListFilesOptions | null] | undefined {
 	const parsed = parseJsonTuple(key);
 	if (
 		!parsed ||
@@ -300,6 +328,7 @@ const getFilePathMemo = memoizeWithTtl(
 			hoi4: parsed[2] ?? undefined,
 			workspace: parsed[3] ?? undefined,
 			parent: parsed[4] ?? undefined,
+			parentModUris: parsed[5]?.map((uri) => vscode.Uri.parse(uri)),
 		});
 	},
 	{ ttl: 500, maxSize: 1000 },
@@ -337,6 +366,7 @@ export function getFilePathFromModOrHOI4(
 			options?.hoi4 ?? null,
 			options?.workspace ?? null,
 			options?.parent ?? null,
+			options?.parentModUris?.map((uri) => uri.toString()) ?? null,
 		]),
 	);
 }
@@ -380,7 +410,7 @@ async function getFilePathFromModOrHOI4Impl(
 		// Then the mods this one extends, in setting order. Before the replace_path check: that
 		// blocks vanilla only, a submod's replace_path never hides its parent's files.
 		if (options?.parent !== false) {
-			for (const parent of getParentModUris()) {
+			for (const parent of options?.parentModUris ?? getParentModUris()) {
 				const findPath = vscode.Uri.joinPath(parent, relativePath);
 				if (await isFile(findPath)) {
 					return findPath;
@@ -759,7 +789,16 @@ const fileListCache = new PromiseCache<string[]>({
 		if (!parsed) {
 			return Promise.resolve([]);
 		}
-		return listFilesFromModOrHOI4Impl(parsed[0], parsed[1]);
+		const options = parsed[1];
+		if (options?.parentModUris) {
+			return listFilesFromModOrHOI4Impl(parsed[0], {
+				...options,
+				parentModUris: options.parentModUris.map((uri) =>
+					typeof uri === "string" ? vscode.Uri.parse(uri) : uri,
+				),
+			});
+		}
+		return listFilesFromModOrHOI4Impl(parsed[0], options);
 	},
 	life: 3 * 1000,
 	maxSize: 300,
@@ -769,7 +808,15 @@ export function listFilesFromModOrHOI4(
 	relativePath: string,
 	options?: ListFilesOptions,
 ): Promise<string[]> {
-	return fileListCache.get(JSON.stringify([relativePath, options ?? null]));
+	const cacheOptions = options?.parentModUris
+		? {
+				...options,
+				parentModUris: options.parentModUris.map((uri) => uri.toString()),
+			}
+		: options;
+	return fileListCache.get(
+		JSON.stringify([relativePath, cacheOptions ?? null]),
+	);
 }
 
 async function listFilesFromModOrHOI4Impl(
@@ -1024,7 +1071,7 @@ async function visitFileSources(
 
 		// Find in the mods this one extends
 		if (options?.parent !== false) {
-			for (const parent of getParentModUris()) {
+			for (const parent of options?.parentModUris ?? getParentModUris()) {
 				const findPath = vscode.Uri.joinPath(parent, relativePath);
 				if (await isDirectory(findPath)) {
 					visitedParent = true;

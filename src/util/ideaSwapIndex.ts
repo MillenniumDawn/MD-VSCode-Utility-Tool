@@ -10,10 +10,7 @@ import {
 	readIndexFileContent,
 	reportIndexParseFailure,
 } from "./indexHalf";
-import {
-	createIndexWatchers,
-	toWorkspaceRelativePath,
-} from "./indexWatchers";
+import { createIndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
 import { Node, parseHoi4File } from "../hoiformat/hoiparser";
 import { ideaSwapIndex } from "./featureflags";
 
@@ -62,9 +59,8 @@ const globalSwapIndex: SwapIndex = {};
 // The parent mods' own half, like the other indexes. This one is keyed by file rather than by id, so
 // nothing here races; the half exists so that deleting a workspace override of a parent's file leaves
 // the parent's copy in place rather than dropping both.
-let parentSwapIndex: SwapIndex = {};
+let parentSwapIndexes: SwapIndex[] = [];
 let workspaceSwapIndex: SwapIndex = {};
-
 
 // Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
@@ -125,16 +121,26 @@ async function buildParentSwapIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
 ): Promise<void> {
+	const parents = getParentModUris();
+	parentSwapIndexes = parents.map(() => ({}));
 	// No parents, no half: a mod that extends nothing pays no listing and writes no cache for it.
-	if (getParentModUris().length === 0) {
+	if (parents.length === 0) {
 		return;
 	}
-	await buildSwapIndexHalf(
-		"ideaSwapIndex.parent",
-		{ workspace: false, hoi4: false },
-		parentSwapIndex,
-		estimatedSize,
-		progress,
+	await Promise.all(
+		parents.map((parent, index) =>
+			buildSwapIndexHalf(
+				`ideaSwapIndex.parent.${index}`,
+				{
+					workspace: false,
+					hoi4: false,
+					parentModUris: [parent],
+				},
+				parentSwapIndexes[index]!,
+				estimatedSize,
+				progress,
+			),
+		),
 	);
 }
 
@@ -212,7 +218,10 @@ async function fillSwaps(
 
 	try {
 		const swaps = extractIdeaSwaps(
-			parseHoi4File(fileContent, localize("infile", "In file {0}:\n", filePath)),
+			parseHoi4File(
+				fileContent,
+				localize("infile", "In file {0}:\n", filePath),
+			),
 		);
 		if (swaps.length > 0) {
 			swapIndex[filePath] = swaps;
@@ -389,11 +398,11 @@ function buildLookup(): Map<string, IdeaSwap[]> {
 	}
 
 	// The game's order, lowest first, so a file every layer has is read from the working mod's copy.
-	const merged: SwapIndex = {
-		...globalSwapIndex,
-		...parentSwapIndex,
-		...workspaceSwapIndex,
-	};
+	const merged: SwapIndex = { ...globalSwapIndex };
+	for (let index = parentSwapIndexes.length - 1; index >= 0; index--) {
+		Object.assign(merged, parentSwapIndexes[index]);
+	}
+	Object.assign(merged, workspaceSwapIndex);
 	const byIdea = new Map<string, IdeaSwap[]>();
 
 	for (const [file, records] of Object.entries(merged)) {
@@ -409,7 +418,11 @@ function buildLookup(): Map<string, IdeaSwap[]> {
 	return byIdea;
 }
 
-function addTo(map: Map<string, IdeaSwap[]>, key: string, swap: IdeaSwap): void {
+function addTo(
+	map: Map<string, IdeaSwap[]>,
+	key: string,
+	swap: IdeaSwap,
+): void {
 	const existing = map.get(key);
 	if (existing) {
 		existing.push(swap);
@@ -466,7 +479,7 @@ const watchers = createIndexWatchers({
 	},
 	rebuildParent: {
 		reset: () => {
-			parentSwapIndex = {};
+			parentSwapIndexes = [];
 			markSwapIndexChanged();
 		},
 		build: buildParentSwapIndex,
@@ -483,7 +496,7 @@ export function __resetIdeaSwapIndexForTests(): void {
 	for (const file of Object.keys(globalSwapIndex)) {
 		delete globalSwapIndex[file];
 	}
-	parentSwapIndex = {};
+	parentSwapIndexes = [];
 	workspaceSwapIndex = {};
 	markSwapIndexChanged();
 }
