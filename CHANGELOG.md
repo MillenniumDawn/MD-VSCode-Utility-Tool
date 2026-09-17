@@ -18,6 +18,7 @@ Unreleased
 - Opening a DDS or TGA file whose header claims an absurd size (for example 65535x65535) no longer freezes or crashes the extension: the image viewer now refuses it with a message instead of trying to allocate gigabytes of pixels. Issue #174.
 - A focus id, MIO trait id, GUI window name or country tag containing `</script>` can no longer break out of the preview page or inject markup into it: the focus tree, MIO, GUI and technology previews now escape their data the way the other previews already did. Issue #209.
 - A GUI container-window name or technology folder name containing quotes or angle brackets can no longer break out of the folder selector or inject markup into the GUI and technology previews. Issue #210.
+- A truncated or corrupt provinces.bmp, rivers.bmp or TGA texture is reported with a readable message instead of an internal read error or a garbled image. Issue #189.
 - A MIO trait token or a localisation value containing quotes or angle brackets can no longer inject markup into the MIO and technology previews. Issue #211.
 - [ CI ] A merged pull request labelled bug, or one closing an issue labelled bug, is now filed under Bugfixes in the release changelog instead of always landing under Functionality. Issue #212.
 - [ Focus Tree Previewer ] Ticking a completed-focus checkbox on a large tree no longer freezes the preview for seconds; the completed-focus conditions are indexed once per redraw instead of rescanned for every focus. Issue #213.

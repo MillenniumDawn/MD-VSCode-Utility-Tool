@@ -18,6 +18,7 @@ export function ddsToPng(dds: DDS): PNG {
 }
 
 const TGA_HEADER_LENGTH = 18;
+const TGA_TYPE_UNCOMPRESSED = 2;
 
 export function tgaToPng(buffer: Buffer): PNG {
 	// The tga library allocates width * height * 4 bytes in its constructor, so the header
@@ -25,7 +26,18 @@ export function tgaToPng(buffer: Buffer): PNG {
 	if (buffer.length < TGA_HEADER_LENGTH) {
 		throw new UserError("TGA header is truncated");
 	}
-	assertImageDimensions(buffer.readUInt16LE(12), buffer.readUInt16LE(14), "TGA");
+	const width = buffer.readUInt16LE(12);
+	const height = buffer.readUInt16LE(14);
+	assertImageDimensions(width, height, "TGA");
+
+	// An uncompressed image has a known size; the library reads it straight after the header
+	// and reads past the end of a short buffer without complaint, returning garbage pixels.
+	if (buffer[2] === TGA_TYPE_UNCOMPRESSED) {
+		const pixelBytes = width * height * Math.ceil(buffer[16] / 8);
+		if (TGA_HEADER_LENGTH + pixelBytes > buffer.length) {
+			throw new UserError("TGA pixel data is truncated");
+		}
+	}
 
 	const tga = new TGA(buffer);
 	if (!tga.pixels) {
