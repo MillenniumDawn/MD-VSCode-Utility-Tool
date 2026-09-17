@@ -45,6 +45,7 @@
 				"mdHoi4Utilities.installPath",
 				"mdHoi4Utilities.modFile",
 				"mdHoi4Utilities.parentModPaths",
+				"mdHoi4Utilities.userDataPath",
 				"mdHoi4Utilities.inlayWindowGfxRoots",
 				"mdHoi4Utilities.technologyGfxRoots"
 			]
@@ -81,7 +82,13 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Absolute folders of the mods this workspace extends (for a submod), searched in order after the workspace folders and before the Hearts of Iron IV install and DLCs."
+						"description": "Absolute folders of the mods this workspace extends (for a submod), searched in order after the workspace folders and before the Hearts of Iron IV install and DLCs. The mods named in the selected .mod file's dependencies are found through the launcher's mod registry and appended after these; an entry here wins over the registry for the same mod."
+					},
+					"mdHoi4Utilities.userDataPath": {
+						"title": "User data path",
+						"type": "string",
+						"default": "",
+						"description": "The Hearts of Iron IV user data folder, the one holding dlc_load.json and the mod folder the launcher writes. Used to resolve the dependencies of the selected .mod file to folders. Found automatically when empty."
 					},
 					"mdHoi4Utilities.enableSupplyArea": {
 						"title": "%hoi4modutilities.enableSupplyArea.title%",
@@ -413,5 +420,9 @@
 		"tga": "^1.0.4",
 		"url": "^0.11.0",
 		"util": "^0.12.5"
+	},
+	"allowScripts": {
+		"@vscode/vsce-sign@2.0.9": true,
+		"keytar": false
 	}
 }

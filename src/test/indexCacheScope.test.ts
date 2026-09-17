@@ -8,6 +8,7 @@ import {
 	saveCacheData,
 } from "../util/indexCache";
 import { restoreVscodeStubs, stubVscode } from "./_vscode_stub";
+import { clearParentModCache } from "../util/parentmods";
 
 describe("util/indexCache cache scopes", function () {
 	let originalContext: vscode.ExtensionContext | null;
@@ -51,6 +52,7 @@ describe("util/indexCache cache scopes", function () {
 		}
 
 		configuration.parentModPaths = ["/parent-two"];
+		clearParentModCache();
 		const newScope = captureCacheScope();
 		if (!newScope) {
 			throw new Error("cache scope was not captured");

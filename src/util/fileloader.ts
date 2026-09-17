@@ -10,7 +10,6 @@ import {
 	readFile,
 	readDir,
 	isSameUri,
-	fileOrUriStringToUri,
 	ensureFileScheme,
 	readDirFilesRecursively,
 	getConfiguration,
@@ -26,7 +25,7 @@ import {
 import { localize } from "./i18n";
 import { convertNodeToJson, SchemaDef, HOIPartial } from "../hoiformat/schema";
 import { error } from "./debug";
-import { updateSelectedModFileStatus, workspaceModFilesCache } from "./modfile";
+import { getSelectedModFileUri, updateSelectedModFileStatus } from "./modfile";
 import {
 	UserError,
 	memoizeWithTtl,
@@ -1249,23 +1248,7 @@ async function getReplacePaths(): Promise<string[] | undefined> {
 }
 
 async function getOwnReplacePaths(): Promise<string[] | undefined> {
-	const conf = getConfiguration();
-	let modFile = fileOrUriStringToUri(conf.modFile);
-
-	if (conf.modFile === "") {
-		if (vscode.workspace.workspaceFolders) {
-			for (const workspaceFolder of vscode.workspace.workspaceFolders) {
-				const workspaceFolderPath = workspaceFolder.uri;
-				const mods = await workspaceModFilesCache.get(
-					workspaceFolderPath.toString(),
-				);
-				if (mods.length > 0) {
-					modFile = mods[0];
-					break;
-				}
-			}
-		}
-	}
+	const modFile = await getSelectedModFileUri();
 
 	try {
 		if (modFile && (await isFile(modFile))) {
