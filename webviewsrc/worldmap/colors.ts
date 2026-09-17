@@ -98,7 +98,7 @@ export function getColorByColorSet(
 			);
 			const supplyAreaId = stateId ? stateToSupplyArea[stateId] : undefined;
 			const supplyArea = worldMap.getSupplyAreaById(supplyAreaId);
-			return worldMap.getProvinceWarnings(
+			return worldMap.hasProvinceWarnings(
 				viewMode !== "warnings" || warningFilter.includes("province")
 					? province
 					: undefined,
@@ -111,7 +111,7 @@ export function getColorByColorSet(
 				viewMode !== "warnings" || warningFilter.includes("supplyarea")
 					? supplyArea
 					: undefined,
-			).length > 0
+			)
 				? isLand
 					? landWarning
 					: waterWarning

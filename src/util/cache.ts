@@ -1,6 +1,6 @@
 export interface CacheOptions<V> {
 	factory(key: string): V;
-	expireWhenChange?(key: string, cachedValue: V): any;
+	expireWhenChange?(key: string, cachedValue: V): unknown;
 	life: number;
 	nonExpireLife?: number;
 	/** Maximum number of entries kept. When exceeded, the least recently accessed entries are evicted. Unbounded when undefined. */
@@ -13,14 +13,14 @@ export interface CacheOptions<V> {
 
 export interface PromiseCacheOptions<V>
 	extends Omit<CacheOptions<Promise<V>>, "weigher"> {
-	expireWhenChange?(key: string, cachedValue: Promise<V>): Promise<any> | any;
+	expireWhenChange?(key: string, cachedValue: Promise<V>): unknown;
 	/** Weight of the resolved value, used together with `maxBytes`. */
 	weigher?(value: V): number;
 }
 
 interface CacheEntry<V> {
 	value: V;
-	expiryToken: any;
+	expiryToken: unknown;
 	lastAccess: number;
 	// Monotonic access sequence used for LRU eviction ordering. lastAccess (a Date.now() timestamp)
 	// can't order accesses that fall within the same millisecond, so eviction would drop the wrong
@@ -63,7 +63,7 @@ export class Cache<V> {
 	public get(key: string = ""): V {
 		const cacheEntry = this._cache[key];
 		const now = Date.now();
-		let expireToken: any = undefined;
+		let expireToken: unknown = undefined;
 		if (
 			cacheEntry &&
 			(now - cacheEntry.lastAccess < this.options.nonExpireLife! ||
@@ -185,7 +185,7 @@ export class PromiseCache<V> extends Cache<Promise<V>> {
 	public async get(key: string = ""): Promise<V> {
 		const cacheEntry = this._cache[key];
 		const now = Date.now();
-		let expireToken: any = undefined;
+		let expireToken: unknown = undefined;
 		if (
 			cacheEntry &&
 			(now - cacheEntry.lastAccess < this.options.nonExpireLife! ||

@@ -19,7 +19,7 @@ import { registerIndexStatusCommand } from "./util/indexBuild";
 import { disposeImageDecodeWorkers } from "./util/image/imagedecoder";
 
 export function activate(context: vscode.ExtensionContext) {
-    let locale = (context as any).extension?.packageJSON.locale;
+    let locale: string | undefined = context.extension?.packageJSON?.locale;
     if (locale === "%hoi4modutilities.locale%") {
         locale = 'en';
     }
@@ -33,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(registerTelemetryReporter());
     context.subscriptions.push(registerFeatureFlags());
 
-    sendEvent('extension.activate', { locale, isWeb: IS_WEB_EXT.toString() });
+    sendEvent('extension.activate', { locale: locale ?? '', isWeb: IS_WEB_EXT.toString() });
 
     context.subscriptions.push(previewManager.register());
     context.subscriptions.push(registerModFile());

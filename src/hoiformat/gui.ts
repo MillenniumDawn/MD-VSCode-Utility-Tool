@@ -200,12 +200,13 @@ const containerWindowTypeSchema: SchemaDef<ContainerWindowType> = {
     size: complexSizeSchema,
     margin: marginSchema,
     background: backgroundSchema,
+    // Both refer back to this schema, which is assigned below the literal.
     containerwindowtype: {
-        _innerType: undefined as any,
+        _innerType: undefined as unknown as SchemaDef<ContainerWindowType>,
         _type: "array",
     },
     windowtype: {
-        _innerType: undefined as any,
+        _innerType: undefined as unknown as SchemaDef<ContainerWindowType>,
         _type: "array",
     },
     gridboxtype: {
