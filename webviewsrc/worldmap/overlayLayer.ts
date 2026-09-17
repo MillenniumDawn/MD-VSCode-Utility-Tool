@@ -116,8 +116,7 @@ export function renderRivers(
 			continue;
 		}
 
-		const hasWarning =
-			showRiverWarning && worldMap.getRiverWarnings(i).length > 0;
+		const hasWarning = showRiverWarning && worldMap.hasRiverWarnings(i);
 		for (const key in river.colors) {
 			const index = parseInt(key, 10);
 			const x = (index % river.boundingBox.w) + river.boundingBox.x;

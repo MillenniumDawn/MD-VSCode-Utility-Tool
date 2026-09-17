@@ -21,7 +21,7 @@ const mioOrgDir = 'common/military_industrial_organization/organizations';
 const genericMio = `${mioOrgDir}/00_generic_organization.txt`;
 
 export class MioLoader extends ContentLoader<MioLoaderResult> {
-    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: any, session: LoaderSession): Promise<LoadResultOD<MioLoaderResult>> {
+    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: unknown, session: LoaderSession): Promise<LoadResultOD<MioLoaderResult>> {
         if (error || (content === undefined)) {
             throw error;
         }

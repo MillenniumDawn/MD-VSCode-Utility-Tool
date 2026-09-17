@@ -49,7 +49,7 @@ export function localize(
 	// they could never be translated and no tooling noticed.
 	key: keyof typeof __table,
 	message: string,
-	...args: any[]
+	...args: unknown[]
 ): string {
 	if (key in table) {
 		message = table[key] ?? message;
@@ -61,7 +61,7 @@ export function localize(
 	);
 	return message.replace(
 		regex,
-		(_, group1) => args[parseInt(group1)]?.toString() ?? "",
+		(_, group1) => String(args[parseInt(group1)] ?? ""),
 	);
 }
 

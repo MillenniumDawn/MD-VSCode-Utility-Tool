@@ -1,32 +1,40 @@
 export interface CacheOptions<V> {
 	factory(key: string): V;
-	expireWhenChange?(key: string, cachedValue: V): any;
+	expireWhenChange?(key: string, cachedValue: V): unknown;
 	life: number;
 	nonExpireLife?: number;
 	/** Maximum number of entries kept. When exceeded, the least recently accessed entries are evicted. Unbounded when undefined. */
 	maxSize?: number;
 	/** Maximum total weight (e.g. bytes) kept. When exceeded, least recently accessed entries are evicted. Needs `weigher`. */
 	maxBytes?: number;
-	/** Weight of a value, used together with `maxBytes`. Defaults to 0 (count-only eviction) when omitted. */
+	/**
+	 * Weight of a value, used together with `maxBytes`. Defaults to 0 (count-only eviction) when
+	 * omitted. Re-evaluated on every access to the entry and on every limit check, so it may read
+	 * fields the value populates lazily after it was cached.
+	 */
 	weigher?(value: V): number;
 }
 
 export interface PromiseCacheOptions<V>
 	extends Omit<CacheOptions<Promise<V>>, "weigher"> {
-	expireWhenChange?(key: string, cachedValue: Promise<V>): Promise<any> | any;
-	/** Weight of the resolved value, used together with `maxBytes`. */
+	expireWhenChange?(key: string, cachedValue: Promise<V>): unknown;
+	/** Weight of the resolved value, used together with `maxBytes`; re-evaluated like `CacheOptions.weigher`. */
 	weigher?(value: V): number;
 }
 
 interface CacheEntry<V> {
 	value: V;
-	expiryToken: any;
+	expiryToken: unknown;
 	lastAccess: number;
 	// Monotonic access sequence used for LRU eviction ordering. lastAccess (a Date.now() timestamp)
 	// can't order accesses that fall within the same millisecond, so eviction would drop the wrong
 	// entry under rapid access; a strictly increasing counter gives true least-recently-used order.
 	accessSeq: number;
+	// Last computed weight, and the function that recomputes it. A value can grow after it was
+	// cached (an image memoizes its data URI, a sprite its split frames), so the weight is refreshed
+	// on access and at every limit check rather than fixed at insertion.
 	weight: number;
+	weigh?: () => number;
 }
 
 export class Cache<V> {
@@ -63,7 +71,7 @@ export class Cache<V> {
 	public get(key: string = ""): V {
 		const cacheEntry = this._cache[key];
 		const now = Date.now();
-		let expireToken: any = undefined;
+		let expireToken: unknown = undefined;
 		if (
 			cacheEntry &&
 			(now - cacheEntry.lastAccess < this.options.nonExpireLife! ||
@@ -74,16 +82,20 @@ export class Cache<V> {
 		) {
 			cacheEntry.lastAccess = now;
 			cacheEntry.accessSeq = this.nextAccessSeq();
+			this.reweigh(cacheEntry);
 			return cacheEntry.value;
 		}
 
 		const value = this.options.factory(key);
+		const weigher = this.options.weigher;
+		const weigh = weigher ? () => weigher(value) ?? 0 : undefined;
 		const newEntry: CacheEntry<V> = {
 			lastAccess: now,
 			accessSeq: this.nextAccessSeq(),
 			expiryToken: expireToken ?? this.options.expireWhenChange!(key, value),
 			value,
-			weight: this.options.weigher ? (this.options.weigher(value) ?? 0) : 0,
+			weight: weigh ? weigh() : 0,
+			weigh,
 		};
 
 		this._cache[key] = newEntry;
@@ -115,6 +127,19 @@ export class Cache<V> {
 		}
 	}
 
+	// Refreshes the weight of an entry that was just accessed; when it changed, the totals are
+	// re-checked so a value that grew since it was cached is accounted for from this access on.
+	protected reweigh(entry: CacheEntry<V>): void {
+		if (this.options.maxBytes === undefined || !entry.weigh) {
+			return;
+		}
+		const weight = entry.weigh();
+		if (weight !== entry.weight) {
+			entry.weight = weight;
+			this.enforceLimits();
+		}
+	}
+
 	protected enforceLimits(): void {
 		const { maxSize, maxBytes } = this.options;
 		if (maxSize === undefined && maxBytes === undefined) {
@@ -126,7 +151,14 @@ export class Cache<V> {
 		let totalBytes = 0;
 		if (maxBytes !== undefined) {
 			for (const k of keys) {
-				totalBytes += this._cache[k]?.weight ?? 0;
+				const entry = this._cache[k];
+				if (!entry) {
+					continue;
+				}
+				if (entry.weigh) {
+					entry.weight = entry.weigh();
+				}
+				totalBytes += entry.weight;
 			}
 		}
 
@@ -185,7 +217,7 @@ export class PromiseCache<V> extends Cache<Promise<V>> {
 	public async get(key: string = ""): Promise<V> {
 		const cacheEntry = this._cache[key];
 		const now = Date.now();
-		let expireToken: any = undefined;
+		let expireToken: unknown = undefined;
 		if (
 			cacheEntry &&
 			(now - cacheEntry.lastAccess < this.options.nonExpireLife! ||
@@ -195,6 +227,7 @@ export class PromiseCache<V> extends Cache<Promise<V>> {
 		) {
 			cacheEntry.lastAccess = now;
 			cacheEntry.accessSeq = this.nextAccessSeq();
+			this.reweigh(cacheEntry);
 			return await cacheEntry.value;
 		}
 
@@ -212,12 +245,13 @@ export class PromiseCache<V> extends Cache<Promise<V>> {
 		this._cache[key] = newEntry;
 
 		// The weight is only known once the promise resolves; update it then and re-check limits.
-		if (this.pweigher && this.options.maxBytes !== undefined) {
+		const weigher = this.pweigher;
+		if (weigher && this.options.maxBytes !== undefined) {
 			value.then(
 				(v) => {
-					if (this._cache[key] === newEntry) {
-						newEntry.weight =
-							v === null || v === undefined ? 0 : (this.pweigher!(v) ?? 0);
+					if (this._cache[key] === newEntry && v !== null && v !== undefined) {
+						newEntry.weigh = () => weigher(v) ?? 0;
+						newEntry.weight = newEntry.weigh();
 						this.enforceLimits();
 					}
 				},

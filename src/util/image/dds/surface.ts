@@ -497,18 +497,22 @@ function unormSrgbNormalizer(value: number, max: number): number {
 	return Math.pow(value / max, 2.2);
 }
 
+type ChannelBuffer = Uint8Array | Uint16Array | Uint32Array | Float32Array;
+
 // Don't use js clossure for better performance
 interface ChannelReader {
-	reader: (
-		buffer: any,
+	// Method shorthand on purpose: its parameters are bivariant, so a reader written for one
+	// buffer type still fits, and readerState is the buffer it was written for.
+	reader(
+		buffer: ChannelBuffer,
 		offset: number,
 		bitOffset: number,
 		channelStart: number[],
 		channelLength: number[],
 		channelMask: number[],
 		rawPixel: Float64Array,
-	) => void;
-	readerState: unknown;
+	): void;
+	readerState: ChannelBuffer;
 }
 function getChannelReader(
 	inputBuffer: ArrayBuffer,
