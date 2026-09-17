@@ -71,6 +71,14 @@ jobs:
           cache: "npm"
       - name: Install dependencies
         run: npm ci
+      # @vscode/test-electron skips the download when .vscode-test/vscode-<version> already exists.
+      # Keyed on the file that carries the pinned version, so moving the pin is the only thing that
+      # fetches a new build.
+      - name: Cache VS Code build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .vscode-test/vscode-*
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('src/test/integration/runTest.ts') }}
       - name: Build extension
         run: npm run webpack
       - name: Compile tests
