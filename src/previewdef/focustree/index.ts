@@ -276,7 +276,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
      *    base calls back into onRenderApplied and the real icons are re-resolved and re-pushed.
      */
     private renderResultFor(structure: FocusTreePayload, webview: vscode.Webview, uri: vscode.Uri): LoaderRenderResult {
-        const styleRecords = (structure.styleTable as any).records as Record<string, string>;
+        const styleRecords = structure.styleTable.styleRecords;
         this.pendingTreeFingerprints = this.treeFingerprintsFor(structure.focusTrees);
         this.lastGoodHadFocusTrees = true;
         return {

@@ -11,7 +11,7 @@ export interface GuiFileLoaderResult {
 }
 
 export class GuiFileLoader extends ContentLoader<GuiFileLoaderResult> {
-    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: any, session: LoaderSession): Promise<LoadResultOD<GuiFileLoaderResult>> {
+    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: unknown, session: LoaderSession): Promise<LoadResultOD<GuiFileLoaderResult>> {
         if (error || (content === undefined)) {
             throw error;
         }

@@ -23,7 +23,7 @@ export class WorldMapContainer implements vscode.WebviewPanelSerializer {
         return this.openWorldMapView();
     }
     
-    public deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel, _state: any): Promise<void> {
+    public deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel, _state: unknown): Promise<void> {
         return this.openWorldMapView(webviewPanel);
     }
 

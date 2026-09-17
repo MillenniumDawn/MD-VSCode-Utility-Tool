@@ -329,7 +329,7 @@ describe('util/loader/loader', () => {
             const session = new LoaderSession(false);
             // Simulate an ancestor loader already loading the same file. beforeLoadImpl walks
             // session.loadingLoader and rejects a self-referential load.
-            session.loadingLoader.push({ file: 'cycle.txt' } as unknown as Loader<unknown, unknown>);
+            session.loadingLoader.push(new CapturingContentLoader('cycle.txt', async () => 'x', false));
 
             await assert.rejects(loader.load(session), (e: unknown) => e instanceof UserError);
         });

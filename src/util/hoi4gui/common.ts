@@ -99,10 +99,8 @@ export function normalizeMargin(margin: Partial<Margin> | undefined, size: Numbe
     ];
 }
 
-export function removeHtmlOptions<T>(options: T): { [K in Exclude<keyof T, 'id' | 'classNames'>]: T[K] } {
-    const result = {...options} as any;
-    delete result['id'];
-    delete result['classNames'];
+export function removeHtmlOptions<T extends object>(options: T): Omit<T, 'id' | 'classNames'> {
+    const { id: _id, classNames: _classNames, ...result } = options as T & { id?: unknown; classNames?: unknown };
     return result;
 }
 

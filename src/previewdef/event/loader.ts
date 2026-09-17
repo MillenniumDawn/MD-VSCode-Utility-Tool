@@ -39,7 +39,9 @@ export class EventsLoader extends ContentLoader<EventsLoaderResult> {
         const localizationDependencies = dependencies.filter(d => d.type.match(/^locali[sz]ation$/) && d.path.endsWith('.yml')).map(d => d.path);
         const localizationDepFiles = await this.loaderDependencies.loadMultiple(localizationDependencies, session, YamlLoader);
 
-        const localizationDict = makeLocalizationDict(mergeInLoadResult(localizationDepFiles, 'result'), this.languageKey);
+        // Each result is one parsed .yml document, not an array, so it is not something to merge
+        // element-wise: mergeInLoadResult iterated it and threw on the first dependency.
+        const localizationDict = makeLocalizationDict(localizationDepFiles.map(f => f.result), this.languageKey);
         Object.assign(localizationDict, ...eventsDepFiles.map(f => f.result.localizationDict));
         
         const gfxDependencies = [

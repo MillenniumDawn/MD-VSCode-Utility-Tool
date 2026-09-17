@@ -8,6 +8,7 @@ import {
     __resetLocalisationIndexForTests,
     __testHandlers,
 } from '../util/localisationIndex';
+import { clearParentModCache } from '../util/parentmods';
 import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 describe('util/localisationIndex', () => {
@@ -87,13 +88,15 @@ type FileloaderModule = {
         options?: {
             mod?: boolean;
             hoi4?: boolean;
+            workspace?: boolean;
+            parent?: boolean;
             recursively?: boolean;
             token?: unknown;
         },
     ) => Promise<ListedEntry[]>;
     readFileFromModOrHOI4: (
         relativePath: string,
-        options?: { mod?: boolean; hoi4?: boolean },
+        options?: { mod?: boolean; hoi4?: boolean; workspace?: boolean; parent?: boolean },
     ) => Promise<[Buffer, unknown]>;
 };
 
@@ -277,5 +280,81 @@ describe('util/localisationIndex lazy build', function () {
             const result = await getLocalisedText('KEY_A', 'en');
             assert.strictEqual(result, 'KEY_A');
         });
+    });
+});
+
+// Three halves, looked up in the game's order: the working mod, then the mods it extends, then
+// vanilla. Each half here defines the same key in a differently named file, which is exactly the
+// case a single shared half decided by parse order.
+describe('util/localisationIndex parent mods', function () {
+    function yml(...lines: string[]): Buffer {
+        return Buffer.from(['l_english:', ...lines.map((line) => ' ' + line), ''].join(String.fromCharCode(10)));
+    }
+    const files: Record<string, Buffer> = {
+        'localisation/vanilla_l_english.yml': yml('SHARED:0 "vanilla"', 'VANILLA_ONLY:0 "vanilla only"'),
+        'localisation/parent_l_english.yml': yml('SHARED:0 "parent"', 'PARENT_ONLY:0 "parent only"'),
+        'localisation/sub_l_english.yml': yml('SHARED:0 "workspace"'),
+    };
+    let originalListFiles: FileloaderModule['listFileEntriesFromModOrHOI4'];
+    let originalReadFile: FileloaderModule['readFileFromModOrHOI4'];
+    let releaseWorkspaceRead: () => void;
+
+    beforeEach(function () {
+        __resetLocalisationIndexForTests();
+        stubVscode({
+            getConfiguration: () => ({ localisationIndex: true, parentModPaths: ['D:/mods/parent'] }),
+            getWorkspaceFolder: () => WORKSPACE_FOLDER,
+        });
+        clearParentModCache();
+        featureflags.refreshFeatureFlags();
+        const workspaceRead = deferred<void>();
+        releaseWorkspaceRead = () => workspaceRead.resolve(undefined);
+
+        originalListFiles = fileloader.listFileEntriesFromModOrHOI4;
+        originalReadFile = fileloader.readFileFromModOrHOI4;
+        (fileloader as any).listFileEntriesFromModOrHOI4 = async (_p: string, options: any) => {
+            if (options?.mod === false) {
+                return toEntries(['vanilla_l_english.yml']);
+            }
+            if (options?.workspace === false) {
+                return toEntries(['parent_l_english.yml']);
+            }
+            return toEntries(['sub_l_english.yml']);
+        };
+        (fileloader as any).readFileFromModOrHOI4 = async (relativePath: string) => {
+            if (relativePath.endsWith('sub_l_english.yml')) {
+                // The workspace half parses first, so a last-wins bug would show the parent's text.
+                await workspaceRead.promise;
+            }
+            return [files[relativePath], {}];
+        };
+    });
+
+    afterEach(function () {
+        (fileloader as any).listFileEntriesFromModOrHOI4 = originalListFiles;
+        (fileloader as any).readFileFromModOrHOI4 = originalReadFile;
+        restoreVscodeStubs();
+        clearParentModCache();
+        featureflags.refreshFeatureFlags();
+        __resetLocalisationIndexForTests();
+    });
+
+    it('answers from the working mod, then the parent, then vanilla', async function () {
+        const lookup = getLocalisedText('SHARED', 'en');
+        await waitForAsyncTasks();
+        releaseWorkspaceRead();
+
+        assert.strictEqual(await lookup, 'workspace');
+        assert.strictEqual(await getLocalisedText('PARENT_ONLY', 'en'), 'parent only');
+        assert.strictEqual(await getLocalisedText('VANILLA_ONLY', 'en'), 'vanilla only');
+    });
+
+    it('falls back to the parent, then vanilla, as the workspace files that shadow them go', async function () {
+        releaseWorkspaceRead();
+        assert.strictEqual(await getLocalisedText('SHARED', 'en'), 'workspace');
+
+        __testHandlers.onDeleteFiles({ files: [locFileUri('localisation/sub_l_english.yml')] });
+        await waitForAsyncTasks();
+        assert.strictEqual(await getLocalisedText('SHARED', 'en'), 'parent');
     });
 });

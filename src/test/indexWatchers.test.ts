@@ -2,6 +2,7 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { __resetIndexProgressForTests } from "../util/indexBuild";
 import { createIndexWatchers } from "../util/indexWatchers";
+import { publishParentMods, resetParentModsForTest } from "../util/parentmods";
 import { createBuildGate } from "../util/promiseUtils";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
@@ -160,5 +161,124 @@ describe("util/indexWatchers folder-change rebuild", function () {
 		rebuild.resolve();
 		await waitForAsyncTasks();
 		assert.strictEqual(removed.length, 1);
+	});
+});
+
+// A change of the parent list rebuilds the parent half and only that; a folder change rebuilds
+// the workspace half and only that. Driven through register(), because that is where the
+// subscription is wired up: to the published parent list, not to the raw setting, so a setting
+// change reaches the index once the `.mod` dependencies have been re-resolved against it.
+describe("util/indexWatchers parent list change", function () {
+	let resets: number;
+	let rebuilds: number;
+	let parentResets: number;
+	let parentRebuilds: number;
+	let configurationHandler: ((e: vscode.ConfigurationChangeEvent) => void) | undefined;
+	let handlers: ReturnType<typeof createIndexWatchers>["handlers"];
+	let registration: vscode.Disposable;
+
+	beforeEach(function () {
+		resets = 0;
+		rebuilds = 0;
+		parentResets = 0;
+		parentRebuilds = 0;
+		configurationHandler = undefined;
+		resetParentModsForTest();
+		stubVscode({
+			getConfiguration: () => ({ parentModPaths: ["D:\parent"] }),
+			onDidChangeConfiguration: (handler: (e: vscode.ConfigurationChangeEvent) => void) => {
+				configurationHandler = handler;
+				return { dispose: () => undefined };
+			},
+		});
+		const watchers = createIndexWatchers({
+			enabled: true,
+			extension: ".txt",
+			hasStarted: () => true,
+			gate: createBuildGate(),
+			reindexFile: () => undefined,
+			removeFile: () => undefined,
+			rebuildWorkspace: {
+				reset: () => {
+					resets++;
+				},
+				build: async () => {
+					rebuilds++;
+				},
+				message: "Building workspace index...",
+				telemetryEvent: "testIndex.workspace",
+				failureMessage: "Building workspace index failed.",
+			},
+			rebuildParent: {
+				reset: () => {
+					parentResets++;
+				},
+				build: async () => {
+					parentRebuilds++;
+				},
+			},
+		});
+		handlers = watchers.handlers;
+		registration = watchers.register();
+	});
+
+	afterEach(function () {
+		registration.dispose();
+		resetParentModsForTest();
+		restoreVscodeStubs();
+		__resetIndexProgressForTests();
+	});
+
+	it("rebuilds the parent half, and leaves the workspace half alone, when the parent list is published", async function () {
+		assert.ok(publishParentMods(), "the first publish of a non-empty list is a change");
+		await waitForAsyncTasks();
+
+		assert.strictEqual(parentResets, 1);
+		assert.strictEqual(parentRebuilds, 1);
+		assert.strictEqual(resets, 0);
+		assert.strictEqual(rebuilds, 0);
+	});
+
+	it("does not rebuild when the published list is the one it already heard", async function () {
+		publishParentMods();
+		await waitForAsyncTasks();
+		assert.strictEqual(publishParentMods(), false);
+		await waitForAsyncTasks();
+
+		assert.strictEqual(parentRebuilds, 1);
+	});
+
+	// A name that resolved to nothing names no folder the half reads; only the status bar cares.
+	it("leaves both halves alone when only the unresolved names changed", async function () {
+		handlers.onChangeParentMods({ folders: false, unresolved: true });
+		await waitForAsyncTasks();
+
+		assert.strictEqual(parentResets, 0);
+		assert.strictEqual(parentRebuilds, 0);
+		assert.strictEqual(resets, 0);
+		assert.strictEqual(rebuilds, 0);
+	});
+
+	it("leaves the parent half alone when a workspace folder changes", async function () {
+		handlers.onChangeWorkspaceFolders({ added: [], removed: [] });
+		await waitForAsyncTasks();
+
+		assert.strictEqual(resets, 1);
+		assert.strictEqual(rebuilds, 1);
+		assert.strictEqual(parentResets, 0);
+		assert.strictEqual(parentRebuilds, 0);
+	});
+
+	// The raw setting is somebody else's event: hoifs.ts re-resolves on it and publishes the result.
+	it("does not subscribe to the configuration itself", async function () {
+		assert.strictEqual(configurationHandler, undefined);
+	});
+
+	it("stops listening once disposed", async function () {
+		registration.dispose();
+		publishParentMods();
+		await waitForAsyncTasks();
+
+		assert.strictEqual(parentRebuilds, 0);
 	});
 });

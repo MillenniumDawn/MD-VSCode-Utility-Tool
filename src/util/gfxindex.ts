@@ -7,21 +7,26 @@ import { localize } from "./i18n";
 import { uniq } from "lodash";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
+import { FileSourceOptions, ListFilesOptions } from "./fileloader";
 import {
 	buildIndexHalf,
+	captureIndexBuildContext,
+	IndexBuildContext,
 	readIndexFileContent,
 	reportIndexParseFailure,
 } from "./indexHalf";
-import {
-	createIndexWatchers,
-	toWorkspaceRelativePath,
-} from "./indexWatchers";
+import { createIndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
 
 interface GfxIndexItem {
 	file: string;
 }
 
 const globalGfxIndex: Record<string, GfxIndexItem | undefined> = {};
+// The parent mods get a half of their own rather than a share of the workspace's. Precedence
+// between sources is what the halves are for: inside one half the last file to parse wins, and
+// the parse queue is four wide, so a sprite the workspace redefines in a differently named .gfx
+// would resolve to the parent's file on some builds and the workspace's on others.
+let parentGfxIndexes: Record<string, GfxIndexItem | undefined>[] = [];
 let workspaceGfxIndex: Record<string, GfxIndexItem | undefined> = {};
 
 // Reverse map for O(1) removal: file path -> sprite names from that file
@@ -48,11 +53,13 @@ let estimatedSize: [number] = [0];
 const builder = createIndexBuilder({
 	name: "gfxIndex",
 	message: localize("gfxindex.building", "Building GFX index..."),
-	build: (progress) => {
+	build: async (progress) => {
 		estimatedSize = [0];
+		const context = await captureIndexBuildContext();
 		return Promise.all([
-			buildGlobalGfxIndex(estimatedSize, progress),
-			buildWorkspaceGfxIndex(estimatedSize, progress),
+			buildGlobalGfxIndex(estimatedSize, progress, context),
+			buildParentGfxIndex(estimatedSize, progress, context),
+			buildWorkspaceGfxIndex(estimatedSize, progress, context),
 		]);
 	},
 	onSuccess: () => {
@@ -62,10 +69,11 @@ const builder = createIndexBuilder({
 
 const buildGate = builder.gate;
 
-function ensureIndexBuilt(): Promise<[void, void]> {
+function ensureIndexBuilt(): Promise<[void, void, void]> {
 	return builder.ensureBuilt();
 }
 
+/** The game's order: the working mod, then the mods it extends, then vanilla. */
 export async function getGfxContainerFile(
 	gfxName: string | undefined,
 ): Promise<string | undefined> {
@@ -74,7 +82,13 @@ export async function getGfxContainerFile(
 	}
 
 	await ensureIndexBuilt().catch(() => undefined);
-	return (globalGfxIndex[gfxName] ?? workspaceGfxIndex[gfxName])?.file;
+	return (
+		workspaceGfxIndex[gfxName] ??
+		parentGfxIndexes
+			.map((index) => index[gfxName])
+			.find((item) => item !== undefined) ??
+		globalGfxIndex[gfxName]
+	)?.file;
 }
 
 /**
@@ -91,6 +105,7 @@ export async function getIndexedGfxNames(): Promise<string[]> {
 	await ensureIndexBuilt().catch(() => undefined);
 	return uniq([
 		...Object.keys(globalGfxIndex),
+		...parentGfxIndexes.flatMap((index) => Object.keys(index)),
 		...Object.keys(workspaceGfxIndex),
 	]);
 }
@@ -119,6 +134,7 @@ const isGfxFile = (relativePath: string) =>
 async function buildGlobalGfxIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context: IndexBuildContext,
 ): Promise<void> {
 	// The global half keeps no file-to-keys map: nothing invalidates a vanilla file per-file, so
 	// building one only ever wrote an empty object into the cache.
@@ -129,35 +145,74 @@ async function buildGlobalGfxIndex(
 		null,
 		estimatedSize,
 		progress,
+		context,
+	);
+}
+
+async function buildParentGfxIndex(
+	estimatedSize: [number],
+	progress: IndexProgress,
+	context?: IndexBuildContext,
+): Promise<void> {
+	const buildContext = context ?? (await captureIndexBuildContext());
+	const parents = buildContext.parentModUris;
+	parentGfxIndexes = parents.map(() => ({}));
+	// No parents, no half: a mod that extends nothing pays no listing and writes no cache for it.
+	if (parents.length === 0) {
+		return;
+	}
+	await Promise.all(
+		parents.map((parent, index) =>
+			buildGfxIndexHalf(
+				`gfxIndex.parent.${index}`,
+				{
+					workspace: false,
+					hoi4: false,
+					recursively: true,
+					parentModUris: [parent],
+				},
+				parentGfxIndexes[index]!,
+				null,
+				estimatedSize,
+				progress,
+				buildContext,
+			),
+		),
 	);
 }
 
 async function buildWorkspaceGfxIndex(
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context?: IndexBuildContext,
 ): Promise<void> {
+	const buildContext = context ?? (await captureIndexBuildContext());
 	await buildGfxIndexHalf(
 		"gfxIndex.workspace",
-		{ hoi4: false, recursively: true },
+		{ parent: false, hoi4: false, recursively: true },
 		workspaceGfxIndex,
 		workspaceGfxFileToKeys,
 		estimatedSize,
 		progress,
+		buildContext,
 	);
 }
 
 async function buildGfxIndexHalf(
 	cacheName: string,
-	options: { mod?: boolean; hoi4?: boolean; recursively?: boolean },
+	options: ListFilesOptions,
 	targetIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
 	estimatedSize: [number],
 	progress: IndexProgress,
+	context: IndexBuildContext,
 ): Promise<void> {
 	await buildIndexHalf<GfxCacheData>(
 		{
 			cacheName,
 			version: GFX_CACHE_VERSION,
+			cacheScope: context.cacheScope,
+			dependencyGeneration: context.dependencyGeneration,
 			listFiles: (token) =>
 				listIndexFiles({
 					roots: [gfxRoot],
@@ -207,7 +262,7 @@ async function fillGfxItems(
 	gfxFile: IndexFile,
 	gfxIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
-	options: { mod?: boolean; hoi4?: boolean },
+	options: FileSourceOptions,
 	estimatedSize?: [number],
 ): Promise<boolean> {
 	const filePath = gfxFile.path;
@@ -279,6 +334,13 @@ const watchers = createIndexWatchers({
 		telemetryEvent: "gfxIndex.workspace",
 		failureMessage: "Building workspace GFX index failed.",
 	},
+	rebuildParent: {
+		reset: () => {
+			parentGfxIndexes = [];
+			bumpGfxIndexVersion();
+		},
+		build: buildParentGfxIndex,
+	},
 });
 
 export function registerGfxIndex(): vscode.Disposable {
@@ -314,14 +376,16 @@ async function reindexWorkspaceGfxFile(file: vscode.Uri): Promise<void> {
 		return;
 	}
 
-	// No URI: a re-index reaches one file, so resolving it the usual way costs nothing.
+	// No URI: a re-index reaches one file, so resolving it the usual way costs nothing. Workspace
+	// only: a re-index that fires after the file was deleted must not read the parent's copy into
+	// this half, which is the one half the parent's files are never in.
 	const parsedIndex: Record<string, GfxIndexItem | undefined> = {};
 	const parsedKeys = new Map<string, string[]>();
 	const parsed = await fillGfxItems(
 		{ path: relative },
 		parsedIndex,
 		parsedKeys,
-		{ hoi4: false },
+		{ parent: false, hoi4: false },
 	);
 	if (!parsed) {
 		return;
@@ -346,6 +410,7 @@ export function __resetGfxIndexForTests(): void {
 	for (const key of Object.keys(globalGfxIndex)) {
 		delete globalGfxIndex[key];
 	}
+	parentGfxIndexes = [];
 	workspaceGfxIndex = {};
 	workspaceGfxFileToKeys.clear();
 	bumpGfxIndexVersion();
