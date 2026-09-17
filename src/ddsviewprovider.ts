@@ -66,7 +66,7 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
             let pngBytes: Uint8Array | null = new Uint8Array(pngBuffer.buffer, pngBuffer.byteOffset, pngBuffer.byteLength);
             const messageListener = webviewPanel.webview.onDidReceiveMessage((msg: { command?: string } | undefined) => {
                 if (msg?.command === 'ready' && pngBytes !== null) {
-                    webviewPanel.webview.postMessage({ type: 'image', data: pngBytes });
+                    void webviewPanel.webview.postMessage({ type: 'image', data: pngBytes });
                 }
             });
             webviewPanel.onDidDispose(() => {
