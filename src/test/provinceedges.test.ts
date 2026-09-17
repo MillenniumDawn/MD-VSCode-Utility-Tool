@@ -13,8 +13,7 @@ function seg(x1: number, y1: number, x2: number, y2: number): [Point, Point] {
 
 // Build a fillEdges input from a height*width grid of colors (row-major, y*width+x).
 function buildGrid(colors: number[][]): {
-    provinces: any[];
-    colorToProvince: Record<number, any>;
+    provinces: { color: number }[];
     colorByPosition: Uint32Array;
     width: number;
     height: number;
@@ -22,23 +21,22 @@ function buildGrid(colors: number[][]): {
     const height = colors.length;
     const width = colors[0].length;
     const colorByPosition = new Uint32Array(width * height);
-    const colorToProvince: Record<number, any> = {};
-    const provinces: any[] = [];
+    const seenColors = new Set<number>();
+    const provinces: { color: number }[] = [];
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
             const color = colors[y][x];
             colorByPosition[y * width + x] = color;
-            if (colorToProvince[color] === undefined) {
-                const province = { color, warnings: [] };
-                colorToProvince[color] = province;
-                provinces.push(province);
+            if (!seenColors.has(color)) {
+                seenColors.add(color);
+                provinces.push({ color });
             }
         }
     }
-    return { provinces, colorToProvince, colorByPosition, width, height };
+    return { provinces, colorByPosition, width, height };
 }
 
-function edgesOf(provinces: any[], color: number): ProvinceEdgeGraph[] {
+function edgesOf(provinces: { color: number; edges: ProvinceEdgeGraph[] }[], color: number): ProvinceEdgeGraph[] {
     return provinces.find(p => p.color === color)!.edges;
 }
 
@@ -113,7 +111,7 @@ describe('worldmap/provincebmp edge joining', function () {
                 [A, A, B, B],
                 [A, A, B, B],
             ]);
-            const provinces = fillEdges(grid.provinces, grid.colorToProvince, grid.colorByPosition, grid.width, grid.height);
+            const provinces = fillEdges(grid.provinces, grid.colorByPosition, grid.width, grid.height);
 
             assert.deepStrictEqual(edgesOf(provinces, A), [
                 { toColor: B, path: [[pt(0, 2), pt(0, 0)], [pt(2, 0), pt(2, 2)]] },
@@ -135,7 +133,7 @@ describe('worldmap/provincebmp edge joining', function () {
                 [C, C, C, C],
                 [C, C, C, C],
             ]);
-            const provinces = fillEdges(grid.provinces, grid.colorToProvince, grid.colorByPosition, grid.width, grid.height);
+            const provinces = fillEdges(grid.provinces, grid.colorByPosition, grid.width, grid.height);
 
             assert.deepStrictEqual(edgesOf(provinces, A), [
                 { toColor: B, path: [[pt(0, 2), pt(0, 0)], [pt(2, 0), pt(2, 2)]] },
