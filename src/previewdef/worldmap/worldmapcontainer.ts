@@ -4,7 +4,7 @@ import { WorldMap } from './worldmap';
 import { contextContainer } from '../../context';
 import { localize } from '../../util/i18n';
 import { sendEvent } from '../../util/telemetry';
-import { getConfiguration } from '../../util/vsccommon';
+import { getConfiguration, previewWebviewOptions } from '../../util/vsccommon';
 
 export class WorldMapContainer implements vscode.WebviewPanelSerializer {
     private worldMap: WorldMap | undefined = undefined;
@@ -34,15 +34,18 @@ export class WorldMapContainer implements vscode.WebviewPanelSerializer {
             return;
         }
 
+        const webviewOptions = previewWebviewOptions();
         panel = panel ?? vscode.window.createWebviewPanel(
             WebviewType.PreviewWorldMap,
             localize('worldmap.preview.title', 'Preview World Map'),
             vscode.ViewColumn.Active,
             {
-                enableScripts: true,
+                ...webviewOptions,
                 retainContextWhenHidden: getConfiguration().worldMapRetainContextWhenHidden !== false,
             }
         );
+        // A panel restored from a session that predates the scoped roots carries the wide default.
+        panel.webview.options = webviewOptions;
 
         panel.onDidDispose(() => {
             if (this.worldMap?.panel === panel) {

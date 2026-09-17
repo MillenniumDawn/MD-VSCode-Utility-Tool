@@ -31,6 +31,8 @@ export class WorldMap {
 	private lastRequestedExportRequestId = 0;
 	private exportInProgressRequestId: number | undefined;
 
+	private subscriptions: vscode.Disposable[] = [];
+
 	constructor(panel: vscode.WebviewPanel) {
 		this.panel = panel;
 		this.worldMapLoader = new WorldMapLoader();
@@ -44,8 +46,10 @@ export class WorldMap {
 
 		const webview = this.panel.webview;
 		webview.html = this.renderWorldMap(webview);
-		webview.onDidReceiveMessage((msg) => this.onMessage(msg));
-		this.panel.onDidChangeViewState(() => this.onViewStateChanged());
+		this.subscriptions.push(
+			webview.onDidReceiveMessage((msg) => this.onMessage(msg)),
+			this.panel.onDidChangeViewState(() => this.onViewStateChanged()),
+		);
 	}
 
 	// The full world map (provinces, states, countries, ...) is 100-300 MB. When the panel is
@@ -89,6 +93,8 @@ export class WorldMap {
 	);
 
 	public dispose() {
+		vscode.Disposable.from(...this.subscriptions).dispose();
+		this.subscriptions = [];
 		this.panel = undefined;
 	}
 
@@ -355,7 +361,7 @@ export class WorldMap {
 
 		const prefix = "data:image/png;base64,";
 		if (!dataUrl || !dataUrl.startsWith(prefix)) {
-			vscode.window.showErrorMessage(
+			void vscode.window.showErrorMessage(
 				localize(
 					"worldmap.export.error.imgformat",
 					"Can't export world map: Image is not in correct format.",
@@ -374,12 +380,12 @@ export class WorldMap {
 			if (this.lastRequestedExportRequestId === requestId) {
 				this.lastRequestedExportUri = undefined;
 			}
-			vscode.window.showInformationMessage(
+			void vscode.window.showInformationMessage(
 				localize("worldmap.export.success", "Successfully exported world map."),
 			);
 		} catch (e) {
 			error(e);
-			vscode.window.showErrorMessage(
+			void vscode.window.showErrorMessage(
 				localize("worldmap.export.error", "Can't export world map: {0}.", e),
 			);
 		} finally {

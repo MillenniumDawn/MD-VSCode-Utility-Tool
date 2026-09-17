@@ -11,13 +11,22 @@ Unreleased
 - [ World Map Previewer ] The country colour set pans and zooms smoothly on a full-size map. Each province's owner colour was searched through every country tag on every redraw; the table is now built once per redraw. Issue #214.
 - [ World Map Previewer ] State, strategic region and supply area labels no longer stall panning on a full-size map. The province under each label was searched through every province on every redraw; provinces are now indexed by position once per map load. Issue #215.
 - [ World Map Previewer ] The warnings colour set and the hover tooltip no longer stall panning on a map with many warnings. Every province used to be checked against every warning on every redraw; warnings are now indexed by province, state, strategic region, supply area and river once per map load. Issue #216.
+- [ Focus Tree Previewer ] Refreshing a focus tree or decision preview no longer re-reads every file under `interface/` each time: the window names and sprites each file defines are remembered between refreshes, and the search stops as soon as the ones the preview needs are found. Issue #178.
+- Opening a large DDS or TGA texture uses far less memory: the decoded image is handed to the viewer as raw bytes instead of being embedded in the page as base64 text. Issue #176.
+- [ Focus Tree Previewer ] Focus tree, technology tree and MIO previews position each node and connection line directly on the element instead of through a one-off CSS rule, so a large tree ships far less CSS and opens faster. Issue #179.
+- An error inside a focus tree or MIO preview control (tree selector, condition filters, completed-focus checkboxes, the in-place refresh) is now logged and reported instead of being silently lost. Issue #181.
+- [ CI ] The integration tests run against a pinned VS Code version that is cached between runs, so a pull request no longer downloads the latest release every time or turns red when VS Code ships a regression. Issue #183.
 - [ CI ] A pull request builds and type-checks the extension once instead of twice: the integration smoke test now runs in the same job as the unit tests, against the packaged build. Issue #184.
 
   Bugfixes:
 
+- Closing a preview panel now releases everything the preview subscribed to on it, so a closed preview no longer keeps its cached data alive for as long as the panel object lives. Issue #180.
+- The image cache now counts the base64 data of each image and the split frames and tiles of each sprite towards its 128 MB limit, and sprites have a byte limit of their own, so memory is released when the limit is reached instead of growing to several times that. Issue #177.
+- Preview and world map panels can now only load the extension's own files, not files from the opened mod folder, closing a way for a crafted mod to run scripts inside a preview. Issue #175.
 - An event file with a `#!localisation:` dependency comment failed to preview: the localisation file was loaded and then rejected as "not iterable". Its keys now reach the event titles and descriptions again. Issue #85.
 - Opening a DDS or TGA file whose header claims an absurd size (for example 65535x65535) no longer freezes or crashes the extension: the image viewer now refuses it with a message instead of trying to allocate gigabytes of pixels. Issue #174.
 - A focus id, MIO trait id, GUI window name or country tag containing `</script>` can no longer break out of the preview page or inject markup into it: the focus tree, MIO, GUI and technology previews now escape their data the way the other previews already did. Issue #209.
+- A misspelled or empty folder in `mdHoi4Utilities.technologyGfxRoots` or `mdHoi4Utilities.inlayWindowGfxRoots`, an interface `.gui` or `.gfx` file that fails to parse, a broken `00_titlebar_styles.txt` or a failed idea-swap index now leave a message naming the file or folder in the HOI4 Modding output channel, instead of silently missing icons or windows. Issue #182.
 - A GUI container-window name or technology folder name containing quotes or angle brackets can no longer break out of the folder selector or inject markup into the GUI and technology previews. Issue #210.
 - A MIO trait token or a localisation value containing quotes or angle brackets can no longer inject markup into the MIO and technology previews. Issue #211.
 - [ CI ] A merged pull request labelled bug, or one closing an issue labelled bug, is now filed under Bugfixes in the release changelog instead of always landing under Functionality. Issue #212.
