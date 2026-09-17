@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- The extension's own interface — preview toolbars, filters, warnings and the settings descriptions — is now fully translated into Korean, Russian and Simplified Chinese, where the newer previews (characters, decisions, ideas, index status) had been showing English. Issue #191.
+
 v1.1.36
 
   Functionality:
