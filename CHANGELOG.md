@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- A sprite whose name contains quotes or braces no longer breaks the page styling of the GUI, focus tree, technology and MIO previews that draw it. Issue #218.
+
 v1.1.36
 
   Functionality:
