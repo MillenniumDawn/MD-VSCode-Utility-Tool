@@ -17,6 +17,7 @@ Unreleased
 - An error inside a focus tree or MIO preview control (tree selector, condition filters, completed-focus checkboxes, the in-place refresh) is now logged and reported instead of being silently lost. Issue #181.
 - [ CI ] The integration tests run against a pinned VS Code version that is cached between runs, so a pull request no longer downloads the latest release every time or turns red when VS Code ships a regression. Issue #183.
 - [ CI ] A pull request builds and type-checks the extension once instead of twice: the integration smoke test now runs in the same job as the unit tests, against the packaged build. Issue #184.
+- [ CI ] Every release and version-check job now runs on the same pinned Node version as the tests, read from one `.nvmrc`, instead of whatever the GitHub runner image happens to ship. Issue #185.
 
   Bugfixes:
 
