@@ -5,6 +5,7 @@ import { UserError } from './common';
 import { isSamePath } from './nodecommon';
 import { ConfigurationKey } from '../constants';
 import { defaultYmlSuffix, ymlSuffixBySettingName } from './locales';
+import { contextContainer } from '../context';
 
 export function getConfiguration() {
     return vscode.workspace.getConfiguration(ConfigurationKey);
@@ -152,4 +153,18 @@ export function getLanguageIdInYml(): string {
     // step by hand. It lives in locales.ts now, with the rest.
     const setting = getConfiguration().previewLocalisation;
     return (setting !== undefined ? ymlSuffixBySettingName[setting] : undefined) ?? defaultYmlSuffix;
+}
+
+/**
+ * Options for every preview webview. `localResourceRoots` is scoped to the extension's own
+ * folder: left out, VS Code also allows every workspace folder, and the CSP lets the webview
+ * load scripts and styles from any allowed root, so a mod could ship a script the preview would
+ * run. Nothing the previews show comes from the workspace (images are data URIs), so the
+ * extension folder is the whole list.
+ */
+export function previewWebviewOptions(): vscode.WebviewOptions {
+    return {
+        enableScripts: true,
+        localResourceRoots: contextContainer.current ? [contextContainer.current.extensionUri] : [],
+    };
 }

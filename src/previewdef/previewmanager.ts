@@ -9,7 +9,7 @@ import { arrayToMap, debounceByInput } from '../util/common';
 import { debug, error } from '../util/debug';
 import { PreviewBase } from './previewbase';
 import { contextContainer, setVscodeContext } from '../context';
-import { basename, getDocumentByUri } from '../util/vsccommon';
+import { basename, getDocumentByUri, previewWebviewOptions } from '../util/vsccommon';
 import { worldMapPreviewDef } from './worldmap';
 import { eventPreviewDef } from './event';
 import { chain } from 'lodash';
@@ -175,14 +175,15 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         }
 
         const filename = basename(uri);
+        const webviewOptions = previewWebviewOptions();
         panel = panel ?? vscode.window.createWebviewPanel(
             WebviewType.Preview,
             localize('preview.viewtitle', "HOI4: {0}", filename),
             vscode.ViewColumn.Beside,
-            {
-                enableScripts: true
-            }
+            webviewOptions
         );
+        // A panel restored from a session that predates the scoped roots carries the wide default.
+        panel.webview.options = webviewOptions;
 
         if (contextContainer.current) {
             panel.iconPath = {
