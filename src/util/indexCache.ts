@@ -3,6 +3,7 @@ import { contextContainer } from '../context';
 import { Logger } from './logger';
 import { fnv1a64Hex } from './hash';
 import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration } from './vsccommon';
+import { normalizeParentModPathSetting } from './parentmods';
 
 interface CacheManifest {
     version: number;
@@ -29,15 +30,20 @@ const CACHE_ROOT = 'indexCache';
  * profile get two caches instead of overwriting each other's.
  *
  * The identity is the selected `modFile` plus the workspace folders, sorted, so reordering the
- * folders does not invalidate anything. A plain FNV-1a hash rather than `node:crypto`, because this
- * module is loaded in the web build too (where it never reaches disk at all) and because a collision
+ * folders does not invalidate anything, plus the parent mod paths in setting order, because there
+ * the order is the precedence. A plain FNV-1a hash rather than `node:crypto`, because this module
+ * is loaded in the web build too (where it never reaches disk at all) and because a collision
  * costs no more than two mods sharing one cache -- which is exactly today's behaviour.
  *
  * The vanilla (`.global`) halves are namespaced along with the mod's, so a second mod rebuilds them
  * once. That is a few seconds of the shared parse queue, and it buys one identity rule instead of
  * two.
  */
-export function cacheNamespaceFor(modFile: string | undefined, workspaceFolderUris: readonly string[]): string {
+export function cacheNamespaceFor(
+    modFile: string | undefined,
+    workspaceFolderUris: readonly string[],
+    parentModPaths: readonly string[] = [],
+): string {
     const parts: string[] = [];
 
     const mod = modFile?.trim();
@@ -50,17 +56,28 @@ export function cacheNamespaceFor(modFile: string | undefined, workspaceFolderUr
         parts.push('ws:' + uri);
     }
 
+    for (const parent of parentModPaths) {
+        const trimmed = parent.trim();
+        if (trimmed) {
+            parts.push('parent:' + trimmed.replace(/\\+/g, '/').toLowerCase());
+        }
+    }
+
     return fnv1a64Hex(parts.join('\n'));
 }
 
 
-/** The two inputs to `cacheNamespaceFor`, each read defensively -- neither is worth failing over. */
+/** The inputs to `cacheNamespaceFor`, each read defensively -- none is worth failing over. */
 function cacheNamespace(): string {
     let modFile: string | undefined;
+    let parentModPaths: string[] = [];
     try {
-        modFile = getConfiguration().modFile as string | undefined;
+        const conf = getConfiguration();
+        modFile = conf.modFile as string | undefined;
+        parentModPaths = normalizeParentModPathSetting(conf.parentModPaths);
     } catch {
         modFile = undefined;
+        parentModPaths = [];
     }
 
     let folders: string[] = [];
@@ -70,10 +87,12 @@ function cacheNamespace(): string {
         folders = [];
     }
 
-    return cacheNamespaceFor(modFile, folders);
+    return cacheNamespaceFor(modFile, folders, parentModPaths);
 }
 
-function getCacheDir(): vscode.Uri | null {
+export type CacheScope = vscode.Uri | null;
+
+export function captureCacheScope(): CacheScope {
     const ctx = contextContainer.current;
     if (!ctx || IS_WEB_EXT) {
         return null;
@@ -85,8 +104,8 @@ function getCacheDir(): vscode.Uri | null {
 // session: a workspace folder is added, or the `modFile` setting is pointed at another mod.
 const cacheDirPromises = new Map<string, Promise<vscode.Uri | null>>();
 
-function ensureCacheDir(): Promise<vscode.Uri | null> {
-    const dir = getCacheDir();
+export function ensureCacheDir(scope: CacheScope = captureCacheScope()): Promise<vscode.Uri | null> {
+    const dir = scope;
     if (!dir) {
         return Promise.resolve(null);
     }
@@ -146,8 +165,8 @@ async function removeUnnamespacedCaches(): Promise<void> {
     }
 }
 
-export async function saveCacheManifest(indexName: string, filePaths: string[], mtimes: Map<string, number>, version: number): Promise<void> {
-    const dir = await ensureCacheDir();
+export async function saveCacheManifest(indexName: string, filePaths: string[], mtimes: Map<string, number>, version: number, scope?: CacheScope): Promise<void> {
+    const dir = await ensureCacheDir(scope);
     if (!dir) { return; }
     try {
         const manifest: CacheManifest = {
@@ -158,11 +177,12 @@ export async function saveCacheManifest(indexName: string, filePaths: string[], 
         await writeFile(uri, Buffer.from(JSON.stringify(manifest)));
     } catch (e) {
         Logger.error(`Failed to save cache manifest for ${indexName}: ${e}`);
+        throw e;
     }
 }
 
-export async function loadCacheManifest(indexName: string, expectedVersion: number): Promise<CacheManifest | null> {
-    const dir = getCacheDir();
+export async function loadCacheManifest(indexName: string, expectedVersion: number, scope?: CacheScope): Promise<CacheManifest | null> {
+    const dir = scope === undefined ? captureCacheScope() : scope;
     if (!dir) { return null; }
     try {
         const uri = vscode.Uri.joinPath(dir, `${indexName}.manifest.json`);
@@ -175,19 +195,20 @@ export async function loadCacheManifest(indexName: string, expectedVersion: numb
     }
 }
 
-export async function saveCacheData(indexName: string, data: string): Promise<void> {
-    const dir = await ensureCacheDir();
+export async function saveCacheData(indexName: string, data: string, scope?: CacheScope): Promise<void> {
+    const dir = await ensureCacheDir(scope);
     if (!dir) { return; }
     try {
         const uri = vscode.Uri.joinPath(dir, `${indexName}.data.json`);
         await writeFile(uri, Buffer.from(data));
     } catch (e) {
         Logger.error(`Failed to save cache data for ${indexName}: ${e}`);
+        throw e;
     }
 }
 
-export async function loadCacheData(indexName: string): Promise<string | null> {
-    const dir = getCacheDir();
+export async function loadCacheData(indexName: string, scope?: CacheScope): Promise<string | null> {
+    const dir = scope === undefined ? captureCacheScope() : scope;
     if (!dir) { return null; }
     try {
         const uri = vscode.Uri.joinPath(dir, `${indexName}.data.json`);

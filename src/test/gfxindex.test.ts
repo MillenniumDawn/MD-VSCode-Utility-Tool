@@ -9,6 +9,7 @@ import {
 	__resetGfxIndexForTests,
 	__testHandlers,
 } from "../util/gfxindex";
+import { clearParentModCache } from "../util/parentmods";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
 type ListedEntry = {
@@ -23,13 +24,20 @@ type FileloaderModule = {
 		options?: {
 			mod?: boolean;
 			hoi4?: boolean;
+			workspace?: boolean;
+			parent?: boolean;
 			recursively?: boolean;
 			token?: unknown;
 		},
 	) => Promise<ListedEntry[]>;
 	readFileFromModOrHOI4: (
 		relativePath: string,
-		options?: { mod?: boolean; hoi4?: boolean },
+		options?: {
+			mod?: boolean;
+			hoi4?: boolean;
+			workspace?: boolean;
+			parent?: boolean;
+		},
 	) => Promise<[Buffer, unknown]>;
 };
 
@@ -372,6 +380,167 @@ describe("owner-guarded removal with duplicate GFX names", function () {
 			(fileloader as any).readFileFromModOrHOI4 = origRead;
 			__resetGfxIndexForTests();
 		}
+	});
+});
+
+// The parent mods are a half of their own. Inside one half the last file parsed wins, so a
+// sprite the workspace redefines in a differently named .gfx than the parent's would resolve to
+// whichever of the two the four-wide parse queue finished last. Across halves the order is fixed:
+// workspace, parent, vanilla.
+describe("parent mods", function () {
+	function sprites(...names: string[]): Buffer {
+		const types = names
+			.map((name) => `spriteType = { name = "${name}" texturefile = "x.dds" }`)
+			.join(" ");
+		return Buffer.from(`spriteTypes = { ${types} }`);
+	}
+
+	const workspaceFiles: Record<string, Buffer> = {
+		"interface/sub.gfx": sprites("GFX_shared", "GFX_sub_only"),
+		"interface/override.gfx": sprites("GFX_override"),
+	};
+	const parentFiles: Record<string, Buffer> = {
+		"interface/parent.gfx": sprites("GFX_shared", "GFX_parent_only"),
+		"interface/override.gfx": sprites("GFX_override"),
+	};
+
+	let listedOptions: {
+		mod?: boolean;
+		workspace?: boolean;
+		parent?: boolean;
+	}[];
+	let releaseParentReads: () => void;
+
+	/** Which halves listed, by the options each one passes, in a fixed order. */
+	function listedHalves(): string[] {
+		return listedOptions
+			.map((o) =>
+				o.mod === false
+					? "global"
+					: o.workspace === false
+						? "parent"
+						: o.parent === false
+							? "workspace"
+							: "unexpected",
+			)
+			.sort();
+	}
+
+	beforeEach(function () {
+		listedOptions = [];
+		const parentReads = deferred<void>();
+		releaseParentReads = () => parentReads.resolve(undefined);
+		stubVscode({
+			getConfiguration: () => ({
+				gfxIndex: true,
+				parentModPaths: ["D:/mods/parent"],
+			}),
+			getWorkspaceFolder: () => WORKSPACE_FOLDER,
+		});
+		clearParentModCache();
+		featureflags.refreshFeatureFlags();
+		(fileloader as any).listFileEntriesFromModOrHOI4 = async (
+			_relativePath: string,
+			options: { mod?: boolean; workspace?: boolean; parent?: boolean },
+		) => {
+			listedOptions.push({
+				mod: options?.mod,
+				workspace: options?.workspace,
+				parent: options?.parent,
+			});
+			if (options?.mod === false) {
+				return toEntries([]);
+			}
+			if (options?.workspace === false) {
+				return toEntries(
+					Object.keys(parentFiles).map((f) => f.replace("interface/", "")),
+				);
+			}
+			return toEntries(
+				Object.keys(workspaceFiles).map((f) => f.replace("interface/", "")),
+			);
+		};
+		(fileloader as any).readFileFromModOrHOI4 = async (
+			relativePath: string,
+			options: { workspace?: boolean; parent?: boolean },
+		) => {
+			if (options?.workspace === false) {
+				// The parent half parses last, on purpose: the order must not matter.
+				await parentReads.promise;
+				return [parentFiles[relativePath], {}];
+			}
+			const content = workspaceFiles[relativePath];
+			if (content === undefined) {
+				throw new Error(`no workspace file ${relativePath}`);
+			}
+			return [content, {}];
+		};
+	});
+
+	afterEach(function () {
+		restoreVscodeStubs();
+		clearParentModCache();
+		featureflags.refreshFeatureFlags();
+		__resetGfxIndexForTests();
+	});
+
+	it("lists the parents as a half of their own, and keeps them out of the workspace half", async function () {
+		releaseParentReads();
+		await getIndexedGfxNames();
+
+		assert.deepStrictEqual(listedHalves(), ["global", "parent", "workspace"]);
+	});
+
+	it("resolves a sprite both define to the workspace's file, even when the parent parsed last", async function () {
+		const lookup = getGfxContainerFile("GFX_shared");
+		await waitForAsyncTasks();
+		releaseParentReads();
+
+		assert.strictEqual(await lookup, "interface/sub.gfx");
+		assert.strictEqual(
+			await getGfxContainerFile("GFX_parent_only"),
+			"interface/parent.gfx",
+		);
+		assert.ok((await getIndexedGfxNames()).includes("GFX_parent_only"));
+	});
+
+	it("keeps the parent's copy when the workspace override of a file is deleted", async function () {
+		releaseParentReads();
+		assert.strictEqual(
+			await getGfxContainerFile("GFX_override"),
+			"interface/override.gfx",
+		);
+
+		__testHandlers.onDeleteFiles({
+			files: [gfxFileUri("interface/override.gfx")],
+		});
+		await waitForAsyncTasks();
+
+		assert.strictEqual(
+			await getGfxContainerFile("GFX_override"),
+			"interface/override.gfx",
+		);
+
+		// And a workspace-only file's sprites do go when it does.
+		__testHandlers.onDeleteFiles({ files: [gfxFileUri("interface/sub.gfx")] });
+		await waitForAsyncTasks();
+		assert.strictEqual(await getGfxContainerFile("GFX_sub_only"), undefined);
+		assert.strictEqual(
+			await getGfxContainerFile("GFX_shared"),
+			"interface/parent.gfx",
+		);
+	});
+
+	it("rebuilds the parent half alone when the parent list changes", async function () {
+		releaseParentReads();
+		await getIndexedGfxNames();
+		listedOptions = [];
+
+		__testHandlers.onChangeParentMods();
+		await waitForAsyncTasks();
+		await waitForAsyncTasks();
+
+		assert.deepStrictEqual(listedHalves(), ["parent"]);
 	});
 });
 

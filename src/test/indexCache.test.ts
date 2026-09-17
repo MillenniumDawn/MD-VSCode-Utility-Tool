@@ -54,6 +54,36 @@ describe('util/indexCache', () => {
                 cacheNamespaceFor(undefined, ['file:///a', 'file:///b']),
             );
         });
+
+        it('gives two parent mod lists two different namespaces', () => {
+            assert.notStrictEqual(
+                cacheNamespaceFor(undefined, ['file:///ws'], ['d:/mods/parent']),
+                cacheNamespaceFor(undefined, ['file:///ws'], ['d:/mods/other']),
+            );
+            assert.notStrictEqual(
+                cacheNamespaceFor(undefined, ['file:///ws']),
+                cacheNamespaceFor(undefined, ['file:///ws'], ['d:/mods/parent']),
+            );
+        });
+
+        it('changes when the parent mods are reordered, because the order is the precedence', () => {
+            assert.notStrictEqual(
+                cacheNamespaceFor(undefined, ['file:///ws'], ['d:/a', 'd:/b']),
+                cacheNamespaceFor(undefined, ['file:///ws'], ['d:/b', 'd:/a']),
+            );
+        });
+
+        it('reads the same parent mod whichever slashes and case it is written with, and skips blanks', () => {
+            assert.strictEqual(
+                cacheNamespaceFor(undefined, [], ['D:\\Mods\\Parent', '', '  ']),
+                cacheNamespaceFor(undefined, [], ['d:/mods/parent']),
+            );
+            assert.strictEqual(
+                cacheNamespaceFor(undefined, ['file:///ws'], []),
+                cacheNamespaceFor(undefined, ['file:///ws']),
+            );
+        });
+
     });
 
     describe('computeStaleFiles', () => {

@@ -12,6 +12,7 @@ import {
 } from "../util/fileloader";
 import { CancelledError } from "../util/common";
 import { Node, SymbolNode } from "../hoiformat/hoiparser";
+import { clearParentModCache } from "../util/parentmods";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
 // EXPIRY_STAT_TTL in fileloader.ts is 500ms; tests advance the stubbed clock past that.
@@ -970,6 +971,354 @@ describe("util/fileloader listFileEntriesFromModOrHOI4", function () {
 					} as unknown as vscode.CancellationToken,
 				}),
 			CancelledError,
+		);
+	});
+});
+
+// A submod holds only what it overrides; the rest is in the mod it extends, listed in
+// `parentModPaths`. Those folders sit between the workspace and the game install: the workspace
+// wins over a parent, a parent over vanilla, and the submod's own replace_path -- which blocks
+// vanilla -- never hides a parent's file. Real folders, so the native walk is what gets exercised.
+describe("util/fileloader parent mods", function () {
+	const nodeFs = require("fs/promises") as typeof import("fs/promises");
+	const nodePath = require("path") as typeof import("path");
+	const nodeOs = require("os") as typeof import("os");
+
+	let root: string;
+	let workspaceDir: string;
+	let parentDir: string;
+	let grandparentDir: string;
+	let gameDir: string;
+	let modFile: string;
+	let replacePathContent = "";
+
+	function realPathOf(uri: unknown): string {
+		const raw = String(
+			(uri as { fsPath?: string; path?: string }).fsPath ??
+				(uri as { path?: string }).path ??
+				"",
+		);
+		if (raw.startsWith("hoi4installpath:")) {
+			return nodePath.join(
+				gameDir,
+				raw.slice("hoi4installpath:".length).replace(/^\/+/, ""),
+			);
+		}
+		return raw.startsWith("file://") ? raw.slice("file://".length) : raw;
+	}
+
+	function resolvedPath(uri: vscode.Uri | undefined): string | undefined {
+		return uri === undefined ? undefined : nodePath.resolve(realPathOf(uri));
+	}
+
+	async function write(fullPath: string, content = "x"): Promise<void> {
+		await nodeFs.mkdir(nodePath.dirname(fullPath), { recursive: true });
+		await nodeFs.writeFile(fullPath, content);
+	}
+
+	function configure(parentModPaths: string[], replacePath?: string): void {
+		stubVscode({
+			configuration: {
+				modFile,
+				installPath: "",
+				loadDlcContents: false,
+				parentModPaths,
+			},
+		});
+		clearParentModCache();
+		replacePathContent =
+			replacePath === undefined ? "" : `replace_path="${replacePath}"\n`;
+	}
+
+	beforeEach(async function () {
+		root = await nodeFs.mkdtemp(nodePath.join(nodeOs.tmpdir(), "hoi4parent-"));
+		workspaceDir = nodePath.join(root, "ws");
+		parentDir = nodePath.join(root, "parent");
+		grandparentDir = nodePath.join(root, "grandparent");
+		gameDir = nodePath.join(root, "game");
+		// A fresh .mod per run: the replace_path cache is keyed by its path and outlives this suite.
+		modFile = nodePath.join(root, "sub.mod");
+		await write(modFile, 'name="sub"\n');
+		await write(nodePath.join(workspaceDir, "interface", "override.gfx"), "ws");
+		await write(nodePath.join(workspaceDir, "interface", "subonly.gfx"), "ws");
+		await write(nodePath.join(parentDir, "interface", "override.gfx"), "parent");
+		await write(nodePath.join(parentDir, "interface", "shared.gfx"), "parent");
+		await write(nodePath.join(parentDir, "interface", "chain.gfx"), "parent");
+		await write(
+			nodePath.join(grandparentDir, "interface", "chain.gfx"),
+			"grandparent",
+		);
+		await write(
+			nodePath.join(grandparentDir, "interface", "deep.gfx"),
+			"grandparent",
+		);
+		await write(nodePath.join(gameDir, "interface", "shared.gfx"), "vanilla");
+		await write(nodePath.join(gameDir, "interface", "vanilla.gfx"), "vanilla");
+
+		stubVscode({
+			workspaceFolders: [{ uri: vscode.Uri.file(workspaceDir) }],
+			stat: async (uri: unknown) => {
+				const stat = await nodeFs.stat(realPathOf(uri));
+				return {
+					type: stat.isDirectory()
+						? vscode.FileType.Directory
+						: vscode.FileType.File,
+					mtime: stat.mtime.getTime(),
+					ctime: stat.birthtime.getTime(),
+					size: stat.size,
+				};
+			},
+			readDirectory: async (uri: unknown) => {
+				const dirents = await nodeFs.readdir(realPathOf(uri), {
+					withFileTypes: true,
+				});
+				return dirents.map(
+					(dirent) =>
+						[
+							dirent.name,
+							dirent.isDirectory()
+								? vscode.FileType.Directory
+								: vscode.FileType.File,
+						] as [string, number],
+				);
+			},
+			readFile: async (uri: unknown) => {
+				if (
+					nodePath.resolve(realPathOf(uri)) === nodePath.resolve(modFile)
+				) {
+					return Buffer.from(`name="sub"\n${replacePathContent}`);
+				}
+				return nodeFs.readFile(realPathOf(uri));
+			},
+		});
+		configure([parentDir]);
+	});
+
+	afterEach(async function () {
+		restoreVscodeStubs();
+		clearParentModCache();
+		await clearDlcZipCache();
+		await nodeFs.rm(root, { recursive: true, force: true });
+	});
+
+	it("resolves a file the workspace lacks from the parent mod", async function () {
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/shared.gfx")),
+			nodePath.resolve(parentDir, "interface", "shared.gfx"),
+		);
+	});
+
+	it("lets the workspace win over the parent", async function () {
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/override.gfx")),
+			nodePath.resolve(workspaceDir, "interface", "override.gfx"),
+		);
+	});
+
+	it("searches the parents in setting order", async function () {
+		configure([parentDir, grandparentDir]);
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/chain.gfx")),
+			nodePath.resolve(parentDir, "interface", "chain.gfx"),
+		);
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/deep.gfx")),
+			nodePath.resolve(grandparentDir, "interface", "deep.gfx"),
+		);
+
+		await clearDlcZipCache();
+		configure([grandparentDir, parentDir]);
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/chain.gfx")),
+			nodePath.resolve(grandparentDir, "interface", "chain.gfx"),
+		);
+	});
+
+	it("skips the parents with parent: false, so a parent-only file is not in the mod", async function () {
+		assert.strictEqual(
+			await getFilePathFromModOrHOI4("interface/shared.gfx", {
+				hoi4: false,
+				parent: false,
+			}),
+			undefined,
+		);
+		assert.strictEqual(
+			resolvedPath(
+				await getFilePathFromModOrHOI4("interface/override.gfx", {
+					hoi4: false,
+					parent: false,
+				}),
+			),
+			nodePath.resolve(workspaceDir, "interface", "override.gfx"),
+		);
+	});
+
+	it("skips the parents along with the workspace under mod: false", async function () {
+		assert.strictEqual(
+			resolvedPath(
+				await getFilePathFromModOrHOI4("interface/shared.gfx", { mod: false }),
+			),
+			nodePath.resolve(gameDir, "interface", "shared.gfx"),
+		);
+	});
+
+	it("still falls through to vanilla for a file no mod has", async function () {
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/vanilla.gfx")),
+			nodePath.resolve(gameDir, "interface", "vanilla.gfx"),
+		);
+	});
+
+	it("keeps replace_path blocking vanilla without hiding the parent", async function () {
+		configure([parentDir], "interface");
+
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/shared.gfx")),
+			nodePath.resolve(parentDir, "interface", "shared.gfx"),
+		);
+		assert.strictEqual(
+			await getFilePathFromModOrHOI4("interface/vanilla.gfx"),
+			undefined,
+		);
+	});
+
+	it("lists the mod half with the parent's files, each name once, workspace first", async function () {
+		const entries = await listFileEntriesFromModOrHOI4("interface", {
+			mod: true,
+			hoi4: false,
+			recursively: true,
+		});
+
+		assert.deepStrictEqual(
+			entries.map((e) => e.relativePath).sort(),
+			["chain.gfx", "override.gfx", "shared.gfx", "subonly.gfx"],
+		);
+		const override = entries.find((e) => e.relativePath === "override.gfx")!;
+		assert.strictEqual(
+			nodePath.resolve(realPathOf(override.uri)),
+			nodePath.resolve(workspaceDir, "interface", "override.gfx"),
+		);
+		const shared = entries.find((e) => e.relativePath === "shared.gfx")!;
+		assert.strictEqual(
+			nodePath.resolve(realPathOf(shared.uri)),
+			nodePath.resolve(parentDir, "interface", "shared.gfx"),
+		);
+
+		assert.deepStrictEqual(
+			(await listFilesFromModOrHOI4("interface", { hoi4: false })).sort(),
+			["chain.gfx", "override.gfx", "shared.gfx", "subonly.gfx"],
+		);
+	});
+
+	it("leaves the mod-only listing exactly as before when no parent is configured", async function () {
+		configure([]);
+		stubVscode({
+			workspaceFolders: [
+				{ uri: vscode.Uri.file(workspaceDir) },
+				{ uri: vscode.Uri.file(parentDir) },
+			],
+		});
+
+		// Two workspace folders holding the same name have always listed it twice here.
+		const names = await listFilesFromModOrHOI4("interface", { hoi4: false });
+		assert.strictEqual(
+			names.filter((name) => name === "override.gfx").length,
+			2,
+		);
+	});
+
+	it("lists the full stack once each: workspace, parent, then vanilla", async function () {
+		assert.deepStrictEqual(
+			(await listFilesFromModOrHOI4("interface")).sort(),
+			["chain.gfx", "override.gfx", "shared.gfx", "subonly.gfx", "vanilla.gfx"],
+		);
+	});
+
+	// How an index reads the parents into a half of their own.
+	it("lists and resolves the parents alone under workspace: false", async function () {
+		configure([parentDir, grandparentDir]);
+
+		const entries = await listFileEntriesFromModOrHOI4("interface", {
+			workspace: false,
+			hoi4: false,
+			recursively: true,
+		});
+		assert.deepStrictEqual(
+			entries.map((e) => e.relativePath).sort(),
+			["chain.gfx", "deep.gfx", "override.gfx", "shared.gfx"],
+		);
+		// The parent's copy, not the workspace's, and the first parent's for a name both have.
+		const override = entries.find((e) => e.relativePath === "override.gfx")!;
+		assert.strictEqual(
+			nodePath.resolve(realPathOf(override.uri)),
+			nodePath.resolve(parentDir, "interface", "override.gfx"),
+		);
+		assert.strictEqual(
+			entries.filter((e) => e.relativePath === "chain.gfx").length,
+			1,
+		);
+
+		assert.strictEqual(
+			resolvedPath(
+				await getFilePathFromModOrHOI4("interface/override.gfx", {
+					workspace: false,
+					hoi4: false,
+				}),
+			),
+			nodePath.resolve(parentDir, "interface", "override.gfx"),
+		);
+		assert.strictEqual(
+			await getFilePathFromModOrHOI4("interface/subonly.gfx", {
+				workspace: false,
+				hoi4: false,
+			}),
+			undefined,
+		);
+	});
+
+	it("keeps the parents out of the workspace half under parent: false", async function () {
+		assert.deepStrictEqual(
+			(
+				await listFileEntriesFromModOrHOI4("interface", {
+					parent: false,
+					hoi4: false,
+					recursively: true,
+				})
+			)
+				.map((e) => e.relativePath)
+				.sort(),
+			["override.gfx", "subonly.gfx"],
+		);
+	});
+
+	// The game applies a replace_path from any loaded mod's descriptor. A submod of Millennium Dawn
+	// that declares none of its own still never sees vanilla's focus trees, because MD's descriptor
+	// took them out.
+	it("honours the parent's own descriptor.mod replace_path against vanilla", async function () {
+		await write(
+			nodePath.join(parentDir, "descriptor.mod"),
+			'name="parent"\nreplace_path="interface"\n',
+		);
+		await clearDlcZipCache();
+
+		assert.strictEqual(
+			await getFilePathFromModOrHOI4("interface/vanilla.gfx"),
+			undefined,
+		);
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/shared.gfx")),
+			nodePath.resolve(parentDir, "interface", "shared.gfx"),
+		);
+		assert.deepStrictEqual(
+			(await listFilesFromModOrHOI4("interface")).sort(),
+			["chain.gfx", "override.gfx", "shared.gfx", "subonly.gfx"],
+		);
+	});
+
+	it("treats a parent without a descriptor as replacing nothing", async function () {
+		assert.strictEqual(
+			resolvedPath(await getFilePathFromModOrHOI4("interface/vanilla.gfx")),
+			nodePath.resolve(gameDir, "interface", "vanilla.gfx"),
 		);
 	});
 });

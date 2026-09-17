@@ -3,6 +3,7 @@ import * as path from "path";
 import { ConfigurationKey, Commands } from "../constants";
 import { PromiseCache } from "./cache";
 import { localize } from "./i18n";
+import { clearParentModCache, getParentModUris } from "./parentmods";
 import {
 	basename,
 	fileOrUriStringToUri,
@@ -21,6 +22,13 @@ export const workspaceModFilesCache = new PromiseCache({
 	factory: getWorkspaceModFiles,
 	life: 10 * 1000,
 });
+
+// What the item last showed, so a redraw for a reason unrelated to the mod file -- the parent list
+// changed -- keeps the error marker rather than resetting it to "fine" until the next real check.
+let lastStatus: { modFile: vscode.Uri | undefined; error: boolean } = {
+	modFile: undefined,
+	error: false,
+};
 
 export function registerModFile(): vscode.Disposable {
 	const disposables: vscode.Disposable[] = [];
@@ -53,28 +61,49 @@ export function updateSelectedModFileStatus(
 	modFile: vscode.Uri | undefined,
 	error: boolean = false,
 ): void {
+	lastStatus = { modFile, error };
 	if (modFileStatusContainer.current) {
 		const modName = modFileStatusContainer.current;
+		const parents = getParentModUris();
+		// The parent mods ride along on this item rather than getting one of their own: they are
+		// part of what "the working mod" resolves to, and a second item costs status bar space.
+		const parentSuffix = parents.length > 0 ? ` +${parents.length}` : "";
+		const parentTooltip = parents
+			.map(
+				(parent) =>
+					"\n" +
+					localize("modfile.extends", "Extends: {0}", uriToFilePathWhenPossible(parent)),
+			)
+			.join("");
 		if (modFile) {
 			const modFileName = basename(modFile, ".mod");
 			modName.command = Commands.SelectModFile;
-			modName.text = (error ? "$(error) " : "$(file-code) ") + modFileName;
+			modName.text =
+				(error ? "$(error) " : "$(file-code) ") + modFileName + parentSuffix;
 			modName.tooltip =
 				(error
 					? localize("modfile.errorreading", "Error reading this file: ")
-					: "") + uriToFilePathWhenPossible(modFile);
+					: "") +
+				uriToFilePathWhenPossible(modFile) +
+				parentTooltip;
 			modName.show();
 		} else {
 			modName.command = Commands.SelectModFile;
 			modName.text =
-				"$(file-code) " + localize("modfile.nomodfile", "(No mod descriptor)");
-			modName.tooltip = localize(
-				"modfile.clicktoselect",
-				"Click to select a mod file...",
-			);
+				"$(file-code) " +
+				localize("modfile.nomodfile", "(No mod descriptor)") +
+				parentSuffix;
+			modName.tooltip =
+				localize("modfile.clicktoselect", "Click to select a mod file...") +
+				parentTooltip;
 			modName.show();
 		}
 	}
+}
+
+/** Redraws the item with the mod file and error state it last showed. */
+export function redrawSelectedModFileStatus(): void {
+	updateSelectedModFileStatus(lastStatus.modFile, lastStatus.error);
 }
 
 function onChangeWorkspaceConfiguration(
@@ -84,6 +113,11 @@ function onChangeWorkspaceConfiguration(
 		void checkAndUpdateModFileStatus(
 			fileOrUriStringToUri(getConfiguration().modFile),
 		);
+	} else if (e.affectsConfiguration(`${ConfigurationKey}.parentModPaths`)) {
+		// This listener is registered ahead of the one in hoifs.ts that owns the cache, so drop
+		// it here too or the item redraws with the old list.
+		clearParentModCache();
+		redrawSelectedModFileStatus();
 	}
 }
 
