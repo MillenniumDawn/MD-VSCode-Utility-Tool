@@ -303,4 +303,26 @@ describe('.github/workflows', function () {
             assert.doesNotMatch(summary?.run ?? '', /release pull request after it/);
         });
     });
+
+    describe('test.yml', function () {
+        const workflow = load('test.yml');
+
+        it('gates every pull request on coverage of the lines it changed', function () {
+            // The whole-suite c8 thresholds leave room for thousands of untested lines, so the
+            // step reading the lcov report is the one that keeps coverage from sliding. It diffs
+            // against HEAD^1 -- the base branch, since HEAD is the merge commit on a pull request
+            // -- which only exists when the checkout is deeper than the default one commit.
+            const gate = runsIn(workflow, 'test', 'scripts/diff-coverage.js');
+            assert.ok(gate, 'no changed-lines coverage step');
+            assert.match(gate.run ?? '', /--base HEAD\^1/);
+            assert.match(gate.if ?? '', /github\.event_name == 'pull_request'/);
+
+            const testSteps = jobSteps(workflow, 'test');
+            const coverage = testSteps.findIndex((step) => step.run?.includes('test:coverage'));
+            assert.ok(coverage >= 0, 'no coverage step');
+            assert.ok(testSteps.indexOf(gate) > coverage, 'the gate runs before the report it reads exists');
+
+            assert.strictEqual(usesIn(workflow, 'test', 'actions/checkout')?.with?.['fetch-depth'], 2);
+        });
+    });
 });
