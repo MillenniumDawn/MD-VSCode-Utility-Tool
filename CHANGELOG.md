@@ -15,6 +15,7 @@ Unreleased
 
   Bugfixes:
 
+- The image cache now counts the base64 data of each image and the split frames and tiles of each sprite towards its 128 MB limit, and sprites have a byte limit of their own, so memory is released when the limit is reached instead of growing to several times that. Issue #177.
 - Preview and world map panels can now only load the extension's own files, not files from the opened mod folder, closing a way for a crafted mod to run scripts inside a preview. Issue #175.
 - An event file with a `#!localisation:` dependency comment failed to preview: the localisation file was loaded and then rejected as "not iterable". Its keys now reach the event titles and descriptions again. Issue #85.
 - Opening a DDS or TGA file whose header claims an absurd size (for example 65535x65535) no longer freezes or crashes the extension: the image viewer now refuses it with a message instead of trying to allocate gigabytes of pixels. Issue #174.
