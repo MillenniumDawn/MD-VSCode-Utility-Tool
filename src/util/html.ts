@@ -90,7 +90,7 @@ export function html(webview: vscode.Webview, body: string, scripts: (string | D
             default-src 'none';
             style-src ${preparedStyles.map(v => v[1]).join(' ')} ${webview.cspSource};
             script-src ${preparedScripts.map(v => v[1]).filter(v => v.length > 0).join(' ')} ${webview.cspSource};
-            img-src data: ${webview.cspSource};
+            img-src data: blob: ${webview.cspSource};
             font-src ${webview.cspSource};
         ">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
