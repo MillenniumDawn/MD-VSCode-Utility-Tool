@@ -20,8 +20,7 @@
 		]
 	},
 	"include": [
-		"src/test/**/*.ts",
-		"src/def.d.ts",
+		"src/**/*.ts",
 		"i18n/en.ts"
 	],
 	"exclude": [
