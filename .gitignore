@@ -23,6 +23,9 @@ i18n/*.js.map
 out-test/
 out-test-webview/
 
+# VS Code build downloaded by the integration tests
+.vscode-test/
+
 # Logs
 *.log
 logs/

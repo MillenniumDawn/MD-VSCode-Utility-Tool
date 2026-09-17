@@ -68,6 +68,15 @@ function runsIn(workflow: Workflow, job: string, fragment: string): Step | undef
     return jobSteps(workflow, job).find((step) => step.run?.includes(fragment));
 }
 
+// A step runs Node when a line of its script starts with node, npm or npx, or pipes into or
+// substitutes one -- not when it only names them in a message it echoes.
+function runsNode(step: Step): boolean {
+    return (step.run ?? '').split('\n').some((line) => {
+        const trimmed = line.trim();
+        return !trimmed.startsWith('echo ') && !trimmed.startsWith('#') && /(^|[\s(|])(node|npm|npx)\s/.test(trimmed);
+    });
+}
+
 describe('.github/workflows', function () {
     it('parses every workflow', function () {
         const files = workflowFiles();
@@ -86,6 +95,40 @@ describe('.github/workflows', function () {
                 assert.match(step.uses, /^[\w-]+\/[\w.-]+@[0-9a-f]{40}$/, `${file}: ${step.uses}`);
             }
         }
+    });
+
+    it('sets up the pinned Node before any job runs it', function () {
+        // The check and release pull request jobs used to run release-check.js and the bump
+        // scripts on whatever Node the runner image shipped, which GitHub rolls forward without
+        // notice, while the tests pinned theirs. Every job that runs node now sets it up first, and
+        // every setup reads the one declaration in .nvmrc rather than carrying its own number.
+        for (const file of workflowFiles()) {
+            for (const [id, job] of Object.entries(load(file).jobs ?? {})) {
+                let setUp = false;
+                for (const step of job.steps ?? []) {
+                    if (step.uses?.startsWith('actions/setup-node@')) {
+                        assert.strictEqual(step.with?.['node-version-file'], '.nvmrc', `${file}: ${id} does not read .nvmrc`);
+                        assert.strictEqual(step.with?.['node-version'], undefined, `${file}: ${id} pins its own Node version`);
+                        setUp = true;
+                    }
+                    if (runsNode(step)) {
+                        assert.ok(setUp, `${file}: ${id} runs node in "${step.name ?? step.run}" without setting it up`);
+                    }
+                }
+            }
+        }
+    });
+
+    it('declares the Node version once and keeps the types on it', function () {
+        const root = path.join(workflowDir, '..', '..');
+        const major = fs.readFileSync(path.join(root, '.nvmrc'), 'utf8').trim();
+        assert.match(major, /^\d+$/, '.nvmrc should carry a bare major version');
+        const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as {
+            engines?: Record<string, string>;
+            devDependencies?: Record<string, string>;
+        };
+        assert.strictEqual(pkg.engines?.node, `>=${major}`);
+        assert.strictEqual(pkg.devDependencies?.['@types/node'], `^${major}`);
     });
 
     describe('release.yml', function () {

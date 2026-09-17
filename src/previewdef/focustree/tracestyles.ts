@@ -12,11 +12,12 @@ export const traceLineClass = 'st-ft-trace-line';
 export const traceDimClass = 'st-ft-trace-dim';
 
 export function registerTraceStyles(styleTable: StyleTable): void {
-    // Emitted through `raw` with an id prefix rather than as plain classes, because the per-line
-    // geometry class (`.st-gridbox-connection-N`, carrying `border-top: 1px solid #88aaff`) is
+    // Emitted through `raw` with an id prefix rather than as plain classes, because the line's
+    // border class (`.st-gridbox-connection-...`, carrying `border-top: 1px solid #88aaff`) is
     // serialized into the body *after* the shell stylesheet and would win a same-specificity tie
     // on document order. An id selector wins on specificity instead, which beats reaching for
-    // !important.
+    // !important. That border has to stay a class for the same reason: an inline style would beat
+    // any selector, so the connection keeps only its geometry in its style attribute.
     //
     // The z-index is not optional: connections are emitted before the item divs, and a focus node's
     // own layers go up to z-index 3, so without it the traced line stays hidden behind the nodes it

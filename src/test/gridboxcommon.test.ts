@@ -31,7 +31,7 @@ describe("util/hoi4gui/gridboxcommon", () => {
 			);
 			assert.ok(html.includes('data-conn-from="a"'));
 			assert.ok(st.toRawCss().includes("border-top: 1px solid red"));
-			assert.ok(st.toRawCss().includes("width: 100px"));
+			assert.ok(html.includes('style="left: 0px; top: 10px; width: 100px; height: 1px;"'));
 		});
 
 		it("renders vertical line when x equal", () => {
@@ -49,7 +49,41 @@ describe("util/hoi4gui/gridboxcommon", () => {
 			);
 			assert.ok(html.includes('data-conn-type="child"'));
 			assert.ok(st.toRawCss().includes("border-left: 2px dashed blue"));
-			assert.ok(st.toRawCss().includes("height: 100px"));
+			assert.ok(html.includes('style="left: 10px; top: 0px; width: 1px; height: 100px;"'));
+		});
+
+		it("keeps geometry out of the stylesheet and shares one border rule between lines", () => {
+			const st = makeStyleTable();
+			const first = renderGridBoxConnection(
+				{ x: 0, y: 10 },
+				{ x: 100, y: 10 },
+				"1px solid red",
+				"child",
+				"up",
+				{ width: 50, height: 50 },
+				undefined,
+				st,
+				1.5,
+			);
+			const second = renderGridBoxConnection(
+				{ x: 0, y: 60 },
+				{ x: 40, y: 60 },
+				"1px solid red",
+				"child",
+				"up",
+				{ width: 50, height: 50 },
+				undefined,
+				st,
+				1.5,
+			);
+			const css = st.toRawCss();
+			assert.strictEqual((css.match(/border-top: 1px solid red/g) || []).length, 1);
+			assert.ok(!css.includes("left:"));
+			assert.ok(!css.includes("gridbox-connection-0"));
+			const borderClass = /st-gridbox-connection-[\w]+/.exec(first)?.[0];
+			assert.ok(borderClass);
+			assert.ok(second.includes(borderClass!));
+			assert.ok(second.includes('style="left: 0px; top: 60px; width: 40px; height: 1px;"'));
 		});
 
 		it("swaps parent geometry but keeps parent type label", () => {
@@ -237,6 +271,28 @@ describe("util/hoi4gui/gridboxcommon", () => {
 			assert.ok(html.includes('data-conn-from="a"'));
 		});
 
+		it("positions each item through its style attribute, not a one-off rule", async () => {
+			const st = makeStyleTable();
+			const gridBox: any = {
+				position: { x: toNumberLike(0), y: toNumberLike(0) },
+				size: { width: toNumberLike(200), height: toNumberLike(200) },
+				slotsize: { width: toNumberLike(50), height: toNumberLike(50) },
+				format: { _name: "up" },
+			};
+			const parentInfo = {
+				size: { width: 1920, height: 1080 },
+				orientation: "upper_left" as const,
+			};
+			const html = await renderGridBoxCommon(gridBox, parentInfo, {
+				styleTable: st,
+				items: {
+					a: { id: "a", gridX: 1, gridY: 2, connections: [] },
+				},
+			});
+			assert.ok(/data-gridbox-item="a"[^>]*style="left: 125px; top: 100px; width: 50px; height: 50px;"/.test(html));
+			assert.ok(!st.toRawCss().includes("gridbox-item"));
+		});
+
 		it("renders empty gridbox at exact position", async () => {
 			const st = makeStyleTable();
 			const gridBox: any = {
@@ -287,6 +343,8 @@ describe("util/hoi4gui/gridboxcommon", () => {
 				onRenderLineBox: async () => "<span>box</span>",
 			});
 			assert.ok(html.includes("data-cell-x="));
+			assert.ok(/data-cell-x="0"[^>]*style="left: \d+px; top: 0px; width: 50px; height: 50px;"/.test(html));
+			assert.ok(!st.toRawCss().includes("gridbox-connection"));
 		});
 
 		it("escapes ids containing a quote", async () => {

@@ -911,7 +911,7 @@ function setupCheckedFocuses(focuses: Focus[], focusTree: FocusTree) {
 				checkbox.checked = !!focusCheckState[focus.id];
 				const checkboxItem = new Checkbox(checkbox);
 				checkedFocuses[focus.id] = checkboxItem;
-				checkbox.addEventListener("change", async () => {
+				checkbox.addEventListener("change", tryRun(async () => {
 					if (checkbox.checked) {
 						for (const exclusiveFocus of focus.exclusive) {
 							const exclusiveCheckbox = checkedFocuses[exclusiveFocus];
@@ -940,7 +940,7 @@ function setupCheckedFocuses(focuses: Focus[], focusTree: FocusTree) {
 					}
 
 					retriggerSearch();
-				});
+				}));
 			} else {
 				checkbox.parentElement?.remove();
 			}
@@ -1049,7 +1049,7 @@ function getInlayGfxClassName(
 
 let retriggerSearch: () => void = () => {};
 
-window.addEventListener("message", async (event) => {
+window.addEventListener("message", tryRun(async (event) => {
 	const msg = event.data;
 
 	// Fills the nonced <style> with the real focus-icon background CSS once the deferred conversion finishes.
@@ -1086,7 +1086,7 @@ window.addEventListener("message", async (event) => {
 	updateSelectedFocusTree(false);
 	await buildContent();
 	retriggerSearch();
-});
+}));
 
 window.addEventListener(
 	"load",
@@ -1118,12 +1118,12 @@ window.addEventListener(
 		if (showInlayWindowsElement) {
 			(window as any).__showInlayWindows = false;
 			showInlayWindowsElement.checked = false;
-			showInlayWindowsElement.addEventListener("change", async () => {
+			showInlayWindowsElement.addEventListener("change", tryRun(async () => {
 				(window as any).__showInlayWindows = showInlayWindowsElement.checked;
 				updateSelectedFocusTree(false);
 				await buildContent();
 				retriggerSearch();
-			});
+			}));
 		}
 
 		// Focuses
@@ -1132,20 +1132,20 @@ window.addEventListener(
 		) as HTMLSelectElement | null;
 		if (focusesElement) {
 			focusesElement.value = selectedFocusTreeIndex.toString();
-			focusesElement.addEventListener("change", async () => {
+			focusesElement.addEventListener("change", tryRun(async () => {
 				selectedFocusTreeIndex = parseInt(focusesElement.value);
 				setState({ selectedFocusTreeIndex });
 				updateSelectedFocusTree(true);
 				await buildContent();
 				retriggerSearch();
-			});
+			}));
 		}
 
 		const inlayWindowsElement = document.getElementById(
 			"inlay-windows",
 		) as HTMLSelectElement | null;
 		if (inlayWindowsElement) {
-			inlayWindowsElement.addEventListener("change", async () => {
+			inlayWindowsElement.addEventListener("change", tryRun(async () => {
 				const focusTree = focusTrees[selectedFocusTreeIndex];
 				if (focusTree === undefined) {
 					return;
@@ -1153,7 +1153,7 @@ window.addEventListener(
 				setSelectedInlayWindowId(focusTree, inlayWindowsElement.value);
 				await buildContent();
 				retriggerSearch();
-			});
+			}));
 		}
 
 		// Allow branch
@@ -1246,7 +1246,7 @@ window.addEventListener(
 				conditions.selectedValues$.next(
 					selectedExprs.map((e) => `${e.scopeName}!|${e.nodeContent}`),
 				);
-				conditions.selectedValues$.subscribe(async (selection) => {
+				conditions.selectedValues$.subscribe(tryRun(async (selection) => {
 					selectedExprs = selection.map<ConditionItem>((selection) => {
 						const index = selection.indexOf("!|");
 						if (index === -1) {
@@ -1266,7 +1266,7 @@ window.addEventListener(
 
 					await buildContent();
 					retriggerSearch();
-				});
+				}));
 			}
 
 			const inlayConditionsElement = document.getElementById(
@@ -1278,7 +1278,7 @@ window.addEventListener(
 				inlayConditions.selectedValues$.next(
 					selectedInlayExprs.map((e) => `${e.scopeName}!|${e.nodeContent}`),
 				);
-				inlayConditions.selectedValues$.subscribe(async (selection) => {
+				inlayConditions.selectedValues$.subscribe(tryRun(async (selection) => {
 					selectedInlayExprs = selection.map<ConditionItem>((selection) => {
 						const index = selection.indexOf("!|");
 						if (index === -1) {
@@ -1298,7 +1298,7 @@ window.addEventListener(
 
 					await buildContent();
 					retriggerSearch();
-				});
+				}));
 			}
 		}
 
@@ -1347,11 +1347,11 @@ window.addEventListener(
 			"reset-focus-checkboxes",
 		) as HTMLButtonElement | null;
 		if (resetFocusCheckboxes) {
-			resetFocusCheckboxes.addEventListener("click", async () => {
+			resetFocusCheckboxes.addEventListener("click", tryRun(async () => {
 				setState({ checkedFocuses: {} });
 				await buildContent();
 				retriggerSearch();
-			});
+			}));
 		}
 
 		updateSelectedFocusTree(false);

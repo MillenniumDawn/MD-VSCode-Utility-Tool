@@ -17,5 +17,5 @@ export const contextContainer: ContextContainer = {
 
 export function setVscodeContext(key: string, value: unknown): void {
     contextContainer.contextValue[key] = value;
-    vscode.commands.executeCommand('setContext', key, value);
+    void vscode.commands.executeCommand('setContext', key, value);
 }
