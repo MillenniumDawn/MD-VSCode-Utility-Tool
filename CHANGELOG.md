@@ -4,6 +4,7 @@ v1.1.37
 
   Functionality:
 
+- [ CI ] The extension package no longer ships developer files (contributor notes, lint and duplication configuration, stray log and temp files), and every CI job now has a time limit so a stuck publish cannot block later releases for hours. Issue #202.
 - The extension's own interface — preview toolbars, filters, warnings and the settings descriptions — is now fully translated into Korean, Russian and Simplified Chinese, where the newer previews (characters, decisions, ideas, index status) had been showing English. Issue #191.
 - Previews drop a malformed message from their own page instead of acting on it, the condition filters in the focus tree and MIO previews show a trigger as the text it is written as, and the loading page carries a content security policy like the finished preview. Issue #201.
 - A DLC archive entry that claims an unreasonable size is refused before it is unpacked. Issue #201.

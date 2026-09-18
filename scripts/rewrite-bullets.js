@@ -214,11 +214,24 @@ async function rewriteTogether(entries, key) {
 	const content = messageContent(payload);
 	const fenced = /```(?:json)?\s*\n([\s\S]*?)\n?```/.exec(content);
 	const parsed = JSON.parse(fenced ? fenced[1] : content);
+	// Only the numbers that were asked about are taken. A reply keyed by a number outside the
+	// batch is a model that lost track, and one that transposed two numbers would otherwise swap
+	// two pull requests' wording without anything noticing; the rest of the batch stands on its own.
+	const asked = new Set(entries.map((entry) => Number(entry.number)));
 	const written = new Map();
+	const strays = [];
 	for (const item of parsed?.bullets ?? []) {
-		if (acceptable(item?.text)) {
-			written.set(Number(item.number), String(item.text).trim());
+		const number = Number(item?.number);
+		if (!asked.has(number)) {
+			strays.push(item?.number);
+			continue;
 		}
+		if (acceptable(item?.text)) {
+			written.set(number, String(item.text).trim());
+		}
+	}
+	if (strays.length > 0) {
+		warn(`The model replied for pull request(s) ${strays.join(', ')} that were not in the batch; those replies are ignored.`);
 	}
 	return written;
 }

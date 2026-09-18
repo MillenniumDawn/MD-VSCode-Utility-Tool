@@ -27,3 +27,10 @@ coverage/**
 .opencode/**
 .pi-subagents/**
 .pi-agent/**
+CLAUDE.md
+eslint.config.cjs
+.jscpd.json
+.nvmrc
+*.log
+*.tmp
+*.vsix

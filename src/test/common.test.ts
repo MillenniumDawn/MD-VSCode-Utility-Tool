@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import { waitFor } from './waitfor';
 import { hsvToRgb, slice, clipNumber, withTimeout, mapLimit, forceError, arrayToMap, TimeoutError, UserError, randomString, debounceByInput, memoizeWithTtl, jsonForScript, createWorkQueue, CancelledError } from '../util/common';
 
 describe('util/common', function () {
@@ -372,12 +373,12 @@ describe('util/common', function () {
     });
 
     describe('debounceByInput', function () {
-        // The debouncer uses lodash debounce under the hood, which schedules via
-        // setTimeout(0) when wait is 0. We have to wait for at least one macrotask
-        // tick before the wrapped function fires. The margin is generous so the
-        // test stays reliable under heavy CI load.
-        function nextTick(): Promise<void> {
-            return new Promise(resolve => setTimeout(resolve, 50));
+        // The debouncer uses lodash debounce under the hood, which schedules via setTimeout(0)
+        // when wait is 0, so the wrapped function fires on a later macrotask. Polling for the
+        // count rather than sleeping a fixed span: a sleep is either wasted time or, on a loaded
+        // runner, not quite enough of it.
+        function calledTimes(count: () => number, expected: number): Promise<void> {
+            return waitFor(() => count() === expected, { message: `expected ${expected} call(s), got ${count()}` });
         }
 
         it('coalesces calls with the same key into a single deferred call', async function () {
@@ -390,14 +391,16 @@ describe('util/common', function () {
 
             fn(1, 2);
             fn(1, 2);
-            await nextTick();
-
+            await calledTimes(() => calls, 1);
+            // One more timer turn: a second call the debouncer failed to coalesce would have been
+            // scheduled alongside the first and fired by now.
+            await new Promise(resolve => setTimeout(resolve, 0));
             assert.strictEqual(calls, 1);
 
             // After the debounce fires, the cache is cleared so a new call with the
             // same key runs again.
             fn(1, 2);
-            await nextTick();
+            await calledTimes(() => calls, 2);
             assert.strictEqual(calls, 2);
         });
 
@@ -411,7 +414,7 @@ describe('util/common', function () {
 
             fn(1);
             fn(2);
-            await nextTick();
+            await calledTimes(() => calls, 2);
             assert.strictEqual(calls, 2);
         });
     });

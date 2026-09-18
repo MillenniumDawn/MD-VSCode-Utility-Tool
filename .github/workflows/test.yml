@@ -1,13 +1,18 @@
 on:
+  # No branch filter: it would name the base branch, and "*" does not match a "/" -- so a pull
+  # request into a branch such as release/version-bump ran no tests at all.
   pull_request:
-    branches:
-      - "*"
   # For re-running the suite against a branch by hand. The release pull request no longer needs it:
   # it is opened by the release bot's App token, and a pull request from one of those starts a run
   # like anyone else's.
   workflow_dispatch:
 
 name: Test
+
+# The job runs npm lifecycle scripts and webpack over branch code, so the token it gets should open
+# nothing but the tree.
+permissions:
+  contents: read
 
 # The release pull request is pushed to again on every merge into main, so without this a run would
 # be left going while its own commit is already outdated. A dispatched run has no pull request
@@ -20,6 +25,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # A normal run is two to three minutes; the cap leaves room for a VS Code download on a cache
+    # miss without letting a hung Electron sit for GitHub's six-hour default.
+    timeout-minutes: 30
 
     steps:
       # Depth 2, not 1: on a pull request HEAD is the merge commit, so its first parent is the base
