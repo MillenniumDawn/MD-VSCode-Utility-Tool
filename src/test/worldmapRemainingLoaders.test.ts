@@ -309,6 +309,54 @@ describe("previewdef/worldmap/loader strategicregion", () => {
 		assert.ok(mod.StrategicRegionsLoader);
 	});
 
+	it("lists a file it could not load as a warning and merges the rest", async () => {
+		const fileloader: any = await import("../util/fileloader");
+		const origToken = fileloader.hoiFileExpiryToken;
+		const originalConsoleError = console.error;
+		console.error = () => undefined;
+		// The expiry stat runs before the file is read, so a file that vanished between the
+		// folder listing and its load rejects there, outside the read's own catch.
+		fileloader.hoiFileExpiryToken = async (file: string) => {
+			if (file.endsWith("gone.txt")) {
+				throw new Error("Can't find file " + file);
+			}
+			return "v1";
+		};
+		try {
+			await withStrategicRegionsLoader(
+				{
+					"a.txt": {
+						strategic_region: [
+							{
+								id: 1,
+								name: "Region1",
+								provinces: { _values: ["1", "2", "3", "4", "5"] },
+								naval_terrain: "ocean",
+							},
+						],
+					},
+					"gone.txt": { strategic_region: [] },
+				},
+				async (loader) => {
+					const result = await loader.load(new LoaderSession(true));
+
+					assert.strictEqual(result.result.strategicRegions.length, 2);
+					assert.strictEqual(result.result.strategicRegions[1].name, "Region1");
+					const failure = result.warnings.find((w: any) =>
+						w.text.includes("Failed to load"),
+					);
+					assert.ok(failure, result.warnings.map((w: any) => w.text).join("\n"));
+					assert.deepStrictEqual(failure.source, []);
+					assert.ok(failure.relatedFiles[0].endsWith("gone.txt"));
+					assert.ok(failure.text.includes("Can't find file"));
+				},
+			);
+		} finally {
+			fileloader.hoiFileExpiryToken = origToken;
+			console.error = originalConsoleError;
+		}
+	});
+
 	it("merges files, sorts by id and cross-validates provinces and states", async () => {
 		await withStrategicRegionsLoader(
 			{

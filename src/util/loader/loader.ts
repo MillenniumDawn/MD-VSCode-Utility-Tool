@@ -6,7 +6,7 @@ import {
 	readFileFromModOrHOI4,
 } from "../fileloader";
 import { error } from "../debug";
-import { UserError } from "../common";
+import { mapLimit, UserError } from "../common";
 import { Dependency, getDependenciesFromText } from "../dependency";
 import { sendEvent } from "../telemetry";
 export { Dependency } from "../dependency";
@@ -223,6 +223,19 @@ export abstract class FileLoader<T, E = {}> extends Loader<T, E> {
 	): Promise<LoadResultOD<T, E>>;
 }
 
+/**
+ * How many files a folder loads at once. Parsing is synchronous, so starting every file together
+ * only bought concurrency on the read while holding every buffer and parse tree live at the same
+ * time -- around a thousand of them for `history/states` in a large mod.
+ */
+export const FOLDER_LOAD_CONCURRENCY = 8;
+
+/** A file in the folder whose loader rejected; the folder still loads without it. */
+export interface FolderFileFailure {
+	file: string;
+	error: unknown;
+}
+
 export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 	T,
 	E
@@ -249,8 +262,10 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 		}
 
 		return (
-			await Promise.all(
-				Object.values(this.subLoaders).map((l) => l.shouldReload(session)),
+			await mapLimit(
+				Object.values(this.subLoaders),
+				FOLDER_LOAD_CONCURRENCY,
+				(l) => l.shouldReload(session),
 			)
 		).some((v) => v);
 	}
@@ -261,7 +276,6 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 
 		const subLoaders = this.subLoaders;
 		const newSubLoaders: Record<string, FileLoader<TFile, EFile>> = {};
-		const fileResultPromises: Promise<LoadResult<TFile, EFile>>[] = [];
 
 		for (const file of files) {
 			let subLoader = subLoaders[file];
@@ -271,13 +285,36 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 				subLoader.onProgress((e) => this.onProgressEmitter.fire(e));
 			}
 
-			fileResultPromises.push(subLoader.load(session));
 			newSubLoaders[file] = subLoader;
 		}
 
 		this.subLoaders = newSubLoaders;
 
-		return this.mergeFiles(await Promise.all(fileResultPromises), session);
+		const failures: FolderFileFailure[] = [];
+		const outcomes = await mapLimit(
+			files,
+			FOLDER_LOAD_CONCURRENCY,
+			async (file) => {
+				const subLoader = newSubLoaders[file]!;
+				try {
+					return await subLoader.load(session);
+				} catch (e) {
+					// A cancelled session is the same error class as a missing file, so the
+					// session is asked rather than the error. Anything else is one file's
+					// problem, not the folder's.
+					session.throwIfCancelled();
+					error(e);
+					failures.push({ file: subLoader.file, error: e });
+					return undefined;
+				}
+			},
+		);
+
+		const fileResults = outcomes.filter(
+			(r): r is LoadResult<TFile, EFile> => r !== undefined,
+		);
+
+		return this.mergeFiles(fileResults, session, failures);
 	}
 
 	protected extraMeasurements(result: LoadResult<T, E>) {
@@ -287,6 +324,7 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 	protected abstract mergeFiles(
 		fileResults: LoadResult<TFile, EFile>[],
 		session: LoaderSession,
+		failures: FolderFileFailure[],
 	): Promise<LoadResult<T, E>>;
 }
 
