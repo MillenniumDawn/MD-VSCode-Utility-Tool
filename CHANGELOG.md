@@ -12,6 +12,7 @@ Unreleased
 
   Bugfixes:
 
+- A sprite whose name contains quotes or braces no longer breaks the page styling of the GUI, focus tree, technology and MIO previews that draw it. Issue #218.
 - [ World Map Previewer ] A provinces or rivers BMP with a small, top-down, compressed or unusual-depth header is reported as a clear error instead of failing the preview or reading colours no province has. Issue #201.
 - A mod key named `__proto__` or `constructor` no longer vanishes from a parsed file or from a MIO's trait list. Issue #201.
 - [ World Map Previewer ] Exporting the map no longer leaves mouse handlers behind that made panning heavier after every export, hovering the selected province no longer paints the hover highlight over the selection, resource icons load once per map instead of on every progress update, and the warnings list is only rebuilt when the warnings change. Issue #200.

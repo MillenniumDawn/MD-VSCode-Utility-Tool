@@ -46,6 +46,7 @@ describe("util/hoi4gui/icon", () => {
 			width2: 32,
 		};
 		const fakeSprite: any = {
+			id: "my_sprite",
 			width: 32,
 			height: 32,
 			image: fakeImage,
@@ -70,6 +71,7 @@ describe("util/hoi4gui/icon", () => {
 			_token: { start: 0, end: 1 },
 		};
 		const fakeSprite: any = {
+			id: "my_sprite",
 			width: 20,
 			height: 20,
 			uri: "file:///a.png",
@@ -91,6 +93,7 @@ describe("util/hoi4gui/icon", () => {
 		};
 		let calledWith: string | undefined;
 		const fakeSprite: any = {
+			id: "quad_sprite",
 			width: 10,
 			height: 10,
 			uri: "file:///q.png",
