@@ -376,6 +376,25 @@ describe('webview/util/common', function () {
                 assert.strictEqual(zoomOut.disabled, true, 'at the floor');
                 assert.strictEqual(zoomIn.disabled, false);
             });
+
+            // jsdom lays nothing out, so what the fix for #344 does to the scroll range cannot be
+            // seen here; what can be pinned is the order it depends on -- the canvas is measured
+            // after the transform is written and before the readout is, which is the one flush
+            // Chromium needs to settle the transform's overflow on its own.
+            it('measures the canvas between the transform and the readout, so the scroll range follows the zoom', function () {
+                const div = zoomable();
+                const level = document.getElementById('zoom-level')!;
+                const measured: { transform: string; level: string }[] = [];
+                div.getBoundingClientRect = () => {
+                    measured.push({ transform: div.style.transform, level: level.textContent ?? '' });
+                    return { x: 0, y: 0, width: 0, height: 0, top: 0, right: 0, bottom: 0, left: 0, toJSON: () => ({}) };
+                };
+
+                key({ key: '-' });
+
+                assert.deepStrictEqual(measured, [{ transform: 'scale(0.8)', level: '100%' }]);
+                assert.strictEqual(level.textContent, '80%');
+            });
         });
     });
 
