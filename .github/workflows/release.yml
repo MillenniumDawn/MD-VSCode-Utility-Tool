@@ -669,10 +669,13 @@ jobs:
     name: "Release: Open a fix pull request"
     needs: [check, verify, build-release, release-marketplace, release-open-vsx, release-open-vsx-retry, release-github]
     # `failure` only, and never `cancelled`: a run someone stopped by hand is not a problem to fix.
+    # `!cancelled()` rather than `always()`, because `always()` is also true on a cancelled run,
+    # and a retry that was cancelled mid-wait is "not success" -- the clause below would then read
+    # the first Open VSX failure as a failed release and open a pull request for it.
     # Folded, so the expression reaches the runner as one line: a more-indented line would keep
     # its newline.
     if: >-
-      ${{ always() && needs.check.outputs.release == 'true' &&
+      ${{ !cancelled() && needs.check.outputs.release == 'true' &&
       (needs.verify.result == 'failure' ||
       needs['build-release'].result == 'failure' ||
       needs['release-marketplace'].result == 'failure' ||

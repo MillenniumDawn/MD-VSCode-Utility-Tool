@@ -431,9 +431,12 @@ describe('.github/workflows', function () {
                 assert.ok(!watched.includes(job), `release-failed should not watch ${job}`);
             }
 
-            assert.match(failed.if ?? '', /always\(\)/);
-            // Never on a run someone stopped by hand -- that is not a problem to fix.
-            assert.doesNotMatch(failed.if ?? '', /cancelled/);
+            // Evaluated even though a needed job failed, but never on a run someone stopped by
+            // hand -- that is not a problem to fix. `always()` is also true on a cancelled run,
+            // and a retry cancelled mid-wait would then read as "not success" and open a pull
+            // request for the first Open VSX failure.
+            assert.match(failed.if ?? '', /!cancelled\(\)/);
+            assert.doesNotMatch(failed.if ?? '', /always\(\)/);
             // Every job whose failure is a failed release, by name: the old `contains(join(...))`
             // over every result would have opened a pull request for the Open VSX job that only
             // handed over to the retry.
