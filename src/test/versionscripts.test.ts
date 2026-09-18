@@ -17,7 +17,7 @@ const mergeChangelog = require('../../../scripts/merge-changelog');
 const issueVersionTriage = require('../../../scripts/issue-version-triage');
 const closeFixedIssues = require('../../../scripts/close-fixed-issues');
 const prereleaseVersion = require('../../../scripts/prerelease-version');
-const publishMarketplace = require('../../../scripts/publish-marketplace');
+const publishExtension = require('../../../scripts/publish-extension');
 
 describe('scripts/bump-version', function () {
     describe('nextVersion', function () {
@@ -1098,56 +1098,171 @@ describe('scripts/release-check', function () {
     });
 });
 
-describe('scripts/publish-marketplace', function () {
+describe('scripts/publish-extension', function () {
+    // Runs the retry loop with the registry, the clock and GITHUB_OUTPUT all stubbed, and returns
+    // what it did: how many attempts, how long it slept before each, and whether it told the
+    // workflow the failure was transient. `outputs` is what each attempt answers; '' is a success.
+    function run(registry: string, schedule: string, outputs: string[]) {
+        const stdout = process.stdout.write;
+        const slept: number[] = [];
+        let attempts = 0;
+        let transient = 0;
+        process.stdout.write = (() => true) as typeof process.stdout.write;
+        try {
+            const ok = publishExtension.publish({ registry, vsix: 'ext.vsix', pat: 'secret', preRelease: false, schedule }, {
+                publishOnce: () => {
+                    const output = outputs[attempts++] ?? '';
+                    return { ok: output === '', output };
+                },
+                sleep: (seconds: number) => slept.push(seconds),
+                reportTransient: () => transient++,
+            });
+            return { ok, attempts, slept, transient };
+        } finally {
+            process.stdout.write = stdout;
+        }
+    }
+
+    // Sets token variables for one test and puts the environment back afterwards.
+    function withEnv(values: Record<string, string | undefined>, body: () => void) {
+        const previous: Record<string, string | undefined> = {};
+        for (const [name, value] of Object.entries(values)) {
+            previous[name] = process.env[name];
+            if (value === undefined) {
+                delete process.env[name];
+            } else {
+                process.env[name] = value;
+            }
+        }
+        try {
+            body();
+        } finally {
+            for (const [name, value] of Object.entries(previous)) {
+                if (value === undefined) {
+                    delete process.env[name];
+                } else {
+                    process.env[name] = value;
+                }
+            }
+        }
+    }
+
+    const openVsxDown = 'Error: The server responded with status 503: Service Unavailable';
+
     describe('isTransient', function () {
         it('retries the gallery timeout that failed a release', function () {
-            assert.strictEqual(publishMarketplace.isTransient('Publishing \'x v1.1.35\'...\nError: Request timeout: /_apis/gallery'), true);
+            assert.strictEqual(publishExtension.isTransient('Publishing \'x v1.1.35\'...\nError: Request timeout: /_apis/gallery'), true);
+        });
+
+        it('retries the 503 that failed a release on Open VSX', function () {
+            assert.strictEqual(publishExtension.isTransient(openVsxDown), true);
         });
 
         it('retries network errors and gateway failures', function () {
-            assert.strictEqual(publishMarketplace.isTransient('Error: read ECONNRESET'), true);
-            assert.strictEqual(publishMarketplace.isTransient('Error: connect ETIMEDOUT 1.2.3.4:443'), true);
-            assert.strictEqual(publishMarketplace.isTransient('Error: socket hang up'), true);
-            assert.strictEqual(publishMarketplace.isTransient('Failed request: 502 Bad Gateway'), true);
-            assert.strictEqual(publishMarketplace.isTransient('Error: Failed Request: Service Unavailable(503)'), true);
-            assert.strictEqual(publishMarketplace.isTransient('Error: Failed Request: (504)'), true);
-            assert.strictEqual(publishMarketplace.isTransient('status code: 503'), true);
+            assert.strictEqual(publishExtension.isTransient('Error: read ECONNRESET'), true);
+            assert.strictEqual(publishExtension.isTransient('Error: connect ETIMEDOUT 1.2.3.4:443'), true);
+            assert.strictEqual(publishExtension.isTransient('Error: socket hang up'), true);
+            assert.strictEqual(publishExtension.isTransient('Failed request: 502 Bad Gateway'), true);
+            assert.strictEqual(publishExtension.isTransient('Error: Failed Request: Service Unavailable(503)'), true);
+            assert.strictEqual(publishExtension.isTransient('Error: Failed Request: (504)'), true);
+            assert.strictEqual(publishExtension.isTransient('status code: 503'), true);
         });
 
         it('does not retry a failure that would only fail again', function () {
-            assert.strictEqual(publishMarketplace.isTransient('Error: Failed request: (401)'), false);
-            assert.strictEqual(publishMarketplace.isTransient('Error: 404 Not Found'), false);
-            assert.strictEqual(publishMarketplace.isTransient('Error: Missing publisher name.'), false);
-            assert.strictEqual(publishMarketplace.isTransient(''), false);
-            assert.strictEqual(publishMarketplace.isTransient(undefined), false);
+            assert.strictEqual(publishExtension.isTransient('Error: Failed request: (401)'), false);
+            assert.strictEqual(publishExtension.isTransient('Error: 404 Not Found'), false);
+            assert.strictEqual(publishExtension.isTransient('Error: Missing publisher name.'), false);
+            assert.strictEqual(publishExtension.isTransient(''), false);
+            assert.strictEqual(publishExtension.isTransient(undefined), false);
         });
 
         it('does not mistake a version for a status code', function () {
-            assert.strictEqual(publishMarketplace.isTransient('Publishing \'x v1.3.503\'...\nError: Missing publisher name.'), false);
-            assert.strictEqual(publishMarketplace.isTransient('hearts-of-iron-iv-utilities-2026-1.3.500.vsix: invalid manifest'), false);
+            assert.strictEqual(publishExtension.isTransient('Publishing \'x v1.3.503\'...\nError: Missing publisher name.'), false);
+            assert.strictEqual(publishExtension.isTransient('hearts-of-iron-iv-utilities-2026-1.3.500.vsix: invalid manifest'), false);
+        });
+    });
+
+    describe('commandFor', function () {
+        it('publishes to the Marketplace through vsce, skipping a version it already has', function () {
+            const args = publishExtension.commandFor({ registry: 'marketplace', vsix: 'ext.vsix', pat: 'secret', preRelease: false });
+            assert.deepStrictEqual(args, ['--no-install', '@vscode/vsce', 'publish', '--packagePath', 'ext.vsix', '--skip-duplicate', '--pat', 'secret']);
+            assert.ok(publishExtension.commandFor({ registry: 'marketplace', vsix: 'ext.vsix', pat: 'secret', preRelease: true }).includes('--pre-release'));
+        });
+
+        it('publishes to Open VSX through ovsx, skipping a version it already has', function () {
+            const args = publishExtension.commandFor({ registry: 'open-vsx', vsix: 'ext.vsix', pat: 'secret', preRelease: false });
+            assert.deepStrictEqual(args, ['--no-install', 'ovsx', 'publish', 'ext.vsix', '--skip-duplicate', '-p', 'secret']);
+        });
+
+        it('never hands ovsx --pre-release, which it ignores for a built vsix', function () {
+            const args = publishExtension.commandFor({ registry: 'open-vsx', vsix: 'ext.vsix', pat: 'secret', preRelease: true });
+            assert.ok(!args.includes('--pre-release'));
+        });
+    });
+
+    describe('publish', function () {
+        it('tries again after a transient failure and stops at the first success', function () {
+            const result = run('open-vsx', 'quick', [openVsxDown, '']);
+            assert.strictEqual(result.ok, true);
+            assert.strictEqual(result.attempts, 2);
+            assert.deepStrictEqual(result.slept, [30]);
+            assert.strictEqual(result.transient, 0);
+        });
+
+        it('tells the workflow when every quick attempt failed on the registry', function () {
+            const result = run('open-vsx', 'quick', [openVsxDown, openVsxDown, openVsxDown]);
+            assert.strictEqual(result.ok, false);
+            assert.strictEqual(result.attempts, 3);
+            assert.deepStrictEqual(result.slept, [30, 60]);
+            assert.strictEqual(result.transient, 1);
+        });
+
+        it('gives up at once, and says nothing, on a failure that would only fail again', function () {
+            const result = run('marketplace', 'quick', ['Error: Failed request: (401)']);
+            assert.strictEqual(result.ok, false);
+            assert.strictEqual(result.attempts, 1);
+            assert.deepStrictEqual(result.slept, []);
+            assert.strictEqual(result.transient, 0);
+        });
+
+        it('waits before every attempt on the patient schedule, the first one included', function () {
+            const result = run('open-vsx', 'patient', [openVsxDown, '']);
+            assert.strictEqual(result.ok, true);
+            assert.deepStrictEqual(result.slept, [300, 600]);
+            assert.deepStrictEqual(publishExtension.schedules.patient.before, [300, 600, 900]);
         });
     });
 
     describe('parseArgs', function () {
-        it('reads the vsix and the channel, and the token from the environment', function () {
-            const previous = process.env.VSCE_PAT;
-            process.env.VSCE_PAT = 'secret';
-            try {
-                const options = publishMarketplace.parseArgs(['--vsix', 'ext.vsix', '--pre-release']);
+        it('reads the vsix and the channel, and the Marketplace token from the environment', function () {
+            withEnv({ VSCE_PAT: 'secret' }, () => {
+                const options = publishExtension.parseArgs(['--registry', 'marketplace', '--vsix', 'ext.vsix', '--pre-release']);
+                assert.strictEqual(options.registry, 'marketplace');
                 assert.strictEqual(options.vsix, 'ext.vsix');
                 assert.strictEqual(options.preRelease, true);
                 assert.strictEqual(options.pat, 'secret');
-            } finally {
-                if (previous === undefined) {
-                    delete process.env.VSCE_PAT;
-                } else {
-                    process.env.VSCE_PAT = previous;
-                }
-            }
+            });
         });
 
-        it('defaults to the release channel', function () {
-            assert.strictEqual(publishMarketplace.parseArgs(['--vsix', 'ext.vsix']).preRelease, false);
+        it('reads the Open VSX token for Open VSX', function () {
+            withEnv({ VSCE_PAT: 'wrong', OPEN_VSX_TOKEN: 'right' }, () => {
+                const options = publishExtension.parseArgs(['--registry', 'open-vsx', '--vsix', 'ext.vsix', '--schedule', 'patient']);
+                assert.strictEqual(options.pat, 'right');
+                assert.strictEqual(options.schedule, 'patient');
+            });
+        });
+
+        it('defaults to the release channel and the quick schedule', function () {
+            const options = publishExtension.parseArgs(['--registry', 'marketplace', '--vsix', 'ext.vsix']);
+            assert.strictEqual(options.preRelease, false);
+            assert.strictEqual(options.schedule, 'quick');
+        });
+
+        it('has no token for a registry it does not know', function () {
+            withEnv({ VSCE_PAT: 'secret', OPEN_VSX_TOKEN: 'secret' }, () => {
+                assert.strictEqual(publishExtension.parseArgs(['--registry', 'gallery', '--vsix', 'ext.vsix']).pat, '');
+                assert.strictEqual(publishExtension.parseArgs(['--vsix', 'ext.vsix']).registry, '');
+            });
         });
     });
 });

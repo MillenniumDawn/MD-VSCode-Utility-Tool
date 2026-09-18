@@ -17,6 +17,14 @@ describe('util/yaml', () => {
             assert.strictEqual(parseYaml(''), undefined);
         });
 
+        it('parses a comment-only document as undefined', () => {
+            assert.strictEqual(parseYaml('# only a comment\n'), undefined);
+        });
+
+        it('throws on a stream with more than one document', () => {
+            assert.throws(() => parseYaml('a: 1\n---\nb: 2'), /single document/);
+        });
+
         it('parses a sequence at the top level', () => {
             const result = parseYaml('- 1\n- 2\n- 3');
             assert.deepStrictEqual(result, [1, 2, 3]);
