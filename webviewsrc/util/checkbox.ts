@@ -40,7 +40,10 @@ export class Checkbox extends Subscriber {
         const id = this.input.id;
         let text = this.text ?? '';
         if (id) {
-            const label = document.querySelector('label[for=' + JSON.stringify(id) + ']') as HTMLLabelElement;
+            // The browser keeps the label association; the document-wide query is only for an
+            // input that is not attached yet, where `labels` is empty.
+            const label = this.input.labels?.[0]
+                ?? document.querySelector('label[for=' + JSON.stringify(id) + ']') as HTMLLabelElement | null;
             if (label) {
                 label.classList.add('hidden');
                 label.tabIndex = -1;

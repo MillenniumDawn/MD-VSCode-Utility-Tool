@@ -4,6 +4,7 @@ import { Logger } from './logger';
 import { fnv1a64Hex } from './hash';
 import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration, uriToFilePathWhenPossible } from './vsccommon';
 import { getParentModUris } from './parentmods';
+import { mapLimit } from './common';
 
 interface CacheManifest {
     version: number;
@@ -21,7 +22,7 @@ export interface StalenessResult {
     added: string[];
 }
 
-const MTIME_BATCH_SIZE = 30;
+const MTIME_CONCURRENCY = 32;
 
 const CACHE_ROOT = 'indexCache';
 
@@ -230,19 +231,23 @@ export async function loadCacheData(indexName: string, scope?: CacheScope): Prom
 }
 
 export async function getFileMtimes(relativePaths: string[], resolveUri: (relativePath: string) => Promise<vscode.Uri | undefined>): Promise<Map<string, number>> {
+    // A worker pool rather than fixed waves: a wave waited for its slowest stat before the next
+    // one started, so one slow file idled the other 29 slots.
+    const mtimes = await mapLimit(relativePaths, MTIME_CONCURRENCY, async (relativePath) => {
+        try {
+            const uri = await resolveUri(relativePath);
+            return uri ? await getLastModifiedAsync(uri) : undefined;
+        } catch {
+            // File doesn't exist or is inaccessible
+            return undefined;
+        }
+    });
     const result = new Map<string, number>();
-    for (let i = 0; i < relativePaths.length; i += MTIME_BATCH_SIZE) {
-        const batch = relativePaths.slice(i, i + MTIME_BATCH_SIZE);
-        await Promise.all(batch.map(async (relativePath) => {
-            try {
-                const uri = await resolveUri(relativePath);
-                if (uri) {
-                    result.set(relativePath, await getLastModifiedAsync(uri));
-                }
-            } catch {
-                // File doesn't exist or is inaccessible
-            }
-        }));
+    for (let i = 0; i < relativePaths.length; i++) {
+        const mtime = mtimes[i];
+        if (mtime !== undefined) {
+            result.set(relativePaths[i]!, mtime);
+        }
     }
     return result;
 }

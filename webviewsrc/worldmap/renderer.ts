@@ -15,7 +15,7 @@ import {
 	RenderContext,
 } from "./renderContext";
 import { renderAllEdges, renderMapBackground } from "./provinceLayer";
-import { renderMapLabels, resourceImages } from "./stateLayer";
+import { loadResourceImages, renderMapLabels } from "./stateLayer";
 import {
 	renderHoverSelectionByViewMode,
 	renderLoadingText,
@@ -95,13 +95,7 @@ export class Renderer extends Subscriber {
 	};
 
 	private reloadImages = () => {
-		for (const resource of this.loader.worldMap.resources) {
-			const image = new Image();
-			image.onload = () => {
-				resourceImages[resource.name] = image;
-			};
-			image.src = resource.imageUri;
-		}
+		loadResourceImages(this.loader.worldMap.resources);
 	};
 
 	public renderCanvas = () => {

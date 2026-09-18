@@ -267,6 +267,53 @@ describe("webview/decisiontree filteredGraph", () => {
 		assert.ok(bridged, "the chain must keep its arrow across the removed decision");
 		assert.deepStrictEqual(bridged?.skipped, ["d:POL_middle_step"]);
 	});
+
+	it("bridges every caller of a removed decision, each with its own record of what was skipped", () => {
+		// Two missions call the same removed step, which calls a removed step of its own before
+		// reaching two kept missions. The walk from the removed step runs once for both callers;
+		// what each arrow reports must not change for it, and the arrows must not share an array.
+		const category = "c:POL_state_controlled_economy_category";
+		const chain: DecisionGraphPayload = {
+			...integrationPayload,
+			nodes: [
+				...integrationPayload.nodes,
+				decision("POL_other_mission", { isMission: true, daysMissionTimeout: 10 }),
+				decision("POL_step_x"),
+				decision("POL_step_y"),
+				decision("POL_end_1", { isMission: true, daysMissionTimeout: 10 }),
+				decision("POL_end_2", { isMission: true, daysMissionTimeout: 10 }),
+			],
+			edges: [
+				...integrationPayload.edges,
+				structural(category, "d:POL_other_mission"),
+				structural(category, "d:POL_step_x"),
+				structural(category, "d:POL_step_y"),
+				structural(category, "d:POL_end_1"),
+				structural(category, "d:POL_end_2"),
+				call("d:POL_sre_main_countdown_mission", "d:POL_step_x", "activate"),
+				call("d:POL_other_mission", "d:POL_step_x", "unlock"),
+				call("d:POL_step_x", "d:POL_step_y", "activate"),
+				call("d:POL_step_x", "d:POL_end_2", "activate"),
+				call("d:POL_step_y", "d:POL_end_1", "activate"),
+			],
+		};
+
+		const graph = decisiontree.filteredGraph(chain, ["missions"]);
+		const from = (id: string) => graph.edges.filter((e) => e.from === id && e.skipped !== undefined);
+
+		const first = from("d:POL_sre_main_countdown_mission");
+		const second = from("d:POL_other_mission");
+		assert.deepStrictEqual(first.map((e) => [e.to, e.skipped]), [
+			["d:POL_end_2", ["d:POL_step_x", "d:POL_step_y"]],
+			["d:POL_end_1", ["d:POL_step_x", "d:POL_step_y"]],
+		]);
+		assert.deepStrictEqual(second.map((e) => [e.to, e.kind, e.skipped]), [
+			["d:POL_end_2", "unlock", ["d:POL_step_x", "d:POL_step_y"]],
+			["d:POL_end_1", "unlock", ["d:POL_step_x", "d:POL_step_y"]],
+		]);
+		assert.notStrictEqual(first[0]!.skipped, second[0]!.skipped);
+		assert.notStrictEqual(first[0]!.skipped, first[1]!.skipped);
+	});
 });
 
 describe("webview/decisiontree matchesQuery", () => {

@@ -43,10 +43,18 @@ export const MAX_WALK_DEPTH = 32;
 
 /**
  * Pure syscalls on libuv's threadpool, so past a small multiple of the pool size more concurrency
- * only lengthens the queue. The same order as indexCache's MTIME_BATCH_SIZE of 30, which is what this
- * replaces, so it is not a step change in how hard the disk is being asked to work.
+ * only lengthens the queue. The same 32 getFileMtimes uses for the entries this walk could not
+ * date, so it is not a step change in how hard the disk is being asked to work.
  */
 const STAT_CONCURRENCY = 32;
+
+/**
+ * How many sibling directories are descended at once. Every directory used to wait for the whole
+ * subtree of the sibling listed before it, so a walk was one realpath and one readdir at a time
+ * however wide the tree. The limit is per parent, not per walk: a tree eight wide at every level
+ * can have more than eight readdirs queued, which the threadpool serialises anyway.
+ */
+const DIR_CONCURRENCY = 8;
 
 /**
  * Every file under `rootFsPath`, with its mtime, from one traversal. `readdir` cannot report mtimes,
@@ -67,7 +75,6 @@ export async function walkFilesWithMtime(
 	const token = options?.token;
 	const warn = options?.onWarning;
 
-	const found: { relativePath: string; fsPath: string }[] = [];
 	const visitedDirectories = new Set<string>();
 	let warnedAboutDepth = false;
 	let warnedAboutCycle = false;
@@ -76,7 +83,7 @@ export async function walkFilesWithMtime(
 	// Not swallowed, unlike the guard on every directory below it: a root that is not on disk is the
 	// signal the caller needs, not an empty folder.
 	visitedDirectories.add(normalizeRealPath(await fs.realpath(rootFsPath)));
-	await readDirectoryInto(rootFsPath, "", 0);
+	const found = await readDirectory(rootFsPath, "", 0);
 
 	const entries = await mapLimit(found, STAT_CONCURRENCY, async (file) => {
 		throwIfCancelled(token);
@@ -100,11 +107,16 @@ export async function walkFilesWithMtime(
 
 	return entries.filter((entry): entry is NativeWalkEntry => entry !== null);
 
-	async function readDirectoryInto(
+	/**
+	 * The files directly in `dirFsPath` followed by those of each subdirectory, in listing order.
+	 * Returned rather than pushed into a shared array so that descending siblings concurrently
+	 * leaves the order of the result exactly what a serial walk produced.
+	 */
+	async function readDirectory(
 		dirFsPath: string,
 		prefix: string,
 		depth: number,
-	): Promise<void> {
+	): Promise<FoundFile[]> {
 		throwIfCancelled(token);
 
 		let dirents;
@@ -112,9 +124,10 @@ export async function walkFilesWithMtime(
 			dirents = await fs.readdir(dirFsPath, { withFileTypes: true });
 		} catch (e) {
 			warn?.(`Failed to read directory ${dirFsPath}: ${e}`);
-			return;
+			return [];
 		}
 
+		const found: FoundFile[] = [];
 		const subdirectories: string[] = [];
 		for (const dirent of dirents) {
 			const childFsPath = path.join(dirFsPath, dirent.name);
@@ -147,7 +160,7 @@ export async function walkFilesWithMtime(
 		}
 
 		if (subdirectories.length === 0) {
-			return;
+			return found;
 		}
 
 		if (depth + 1 > maxDepth) {
@@ -157,32 +170,36 @@ export async function walkFilesWithMtime(
 					`Directory walk stopped at depth ${maxDepth} in ${dirFsPath}; anything below it is not indexed.`,
 				);
 			}
-			return;
+			return found;
 		}
 
-		for (const name of subdirectories) {
-			await descendInto(
-				path.join(dirFsPath, name),
-				prefix + name + "/",
-				depth + 1,
-			);
+		const nested = await mapLimit(subdirectories, DIR_CONCURRENCY, (name) =>
+			descendInto(path.join(dirFsPath, name), prefix + name + "/", depth + 1),
+		);
+		for (const files of nested) {
+			for (const file of files) {
+				found.push(file);
+			}
 		}
+		return found;
 	}
 
 	async function descendInto(
 		dirFsPath: string,
 		prefix: string,
 		depth: number,
-	): Promise<void> {
+	): Promise<FoundFile[]> {
 		// The guard the vscode.workspace.fs walk has no equivalent of. A junction or symlink pointing
 		// at one of its own ancestors turns a walk into an endless one, and following symlinks at all
 		// is what makes that reachable. realpath is the mechanism available here: readdir's Dirent
 		// carries no inode, and on Windows Stats.ino is not dependable across filesystems. It costs one
 		// syscall per directory against one per file for the mtimes. Keeping the set for the whole walk
 		// rather than per branch also collapses two junctions that point at the same real folder.
+		// Siblings descend concurrently, so the has/add pair below must stay synchronous: with no
+		// await between them, two junctions resolving to the same real folder cannot both pass.
 		const realPath = await realPathOrUndefined(dirFsPath);
 		if (realPath === undefined) {
-			return;
+			return [];
 		}
 		if (visitedDirectories.has(realPath)) {
 			if (!warnedAboutCycle) {
@@ -191,12 +208,17 @@ export async function walkFilesWithMtime(
 					`Directory walk skipped ${dirFsPath}: it resolves to ${realPath}, which it has already walked.`,
 				);
 			}
-			return;
+			return [];
 		}
 		visitedDirectories.add(realPath);
 
-		await readDirectoryInto(dirFsPath, prefix, depth);
+		return readDirectory(dirFsPath, prefix, depth);
 	}
+}
+
+interface FoundFile {
+	relativePath: string;
+	fsPath: string;
 }
 
 function normalizeRealPath(realPath: string): string {
