@@ -1,9 +1,12 @@
 Unreleased
 
+v1.1.38
+
   Bugfixes:
 
 - [ CI ] A release the VS Code Marketplace answers with a server error is retried five, ten and fifteen minutes later, as Open VSX already was, instead of failing the release at once; the fix pull request a failed release opens now lists only the jobs that failed.
 - After zooming a preview, the page could only be scrolled as far as the previous zoom level reached, so the bottom of a large focus tree was out of reach until something else redrew it. The scroll range now follows every zoom step. Issue #344.
+- Version 1.1.37 is republished to the VS Code Marketplace after the previous release failed to reach that target.
 
 v1.1.37
 
