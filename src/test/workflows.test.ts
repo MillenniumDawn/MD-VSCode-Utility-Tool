@@ -124,10 +124,10 @@ describe('.github/workflows', function () {
     it('gives every job a time limit', function () {
         // None had one, so each inherited GitHub's six-hour default. release.yml never cancels a
         // run, so one stuck publish would have parked every later release for that long.
-        // The patient Open VSX retry is the one job whose work is the waiting: five, ten and
-        // fifteen minutes between attempts, so its limit has to hold that half hour plus the
+        // The patient registry retries are the jobs whose work is the waiting: five, ten and
+        // fifteen minutes between attempts, so their limit has to hold that half hour plus the
         // attempts themselves.
-        const allowed = (id: string) => (id === 'release-open-vsx-retry' ? 45 : 30);
+        const allowed = (id: string) => (id.endsWith('-retry') ? 45 : 30);
         for (const file of workflowFiles()) {
             for (const [id, job] of Object.entries(load(file).jobs ?? {})) {
                 const limit = (job as Record<string, unknown>)['timeout-minutes'];
@@ -317,7 +317,7 @@ describe('.github/workflows', function () {
             // how the extension reached no one on Open VSX for months while every run said success.
             // Both sides hand the token to the script, which exits 1 without it.
             const registries: [string[], string, string][] = [
-                [['pre-release-marketplace', 'release-marketplace'], 'VSCE_PAT', 'marketplace'],
+                [['pre-release-marketplace', 'release-marketplace', 'release-marketplace-retry'], 'VSCE_PAT', 'marketplace'],
                 [['pre-release-open-vsx', 'release-open-vsx', 'release-open-vsx-retry'], 'OPEN_VSX_TOKEN', 'open-vsx'],
             ];
             for (const [targets, token, registry] of registries) {
@@ -336,7 +336,7 @@ describe('.github/workflows', function () {
         it('hands both registries the VSIX that was built, out of the artifact', function () {
             const chains: [string, string[]][] = [
                 ['build-pre-release', ['pre-release-marketplace', 'pre-release-open-vsx']],
-                ['build-release', ['release-marketplace', 'release-open-vsx', 'release-open-vsx-retry']],
+                ['build-release', ['release-marketplace', 'release-marketplace-retry', 'release-open-vsx', 'release-open-vsx-retry']],
             ];
             for (const [build, targets] of chains) {
                 for (const job of targets) {
@@ -346,26 +346,36 @@ describe('.github/workflows', function () {
             }
         });
 
-        it('tries Open VSX again later when the first job gave up on an outage, and only then', function () {
-            // v1.1.36 failed to publish on nothing but a 503 from Open VSX, and a fix pull request
+        it('tries a registry again later when the first job gave up on an outage, and only then', function () {
+            // v1.1.36 failed to publish on nothing but a 503 from Open VSX, and v1.1.37 on three
+            // of them from the Marketplace, which had no second job; each time a fix pull request
             // was opened for a build with nothing wrong with it. The first job says whether its
             // failure looked transient; the retry job runs on that, waits, and asks again.
-            const first = jobs['release-open-vsx'];
-            assert.strictEqual(first?.outputs?.transient, '${{ steps.publish.outputs.transient }}');
-            assert.strictEqual(runsIn(workflow, 'release-open-vsx', 'scripts/publish-extension.js')?.id, 'publish');
-            assert.doesNotMatch(runsIn(workflow, 'release-open-vsx', 'scripts/publish-extension.js')?.run ?? '', /--schedule/);
+            const registries: [string, string, string][] = [
+                ['release-marketplace', 'release-marketplace-retry', 'marketplace'],
+                ['release-open-vsx', 'release-open-vsx-retry', 'open-vsx'],
+            ];
+            for (const [job, retryJob, registry] of registries) {
+                const first = jobs[job];
+                assert.strictEqual(first?.outputs?.transient, '${{ steps.publish.outputs.transient }}', `${job} does not say whether its failure was transient`);
+                assert.strictEqual(runsIn(workflow, job, 'scripts/publish-extension.js')?.id, 'publish');
+                assert.doesNotMatch(runsIn(workflow, job, 'scripts/publish-extension.js')?.run ?? '', /--schedule/);
 
-            const retry = jobs['release-open-vsx-retry'];
-            assert.ok(retry, 'no retry job for Open VSX');
-            assert.ok([retry.needs ?? []].flat().includes('release-open-vsx'));
-            assert.match(retry.if ?? '', /always\(\)/);
-            assert.match(retry.if ?? '', /needs\['release-open-vsx'\]\.result == 'failure'/);
-            assert.match(retry.if ?? '', /needs\['release-open-vsx'\]\.outputs\.transient == 'true'/);
-            assert.match(runsIn(workflow, 'release-open-vsx-retry', 'scripts/publish-extension.js')?.run ?? '', /--schedule patient/);
-            // Three waits of up to fifteen minutes, and a ceiling so a hung registry cannot hold the
-            // publish concurrency group for the six hours a job is allowed.
-            assert.ok(typeof retry['timeout-minutes'] === 'number' && retry['timeout-minutes'] <= 60, 'the retry job has no sensible timeout');
+                const retry = jobs[retryJob];
+                assert.ok(retry, `no retry job for ${registry}`);
+                assert.ok([retry.needs ?? []].flat().includes(job));
+                assert.match(retry.if ?? '', /always\(\)/);
+                assert.match(retry.if ?? '', new RegExp(`needs\\['${job}'\\]\\.result == 'failure'`));
+                assert.match(retry.if ?? '', new RegExp(`needs\\['${job}'\\]\\.outputs\\.transient == 'true'`));
+                const publish = runsIn(workflow, retryJob, 'scripts/publish-extension.js');
+                assert.match(publish?.run ?? '', new RegExp(`--registry ${registry}\\b`));
+                assert.match(publish?.run ?? '', /--schedule patient/);
+                // Three waits of up to fifteen minutes, and a ceiling so a hung registry cannot hold
+                // the publish concurrency group for the six hours a job is allowed.
+                assert.ok(typeof retry['timeout-minutes'] === 'number' && retry['timeout-minutes'] <= 60, `${retryJob} has no sensible timeout`);
+            }
             // A pre-release is superseded by the next push, so it gets no second job.
+            assert.strictEqual(jobs['pre-release-marketplace-retry'], undefined);
             assert.strictEqual(jobs['pre-release-open-vsx-retry'], undefined);
         });
 
@@ -390,12 +400,12 @@ describe('.github/workflows', function () {
             // rejected still got its tag and the version was burned while nobody could install it.
             const github = jobs['release-github'];
             const needs = [github?.needs ?? []].flat();
-            for (const registry of ['release-marketplace', 'release-open-vsx']) {
+            for (const registry of ['release-marketplace', 'release-marketplace-retry', 'release-open-vsx', 'release-open-vsx-retry']) {
                 assert.ok(needs.includes(registry), `release-github does not wait for ${registry}`);
+                // At least one, not both: a single registry outage still costs only that registry.
+                // A patient retry that got through counts as that registry taking the build.
+                assert.match(github?.if ?? '', new RegExp(`needs\\.${registry}\\.result == 'success'`), `release-github ignores ${registry}`);
             }
-            // At least one, not both: a single registry outage still costs only that registry.
-            assert.match(github?.if ?? '', /needs\.release-marketplace\.result == 'success'/);
-            assert.match(github?.if ?? '', /needs\.release-open-vsx\.result == 'success'/);
             assert.match(github?.if ?? '', /\|\|/);
             assert.match(github?.if ?? '', /needs\.build-release\.result == 'success'/);
             // Evaluated even though a needed job failed, but never on a run someone stopped.
@@ -410,10 +420,16 @@ describe('.github/workflows', function () {
                 ['build-pre-release', 'verify'],
             );
 
-            // The fix pull request lists the skipped GitHub release: that line is what says there
-            // is no tag.
+            // The fix pull request lists only what failed -- successes and skips drowned out the one
+            // line that mattered -- but a skipped GitHub release still gets a sentence, because
+            // that is what says there is no tag.
             const summary = runsIn(workflow, 'release-failed', 'Publishing **$TAG** failed');
-            assert.match(summary?.run ?? '', /startswith\("Release:"\)/);
+            assert.match(summary?.run ?? '', /select\(\.conclusion == "failure"\)/);
+            assert.doesNotMatch(summary?.run ?? '', /startswith\("Release:"\)/);
+            assert.doesNotMatch(summary?.run ?? '', /\\\(\.conclusion/, 'the list still prints a conclusion per job');
+            assert.match(summary?.run ?? '', /"Release: GitHub release" and \.conclusion == "skipped"/);
+            assert.match(summary?.run ?? '', /No GitHub release was created/);
+            assert.match(summary?.run ?? '', /\$TAG tag yet/);
         });
 
         it('opens a draft pull request on a branch when a release fails', function () {
@@ -421,7 +437,7 @@ describe('.github/workflows', function () {
             assert.ok(failed, 'nothing reacts to a failed release');
 
             const watched = [failed.needs ?? []].flat();
-            for (const job of ['check', 'verify', 'build-release', ...releaseTargets, 'release-open-vsx-retry']) {
+            for (const job of ['check', 'verify', 'build-release', ...releaseTargets, 'release-marketplace-retry', 'release-open-vsx-retry']) {
                 assert.ok(watched.includes(job), `release-failed does not watch ${job}`);
             }
             // A pre-release runs on every push and the next one supersedes it, so it stays out. So
@@ -434,19 +450,23 @@ describe('.github/workflows', function () {
             // Evaluated even though a needed job failed, but never on a run someone stopped by
             // hand -- that is not a problem to fix. `always()` is also true on a cancelled run,
             // and a retry cancelled mid-wait would then read as "not success" and open a pull
-            // request for the first Open VSX failure.
+            // request for the first registry failure.
             assert.match(failed.if ?? '', /!cancelled\(\)/);
             assert.doesNotMatch(failed.if ?? '', /always\(\)/);
             // Every job whose failure is a failed release, by name: the old `contains(join(...))`
-            // over every result would have opened a pull request for the Open VSX job that only
+            // over every result would have opened a pull request for the registry job that only
             // handed over to the retry.
-            for (const job of ['verify', 'build-release', 'release-marketplace', 'release-github', 'release-open-vsx-retry']) {
+            for (const job of ['verify', 'build-release', 'release-github', 'release-marketplace-retry', 'release-open-vsx-retry']) {
                 assert.match(failed.if ?? '', new RegExp(`needs(?:\\.|\\[')${job}(?:'\\])?\\.result == 'failure'`), `release-failed ignores ${job}`);
             }
             assert.doesNotMatch(failed.if ?? '', /join\(needs/);
-            // The first Open VSX failure counts only when the retry did not put it right: it failed
-            // too, or was skipped because the failure was never transient.
-            assert.match(failed.if ?? '', /needs\['release-open-vsx'\]\.result == 'failure' && needs\['release-open-vsx-retry'\]\.result != 'success'/);
+            // A registry's first failure counts only when its retry did not put it right: it failed
+            // too, or was skipped because the failure was never transient. v1.1.37 opened a fix
+            // pull request on the Marketplace's first failure alone, because it had no retry.
+            for (const job of ['release-marketplace', 'release-open-vsx']) {
+                assert.match(failed.if ?? '', new RegExp(`\\(needs\\['${job}'\\]\\.result == 'failure' && needs\\['${job}-retry'\\]\\.result != 'success'\\)`), `release-failed opens a pull request on ${job}'s first failure`);
+                assert.doesNotMatch(failed.if ?? '', new RegExp(`\\|\\|\\s*needs\\['${job}'\\]\\.result == 'failure'\\s*\\|\\|`), `${job}'s first failure counts on its own`);
+            }
             // Folded into one line, or the runner sees a string rather than an expression.
             assert.doesNotMatch(failed.if ?? '', /\n/);
 
