@@ -148,6 +148,7 @@ function renderToolBar(styleTable: StyleTable): string {
 		toggle("show-conditions", localize("decisiontree.showconditions", "Show conditions")),
 		toggle("show-effects", localize("decisiontree.showeffects", "Show effects")),
 		toggle("show-scripted-gui", localize("decisiontree.showscriptedgui", "Show custom GUI")),
+		toggle("collapse-categories", localize("decisiontree.collapsecategories", "Collapse categories")),
 	].join("");
 
 	return `<div class="toolbar-outer ${styleTable.style(

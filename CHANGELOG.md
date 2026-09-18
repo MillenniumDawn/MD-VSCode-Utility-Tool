@@ -2,6 +2,8 @@ Unreleased
 
   Functionality:
 
+- The decision preview can collapse its categories: a "Collapse categories" toggle in the toolbar folds every tab down to its category card, and a chevron on each card opens or closes that one on its own, so a large file can be folded up and read one tab at a time. Issue #272.
+- The extension's settings are grouped into sections — Game and mod, Previews, World map, Indexes and performance — each its own page in the Settings editor, instead of one long list. Issue #335.
 - [ CI ] The extension package no longer ships developer files (contributor notes, lint and duplication configuration, stray log and temp files), and every CI job now has a time limit so a stuck publish cannot block later releases for hours. Issue #202.
 - The extension's own interface — preview toolbars, filters, warnings and the settings descriptions — is now fully translated into Korean, Russian and Simplified Chinese, where the newer previews (characters, decisions, ideas, index status) had been showing English. Issue #191.
 - Previews drop a malformed message from their own page instead of acting on it, the condition filters in the focus tree and MIO previews show a trigger as the text it is written as, and the loading page carries a content security policy like the finished preview. Issue #201.
@@ -16,6 +18,8 @@ Unreleased
   Bugfixes:
 
 - A plain mouse wheel scrolls the focus tree, technology, MIO, event and decision previews again. It had zoomed instead, which shrank the tree until it fit the pane, took the scrollbar with it and left the wheel doing nothing. Zoom with Ctrl+wheel, the zoom buttons or the +/- keys, or set `mdHoi4Utilities.previewWheel` to `auto` or `zoom` to have the wheel zoom. Issue #336.
+- With a filter selected, the decision preview kept dropping the "Not defined in this file" placeholder a surviving decision called, and the arrow with it; the placeholder now stays as long as something on the canvas points at it.
+- The DDS and TGA image viewer now limits the files its page may load to the extension's own folder, like the other previews, instead of the whole workspace. Issue #317.
 - An empty or comment-only localisation file no longer stops "Scan references" with a YAML error.
 
 - [ CI ] The GitHub release and its version tag are only created once the build reached the VS Code Marketplace or Open VSX, so a release that reached neither no longer burns its version number. Issue #197.

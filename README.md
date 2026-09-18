@@ -78,6 +78,10 @@ for `replace_path` too, as it does in the game.
 
 ## Settings
 
+The Settings editor lists them under the extension in these sections.
+
+**Game and mod**
+
 | Setting | What it does |
 |---|---|
 | `mdHoi4Utilities.installPath` | Hearts of Iron IV install path. Without it most previews have no icons. |
@@ -85,20 +89,35 @@ for `replace_path` too, as it does in the game.
 | `mdHoi4Utilities.parentModPaths` | Absolute folders of the mods this workspace extends, in order, for what the `.mod` file's `dependencies` cannot resolve. Searched after the workspace folders and before the game install, e.g. `["D:/mods/parent-mod"]` in the submod's `.vscode/settings.json`. An entry here wins over the registry's folder for the same mod. |
 | `mdHoi4Utilities.userDataPath` | The Hearts of Iron IV user data folder (the one with `dlc_load.json` and the launcher's `mod` folder), where `dependencies` names are looked up. Found automatically when empty, including a Documents folder Windows has moved. |
 | `mdHoi4Utilities.loadDlcContents` | Load DLC images when previewing. Uses more memory. |
+
+**Previews**
+
+| Setting | What it does |
+|---|---|
 | `mdHoi4Utilities.previewLocalisation` | Language of the text shown in previews. |
 | `mdHoi4Utilities.previewWheel` | What a plain mouse wheel does: `scroll` (default), `zoom`, or `auto` (zoom for a mouse, scroll for a trackpad). Ctrl+wheel, the zoom buttons and the +/- keys always zoom. |
+| `mdHoi4Utilities.eventTreePreview`, `decisionPreview`, `ideaPreview`, `characterPreview` | Turn an individual preview on or off. |
 | `mdHoi4Utilities.useConditionInFocus` | Show conditions in the focus tree preview. |
 | `mdHoi4Utilities.inlayWindowGfxRoots` | Folders scanned for the `.gfx` files that focus inlay windows use. |
 | `mdHoi4Utilities.technologyGfxRoots` | Folders scanned for `.gfx` files used by the technology tree, including country-specific icons. |
 | `mdHoi4Utilities.technologyCountryIcons` | Add a country selector to the technology tree preview and prefer that country's icons. |
-| `mdHoi4Utilities.eventTreePreview`, `decisionPreview`, `ideaPreview`, `characterPreview` | Turn an individual preview on or off. |
+
+**World map**
+
+| Setting | What it does |
+|---|---|
+| `mdHoi4Utilities.enableSupplyArea` | Show supply areas, for mods targeting HOI4 1.10 or older. |
+| `mdHoi4Utilities.worldMapRetainContextWhenHidden` | Keep the world map loaded while its tab is hidden. Faster to switch back, more memory. |
+
+**Indexes and performance**
+
+| Setting | What it does |
+|---|---|
 | `mdHoi4Utilities.sharedFocusIndex` | Index shared focuses so other trees can pull them in. |
 | `mdHoi4Utilities.ideaSwapIndex` | Scan `common` and `events` for `swap_ideas` so the idea preview can draw idea chains. |
 | `mdHoi4Utilities.gfxIndex` | Index every sprite definition. Faster icon lookups, more memory. |
 | `mdHoi4Utilities.localisationIndex` | Index localisation so previews show translated text. Uses more memory. |
 | `mdHoi4Utilities.imageDecodeWorkers` | Threads used to decode `.dds` / `.tga` images. More is faster on icon-heavy trees. |
-| `mdHoi4Utilities.worldMapRetainContextWhenHidden` | Keep the world map loaded while its tab is hidden. Faster to switch back, more memory. |
-| `mdHoi4Utilities.enableSupplyArea` | Show supply areas, for mods targeting HOI4 1.10 or older. |
 
 Settings that say so in their description need a window reload to take effect. **Show Index
 Status** in the command palette tells you what the indexes are doing.

@@ -69,6 +69,25 @@
 	border-color: var(--ev-triggered);
 }
 
+/* The chevron that folds one tab, at the end of the head bar. common.css already makes a bare
+   button a 20px icon; this only pulls it into the corner and keeps it quiet until hovered. */
+.dec-collapse {
+	flex: none;
+	margin: -3px -5px 0 auto;
+	color: var(--ev-fg-muted);
+}
+
+.dec-collapse:hover,
+.dec-collapse:focus-visible {
+	color: var(--ev-fg);
+}
+
+/* A folded tab is drawn dashed, like everything else on the canvas standing for something not
+   on it. */
+.dec-card-collapsed {
+	border-style: dashed;
+}
+
 /* ---------- Glyphs ---------- */
 
 /* Round for a decision the player presses, square for a mission that runs itself, and the accent
@@ -110,6 +129,11 @@
 .dec-badge-gui {
 	color: var(--ev-accent);
 	border-color: var(--ev-accent);
+}
+
+/* What a folded tab is standing in for. */
+.dec-badge-hidden {
+	color: var(--ev-fg-muted);
 }
 
 /* Something the file names that the preview could not find. Dashed, like everything else on the
