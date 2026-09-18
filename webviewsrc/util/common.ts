@@ -252,6 +252,11 @@ export function enableZoom(
 		const oldScrollY = window.scrollY;
 
 		contentElement.style.transform = `scale(${scale})`;
+		// Chromium recomputes the document's scroll range for a transform change on its own, but
+		// not when the readout below is written in the same flush: the range then stays at the
+		// previous zoom and the bottom of a large tree cannot be scrolled to. Reading a box settles
+		// the transform first. Issue #344.
+		void contentElement.getBoundingClientRect();
 		setState({ scale });
 		updateZoomControls(scale);
 
