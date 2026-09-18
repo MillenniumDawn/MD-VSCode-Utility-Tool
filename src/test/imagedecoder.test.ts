@@ -4,11 +4,15 @@ import { PNG } from "pngjs";
 import {
 	decodeImageToPng,
 	decodeImageToPngSync,
+	disposeImageDecodeWorkers,
 	resolveWorkerPoolSize,
 	_setImageWorkerPathForTest,
 	_resetImageWorkerPathForTest,
 	_terminateImageWorkerForTest,
 	_getWorkerCountForTest,
+	_setImageJobTimeoutForTest,
+	_isWorkerPoolDisabledForTest,
+	_getLiveWorkerCountForTest,
 } from "../util/image/imagedecoder";
 import { UserError } from "../util/common";
 // Imported only so tsc emits the worker file into this test's outDir; it is import-safe on the main
@@ -187,6 +191,11 @@ describe("util/image/imagedecoder", () => {
 				// Worker survives a decode error: a subsequent valid decode still succeeds.
 				const ok = await decodeImageToPng(makeTga(), "tga");
 				assert.strictEqual(ok.width, 2);
+				// A decode error is not a crash: the pool and the live-thread set still agree.
+				assert.strictEqual(
+					_getLiveWorkerCountForTest(),
+					_getWorkerCountForTest(),
+				);
 			} finally {
 				console.error = originalConsoleError;
 			}
@@ -216,9 +225,10 @@ describe("util/image/imagedecoder", () => {
 	});
 
 	describe("decodeImageToPng (unusable worker file)", () => {
-		// The doomed worker's crash/exit is handled and logged by onWorkerError/onWorkerExit, and can
-		// land after either `it` below has already returned; stub console.error for the whole block
-		// rather than racing per-test capture against that async cleanup.
+		// The doomed worker's crash is handled and logged by onWorkerError, and can land after either
+		// `it` below has already returned; stub console.error for the whole block rather than racing
+		// per-test capture against that async cleanup. Its later 'exit' is awaited by the teardown,
+		// which the last test in this block pins down.
 		let originalConsoleError: typeof console.error;
 
 		before(() => {
@@ -252,6 +262,109 @@ describe("util/image/imagedecoder", () => {
 			assert.strictEqual(result.width, 4);
 			assert.strictEqual(result.height, 4);
 			assertValidPng(result.pngBuffer, 4, 4);
+		});
+
+		it("teardown waits for the doomed worker to exit, so nothing it logs escapes the block", async () => {
+			// Re-arm the pool so this decode spawns its own doomed worker instead of taking the
+			// fallback the earlier crash left in place.
+			await _terminateImageWorkerForTest();
+			const result = await decodeImageToPng(makeTga(), "tga");
+			assert.strictEqual(result.width, 2);
+
+			await _terminateImageWorkerForTest();
+			assert.strictEqual(
+				_getLiveWorkerCountForTest(),
+				0,
+				"no spawned thread should outlive the teardown",
+			);
+
+			// With the thread gone and its listeners removed, nothing can reach console.error once
+			// the teardown has returned - which is what lets the next suite trust its own stub.
+			const blockStub = console.error;
+			const calls: unknown[][] = [];
+			console.error = (...args: unknown[]) => {
+				calls.push(args);
+			};
+			try {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+				assert.deepStrictEqual(calls, []);
+			} finally {
+				console.error = blockStub;
+			}
+		});
+	});
+
+	describe("decodeImageToPng (hanging worker)", () => {
+		// Both paths log through error(); silence it for the block the same way the unusable-worker
+		// block does, since the eviction can land after the `it` has returned.
+		let originalConsoleError: typeof console.error;
+
+		before(() => {
+			originalConsoleError = console.error;
+			console.error = () => undefined;
+		});
+
+		// Each case re-arms the pool: the dispose case leaves it disabled, and the timeout case
+		// leaves it empty.
+		beforeEach(() => {
+			_setImageWorkerPathForTest(
+				path.resolve(__dirname, "hangingImageWorker.js"),
+			);
+		});
+
+		afterEach(async () => {
+			await _terminateImageWorkerForTest();
+		});
+
+		after(() => {
+			_resetImageWorkerPathForTest();
+			console.error = originalConsoleError;
+		});
+
+		it("settles a pending decode when the pool is disposed (falls back to the sync decode)", async function () {
+			// A regression here hangs forever; fail fast instead of stalling the suite.
+			this.timeout(5000);
+			const tga = makeTga();
+			const pending = decodeImageToPng(tga, "tga");
+			assert.strictEqual(_getWorkerCountForTest(), 1);
+
+			disposeImageDecodeWorkers();
+
+			const result = await pending;
+			assert.ok(
+				result.pngBuffer.equals(decodeImageToPngSync(tga, "tga").pngBuffer),
+				"disposed decode should fall back to the sync PNG",
+			);
+			assert.strictEqual(_getWorkerCountForTest(), 0);
+		});
+
+		it("rejects a decode that times out and evicts the wedged worker without disabling the pool", async function () {
+			this.timeout(5000);
+			_setImageJobTimeoutForTest(50);
+			const tga = makeTga();
+			const dds = makeDds(4, 4);
+
+			// Two concurrent jobs: the pool may spread them over two wedged workers or queue both on
+			// one; either way each caller is failed and no worker is left behind.
+			const results = await Promise.allSettled([
+				decodeImageToPng(tga, "tga"),
+				decodeImageToPng(dds, "dds"),
+			]);
+			for (const r of results) {
+				assert.strictEqual(r.status, "rejected");
+				if (r.status === "rejected") {
+					assert.ok(r.reason instanceof Error);
+					assert.strictEqual(r.reason.name, "ImageDecodeTimeoutError");
+					assert.match(r.reason.message, /timed out/);
+				}
+			}
+
+			assert.strictEqual(_getWorkerCountForTest(), 0);
+			assert.strictEqual(
+				_isWorkerPoolDisabledForTest(),
+				false,
+				"a timeout should evict one worker, not give up on the pool",
+			);
 		});
 	});
 });
