@@ -15,6 +15,8 @@ v1.1.37
 - The trigger and effect evaluators behind every preview now have their own tests, so a wrong branch shown for an `if`/`else`, `NOT` or `count_triggers` block is caught before release. Issue #199.
 - Checkbox labels are read through the input's label property with a document query fallback. Drag-panning coalesces mouse moves into one scroll per animation frame. Decision bridging memoises its traversal per removed node.
 - Greyscale and colour-mapped TGA images now decode in the previews and the image viewer instead of being refused as unsupported.
+- The decision preview can collapse its categories: a "Collapse categories" toggle in the toolbar folds every tab down to its category card, and a chevron on each card opens or closes that one on its own, so a large file can be folded up and read one tab at a time. Issue #272.
+- The extension's settings are grouped into sections — Game and mod, Previews, World map, Indexes and performance — each its own page in the Settings editor, instead of one long list. Issue #335.
 
   Bugfixes:
 
@@ -31,6 +33,8 @@ v1.1.37
 - [ CI ] A release no longer fails outright when Open VSX is briefly unavailable: the publish is retried for up to half an hour, and a fix pull request is only opened once that has given up too.
 - The release run retries a transient Open VSX outage before opening a fix pull request, so a momentary service outage no longer triggers a fix pull request.
 - The development toolchain installs cleanly again after a dependency update broke it. Dependency updates that are incompatible with the supported Node and Visual Studio Code versions are held back until those support windows move.
+- With a filter selected, the decision preview kept dropping the "Not defined in this file" placeholder a surviving decision called, and the arrow with it; the placeholder now stays as long as something on the canvas points at it.
+- The DDS and TGA image viewer now limits the files its page may load to the extension's own folder, like the other previews, instead of the whole workspace. Issue #317.
 
 v1.1.36
 

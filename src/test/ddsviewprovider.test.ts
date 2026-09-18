@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { DDSViewProvider, TGAViewProvider } from "../ddsviewprovider";
 import * as imageDecoder from "../util/image/imagedecoder";
 import * as vscodeCommon from "../util/vsccommon";
+import { contextContainer } from "../context";
 
 const mutableVscodeCommon = vscodeCommon as {
 	readFile: typeof vscodeCommon.readFile;
@@ -15,7 +16,7 @@ interface StubPanel {
 	webview: {
 		html: string;
 		cspSource: string;
-		options: { enableScripts?: boolean };
+		options: { enableScripts?: boolean; localResourceRoots?: vscode.Uri[] };
 		postMessage(msg: unknown): Promise<boolean>;
 		onDidReceiveMessage(listener: (msg: unknown) => void): { dispose(): void };
 	};
@@ -67,9 +68,13 @@ describe("DDS and TGA custom editor providers", () => {
 		document.dispose();
 	});
 
+	const extensionUri = vscode.Uri.file("/ext");
+
 	async function openDecodedImage(): Promise<StubPanel> {
 		const originalReadFile = mutableVscodeCommon.readFile;
 		const originalDecode = mutableImageDecoder.decodeImageToPng;
+		const originalContext = contextContainer.current;
+		contextContainer.current = { extensionUri } as any;
 		mutableVscodeCommon.readFile = async () => Buffer.from("source");
 		mutableImageDecoder.decodeImageToPng = async () => ({
 			pngBuffer: Buffer.from([1, 2]),
@@ -87,6 +92,7 @@ describe("DDS and TGA custom editor providers", () => {
 		} finally {
 			mutableVscodeCommon.readFile = originalReadFile;
 			mutableImageDecoder.decodeImageToPng = originalDecode;
+			contextContainer.current = originalContext;
 		}
 	}
 
@@ -106,6 +112,7 @@ describe("DDS and TGA custom editor providers", () => {
 		assert.ok(!view.webview.html.includes("data:image/png;base64"));
 		assert.ok(view.webview.html.includes("img-src data: blob:"));
 		assert.strictEqual(view.webview.options.enableScripts, true);
+		assert.deepStrictEqual(view.webview.options.localResourceRoots, [extensionUri]);
 		assert.deepStrictEqual(view.posted, []);
 
 		view.receive({ command: "ready" });

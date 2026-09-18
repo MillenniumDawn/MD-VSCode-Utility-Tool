@@ -56,19 +56,14 @@
 	"contributes": {
 		"configuration": [
 			{
-				"title": "%hoi4modutilities.displayName%",
+				"title": "%hoi4modutilities.section.gameAndMod%",
+				"order": 1,
 				"properties": {
 					"mdHoi4Utilities.installPath": {
 						"title": "%hoi4modutilities.installPath.title%",
 						"type": "string",
 						"default": "",
 						"description": "%hoi4modutilities.installPath.desc%"
-					},
-					"mdHoi4Utilities.loadDlcContents": {
-						"title": "%hoi4modutilities.loadDlcContents.title%",
-						"type": "boolean",
-						"default": true,
-						"description": "%hoi4modutilities.loadDlcContents.desc%"
 					},
 					"mdHoi4Utilities.modFile": {
 						"title": "%hoi4modutilities.modFile.title%",
@@ -91,12 +86,18 @@
 						"default": "",
 						"description": "The Hearts of Iron IV user data folder, the one holding dlc_load.json and the mod folder the launcher writes. Used to resolve the dependencies of the selected .mod file to folders. Found automatically when empty."
 					},
-					"mdHoi4Utilities.enableSupplyArea": {
-						"title": "%hoi4modutilities.enableSupplyArea.title%",
+					"mdHoi4Utilities.loadDlcContents": {
+						"title": "%hoi4modutilities.loadDlcContents.title%",
 						"type": "boolean",
-						"default": false,
-						"description": "%hoi4modutilities.enableSupplyArea.desc%"
-					},
+						"default": true,
+						"description": "%hoi4modutilities.loadDlcContents.desc%"
+					}
+				}
+			},
+			{
+				"title": "%hoi4modutilities.section.previews%",
+				"order": 2,
+				"properties": {
 					"mdHoi4Utilities.previewLocalisation": {
 						"title": "%hoi4modutilities.previewLocalisation.title%",
 						"type": "string",
@@ -113,6 +114,52 @@
 							"Spanish"
 						],
 						"description": "%hoi4modutilities.previewLocalisation.desc%"
+					},
+					"mdHoi4Utilities.previewWheel": {
+						"title": "Previews: what the mouse wheel does",
+						"type": "string",
+						"default": "auto",
+						"enum": [
+							"auto",
+							"zoom",
+							"scroll"
+						],
+						"enumDescriptions": [
+							"Zoom when the wheel is a mouse wheel, scroll when it is a two-finger trackpad swipe.",
+							"The wheel always zooms.",
+							"The wheel always scrolls; zoom with Ctrl+wheel, the zoom buttons or the +/- keys."
+						],
+						"description": "What a plain mouse wheel does in the focus tree, technology, MIO, event and decision previews. Ctrl+wheel, the zoom buttons and the +/- keys zoom whatever this is set to. Reopen the preview after changing this."
+					},
+					"mdHoi4Utilities.eventTreePreview": {
+						"title": "%hoi4modutilities.eventTreePreview.title%",
+						"type": "boolean",
+						"default": true,
+						"description": "%hoi4modutilities.eventTreePreview.desc%"
+					},
+					"mdHoi4Utilities.decisionPreview": {
+						"title": "%hoi4modutilities.decisionPreview.title%",
+						"type": "boolean",
+						"default": true,
+						"description": "%hoi4modutilities.decisionPreview.desc%"
+					},
+					"mdHoi4Utilities.ideaPreview": {
+						"title": "%hoi4modutilities.ideaPreview.title%",
+						"type": "boolean",
+						"default": true,
+						"description": "%hoi4modutilities.ideaPreview.desc%"
+					},
+					"mdHoi4Utilities.characterPreview": {
+						"title": "%hoi4modutilities.characterPreview.title%",
+						"type": "boolean",
+						"default": true,
+						"description": "%hoi4modutilities.characterPreview.desc%"
+					},
+					"mdHoi4Utilities.useConditionInFocus": {
+						"title": "%hoi4modutilities.useConditionInFocus.title%",
+						"type": "boolean",
+						"default": true,
+						"description": "%hoi4modutilities.useConditionInFocus.desc%"
 					},
 					"mdHoi4Utilities.inlayWindowGfxRoots": {
 						"title": "Focus inlay window GFX roots",
@@ -139,70 +186,42 @@
 						"type": "boolean",
 						"default": false,
 						"description": "Add a country selector to the technology tree preview and prefer that country's icons (GFX_<TAG>_<technology>) over the generic ones, the way the game does. Needs the GFX index to list the countries."
-					},
-					"mdHoi4Utilities.previewWheel": {
-						"title": "Previews: what the mouse wheel does",
-						"type": "string",
-						"default": "auto",
-						"enum": [
-							"auto",
-							"zoom",
-							"scroll"
-						],
-						"enumDescriptions": [
-							"Zoom when the wheel is a mouse wheel, scroll when it is a two-finger trackpad swipe.",
-							"The wheel always zooms.",
-							"The wheel always scrolls; zoom with Ctrl+wheel, the zoom buttons or the +/- keys."
-						],
-						"description": "What a plain mouse wheel does in the focus tree, technology, MIO, event and decision previews. Ctrl+wheel, the zoom buttons and the +/- keys zoom whatever this is set to. Reopen the preview after changing this."
+					}
+				}
+			},
+			{
+				"title": "%hoi4modutilities.section.worldMap%",
+				"order": 3,
+				"properties": {
+					"mdHoi4Utilities.enableSupplyArea": {
+						"title": "%hoi4modutilities.enableSupplyArea.title%",
+						"type": "boolean",
+						"default": false,
+						"description": "%hoi4modutilities.enableSupplyArea.desc%"
 					},
 					"mdHoi4Utilities.worldMapRetainContextWhenHidden": {
 						"title": "World map: keep webview in memory when hidden",
 						"type": "boolean",
 						"default": true,
 						"description": "Keep the world map preview's webview loaded while the tab is hidden (faster to switch back, uses more memory). Turn off to free the webview when hidden and reload it on return, lowering memory use on large maps. The extension-host copy of the map is always released while hidden."
-					},
-					"mdHoi4Utilities.useConditionInFocus": {
-						"title": "%hoi4modutilities.useConditionInFocus.title%",
+					}
+				}
+			},
+			{
+				"title": "%hoi4modutilities.section.indexes%",
+				"order": 4,
+				"properties": {
+					"mdHoi4Utilities.sharedFocusIndex": {
+						"title": "%hoi4modutilities.sharedFocusIndex.title%",
 						"type": "boolean",
 						"default": true,
-						"description": "%hoi4modutilities.useConditionInFocus.desc%"
-					},
-					"mdHoi4Utilities.eventTreePreview": {
-						"title": "%hoi4modutilities.eventTreePreview.title%",
-						"type": "boolean",
-						"default": true,
-						"description": "%hoi4modutilities.eventTreePreview.desc%"
-					},
-					"mdHoi4Utilities.ideaPreview": {
-						"title": "%hoi4modutilities.ideaPreview.title%",
-						"type": "boolean",
-						"default": true,
-						"description": "%hoi4modutilities.ideaPreview.desc%"
-					},
-					"mdHoi4Utilities.decisionPreview": {
-						"title": "%hoi4modutilities.decisionPreview.title%",
-						"type": "boolean",
-						"default": true,
-						"description": "%hoi4modutilities.decisionPreview.desc%"
-					},
-					"mdHoi4Utilities.characterPreview": {
-						"title": "%hoi4modutilities.characterPreview.title%",
-						"type": "boolean",
-						"default": true,
-						"description": "%hoi4modutilities.characterPreview.desc%"
+						"description": "%hoi4modutilities.sharedFocusIndex.desc%"
 					},
 					"mdHoi4Utilities.ideaSwapIndex": {
 						"title": "%hoi4modutilities.ideaSwapIndex.title%",
 						"type": "boolean",
 						"default": false,
 						"description": "%hoi4modutilities.ideaSwapIndex.desc%"
-					},
-					"mdHoi4Utilities.sharedFocusIndex": {
-						"title": "%hoi4modutilities.sharedFocusIndex.title%",
-						"type": "boolean",
-						"default": true,
-						"description": "%hoi4modutilities.sharedFocusIndex.desc%"
 					},
 					"mdHoi4Utilities.gfxIndex": {
 						"title": "%hoi4modutilities.gfxIndex.title%",
