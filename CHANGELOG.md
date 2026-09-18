@@ -15,6 +15,7 @@ Unreleased
 
   Bugfixes:
 
+- The DDS and TGA image viewer now limits the files its page may load to the extension's own folder, like the other previews, instead of the whole workspace. Issue #317.
 - An empty or comment-only localisation file no longer stops "Scan references" with a YAML error.
 
 - [ CI ] The GitHub release and its version tag are only created once the build reached the VS Code Marketplace or Open VSX, so a release that reached neither no longer burns its version number. Issue #197.
