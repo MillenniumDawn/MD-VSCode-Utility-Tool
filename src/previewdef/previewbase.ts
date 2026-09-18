@@ -3,7 +3,8 @@ import { localize } from '../util/i18n';
 import { error, debug } from '../util/debug';
 import { getDocumentByUri } from '../util/vsccommon';
 import { isEqual } from 'lodash';
-import { sendByMessage } from '../util/telemetry';
+import { sendByMessage, isTelemetryMessage } from '../util/telemetry';
+import { isOffset, isOptionalOffset, isOptionalString, isRecord } from '../util/messageguards';
 import { loadingShellHtml } from '../util/html';
 import { openOrCopyHoiFile } from '../util/previewfileopener';
 import { setPreviewOption } from '../util/previewoptions';
@@ -91,18 +92,23 @@ export abstract class PreviewBase {
     }
 
     protected registerEvents(panel: vscode.WebviewPanel): void {
-        this.subscriptions.push(panel.webview.onDidReceiveMessage((msg) => {
+        // The page is the extension's own, but its messages are still input: the shape is
+        // checked here, once, so nothing below reads a field it did not verify.
+        this.subscriptions.push(panel.webview.onDidReceiveMessage((msg: unknown) => {
+            if (!isRecord(msg)) {
+                return;
+            }
             switch (msg.command) {
                 case 'navigate':
-                    if (msg.start !== undefined) {
+                    if (isOffset(msg.start) && isOptionalOffset(msg.end) && isOptionalString(msg.file)) {
                         if (msg.file === undefined) {
                             const document = getDocumentByUri(this.uri);
                             if (document === undefined) {
                                 return;
                             }
-        
+
                             void vscode.window.showTextDocument(this.uri, {
-                                selection: new vscode.Range(document.positionAt(msg.start), document.positionAt(msg.end)),
+                                selection: new vscode.Range(document.positionAt(msg.start), document.positionAt(msg.end ?? msg.start)),
                                 viewColumn: vscode.ViewColumn.One
                             });
                         } else {
@@ -111,7 +117,9 @@ export abstract class PreviewBase {
                     }
                     break;
                 case 'telemetry':
-                    sendByMessage(msg);
+                    if (isTelemetryMessage(msg)) {
+                        sendByMessage(msg);
+                    }
                     break;
                 case 'reload':
                     this.reload();

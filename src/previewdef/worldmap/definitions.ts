@@ -1,5 +1,12 @@
 import { Token } from "../../hoiformat/hoiparser";
 import { Warning } from "../../util/common";
+import type { TelemetryMessage } from "../../util/telemetry";
+import {
+	isOffset,
+	isOptionalOffset,
+	isOptionalString,
+	isRecord,
+} from "../../util/messageguards";
 
 export interface WorldMapData {
 	width: number;
@@ -294,6 +301,65 @@ interface OpenFileMessage {
 interface ExportMapMessage {
 	command: "exportmap" | "requestexportmap";
 	dataUrl?: string;
+}
+
+const requestMapItemCommands: ReadonlySet<string> = new Set<
+	RequestMapItemMessage["command"]
+>([
+	"requestprovinces",
+	"requeststates",
+	"requestcountries",
+	"requeststrategicregions",
+	"requestsupplyareas",
+	"requestrailways",
+	"requestsupplynodes",
+]);
+
+const openFileTypes: ReadonlySet<string> = new Set<OpenFileMessage["type"]>([
+	"state",
+	"strategicregion",
+	"supplyarea",
+]);
+
+/**
+ * Whether a message posted by the world map page is one the host handles, in the shape the
+ * union above declares. The union is a type and says nothing at run time; this is the check
+ * the handler runs before it reads a field.
+ */
+export function isWorldMapHostMessage(
+	msg: unknown,
+): msg is WorldMapMessage | TelemetryMessage {
+	if (!isRecord(msg) || typeof msg.command !== "string") {
+		return false;
+	}
+	switch (msg.command) {
+		case "loaded":
+			return typeof msg.force === "boolean";
+		case "openfile":
+			return (
+				typeof msg.file === "string" &&
+				typeof msg.type === "string" &&
+				openFileTypes.has(msg.type) &&
+				isOptionalOffset(msg.start) &&
+				isOptionalOffset(msg.end)
+			);
+		case "exportmap":
+		case "requestexportmap":
+			return isOptionalString(msg.dataUrl);
+		case "telemetry":
+			return (
+				(msg.telemetryType === "event" ||
+					msg.telemetryType === "error" ||
+					msg.telemetryType === "exception") &&
+				Array.isArray(msg.args)
+			);
+		default:
+			return (
+				requestMapItemCommands.has(msg.command) &&
+				isOffset(msg.start) &&
+				isOffset(msg.end)
+			);
+	}
 }
 
 export type ProgressReporter = (progress: string) => Promise<void>;

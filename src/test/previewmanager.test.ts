@@ -139,4 +139,29 @@ describe("previewdef/previewmanager PreviewManager", function () {
 			assert.deepStrictEqual(panel.webview.options.localResourceRoots, [extensionUri]);
 		});
 	});
+
+	describe("dependency subscriptions", function () {
+		it("shares one entry between previews with the same dependency and drops it when both leave", function () {
+			const manager = new PreviewManager() as any;
+			const subscriptions: Map<string, unknown> = manager._updateSubscriptions;
+			const first = { name: "first" };
+			const second = { name: "second" };
+
+			manager.addPreviewToSubscription(first, ["common/x.txt", "gfx/"]);
+			manager.addPreviewToSubscription(second, ["Common/X.txt"]);
+
+			// The two spellings of common/x.txt are one entry, as the match itself ignores case.
+			assert.strictEqual(subscriptions.size, 2);
+			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/x.txt"), [first, second]);
+			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/gfx/"), [first]);
+			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/y.txt"), []);
+
+			manager.removePreviewFromSubscription(first);
+			assert.strictEqual(subscriptions.size, 1);
+			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/x.txt"), [second]);
+
+			manager.removePreviewFromSubscription(second);
+			assert.strictEqual(subscriptions.size, 0);
+		});
+	});
 });

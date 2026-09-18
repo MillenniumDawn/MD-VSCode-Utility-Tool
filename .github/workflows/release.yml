@@ -518,10 +518,11 @@ jobs:
         if-no-files-found: error
         retention-days: 5
 
-  # The three below are deliberately siblings rather than steps in a row. Open VSX used to be a step
-  # after the Marketplace one, so a Marketplace outage took Open VSX and the GitHub release down with
-  # it; now one registry being unreachable costs exactly that registry, and re-running a single
-  # failed job republishes only that target.
+  # The two registries below are deliberately siblings rather than steps in a row. Open VSX used to
+  # be a step after the Marketplace one, so a Marketplace outage took Open VSX and the GitHub release
+  # down with it; now one registry being unreachable costs exactly that registry, and re-running a
+  # single failed job republishes only that target. The GitHub release comes after both, because it
+  # is the tag: see release-github.
   release-marketplace:
     name: "Release: VS Code Marketplace"
     needs: [build-release, verify]
@@ -588,9 +589,19 @@ jobs:
   # Publishing again with the tag and release already there updates the release in place and
   # replaces the .vsix on it (overwrite_files defaults to true), so this job needs no duplicate
   # handling of its own.
+  #
+  # This is the job that writes the tag, and a tag says the version shipped. It used to run
+  # whatever the registries did, so a release both registries rejected still got its tag, and
+  # release-check.js then read that tag as "already released" while nobody could install it. Now
+  # it waits for both registries and runs only when at least one of them took the build: one
+  # registry down still costs only that registry, and the fix pull request republishes it, but a
+  # version that reached nobody keeps no tag, so the next release pull request takes it over
+  # instead of bumping past it. `!cancelled()` rather than `always()`: a run someone stopped by
+  # hand does not tag either.
   release-github:
     name: "Release: GitHub release"
-    needs: [check, build-release, verify]
+    needs: [check, build-release, verify, release-marketplace, release-open-vsx]
+    if: ${{ !cancelled() && needs.build-release.result == 'success' && (needs.release-marketplace.result == 'success' || needs.release-open-vsx.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The release itself is created with the bot's token, so nothing here writes as the workflow.
@@ -667,7 +678,9 @@ jobs:
     # Which jobs failed, and a link straight to each log. The run's own job list is the honest
     # answer -- it names the ones that succeeded too, so it is clear what already reached a
     # registry. This job itself and the skipped ones -- the pre-release jobs and the release pull
-    # request job, neither of which runs on a release push -- are left out.
+    # request job, neither of which runs on a release push -- are left out. A skipped `Release:`
+    # job stays in: the GitHub release skips itself when neither registry took the build, and
+    # that is the line that says there is no tag.
     - name: Write the failure summary
       id: summary
       run: |
@@ -692,14 +705,16 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --paginate \
             --jq '.jobs[]
               | select(.name != "Release: Open a fix pull request")
-              | select(.conclusion != "skipped")
+              | select(.conclusion != "skipped" or (.name | startswith("Release:")))
               | "- **\(.conclusion // "running")** — [\(.name)](\(.html_url))"' \
             || echo "- The job list could not be read; open the run below."
           echo
           echo "A target that says \`success\` is already published. Re-running just the failed job"
           echo "from [the run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
           echo "republishes only that one; the Marketplace step treats a version that is already up"
-          echo "as done rather than as an error."
+          echo "as done rather than as an error. A GitHub release that says \`skipped\` was never"
+          echo "created: neither registry took the build, so there is no $TAG tag yet and nothing"
+          echo "is published anywhere."
         } > "$body"
         echo "body=$body" >> "$GITHUB_OUTPUT"
     - name: Open or update the fix pull request

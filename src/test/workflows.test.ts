@@ -344,6 +344,34 @@ describe('.github/workflows', function () {
             }
         });
 
+        it('creates the GitHub release and its tag only after a registry took the build', function () {
+            // The GitHub release is the tag, and the tag is what release-check.js reads as "this
+            // version shipped". It used to run beside the registries, so a release both of them
+            // rejected still got its tag and the version was burned while nobody could install it.
+            const github = jobs['release-github'];
+            const needs = [github?.needs ?? []].flat();
+            for (const registry of ['release-marketplace', 'release-open-vsx']) {
+                assert.ok(needs.includes(registry), `release-github does not wait for ${registry}`);
+            }
+            // At least one, not both: a single registry outage still costs only that registry.
+            assert.match(github?.if ?? '', /needs\.release-marketplace\.result == 'success'/);
+            assert.match(github?.if ?? '', /needs\.release-open-vsx\.result == 'success'/);
+            assert.match(github?.if ?? '', /\|\|/);
+            assert.match(github?.if ?? '', /needs\.build-release\.result == 'success'/);
+            // Evaluated even though a needed job failed, but never on a run someone stopped.
+            assert.match(github?.if ?? '', /!cancelled\(\)/);
+            assert.doesNotMatch(github?.if ?? '', /always\(\)/);
+
+            // A pre-release is superseded by the next push and has no fix branch, so its GitHub
+            // prerelease stays independent of the registries.
+            assert.deepStrictEqual([jobs['pre-release-github']?.needs ?? []].flat(), ['build-pre-release']);
+
+            // The fix pull request lists the skipped GitHub release: that line is what says there
+            // is no tag.
+            const summary = runsIn(workflow, 'release-failed', 'Publishing **$TAG** failed');
+            assert.match(summary?.run ?? '', /startswith\("Release:"\)/);
+        });
+
         it('opens a draft pull request on a branch when a release fails', function () {
             const failed = jobs['release-failed'];
             assert.ok(failed, 'nothing reacts to a failed release');

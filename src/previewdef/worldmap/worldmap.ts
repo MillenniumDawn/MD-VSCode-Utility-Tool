@@ -10,6 +10,7 @@ import {
 	WorldMapData,
 	MapItemMessage,
 	RequestMapItemMessage,
+	isWorldMapHostMessage,
 } from "./definitions";
 import { matchPathEnd } from "../../util/nodecommon";
 import { writeFile, getConfiguration } from "../../util/vsccommon";
@@ -18,7 +19,7 @@ import { openOrCopyHoiFile } from "../../util/previewfileopener";
 import { WorldMapLoader } from "./loader/worldmaploader";
 import { buildWorldMapChangeMessages } from "./worldmapchanges";
 import { LoaderSession } from "../../util/loader/loader";
-import { TelemetryMessage, sendByMessage } from "../../util/telemetry";
+import { sendByMessage } from "../../util/telemetry";
 
 export class WorldMap {
 	public panel: vscode.WebviewPanel | undefined;
@@ -117,11 +118,12 @@ export class WorldMap {
 		);
 	}
 
-	private async onMessage(
-		msg: WorldMapMessage | TelemetryMessage,
-	): Promise<void> {
+	private async onMessage(msg: unknown): Promise<void> {
 		try {
 			debug("worldmap message " + JSON.stringify(msg));
+			if (!isWorldMapHostMessage(msg)) {
+				return;
+			}
 			switch (msg.command) {
 				case "loaded":
 					await this.sendProvinceMapSummaryToWebview(msg.force);

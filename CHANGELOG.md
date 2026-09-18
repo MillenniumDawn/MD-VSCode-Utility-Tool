@@ -3,6 +3,26 @@ Unreleased
   Functionality:
 
 - [ CI ] The extension package no longer ships developer files (contributor notes, lint and duplication configuration, stray log and temp files), and every CI job now has a time limit so a stuck publish cannot block later releases for hours. Issue #202.
+- The extension's own interface — preview toolbars, filters, warnings and the settings descriptions — is now fully translated into Korean, Russian and Simplified Chinese, where the newer previews (characters, decisions, ideas, index status) had been showing English. Issue #191.
+- Previews drop a malformed message from their own page instead of acting on it, the condition filters in the focus tree and MIO previews show a trigger as the text it is written as, and the loading page carries a content security policy like the finished preview. Issue #201.
+- A DLC archive entry that claims an unreasonable size is refused before it is unpacked. Issue #201.
+- Indexing and file listings read mod, game and DLC folders several directories at a time instead of one after another, and the DLC archives are checked together instead of one by one, so a large mod indexes and its previews open faster. Issue #200.
+- Previews do less work on every refresh: an unchanged document is recognised without re-hashing it, effects are grouped under their conditions without rescanning, and translated text no longer rebuilds its placeholder pattern per message. Issue #200.
+- [ World Map Previewer ] A folder of files such as `history/states` or the country files behind `common/country_tags` is read a few files at a time instead of all at once, so a large mod no longer holds every file in memory during a load, and a single file that cannot be read is skipped and listed under the map's warnings instead of failing the whole preview. Issue #193.
+- Scan references on a mod with thousands of events no longer freezes the editor for minutes and no longer holds every event and localisation file in memory at once; an event or localisation file that cannot be read is now reported in the output log instead of being skipped silently. Issue #194.
+- The trigger and effect evaluators behind every preview now have their own tests, so a wrong branch shown for an `if`/`else`, `NOT` or `count_triggers` block is caught before release. Issue #199.
+
+  Bugfixes:
+
+- [ CI ] The GitHub release and its version tag are only created once the build reached the VS Code Marketplace or Open VSX, so a release that reached neither no longer burns its version number. Issue #197.
+
+- A sprite whose name contains quotes or braces no longer breaks the page styling of the GUI, focus tree, technology and MIO previews that draw it. Issue #218.
+- [ World Map Previewer ] A provinces or rivers BMP with a small, top-down, compressed or unusual-depth header is reported as a clear error instead of failing the preview or reading colours no province has. Issue #201.
+- A mod key named `__proto__` or `constructor` no longer vanishes from a parsed file or from a MIO's trait list. Issue #201.
+- [ World Map Previewer ] Exporting the map no longer leaves mouse handlers behind that made panning heavier after every export, hovering the selected province no longer paints the hover highlight over the selection, resource icons load once per map instead of on every progress update, and the warnings list is only rebuilt when the warnings change. Issue #200.
+- Dragging to pan a preview scrolls once per frame instead of once per mouse event, and a decision chain routed through several hidden decisions is bridged without repeating the same walk. Issue #200.
+- Closing VS Code while a DDS or TGA image is still being decoded no longer leaves that decode waiting forever, and a decode that hangs is abandoned after 30 seconds instead of stalling the preview that asked for it. Issue #195.
+- An image decode worker that crashes while starting no longer logs a second "exited with jobs in flight" error after its jobs were already reported failed. Issue #190.
 
 v1.1.36
 

@@ -141,7 +141,7 @@ export class StatesLoader extends FolderLoader<
 		return super.loadImpl(session);
 	}
 
-	protected async mergeFiles(
+	protected async mergeLoadedFiles(
 		fileResults: LoadResult<StateNoBoundingBox[]>[],
 		session: LoaderSession,
 	): Promise<LoadResult<StateLoaderResult>> {
@@ -264,7 +264,7 @@ class StateCategoriesLoader extends FolderLoader<
 		return super.loadImpl(session);
 	}
 
-	protected async mergeFiles(
+	protected async mergeLoadedFiles(
 		fileResults: LoadResult<StateCategory[]>[],
 	): Promise<LoadResult<Record<string, StateCategory>>> {
 		const warnings = mergeInLoadResult(fileResults, "warnings");
