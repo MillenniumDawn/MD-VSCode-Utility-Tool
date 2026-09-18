@@ -23,5 +23,17 @@ describe('webview/util/i18n', function () {
             const result = feLocalize('test.key', 'Fallback');
             assert.strictEqual(result, 'Translated value');
         });
+
+        it('leaves braces alone when there are no args', function () {
+            assert.strictEqual(feLocalize('nonexistent.key' as any, 'a {} b {0}'), 'a {} b {0}');
+        });
+
+        it('substitutes correctly when the argument count changes between calls', function () {
+            const key = 'nonexistent.key' as any;
+            assert.strictEqual(feLocalize(key, '{0} {1}', 'a', 'b'), 'a b');
+            assert.strictEqual(feLocalize(key, '{0} {1}', 'c'), 'c {1}');
+            assert.strictEqual(feLocalize(key, '{1} {0} {1}', 'd', 'e'), 'e d e');
+            assert.strictEqual(feLocalize(key, '{0} {1}', 'f', 'g'), 'f g');
+        });
     });
 });

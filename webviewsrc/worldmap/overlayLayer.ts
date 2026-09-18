@@ -342,7 +342,7 @@ function renderProvinceHoverSelection(
 	province = worldMap.getProvinceById(session.topBar.hoverProvinceId$.value);
 	if (province) {
 		if (
-			session.topBar.selectedProvinceId$ !== session.topBar.hoverProvinceId$ &&
+			session.topBar.selectedProvinceId$.value !== session.topBar.hoverProvinceId$.value &&
 			isMouseHighlightVisible(session.topBar)
 		) {
 			renderHoverProvince(session, province, worldMap);

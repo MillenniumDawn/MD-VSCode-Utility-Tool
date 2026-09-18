@@ -421,6 +421,7 @@ const table: Partial<typeof __table> = {
     "worldmap.warnings.adjacencynotexist": "{0}와 {1}가 기존 프로빈스에 인접하지 않음",
     "worldmap.warnings.adjacencythroughnotexist": "{0}가 프로빈스에 인접하지 않음",
     "worldmap.warnings.continentnotdefined": "{0} 대륙은 정의되지 않음.",
+    "worldmap.warnings.fileloadfailed": "\"{0}\" 파일을 불러오지 못했습니다: {1}",
     "worldmap.warnings.navalterrainnotdefined": "해상 지형 \"{0}\"는 정의되지 않음.",
     "worldmap.warnings.nowarnings": "경고 없음.",
     "worldmap.warnings.provincecolorconflict": "프로빈스 {0}번은 {1}와 동일한 색상을 가지고 있어 충돌함.",

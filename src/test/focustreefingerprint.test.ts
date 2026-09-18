@@ -1,4 +1,6 @@
 import * as assert from 'assert';
+import * as vscode from 'vscode';
+import { focusTreePreviewDef } from '../previewdef/focustree';
 import {
     FocusTreeStructureInput,
     FocusTreeObjectStructureInput,
@@ -231,6 +233,44 @@ describe('previewdef/focustree/fingerprint', () => {
             const asIcon = computeTreeIconFingerprint([{ focuses: { a: { icon: [{ icon: 'GFX_x' }] } } }] as any);
             const asOverlay = computeTreeIconFingerprint([{ focuses: { a: { overlay: 'GFX_x' } } }] as any);
             assert.notStrictEqual(asIcon, asOverlay);
+        });
+    });
+
+    describe('FocusTreePreview.treeFingerprintsFor', () => {
+        function preview(): any {
+            const panel = {
+                webview: {
+                    html: '',
+                    cspSource: '',
+                    asWebviewUri: (u: unknown) => u,
+                    postMessage: () => Promise.resolve(true),
+                    onDidReceiveMessage: () => ({ dispose() { /* noop */ } }),
+                },
+                visible: true,
+                onDidChangeViewState: () => ({ dispose() { /* noop */ } }),
+                onDidDispose: () => ({ dispose() { /* noop */ } }),
+            };
+            return new (focusTreePreviewDef as any).previewConstructor(vscode.Uri.file('/tmp/tree.txt'), panel);
+        }
+
+        it('fingerprints one parse once per render and again after the render state is reset', () => {
+            // The early-out check and the render result both ask for the fingerprints of the same
+            // parsed trees; serialising every tree twice per keystroke was the cost.
+            const p = preview();
+            const trees = [{ id: 'tree', focuses: { a: { id: 'a', x: 0, y: 0 } } }];
+            const other = [{ id: 'tree', focuses: { a: { id: 'a', x: 1, y: 0 } } }];
+
+            const first = p.treeFingerprintsFor(trees);
+            assert.strictEqual(p.treeFingerprintsFor(trees), first);
+            assert.notStrictEqual(p.treeFingerprintsFor(other), first);
+            assert.notStrictEqual(p.treeFingerprintsFor(trees), first);
+            assert.deepStrictEqual(p.treeFingerprintsFor(trees), first);
+
+            p.resetStructureState();
+            const again = p.treeFingerprintsFor(trees);
+            assert.notStrictEqual(again, first);
+            assert.deepStrictEqual(again, first);
+            p.dispose();
         });
     });
 });

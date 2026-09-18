@@ -421,6 +421,7 @@ const table: Partial<typeof __table> = {
     "worldmap.warnings.adjacencynotexist": "邻接的顶点地块不存在：{0}，{1}",
     "worldmap.warnings.adjacencythroughnotexist": "邻接的经过地块不存在：{0}",
     "worldmap.warnings.continentnotdefined": "编号为{0}的大洲不存在。",
+    "worldmap.warnings.fileloadfailed": "无法加载文件“{0}”：{1}",
     "worldmap.warnings.navalterrainnotdefined": "海军地形“{0}”不存在。",
     "worldmap.warnings.nowarnings": "无警告。",
     "worldmap.warnings.provincecolorconflict": "地块{0}和地块{1}的颜色冲突。",

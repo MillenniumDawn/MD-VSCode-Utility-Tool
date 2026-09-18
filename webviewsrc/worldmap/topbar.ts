@@ -361,15 +361,19 @@ export class TopBar extends Subscriber {
 					x: 0,
 					y: 0,
 					scale: 1,
-				});
-				Renderer.renderMapImpl(canvas, this, viewPoint, worldMap, {
-					preciseEdge: true,
-					overwriteRenderPrecision: 1,
-				});
-				vscode.postMessage({
-					command: "exportmap",
-					dataUrl: canvas.toDataURL(),
-				});
+				}, { interactive: false });
+				try {
+					Renderer.renderMapImpl(canvas, this, viewPoint, worldMap, {
+						preciseEdge: true,
+						overwriteRenderPrecision: 1,
+					});
+					vscode.postMessage({
+						command: "exportmap",
+						dataUrl: canvas.toDataURL(),
+					});
+				} finally {
+					viewPoint.dispose();
+				}
 			}),
 		);
 	}
@@ -472,22 +476,18 @@ export class TopBar extends Subscriber {
 			this.viewMode$.subscribe(() => this.onViewModeChange()),
 		);
 
+		// The map is re-emitted on every progress step of a load; the warnings array is replaced
+		// once, when it arrives, so the text (megabytes on a mod with many warnings) is only
+		// rebuilt when the array is a different one.
+		let renderedWarnings: WorldMapWarning[] | undefined = undefined;
 		this.addSubscription(
 			this.loader.worldMap$.subscribe((wm) => {
-				const warnings = document.getElementById(
-					"warnings",
-				) as HTMLTextAreaElement;
-				if (wm.warnings.length === 0) {
-					warnings.value = feLocalize(
-						"worldmap.warnings.nowarnings",
-						"No warnings.",
-					);
-				} else {
-					warnings.value = feLocalize(
-						"worldmap.warnings",
-						"World map warnings: \n\n{0}",
-						wm.warnings.map(warningToString).join("\n"),
-					);
+				if (wm.warnings !== renderedWarnings) {
+					renderedWarnings = wm.warnings;
+					const warnings = document.getElementById(
+						"warnings",
+					) as HTMLTextAreaElement;
+					warnings.value = warningsText(wm.warnings);
 				}
 
 				this.setSearchBoxPlaceHolder(wm);
@@ -570,5 +570,19 @@ export class TopBar extends Subscriber {
 }
 
 function warningToString(warning: WorldMapWarning): string {
+	if (warning.source.length === 0) {
+		return warning.text;
+	}
 	return `[${warning.source.map((s) => `${s.type.charAt(0).toUpperCase()}${s.type.substr(1)} ${"id" in s ? s.id : s.name}`).join(", ")}] ${warning.text}`;
+}
+
+export function warningsText(warnings: readonly WorldMapWarning[]): string {
+	if (warnings.length === 0) {
+		return feLocalize("worldmap.warnings.nowarnings", "No warnings.");
+	}
+	return feLocalize(
+		"worldmap.warnings",
+		"World map warnings: \n\n{0}",
+		warnings.map(warningToString).join("\n"),
+	);
 }

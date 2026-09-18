@@ -83,6 +83,30 @@ describe("util/hoi4gui/nodecommon", () => {
 			});
 			assert.ok(table.toRawCss().includes("width: 20px"));
 		});
+
+		it("normalizes a hostile sprite id before using it as a class name", () => {
+			const table = st();
+			const sprite: any = {
+				id: 'evil"}.x{color:red',
+				width: 10,
+				height: 10,
+				frames: [{ uri: "file:///a.png", width: 10, height: 10 }],
+			};
+			const html = renderSprite(
+				{ x: 0, y: 0 },
+				{ width: 10, height: 10 },
+				sprite,
+				0,
+				1,
+				{ styleTable: table },
+			);
+			assert.ok(html.includes("st-sprite-img-evil_34_125_46x_123color_58red-0"));
+			assert.ok(!html.includes(sprite.id));
+			assert.ok(
+				table.toRawCss().includes(".st-sprite-img-evil_34_125_46x_123color_58red-0 {"),
+			);
+			assert.ok(!table.toRawCss().includes(sprite.id));
+		});
 	});
 
 	describe("renderCorneredTileSprite", () => {
@@ -131,6 +155,36 @@ describe("util/hoi4gui/nodecommon", () => {
 				},
 			);
 			assert.ok(html.length > 0);
+		});
+
+		it("normalizes a hostile sprite id before using it as a class name", () => {
+			const table = st();
+			const sprite: any = {
+				id: 'evil"}.x{color:red',
+				width: 30,
+				height: 30,
+				borderSize: { x: 5, y: 5 },
+				getTiles: () =>
+					Array(9).fill({ uri: "file:///tile.png", width: 10, height: 10 }),
+			};
+			Object.setPrototypeOf(sprite, CorneredTileSprite.prototype);
+			const html = renderCorneredTileSprite(
+				{ x: 0, y: 0 },
+				{ width: 30, height: 30 },
+				sprite,
+				0,
+				{ styleTable: table },
+			);
+			assert.ok(
+				html.includes("st-corneredtilesprite-img-evil_34_125_46x_123color_58red-0-0-0"),
+			);
+			assert.ok(!html.includes(sprite.id));
+			assert.ok(
+				table
+					.toRawCss()
+					.includes(".st-corneredtilesprite-img-evil_34_125_46x_123color_58red-0-0-0 {"),
+			);
+			assert.ok(!table.toRawCss().includes(sprite.id));
 		});
 	});
 

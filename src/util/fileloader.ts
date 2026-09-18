@@ -32,6 +32,7 @@ import {
 	CancelledError,
 	throwIfCancelled,
 	forceError,
+	mapLimit,
 } from "./common";
 import { Logger } from "./logger";
 import { getInstallPathUri } from "./installpath";
@@ -156,6 +157,10 @@ if (!IS_WEB_EXT) {
 		factory: getDlcZip,
 		expireWhenChange: (key) => getLastModifiedAsync(vscode.Uri.parse(key)),
 		life: 10 * 60 * 1000,
+		// The default of 200ms re-stats every archive on nearly every lookup, and a stat through
+		// hoi4installpath: is two round trips. A DLC archive changes when the game updates, not
+		// between two lookups in the same listing.
+		nonExpireLife: 30 * 1000,
 		maxSize: 64,
 	});
 }
@@ -446,28 +451,55 @@ async function getFilePathFromModOrHOI4Impl(
 	if (!absolutePath && conf.loadDlcContents) {
 		const dlcs = await dlcZipPathsCache.get(installPath.toString());
 		if (dlcs !== null && dlcZipCache !== null) {
-			for (const dlc of dlcs) {
-				const dlcZip = await dlcZipCache.get(dlc.toString());
-				const entry = dlcZip.getEntry(relativePath);
+			const dlcZips = await openDlcZips(dlcs);
+			for (let i = 0; i < dlcs.length; i++) {
+				const entry = dlcZips[i]!.getEntry(relativePath);
 				if (entry !== null) {
-					return dlc.with({ fragment: relativePath });
+					return dlcs[i]!.with({ fragment: relativePath });
 				}
 			}
 		}
 
 		const dlcFolders = await dlcPathsCache.get(installPath.toString());
 		if (dlcFolders !== null) {
-			for (const dlc of dlcFolders) {
-				const findPath = vscode.Uri.joinPath(dlc, relativePath);
-				if (await isFile(findPath)) {
-					return findPath;
-				}
+			const found = await probeDlcFolders(dlcFolders, relativePath, isFile);
+			const first = found.find((uri) => uri !== null);
+			if (first) {
+				return first;
 			}
 		}
 	}
 
 	return absolutePath;
 }
+
+/**
+ * Opens (or fetches from the cache) every DLC archive at once rather than one after another.
+ * The DLC precedence is decided by whoever scans the result, in `dlcs` order; this only makes the
+ * waiting happen together. Each archive is opened at most once per session either way, so a scan
+ * that used to stop at the first hit opens nothing it would not have opened on the next lookup.
+ */
+function openDlcZips(dlcs: vscode.Uri[]): Promise<DlcZip[]> {
+	const cache = dlcZipCache!;
+	return Promise.all(dlcs.map((dlc) => cache.get(dlc.toString())));
+}
+
+/**
+ * Whether `relativePath` exists under each DLC folder, probed several at a time and returned in
+ * `dlcFolders` order so the caller still takes the first match.
+ */
+function probeDlcFolders(
+	dlcFolders: vscode.Uri[],
+	relativePath: string,
+	exists: (uri: vscode.Uri) => Promise<boolean>,
+): Promise<(vscode.Uri | null)[]> {
+	return mapLimit(dlcFolders, DLC_PROBE_CONCURRENCY, async (dlc) => {
+		const findPath = vscode.Uri.joinPath(dlc, relativePath);
+		return (await exists(findPath)) ? findPath : null;
+	});
+}
+
+const DLC_PROBE_CONCURRENCY = 8;
 
 export function isHoiFileOpened(path: vscode.Uri): boolean {
 	return path.fragment === ":opened";
@@ -1112,24 +1144,26 @@ async function visitFileSources(
 		}
 	}
 
-	// Find in HOI4 DLCs
+	// Find in HOI4 DLCs. Whether each one holds the folder is probed for all of them at once; the
+	// visits still happen one at a time in DLC order, which is what the precedence rests on.
 	if (conf.loadDlcContents) {
 		const dlcs = await dlcZipPathsCache.get(installPath.toString());
 		if (dlcs !== null && dlcZipCache !== null) {
-			for (const dlc of dlcs) {
-				const dlcZip = await dlcZipCache.get(dlc.toString());
+			const dlcZips = await openDlcZips(dlcs);
+			for (let i = 0; i < dlcs.length; i++) {
+				const dlcZip = dlcZips[i]!;
 				const folderEntry = dlcZip.getEntry(relativePath);
 				if (folderEntry && folderEntry.isDirectory) {
-					await visitor.dlcZip(dlcZip, dlc, relativePath);
+					await visitor.dlcZip(dlcZip, dlcs[i]!, relativePath);
 				}
 			}
 		}
 
 		const dlcFolders = await dlcPathsCache.get(installPath.toString());
 		if (dlcFolders !== null) {
-			for (const dlc of dlcFolders) {
-				const findPath = vscode.Uri.joinPath(dlc, relativePath);
-				if (await isDirectory(findPath)) {
+			const found = await probeDlcFolders(dlcFolders, relativePath, isDirectory);
+			for (const findPath of found) {
+				if (findPath !== null) {
 					await visitor.directory(
 						findPath,
 						`Failed to list DLC files in ${findPath}`,

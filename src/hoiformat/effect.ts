@@ -221,9 +221,7 @@ function extractEffectByCondition(
 	}
 
 	if (items.length > 0) {
-		const existing = result
-			.filter((r): r is EffectByCondition => r !== null && "condition" in r)
-			.find((r) => r.condition === condition);
+		const existing = existingByCondition(result, condition);
 		if (existing) {
 			existing.items.push(...items);
 		} else {
@@ -235,6 +233,41 @@ function extractEffectByCondition(
 	}
 
 	return { condition: true, items: result };
+}
+
+interface ConditionIndex {
+	// How far into the result array the map reflects; whatever was appended since is indexed on
+	// the next lookup, so entries pushed by any branch of the walk are seen.
+	indexed: number;
+	byCondition: Map<ConditionComplexExpr, EffectByCondition>;
+}
+
+// The same shape as condition.ts's seenKeysFor: the walk merges into one result array from every
+// branch, and finding the group for a condition by filtering the array made each merge cost every
+// group before it. The first group for a condition wins, as `.find` did.
+const conditionIndexes = new WeakMap<EffectComplexExpr[], ConditionIndex>();
+
+function existingByCondition(
+	result: EffectComplexExpr[],
+	condition: ConditionComplexExpr,
+): EffectByCondition | undefined {
+	let index = conditionIndexes.get(result);
+	if (index === undefined || index.indexed > result.length) {
+		index = { indexed: 0, byCondition: new Map() };
+		conditionIndexes.set(result, index);
+	}
+	for (; index.indexed < result.length; index.indexed++) {
+		const entry = result[index.indexed];
+		if (
+			entry !== null &&
+			entry !== undefined &&
+			"condition" in entry &&
+			!index.byCondition.has(entry.condition)
+		) {
+			index.byCondition.set(entry.condition, entry);
+		}
+	}
+	return index.byCondition.get(condition);
 }
 
 function handleIf(

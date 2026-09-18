@@ -176,6 +176,37 @@ describe('hoiformat/schema', () => {
             assert.strictEqual(result.unknown, undefined);
         });
 
+        it('gives every node its own accumulating fields when one schema converts many nodes', () => {
+            // The list of accumulating fields is remembered per schema; the fields themselves must
+            // still be fresh for each node, or one node's values would leak into the next.
+            const root = parseHoi4File([
+                'a = { tags = { X Y } item = 1 item = 2 named = { k = 1 } }',
+                'b = { tags = { Z } item = 3 named = { j = 2 } }',
+                'c = { }',
+            ].join('\n'));
+            const schema: SchemaDef<{ tags: any, item: any, named: any }> = {
+                tags: 'enum',
+                item: { _innerType: 'number', _type: 'array' },
+                named: { _innerType: 'number', _type: 'map' },
+            };
+
+            const a = convertNodeToJson(child(root, 'a'), schema) as any;
+            const b = convertNodeToJson(child(root, 'b'), schema) as any;
+            const c = convertNodeToJson(child(root, 'c'), schema) as any;
+
+            assert.deepStrictEqual(a.tags._values, ['X', 'Y']);
+            assert.deepStrictEqual(b.tags._values, ['Z']);
+            assert.deepStrictEqual(c.tags._values, []);
+            assert.deepStrictEqual(a.item, [1, 2]);
+            assert.deepStrictEqual(b.item, [3]);
+            assert.deepStrictEqual(c.item, []);
+            assert.deepStrictEqual(Object.keys(a.named._map), ['k']);
+            assert.deepStrictEqual(Object.keys(b.named._map), ['j']);
+            assert.deepStrictEqual(Object.keys(c.named._map), []);
+            assert.notStrictEqual(a.item, b.item);
+            assert.deepStrictEqual(Object.keys(c), Object.keys(a));
+        });
+
         it('matches schema keys case-insensitively', () => {
             const root = parseHoi4File([
                 'pos = { X = 5 Y = 6 }',
@@ -204,6 +235,32 @@ describe('hoiformat/schema', () => {
             const result = convertNodeToJson(child(root, 'pos'), positionSchema) as any;
             assert.strictEqual(result.x._value, 8);
             assert.strictEqual(result.y._value, 4);
+        });
+
+        // A file names its entries; one named after a prototype slot has to be an entry like
+        // any other, not a change to the object the entries live on.
+        it('keeps a map entry named __proto__ or constructor as an ordinary entry', () => {
+            const root = parseHoi4File([
+                'items = {',
+                '    __proto__ = { x = 1 y = 2 }',
+                '    constructor = { x = 3 y = 4 }',
+                '    plain = { x = 5 y = 6 }',
+                '}',
+            ].join('\n'));
+            const schema = { _innerType: positionSchema, _type: 'map' } as SchemaDef<any>;
+
+            const result = convertNodeToJson(child(root, 'items'), schema) as any;
+            assert.deepStrictEqual(Object.keys(result._map).sort(), ['__proto__', 'constructor', 'plain']);
+            assert.strictEqual(result._map['__proto__']._value.x._value, 1);
+            assert.strictEqual(result._map['constructor']._value.x._value, 3);
+            assert.strictEqual(Object.getPrototypeOf(result._map), null);
+        });
+
+        it('ignores an object child named after a prototype slot the schema does not declare', () => {
+            const root = parseHoi4File('pos = { constructor = 7 x = 1 y = 2 }');
+            const result = convertNodeToJson(child(root, 'pos'), positionSchema) as any;
+            assert.strictEqual(Object.prototype.hasOwnProperty.call(result, 'constructor'), false);
+            assert.strictEqual(result.x._value, 1);
         });
 
         it('throws for an unknown string schema', () => {

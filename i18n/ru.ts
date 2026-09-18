@@ -421,6 +421,7 @@ const table: Partial<typeof __table> = {
     "worldmap.warnings.adjacencynotexist": "Примыкание к не существующей провинции: {0}, {1}",
     "worldmap.warnings.adjacencythroughnotexist": "Примыкание к существующей провинции не удалось: {0}",
     "worldmap.warnings.continentnotdefined": "Континент {0} не найден.",
+    "worldmap.warnings.fileloadfailed": "Не удалось загрузить файл \"{0}\": {1}",
     "worldmap.warnings.navalterrainnotdefined": "Морская область \"{0}\" не найдена.",
     "worldmap.warnings.nowarnings": "Нет предупреждений, успех.",
     "worldmap.warnings.provincecolorconflict": "Провинция {0} имеет конфликт цвета с провинцией {1}.",
