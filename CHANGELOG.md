@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- [ CI ] A release the VS Code Marketplace answers with a server error is retried five, ten and fifteen minutes later, as Open VSX already was, instead of failing the release at once; the fix pull request a failed release opens now lists only the jobs that failed.
+
 v1.1.37
 
   Functionality:

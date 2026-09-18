@@ -22,7 +22,8 @@
 // registry that has just said 503 is not helped by being asked again at once. When even the
 // last attempt fails on something transient, `transient=true` is written to GITHUB_OUTPUT, which
 // is how the workflow tells "the registry is down" from "the token is wrong" and decides whether
-// the patient retry is worth running.
+// the patient retry is worth running. Both registries have that retry job: v1.1.37 failed on the
+// Marketplace answering 503 to all three quick attempts while only Open VSX had one.
 //
 // Every attempt passes --skip-duplicate. That is what makes the retry safe: a publish the registry
 // accepted before timing out on the answer is found to be there on the next attempt and counted as

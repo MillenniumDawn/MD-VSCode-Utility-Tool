@@ -94,8 +94,9 @@ also needs the publisher namespace to exist before the first publish
 
 **A failed release leaves somewhere to fix it.** When any `Release:` job fails, the bot
 pushes `fix/release-v<version>` — the failing commit plus one empty commit — and opens a
-**draft pull request** whose body lists every job in the run with a link to its log, so what
-already reached a registry is visible without opening anything. Nothing to clean up: push the
+**draft pull request** whose body lists the jobs that failed, each with a link to its log —
+only those; anything not listed passed or did not need to run, so what already reached a
+registry is visible without opening anything. Nothing to clean up: push the
 fix, mark it ready, merge. **That merge is the release**: `release-check.js` recognises the
 branch name and publishes the version again, tag or no tag, and every target treats a
 version it already has as done (`--skip-duplicate` on the Marketplace, `skipDuplicate` on
@@ -111,12 +112,14 @@ failed *pre-release* gets none of this — it runs on every push and the next on
 whose build had nothing wrong with it, and a `503: Service Unavailable` from Open VSX did the
 same to v1.1.36. `scripts/publish-extension.js` runs `vsce publish` or `ovsx publish` up to
 three times, pausing between, when the failure reads like the registry or the network rather
-than the extension; a rejected token or a bad manifest fails at once. Open VSX gets a second
-chance on top: when those quick attempts all fail on something transient, the job says so in
-its `transient` output and **Release: Open VSX (retry later)** asks again five, ten and
-fifteen minutes on. The fix pull request is opened only when that job fails too, or was
-skipped because the failure was never transient — the first Open VSX job going red is what
-starts the retry, not a release to fix. The retry waits inside the run rather than
+than the extension; a rejected token or a bad manifest fails at once. Each registry gets a
+second chance on top: when those quick attempts all fail on something transient, the job says
+so in its `transient` output and **Release: VS Code Marketplace (retry later)** or
+**Release: Open VSX (retry later)** asks again five, ten and fifteen minutes on. The
+Marketplace one was missing until v1.1.37 failed on three 503s in a row there and got a fix
+pull request for a build with nothing wrong with it. The fix pull request is opened only when
+the retry job fails too, or was skipped because the failure was never transient — the first
+registry job going red is what starts the retry, not a release to fix. The retry waits inside the run rather than
 dispatching another, because a dispatched run would sit in the same `publish` concurrency
 group while it waited; the cost is that a push to `main` in that half hour queues behind it.
 
