@@ -88,6 +88,23 @@ let showEffects: boolean = getState().decShowEffects ?? true;
 // is usually after the decisions rather than the tab they sit in.
 let showScriptedGui: boolean = getState().decShowScriptedGui ?? false;
 
+// Off by default, so a file opens the way it always has. The toolbar toggle is the position every
+// tab starts in; the exceptions are the tabs the reader opened or closed on their own with the
+// chevron on the card, stored by category key so they survive an in-place update of the file.
+let collapseAll: boolean = getState().decCollapseCategories ?? false;
+let collapseExceptions = new Set<string>(readCollapseExceptions(getState().decCollapseExceptions));
+
+export function readCollapseExceptions(stored: unknown): string[] {
+	if (!Array.isArray(stored)) {
+		return [];
+	}
+	return stored.filter((entry): entry is string => typeof entry === "string");
+}
+
+function isCategoryCollapsed(categoryKey: string): boolean {
+	return collapseAll !== collapseExceptions.has(categoryKey);
+}
+
 //#region Filtering
 
 export type DecisionFilter =
@@ -236,7 +253,13 @@ export function filteredGraph(
 
 	// Bridge the calls that ran through a decision the filter removed, so a chain keeps its arrow
 	// rather than falling into two halves.
-	const bridged = bridgeEdges(source.edges, kept);
+	const removed = new Set<string>();
+	for (const node of source.nodes) {
+		if (node.kind === "decision" && !kept.has(node.id)) {
+			removed.add(node.id);
+		}
+	}
+	const bridged = bridgeEdges(source.edges, removed);
 
 	for (const edge of bridged) {
 		if (kept.has(edge.from)) {
@@ -247,20 +270,81 @@ export function filteredGraph(
 		}
 	}
 
-	const nodes = source.nodes.filter((n) => kept.has(n.id));
-	const edges = bridged.filter((e) => kept.has(e.from) && kept.has(e.to));
+	return visibleGraphOf(source.nodes, bridged, kept);
+}
+
+// The graph made of the kept nodes and the edges between them, with a fresh root list: a decision
+// whose category is gone is a root now, and a category that lost its decisions still is one.
+function visibleGraphOf(
+	allNodes: readonly DecisionGraphNode[],
+	allEdges: readonly DecisionGraphEdge[],
+	kept: Set<string>,
+): VisibleGraph {
+	const nodes = allNodes.filter((n) => kept.has(n.id));
+	const edges = allEdges.filter((e) => kept.has(e.from) && kept.has(e.to));
 	const withParent = new Set(edges.filter((e) => e.structural).map((e) => e.to));
 	const roots = nodes.filter((n) => !withParent.has(n.id)).map((n) => n.id);
-
 	return { nodes, edges, roots };
+}
+
+// Takes the decisions of every collapsed category off the canvas, leaving the category card itself
+// so the tab can be opened again. `hidden` is what each collapsed category lost, for the badge the
+// card wears in their place. A call that ran through a hidden decision is bridged the way a filter
+// bridges one, so a chain into another tab keeps its arrow; a call out of a hidden decision has
+// nowhere to start from and goes with it, along with any placeholder only it pointed at.
+export function collapseCategories(
+	graph: VisibleGraph,
+	isCollapsed: (categoryId: string) => boolean,
+): { graph: VisibleGraph; hidden: Map<string, string[]> } {
+	const hidden = new Map<string, string[]>();
+	for (const edge of graph.edges) {
+		if (edge.structural && isCollapsed(edge.from)) {
+			const list = hidden.get(edge.from);
+			if (list) {
+				list.push(edge.to);
+			} else {
+				hidden.set(edge.from, [edge.to]);
+			}
+		}
+	}
+	if (hidden.size === 0) {
+		return { graph, hidden };
+	}
+
+	const removed = new Set<string>();
+	for (const ids of hidden.values()) {
+		for (const id of ids) {
+			removed.add(id);
+		}
+	}
+
+	const kept = new Set<string>();
+	for (const node of graph.nodes) {
+		if (node.kind !== "unresolved" && !removed.has(node.id)) {
+			kept.add(node.id);
+		}
+	}
+
+	const bridged = bridgeEdges(graph.edges, removed);
+	for (const edge of bridged) {
+		if (kept.has(edge.from)) {
+			const target = graph.nodes.find((n) => n.id === edge.to);
+			if (target?.kind === "unresolved") {
+				kept.add(edge.to);
+			}
+		}
+	}
+
+	return { graph: visibleGraphOf(graph.nodes, bridged, kept), hidden };
 }
 
 // Every call edge, with the ones that end on a removed decision redirected to whatever that
 // decision went on to call. The decisions passed through are recorded on the edge so the arrow can
-// say how many were left out.
+// say how many were left out. Only what is in `removed` is walked through: a call to a placeholder
+// the file does not define is left as it is, for the caller to decide whether the placeholder stays.
 function bridgeEdges(
 	edges: readonly DecisionGraphEdge[],
-	kept: Set<string>,
+	removed: Set<string>,
 ): DecisionGraphEdge[] {
 	const outgoing = new Map<string, DecisionGraphEdge[]>();
 	for (const edge of edges) {
@@ -298,7 +382,7 @@ function bridgeEdges(
 					continue;
 				}
 				seen.add(next.to);
-				if (kept.has(next.to)) {
+				if (!removed.has(next.to)) {
 					bridges.push({ to: next.to, skipped: [...skipped] });
 				} else {
 					skipped.push(next.to);
@@ -312,12 +396,13 @@ function bridgeEdges(
 
 	const result: DecisionGraphEdge[] = [];
 	for (const edge of edges) {
-		if (edge.structural || kept.has(edge.to)) {
+		if (edge.structural || !removed.has(edge.to)) {
 			result.push(edge);
 			continue;
 		}
+		// An edge bridged once already -- by a filter, before a collapse -- keeps what it skipped.
 		for (const bridge of bridgesFrom(edge.to)) {
-			result.push({ ...edge, to: bridge.to, skipped: [...bridge.skipped] });
+			result.push({ ...edge, to: bridge.to, skipped: [...(edge.skipped ?? []), ...bridge.skipped] });
 		}
 	}
 
@@ -409,8 +494,28 @@ function buildCategoryCard(node: DecisionGraphCategoryNode): HTMLDivElement {
 	head(card, node, node.scriptedGui ? ["gui"] : []);
 	applyNav(card, node.nav, true);
 
+	const hidden = hiddenByCategory.get(node.id);
+	const collapsed = hidden !== undefined;
+	if (collapsed || decisionCountByCategory.has(node.id)) {
+		card.querySelector(".ev-head")?.appendChild(buildCollapseButton(node.categoryKey, collapsed));
+	}
+	if (collapsed) {
+		card.classList.add("dec-card-collapsed");
+	}
+
 	const meta = document.createElement("div");
 	meta.className = "ev-meta";
+	if (hidden) {
+		const element = document.createElement("span");
+		element.className = "ev-badge dec-badge-hidden";
+		element.textContent = feLocalize("decisiontree.hiddencount", "{0} hidden", hidden.length);
+		element.title = feLocalize(
+			"decisiontree.hiddentitle",
+			"Hidden by collapsing this category: {0}",
+			hidden.map((id) => id.replace(/^d:/, "")).join(", "),
+		);
+		meta.appendChild(element);
+	}
 	if (!node.defined) {
 		badge(
 			meta,
@@ -455,6 +560,42 @@ function buildCategoryCard(node: DecisionGraphCategoryNode): HTMLDivElement {
 	}
 
 	return card;
+}
+
+// The chevron that opens or closes one tab on its own. The card it sits in is a navigator, whose
+// click and keydown listeners are on the card itself: a click here stops before it reaches them,
+// and Enter or Space is kept from the card's keydown so the button's own activation is what runs.
+function buildCollapseButton(categoryKey: string, collapsed: boolean): HTMLButtonElement {
+	const button = document.createElement("button");
+	button.className = "dec-collapse";
+	button.type = "button";
+	button.setAttribute("aria-expanded", String(!collapsed));
+	button.title = collapsed
+		? feLocalize("decisiontree.expand", "Expand this category")
+		: feLocalize("decisiontree.collapse", "Collapse this category");
+	const icon = document.createElement("i");
+	icon.className = "codicon " + (collapsed ? "codicon-chevron-right" : "codicon-chevron-down");
+	button.appendChild(icon);
+
+	button.addEventListener(
+		"click",
+		tryRun((e: Event) => {
+			e.stopPropagation();
+			if (collapseExceptions.has(categoryKey)) {
+				collapseExceptions.delete(categoryKey);
+			} else {
+				collapseExceptions.add(categoryKey);
+			}
+			setState({ decCollapseExceptions: [...collapseExceptions] });
+			buildContent();
+		}),
+	);
+	button.addEventListener("keydown", (e: KeyboardEvent) => {
+		if (e.key === "Enter" || e.key === " " || e.code === "Enter" || e.code === "Space") {
+			e.stopPropagation();
+		}
+	});
+	return button;
 }
 
 // The window is rendered by the host at the size the game draws it, which is far wider than a card,
@@ -632,6 +773,25 @@ let isolation: IsolationHandle | undefined = undefined;
 // Filled by buildContent before the cards are built, and read by buildDecisionCard. Empty whenever
 // no filter is selected, because nothing can have been left out.
 let skippedByDecision = new Map<string, string[]>();
+// Both filled by buildContent and read by buildCategoryCard: which categories have a decision to
+// fold away at all, and what a collapsed one is hiding.
+let decisionCountByCategory = new Map<string, number>();
+let hiddenByCategory = new Map<string, string[]>();
+
+function decisionCountByCategoryOf(graph: VisibleGraph): Map<string, number> {
+	const result = new Map<string, number>();
+	for (const edge of graph.edges) {
+		if (edge.structural) {
+			result.set(edge.from, (result.get(edge.from) ?? 0) + 1);
+		}
+	}
+	return result;
+}
+
+function categoryKeyOf(graph: VisibleGraph, id: string): string {
+	const node = graph.nodes.find((n) => n.id === id);
+	return node?.kind === "category" ? node.categoryKey : id;
+}
 
 function skippedByDecisionOf(graph: VisibleGraph): Map<string, string[]> {
 	const result = new Map<string, string[]>();
@@ -669,7 +829,12 @@ function buildContent(): void {
 	// here, and a filter entry it cannot use is one the stored selection must not keep.
 	applyToolbarFlags();
 
-	const graph = filteredGraph(payload, filters);
+	const filtered = filteredGraph(payload, filters);
+	decisionCountByCategory = decisionCountByCategoryOf(filtered);
+	const { graph, hidden } = collapseCategories(filtered, (id) =>
+		isCategoryCollapsed(categoryKeyOf(filtered, id)),
+	);
+	hiddenByCategory = hidden;
 	skippedByDecision = skippedByDecisionOf(graph);
 
 	if (graph.nodes.length === 0) {
@@ -831,6 +996,14 @@ function applyToolbarFlags(): void {
 		state.decShowScriptedGui,
 		false,
 	);
+	// Its neutral position is open: with nothing to fold away there is nothing to collapse.
+	collapseAll = gateToggle(
+		"collapse-categories",
+		flags.hasMissions || flags.hasDecisions,
+		state.decCollapseCategories,
+		false,
+	);
+	collapseExceptions = new Set(readCollapseExceptions(state.decCollapseExceptions));
 	filters = filterControl.gate(
 		(filter) => flags[filterAvailability[filter]],
 		readFilters(state.decisionFilters),
@@ -932,6 +1105,12 @@ window.addEventListener(
 		bindToggle("show-scripted-gui", showScriptedGui, (value) => {
 			showScriptedGui = value;
 			setState({ decShowScriptedGui: value });
+		});
+		// Flipping every tab at once is a fresh start: the tabs opened or closed one by one go too.
+		bindToggle("collapse-categories", collapseAll, (value) => {
+			collapseAll = value;
+			collapseExceptions.clear();
+			setState({ decCollapseCategories: value, decCollapseExceptions: [] });
 		});
 		filterControl.wire(filters);
 

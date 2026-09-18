@@ -135,6 +135,7 @@ describe("previewdef/decision/contentbuilder", () => {
 			"show-conditions",
 			"show-effects",
 			"show-scripted-gui",
+			"collapse-categories",
 		]) {
 			assert.ok(result.html.includes(`id="${id}"`), `expected ${id} in the shell`);
 		}
