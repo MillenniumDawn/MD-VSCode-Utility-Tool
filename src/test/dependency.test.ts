@@ -4,7 +4,11 @@ import {
     getDependenciesFromText,
     loadBounded,
     localisationKeysOf,
+    scanReferencesForEvents,
 } from '../util/dependency';
+import * as vscode from 'vscode';
+import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
+import { clearDlcZipCache } from '../util/fileloader';
 import { HOIEvent, HOIEventOption } from '../previewdef/event/schema';
 
 function option(name: string | undefined, children: string[]): HOIEventOption {
@@ -226,6 +230,146 @@ describe('util/dependency', () => {
         it('ignores comment-like text that is not a marker', () => {
             const result = getDependenciesFromText('# this is a regular comment\n#!event:events/foo.txt\n');
             assert.deepStrictEqual(result, [{ type: 'event', path: 'events/foo.txt' }]);
+        });
+    });
+
+    describe('scanReferencesForEvents', () => {
+        const eventSource = [
+            'add_namespace = mainscan',
+            'country_event = {',
+            '\tid = mainscan.1',
+            '\ttitle = mainscan.1.t',
+            '\tis_triggered_only = yes',
+            '\timmediate = { country_event = { id = linked.1 } }',
+            '\toption = { name = mainscan.1.a }',
+            '}',
+        ].join('\n') + '\n';
+        const existingMarkers = [
+            '#!event:events/linked.txt',
+            '#!localisation:localisation/other.yml',
+        ].join('\n') + '\n';
+        const fileContents: Record<string, string> = {
+            'ws/events/main.txt': eventSource,
+            'ws/events/linked.txt': [
+                'add_namespace = linked',
+                'country_event = {',
+                '\tid = linked.1',
+                '\ttitle = linked.1.t',
+                '\tis_triggered_only = yes',
+                '}',
+            ].join('\n') + '\n',
+            'ws/localisation/english.yml': 'l_english:\n mainscan.1.t: "Main title"\n mainscan.1.a: "An option"\n',
+            'ws/localisation/other.yml': 'l_english:\n unrelated.key: "Unrelated"\n',
+            'ws/localisation/notanobject.yml': 'just a scalar\n',
+            'ws/localisation/arraysection.yml': 'l_english:\n - one\n - two\n',
+        };
+        const wsPath = '/ws';
+        const wsUri = {
+            fsPath: wsPath,
+            path: wsPath,
+            scheme: 'file',
+            toString: () => 'file:///ws',
+        } as unknown as vscode.Uri;
+
+        function rel(uri: any): string {
+            return String(uri?.fsPath ?? uri?.path ?? '')
+                .replace(/\\+/g, '/')
+                .replace(/^\/|\/$/g, '');
+        }
+
+        beforeEach(function () {
+            stubVscode({
+                configuration: { modFile: '', installPath: '', loadDlcContents: true },
+                workspaceFolders: [{ uri: wsUri }],
+                getWorkspaceFolder: () => ({ uri: wsUri }),
+                stat: async (uri: any) => {
+                    const p = rel(uri);
+                    if (p === 'ws/events' || p === 'ws/localisation') {
+                        return { type: vscode.FileType.Directory, mtime: 1, ctime: 0, size: 0 };
+                    }
+                    if (p in fileContents) {
+                        return { type: vscode.FileType.File, mtime: 1, ctime: 0, size: 0 };
+                    }
+                    throw new Error('not found: ' + p);
+                },
+                readDirectory: async (uri: any) => {
+                    const p = rel(uri);
+                    if (p === 'ws/events') {
+                        return [['main.txt', vscode.FileType.File], ['linked.txt', vscode.FileType.File]];
+                    }
+                    if (p === 'ws/localisation') {
+                        return [
+                            ['english.yml', vscode.FileType.File],
+                            ['other.yml', vscode.FileType.File],
+                            ['notanobject.yml', vscode.FileType.File],
+                            ['arraysection.yml', vscode.FileType.File],
+                        ];
+                    }
+                    return [];
+                },
+                readFile: async (uri: any) => {
+                    const p = rel(uri);
+                    const content = fileContents[p];
+                    if (content === undefined) {
+                        throw new Error('not found: ' + p);
+                    }
+                    return Buffer.from(content);
+                },
+            });
+        });
+
+        afterEach(async function () {
+            restoreVscodeStubs();
+            await clearDlcZipCache();
+        });
+
+        async function scan(documentText: string): Promise<string[]> {
+            const inserted: string[] = [];
+            const editor = {
+                document: {
+                    uri: vscode.Uri.file('/ws/events/main.txt'),
+                    isClosed: false,
+                    getText: () => documentText,
+                },
+                edit: async (cb: any) => {
+                    cb({ insert: (_pos: unknown, text: string) => inserted.push(text) });
+                    return true;
+                },
+            } as unknown as vscode.TextEditor;
+
+            await scanReferencesForEvents(editor);
+            return inserted;
+        }
+
+        it('inserts the linked event files and the localisation files that carry their keys', async () => {
+            const inserted = await scan(eventSource);
+
+            assert.strictEqual(inserted.length, 1);
+            assert.strictEqual(
+                inserted[0]!,
+                '#!event:events/linked.txt\n#!localisation:localisation/english.yml\n',
+            );
+        });
+
+        it('skips a localisation file whose yaml root or language section is not an object', async () => {
+            // notanobject.yml parses to a scalar and arraysection.yml to an array; neither can
+            // answer the wanted keys, and neither may fail the scan.
+            const inserted = await scan(eventSource);
+
+            assert.strictEqual(inserted.length, 1);
+            assert.strictEqual(
+                inserted[0]!,
+                '#!event:events/linked.txt\n#!localisation:localisation/english.yml\n',
+            );
+        });
+
+        it('inserts nothing for a dependency the file already carries', async () => {
+            const inserted = await scan(eventSource + existingMarkers);
+
+            // events/linked.txt is an existing marker and localisation/other.yml is filtered out
+            // before the listing; english.yml is new but its section holds none of the keys the
+            // reached events show, so the only new marker is the english file.
+            assert.deepStrictEqual(inserted, ['#!localisation:localisation/english.yml\n']);
         });
     });
 });

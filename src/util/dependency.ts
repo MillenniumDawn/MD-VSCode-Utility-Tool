@@ -194,7 +194,7 @@ export function localisationKeysOf(events: HOIEvent[]): Set<string> {
 	return keys;
 }
 
-async function scanReferencesForEvents(editor: vscode.TextEditor) {
+export async function scanReferencesForEvents(editor: vscode.TextEditor) {
 	const eventFiles = await listFilesFromModOrHOI4("events");
 	const document = editor.document;
 	const events = await loadBounded<HOIEvents>(eventFiles, async (file) => {
