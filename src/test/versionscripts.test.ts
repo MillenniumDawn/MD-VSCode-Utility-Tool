@@ -1187,6 +1187,20 @@ describe('scripts/pr-bullets', function () {
                 { bullets: [], pullRequests: [], entries: [] });
         });
 
+        it('writes nothing for a pull request Dependabot opened', function () {
+            // A dependency bump says nothing to a user, and one arrives every week.
+            const result = prBullets.bulletsFromPullRequests([
+                { number: 40, title: 'Bump webpack from 5.1 to 5.2', body: '', user: { login: 'dependabot[bot]' } },
+                { number: 41, title: 'Draw the thing', body: '', user: { login: 'someone' } },
+            ]);
+
+            assert.deepStrictEqual(result.pullRequests, [41]);
+            assert.deepStrictEqual(result.bullets, ['- Draw the thing.']);
+            assert.strictEqual(prBullets.isDependencyBump({ user: { login: 'Dependabot[bot]' } }), true);
+            assert.strictEqual(prBullets.isDependencyBump({ user: { login: 'dependabot' } }), false);
+            assert.strictEqual(prBullets.isDependencyBump({}), false);
+        });
+
         it('prefixes the bullet with the component its files earned', function () {
             const result = prBullets.bulletsFromPullRequests([{
                 number: 62,
@@ -1722,6 +1736,31 @@ describe('scripts/rewrite-bullets', function () {
             assert.strictEqual(calls.length, 1);
             assert.strictEqual(written.get(1), 'The first thing works.');
             assert.strictEqual(written.get(2), 'The second is fixed.');
+        });
+
+        it('ignores a reply for a pull request that was not in the batch', async function () {
+            // A model that lost track answers for #7; taking it would write wording for a pull
+            // request nobody asked about, and a transposed number would swap two bullets unseen.
+            const seen: string[] = [];
+            globalThis.fetch = (async (_url: string, init: { body: string }) => {
+                seen.push(init.body);
+                if (seen.length === 1) {
+                    return reply(JSON.stringify({
+                        bullets: [
+                            { number: 7, text: 'A sentence for a stranger.' },
+                            { number: 1, text: 'The first thing works.' },
+                        ],
+                    }));
+                }
+                return reply('The second is fixed.');
+            }) as unknown as typeof globalThis.fetch;
+
+            const written = await rewriteBullets.rewrite(entries, 'key');
+            assert.strictEqual(written.get(1), 'The first thing works.');
+            // #2 had no usable reply in the batch, so it went through the one-at-a-time tier.
+            assert.strictEqual(written.get(2), 'The second is fixed.');
+            assert.strictEqual(written.has(7), false);
+            assert.strictEqual(seen.length, 2);
         });
 
         it('retries one at a time when the structured reply is unusable', async function () {
