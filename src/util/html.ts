@@ -26,9 +26,9 @@ export function previewedFileUriScript(uri: vscode.Uri): DynamicScript {
 // each contentbuilder because the zoom it steers lives in the webview code every preview shares, so
 // one copy in the one function they all build their HTML through is the whole of it. Stringified so
 // a value that is not one of the three (a test stub's bare configuration object has none) cannot
-// reach the page as anything but a string, and read back as "auto" there.
+// reach the page as anything but a string, and read back as "scroll" there.
 function previewWheelScript(): DynamicScript {
-    return { content: `window.previewWheel = ${JSON.stringify(previewWheel ?? 'auto')};` };
+    return { content: `window.previewWheel = ${JSON.stringify(previewWheel ?? 'scroll')};` };
 }
 
 export function html(webview: vscode.Webview, body: string, scripts: (string | DynamicScript)[], styles?: (string | StyleTable | DynamicScript | NonceOnly)[]): string {

@@ -55,8 +55,8 @@ warnings view that points at invalid province crossings and other map file mista
 **Sprites and images.** `.dds` and `.tga` files open as images straight in the editor, and a
 `.gfx` file shows every sprite it defines.
 
-**In every preview.** Zoom with the mouse wheel, Ctrl+wheel, the zoom buttons or the +/- keys;
-pan with the trackpad. Click an element to jump to its definition. Text comes from your
+**In every preview.** Scroll with the mouse wheel or the trackpad, or drag the canvas; zoom with
+Ctrl+wheel, the zoom buttons or the +/- keys. Click an element to jump to its definition. Text comes from your
 localisation files, in the language you choose. Vanilla and DLC content is read from your game
 install, and the mod's `.mod` file is honoured for `replace_path`. A submod that only holds the
 files it overrides gets the mods it extends from the `dependencies` list in its `.mod` file, each
@@ -95,7 +95,7 @@ The Settings editor lists them under the extension in these sections.
 | Setting | What it does |
 |---|---|
 | `mdHoi4Utilities.previewLocalisation` | Language of the text shown in previews. |
-| `mdHoi4Utilities.previewWheel` | What a plain mouse wheel does: `auto` (zoom for a mouse, scroll for a trackpad), `zoom` or `scroll`. |
+| `mdHoi4Utilities.previewWheel` | What a plain mouse wheel does: `scroll` (default), `zoom`, or `auto` (zoom for a mouse, scroll for a trackpad). Ctrl+wheel, the zoom buttons and the +/- keys always zoom. |
 | `mdHoi4Utilities.eventTreePreview`, `decisionPreview`, `ideaPreview`, `characterPreview` | Turn an individual preview on or off. |
 | `mdHoi4Utilities.useConditionInFocus` | Show conditions in the focus tree preview. |
 | `mdHoi4Utilities.inlayWindowGfxRoots` | Folders scanned for the `.gfx` files that focus inlay windows use. |
