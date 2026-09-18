@@ -6,6 +6,15 @@ import { BehaviorSubject, fromEvent, Observable } from 'rxjs';
 
 type ViewPointObj = { x: number; y: number; scale: number; };
 
+export interface ViewPointOptions {
+    /**
+     * Whether the view point follows the mouse on its canvas. Off for an offscreen canvas such as
+     * the export, which only needs the coordinate conversion: the dragger subscribes to mouse
+     * events on `document.body`, and a view point nobody disposes keeps those forever.
+     */
+    interactive?: boolean;
+}
+
 export class ViewPoint extends Subscriber {
     public x: number;
     public y: number;
@@ -17,13 +26,16 @@ export class ViewPoint extends Subscriber {
         private loader: { worldMap: FEWorldMap | undefined },
         private topBarHeight: number,
         viewPointObj: ViewPointObj,
+        options?: ViewPointOptions,
     ) {
         super();
         this.x = viewPointObj.x;
         this.y = viewPointObj.y;
         this.scale = viewPointObj.scale;
         this.observable$ = new BehaviorSubject<ViewPointObj>(viewPointObj);
-        this.enableDragger();
+        if (options?.interactive !== false) {
+            this.enableDragger();
+        }
     }
 
     public convertX(x: number) {

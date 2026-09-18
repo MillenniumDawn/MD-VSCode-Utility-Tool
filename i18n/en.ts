@@ -453,6 +453,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"worldmap.warnings.adjacencythroughnotexist":
 		"Adjacency not through an existing province: {0}",
 	"worldmap.warnings.continentnotdefined": "Continent {0} is not defined.",
+	"worldmap.warnings.fileloadfailed": 'Failed to load "{0}": {1}',
 	"worldmap.warnings.navalterrainnotdefined":
 		'Naval terrain "{0}" is not defined.',
 	"worldmap.warnings.nowarnings": "No warnings.",

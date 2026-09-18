@@ -6,7 +6,7 @@ import {
 	HOIPartial,
 	emptyMap,
 } from "../../../hoiformat/schema";
-import { Country } from "../definitions";
+import { Country, WorldMapWarning } from "../definitions";
 import { readFileFromModOrHOI4AsJson } from "../../../util/fileloader";
 import { error } from "../../../util/debug";
 import {
@@ -17,9 +17,14 @@ import {
 	LoadResultOD,
 	mergeInLoadResult,
 	convertColor,
+	fileLoadFailureWarning,
 } from "./common";
 import { localize } from "../../../util/i18n";
-import { LoaderSession } from "../../../util/loader/loader";
+import {
+	FOLDER_LOAD_CONCURRENCY,
+	LoaderSession,
+} from "../../../util/loader/loader";
+import { mapLimit } from "../../../util/common";
 import { flatMap } from "lodash";
 import { Tag, countryTagsFolder, loadCountryTagsFile } from "../../../util/countrytags";
 
@@ -72,8 +77,10 @@ export class CountriesLoader extends Loader<Country[]> {
 		}
 
 		return (
-			await Promise.all(
-				Object.values(this.countryLoaders).map((l) => l.shouldReload(session)),
+			await mapLimit(
+				Object.values(this.countryLoaders),
+				FOLDER_LOAD_CONCURRENCY,
+				(l) => l.shouldReload(session),
 			)
 		).some((v) => v);
 	}
@@ -87,8 +94,6 @@ export class CountriesLoader extends Loader<Country[]> {
 
 		const tagsResult = await this.countryTagsLoader.load(session);
 		const countryTags = tagsResult.result;
-		const countryResultPromises: Promise<LoadResult<Country | undefined>>[] =
-			[];
 		const newCountryLoaders: Record<string, CountryLoader> = {};
 
 		for (const tag of countryTags) {
@@ -99,13 +104,29 @@ export class CountriesLoader extends Loader<Country[]> {
 				countryLoader.onProgress((e) => this.onProgressEmitter.fire(e));
 			}
 
-			countryResultPromises.push(countryLoader.load(session));
 			newCountryLoaders[tag.tag] = countryLoader;
 		}
 
 		this.countryLoaders = newCountryLoaders;
 
-		const countriesResult = await Promise.all(countryResultPromises);
+		// A tag whose country file is missing rejects before loadCountry gets to catch it; that
+		// tag is skipped and listed as a warning rather than costing the map every other country.
+		const failureWarnings: WorldMapWarning[] = [];
+		const countriesResult = (
+			await mapLimit(countryTags, FOLDER_LOAD_CONCURRENCY, async (tag) => {
+				const countryLoader = newCountryLoaders[tag.tag]!;
+				try {
+					return await countryLoader.load(session);
+				} catch (e) {
+					session.throwIfCancelled();
+					error(e);
+					failureWarnings.push(fileLoadFailureWarning(countryLoader.file, e));
+					return undefined;
+				}
+			})
+		).filter(
+			(r): r is LoadResult<Country | undefined> => r !== undefined,
+		);
 		const colorsFileResult = await this.colorsLoader.load(session);
 
 		const countries = countriesResult
@@ -119,7 +140,10 @@ export class CountriesLoader extends Loader<Country[]> {
 		return {
 			result: countries,
 			dependencies: mergeInLoadResult(allResults, "dependencies"),
-			warnings: mergeInLoadResult(allResults, "warnings"),
+			warnings: [
+				...mergeInLoadResult(allResults, "warnings"),
+				...failureWarnings,
+			],
 		};
 	}
 
@@ -157,7 +181,7 @@ class CountryTagsLoader extends FolderLoader<Tag[], Tag[]> {
 		super(countryTagsFolder, CountryTagLoader);
 	}
 
-	protected mergeFiles(
+	protected mergeLoadedFiles(
 		fileResults: LoadResult<Tag[]>[],
 	): Promise<LoadResult<Tag[]>> {
 		return Promise.resolve<LoadResult<Tag[]>>({

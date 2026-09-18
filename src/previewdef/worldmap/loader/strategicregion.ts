@@ -89,7 +89,7 @@ export class StrategicRegionsLoader extends FolderLoader<
 		return super.loadImpl(session);
 	}
 
-	protected async mergeFiles(
+	protected async mergeLoadedFiles(
 		fileResults: LoadResult<StrategicRegionNoRegion[]>[],
 		session: LoaderSession,
 	): Promise<LoadResult<StrategicRegionsLoaderResult>> {

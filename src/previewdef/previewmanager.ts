@@ -51,7 +51,10 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
     ];
     private _previewProvidersMap: Record<string, PreviewProviderDef> = arrayToMap(this._previewProviders, 'type');
 
-    private _updateSubscriptions: Map<string[], PreviewBase[]> = new Map();
+    // Keyed by the joined path so previews sharing a dependency share one entry; a Map keyed by
+    // the segment arrays themselves could never hit, and every document change then matched the
+    // path against one entry per preview per dependency.
+    private _updateSubscriptions: Map<string, { segments: string[]; previews: PreviewBase[] }> = new Map();
 
     public register(): vscode.Disposable {
         const disposables: vscode.Disposable[] = [];
@@ -220,27 +223,27 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
     }
 
     private addPreviewToSubscription(previewItem: PreviewBase, dependency: string[]): void {
-        const matchStrings = Object.values(dependency)
-            .map(d => d.split('/').filter(v => v));
-
-        for (const matchString of matchStrings) {
-            const subscriptions = this._updateSubscriptions.get(matchString);
-            if (subscriptions) {
-                subscriptions.push(previewItem);
+        for (const d of Object.values(dependency)) {
+            const segments = d.split('/').filter(v => v);
+            // matchPathEnd compares case-insensitively, so two spellings of one path are one entry.
+            const key = segments.join('/').toLowerCase();
+            const subscription = this._updateSubscriptions.get(key);
+            if (subscription) {
+                subscription.previews.push(previewItem);
             } else {
-                this._updateSubscriptions.set(matchString, [ previewItem ]);
+                this._updateSubscriptions.set(key, { segments, previews: [ previewItem ] });
             }
         }
     }
 
     private removePreviewFromSubscription(previewItem: PreviewBase): void {
-        for (const [matchString, subscriptions] of this._updateSubscriptions.entries()) {
-            if (subscriptions.includes(previewItem)) {
-                const newSubscriptions = subscriptions.filter(v => v !== previewItem);
-                if (newSubscriptions.length === 0) {
-                    this._updateSubscriptions.delete(matchString);
+        for (const [key, subscription] of this._updateSubscriptions.entries()) {
+            if (subscription.previews.includes(previewItem)) {
+                const previews = subscription.previews.filter(v => v !== previewItem);
+                if (previews.length === 0) {
+                    this._updateSubscriptions.delete(key);
                 } else {
-                    this._updateSubscriptions.set(matchString, newSubscriptions);
+                    subscription.previews = previews;
                 }
             }
         }
@@ -248,9 +251,9 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
     private getPreviewItemsNeedsUpdate(uri: string): PreviewBase[] {
         const result: PreviewBase[] = [];
-        for (const [ matchString, previewItems ] of this._updateSubscriptions.entries()) {
-            if (matchPathEnd(uri, matchString)) {
-                result.push(...previewItems);
+        for (const subscription of this._updateSubscriptions.values()) {
+            if (matchPathEnd(uri, subscription.segments)) {
+                result.push(...subscription.previews);
             }
         }
 

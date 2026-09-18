@@ -176,6 +176,37 @@ describe('hoiformat/schema', () => {
             assert.strictEqual(result.unknown, undefined);
         });
 
+        it('gives every node its own accumulating fields when one schema converts many nodes', () => {
+            // The list of accumulating fields is remembered per schema; the fields themselves must
+            // still be fresh for each node, or one node's values would leak into the next.
+            const root = parseHoi4File([
+                'a = { tags = { X Y } item = 1 item = 2 named = { k = 1 } }',
+                'b = { tags = { Z } item = 3 named = { j = 2 } }',
+                'c = { }',
+            ].join('\n'));
+            const schema: SchemaDef<{ tags: any, item: any, named: any }> = {
+                tags: 'enum',
+                item: { _innerType: 'number', _type: 'array' },
+                named: { _innerType: 'number', _type: 'map' },
+            };
+
+            const a = convertNodeToJson(child(root, 'a'), schema) as any;
+            const b = convertNodeToJson(child(root, 'b'), schema) as any;
+            const c = convertNodeToJson(child(root, 'c'), schema) as any;
+
+            assert.deepStrictEqual(a.tags._values, ['X', 'Y']);
+            assert.deepStrictEqual(b.tags._values, ['Z']);
+            assert.deepStrictEqual(c.tags._values, []);
+            assert.deepStrictEqual(a.item, [1, 2]);
+            assert.deepStrictEqual(b.item, [3]);
+            assert.deepStrictEqual(c.item, []);
+            assert.deepStrictEqual(Object.keys(a.named._map), ['k']);
+            assert.deepStrictEqual(Object.keys(b.named._map), ['j']);
+            assert.deepStrictEqual(Object.keys(c.named._map), []);
+            assert.notStrictEqual(a.item, b.item);
+            assert.deepStrictEqual(Object.keys(c), Object.keys(a));
+        });
+
         it('matches schema keys case-insensitively', () => {
             const root = parseHoi4File([
                 'pos = { X = 5 Y = 6 }',

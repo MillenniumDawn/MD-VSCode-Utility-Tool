@@ -1,14 +1,23 @@
-import { Zone, Point, Region, MapLoaderExtra } from "../definitions";
+import {
+	Zone,
+	Point,
+	Region,
+	MapLoaderExtra,
+	WorldMapWarning,
+} from "../definitions";
 import { DetailValue, Enum } from "../../../hoiformat/schema";
 import { clipNumber, hsvToRgb } from "../../../util/common";
 import {
 	Loader as CommonLoader,
 	FileLoader as CommonFileLoader,
 	FolderLoader as CommonFolderLoader,
+	FolderFileFailure,
+	LoaderSession,
 	mergeInLoadResult as commonMergeInLoadResult,
 	LoadResult as CommonLoadResult,
 	LoadResultOD as CommonLoadResultOD,
 } from "../../../util/loader/loader";
+import { localize } from "../../../util/i18n";
 import { maxBy } from "lodash";
 
 export abstract class Loader<T> extends CommonLoader<T, MapLoaderExtra> {}
@@ -21,7 +30,44 @@ export abstract class FolderLoader<T, F> extends CommonFolderLoader<
 	F,
 	MapLoaderExtra,
 	MapLoaderExtra
-> {}
+> {
+	// A file the folder could not load is a warning on the map, not an error page: the merge runs
+	// over the files that did load and the skipped ones are listed next to every other warning.
+	protected async mergeFiles(
+		fileResults: LoadResult<F>[],
+		session: LoaderSession,
+		failures: FolderFileFailure[],
+	): Promise<LoadResult<T>> {
+		const result = await this.mergeLoadedFiles(fileResults, session);
+		for (const failure of failures) {
+			result.warnings.push(
+				fileLoadFailureWarning(failure.file, failure.error),
+			);
+		}
+		return result;
+	}
+
+	protected abstract mergeLoadedFiles(
+		fileResults: LoadResult<F>[],
+		session: LoaderSession,
+	): Promise<LoadResult<T>>;
+}
+
+export function fileLoadFailureWarning(
+	file: string,
+	error: unknown,
+): WorldMapWarning {
+	return {
+		source: [],
+		relatedFiles: [file],
+		text: localize(
+			"worldmap.warnings.fileloadfailed",
+			'Failed to load "{0}": {1}',
+			file,
+			error instanceof Error ? error.message : String(error),
+		),
+	};
+}
 
 export const mergeInLoadResult = commonMergeInLoadResult;
 
