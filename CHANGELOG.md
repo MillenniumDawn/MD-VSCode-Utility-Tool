@@ -13,6 +13,8 @@ Unreleased
 
   Bugfixes:
 
+- [ CI ] The GitHub release and its version tag are only created once the build reached the VS Code Marketplace or Open VSX, so a release that reached neither no longer burns its version number. Issue #197.
+
 - A sprite whose name contains quotes or braces no longer breaks the page styling of the GUI, focus tree, technology and MIO previews that draw it. Issue #218.
 - [ World Map Previewer ] A provinces or rivers BMP with a small, top-down, compressed or unusual-depth header is reported as a clear error instead of failing the preview or reading colours no province has. Issue #201.
 - A mod key named `__proto__` or `constructor` no longer vanishes from a parsed file or from a MIO's trait list. Issue #201.

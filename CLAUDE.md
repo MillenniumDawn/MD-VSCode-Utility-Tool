@@ -77,11 +77,14 @@ pre-release and nothing else. The same rule answers the **Run workflow** button:
 with no tag yet is published, a tagged one gets a release pull request with the bump size
 you pick. One workflow because a release that is a black box is a release nobody can debug.
 `verify` lints and tests the commit once; then a build job packages the `.vsix` and hands it
-to **three sibling jobs — VS Code Marketplace, Open VSX, GitHub release — that publish in
-parallel**. They are siblings on
-purpose: as steps in a row, a Marketplace outage took Open VSX and the GitHub release down
-with it, and re-running meant re-running all three. Now the Actions graph names what broke
-and re-running one job republishes one target.
+to **two sibling jobs — VS Code Marketplace and Open VSX — that publish in parallel**. They
+are siblings on purpose: as steps in a row, a Marketplace outage took Open VSX and the GitHub
+release down with it, and re-running meant re-running all of them. Now the Actions graph names
+what broke and re-running one job republishes one target. **The GitHub release comes after
+both, and only when at least one registry took the build**, because that release is the tag
+and the tag is what says a version shipped. A release both registries rejected used to get
+its tag anyway, so the version read as released while nobody could install it; now it keeps
+no tag, and the next release pull request takes that version over instead of bumping past it.
 
 **A registry with no token fails.** It used to skip and leave the job green, which is how
 the extension reached nobody on Open VSX for months while every run said success. `VSCE_PAT`
