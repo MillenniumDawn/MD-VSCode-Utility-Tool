@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { html, htmlEscape } from '../util/html';
+import { html, htmlEscape, loadingShellHtml } from '../util/html';
 import { StyleTable } from '../util/styletable';
 
 describe('util/html', () => {
@@ -50,6 +50,31 @@ describe('util/html', () => {
             assert.ok(!styleSrc.includes('nonce-'));
             assert.ok(/script-src ('nonce-[^']+' )+stub-csp/.test(page));
             assert.ok(page.includes('.st-x { color: red; }'));
+        });
+    });
+
+    // The shell is assigned to webview.html directly, not through html(), so it carries its own
+    // policy: nothing from outside, and its one <style> and one <script> admitted by nonce.
+    describe('loadingShellHtml', () => {
+        it('locks the page down to its own style and script', () => {
+            const page = loadingShellHtml('Loading <b>x</b>');
+            const meta = /<meta http-equiv="Content-Security-Policy" content="([^"]*)">/.exec(page);
+            assert.ok(meta, 'expected a CSP meta tag');
+            const policy = meta![1];
+            assert.ok(policy.includes("default-src 'none'"));
+            assert.ok(!policy.includes('unsafe-inline'));
+            const styleNonce = /style-src 'nonce-([A-Za-z0-9]+)'/.exec(policy)?.[1];
+            const scriptNonce = /script-src 'nonce-([A-Za-z0-9]+)'/.exec(policy)?.[1];
+            assert.ok(styleNonce && scriptNonce);
+            assert.ok(page.includes(`<style nonce="${styleNonce}">`));
+            assert.ok(page.includes(`<script nonce="${scriptNonce}">`));
+            assert.ok(!/<style>|<script>/.test(page));
+            assert.ok(page.includes('Loading&nbsp;&lt;b&gt;x&lt;/b&gt;'));
+        });
+
+        it('uses a fresh nonce per page', () => {
+            const nonceOf = (page: string) => /style-src 'nonce-([A-Za-z0-9]+)'/.exec(page)?.[1];
+            assert.notStrictEqual(nonceOf(loadingShellHtml()), nonceOf(loadingShellHtml()));
         });
     });
 });

@@ -609,7 +609,7 @@ function updateSelectedFocusTree(clearCondition: boolean) {
                 ${conditionExprs
 									.map(
 										(option) =>
-											`<div class="option" value='${option.scopeName}!|${option.nodeContent}'>${option.scopeName ? `[${option.scopeName}]` : ""}${option.nodeContent}</div>`,
+											`<div class="option" value="${escapeAttr(`${option.scopeName}!|${option.nodeContent}`)}">${option.scopeName ? `[${escapeAttr(option.scopeName)}]` : ""}${escapeAttr(option.nodeContent)}</div>`,
 									)
 									.join("")}`;
 			conditions.selectedValues$.next(
@@ -632,7 +632,7 @@ function updateSelectedFocusTree(clearCondition: boolean) {
                 ${inlayConditionExprs
 									.map(
 										(option) =>
-											`<div class="option" value='${option.scopeName}!|${option.nodeContent}'>${option.scopeName ? `[${option.scopeName}]` : ""}${option.nodeContent}</div>`,
+											`<div class="option" value="${escapeAttr(`${option.scopeName}!|${option.nodeContent}`)}">${option.scopeName ? `[${escapeAttr(option.scopeName)}]` : ""}${escapeAttr(option.nodeContent)}</div>`,
 									)
 									.join("")}`;
 			inlayConditions.selectedValues$.next(

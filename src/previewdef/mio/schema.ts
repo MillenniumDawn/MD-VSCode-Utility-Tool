@@ -1,6 +1,6 @@
 import { ConditionComplexExpr, ConditionItem, extractConditionValue } from "../../hoiformat/condition";
 import { Node, Token } from "../../hoiformat/hoiparser";
-import { CustomMap, Enum, HOIPartial, Raw, SchemaDef, convertNodeToJson } from "../../hoiformat/schema";
+import { CustomMap, Enum, HOIPartial, Raw, SchemaDef, convertNodeToJson, emptyMap } from "../../hoiformat/schema";
 import { Warning, randomString } from "../../util/common";
 import { localize } from "../../util/i18n";
 
@@ -173,7 +173,9 @@ function getMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }, depend
     const id = mioDefItem._key;
     const mioDef = mioDefItem._value;
     const baseMio = mioDef.include ? dependentMios.find(m => m.id === mioDef.include) : undefined;
-    const traits = baseMio?.traits ? {...baseMio.traits} : {};
+    // Keyed by the trait token the file wrote, so the map has no prototype for a token like
+    // __proto__ or constructor to land on.
+    const traits: Record<string, MioTrait> = Object.assign(emptyMap<MioTrait>(), baseMio?.traits);
     const textHeaders: MioTextHeader[] = baseMio?.textHeaders ? [...baseMio.textHeaders] : [];
     const conditionExprs = baseMio?.conditionExprs ? [...baseMio.conditionExprs] : [];
     const warnings: MioWarning[] = [];
@@ -238,9 +240,9 @@ function getMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }, depend
 }
 
 function validateRelativePositionId(traits: Record<string, MioTrait>, warnings: MioWarning[]) {
-    const relativePositionId: Record<string, MioTrait | undefined> = {};
+    const relativePositionId: Record<string, MioTrait | undefined> = emptyMap();
     const relativePositionIdChain: string[] = [];
-    const circularReported: Record<string, boolean> = {};
+    const circularReported: Record<string, boolean> = emptyMap();
 
     for (const trait of Object.values(traits)) {
         if (trait.relativePositionId === undefined) {
