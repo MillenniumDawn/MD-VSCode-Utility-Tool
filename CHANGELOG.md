@@ -35,6 +35,7 @@ v1.1.37
 - The development toolchain installs cleanly again after a dependency update broke it. Dependency updates that are incompatible with the supported Node and Visual Studio Code versions are held back until those support windows move.
 - With a filter selected, the decision preview kept dropping the "Not defined in this file" placeholder a surviving decision called, and the arrow with it; the placeholder now stays as long as something on the canvas points at it.
 - The DDS and TGA image viewer now limits the files its page may load to the extension's own folder, like the other previews, instead of the whole workspace. Issue #317.
+- A plain mouse wheel scrolls the focus tree, technology, MIO, event and decision previews again. It had zoomed instead, which shrank the tree until it fit the pane, took the scrollbar with it and left the wheel doing nothing. Zoom with Ctrl+wheel, the zoom buttons or the +/- keys, or set `mdHoi4Utilities.previewWheel` to `auto` or `zoom` to have the wheel zoom. Issue #336.
 
 v1.1.36
 

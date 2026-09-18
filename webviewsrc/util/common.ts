@@ -37,12 +37,14 @@ export function setPreviewOption(key: string, value: boolean): void {
 }
 
 // What a bare wheel does, from the `mdHoi4Utilities.previewWheel` setting the host renders into
-// every preview. "auto" reads the gesture -- see wheelIsFromMouse below -- and "zoom"/"scroll" are
-// the reader overriding it, which is the way out for a device the reading gets wrong. Anything else,
-// including the setting never having been rendered, is "auto".
+// every preview. "scroll" is the default: the wheel moves the page and zoom is ctrl+wheel, the
+// buttons and the keys. "auto" reads the gesture -- see wheelIsFromMouse below -- so a mouse notch
+// zooms, and "zoom" makes every wheel zoom. Anything else, including the setting never having been
+// rendered, is "scroll": a wheel that zooms by default shrank the tree until it fit the pane, at
+// which point the scrollbar went and the wheel, still swallowed at the clamp, moved nothing.
 function wheelMode(): string {
 	const value = (window as any).previewWheel;
-	return value === "zoom" || value === "scroll" ? value : "auto";
+	return value === "zoom" || value === "auto" ? value : "scroll";
 }
 
 export function scrollToState() {
@@ -158,10 +160,11 @@ let activeZoom: ((delta: number, pageX: number, pageY: number) => void) | undefi
 let activeZoomTop = 0;
 let zoomListenersRegistered = false;
 
-// A mouse notch and a two-finger trackpad swipe arrive as the same `wheel` event and want opposite
-// things: the notch is the only zoom gesture a mouse has, while the swipe is the laptop moving the
-// camera. Nothing in the platform tells them apart -- PointerEvent.pointerType says "mouse" for
-// both -- so the event itself is read, on `wheel` only and never on a pointer move.
+// Under `previewWheel: "auto"` only. A mouse notch and a two-finger trackpad swipe arrive as the
+// same `wheel` event and want opposite things: the notch is the only zoom gesture a mouse has,
+// while the swipe is the laptop moving the camera. Nothing in the platform tells them apart --
+// PointerEvent.pointerType says "mouse" for both -- so the event itself is read, on `wheel` only
+// and never on a pointer move.
 //
 // A webview is always Chromium, which reports a detent as a whole number of 120ths in the legacy
 // wheelDelta. That unit is the detent itself, so it survives the OS "lines per notch" setting that
@@ -278,9 +281,9 @@ export function enableZoom(
 			const fromMouse = wheelIsFromMouse(e);
 
 			// ctrl/cmd + wheel zooms on any device -- it is also what a trackpad pinch sends. A
-			// bare wheel depends on what sent it: a mouse notch zooms, since that is the only zoom
-			// gesture a mouse has, while a two-finger swipe is left to scroll the document, which
-			// is what panning already is here.
+			// bare wheel scrolls the document unless the setting says otherwise: under "auto" it
+			// depends on what sent it, a mouse notch zooming and a two-finger swipe scrolling, and
+			// under "zoom" it always zooms.
 			if (
 				!e.ctrlKey &&
 				!e.metaKey &&

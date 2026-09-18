@@ -118,7 +118,7 @@
 					"mdHoi4Utilities.previewWheel": {
 						"title": "Previews: what the mouse wheel does",
 						"type": "string",
-						"default": "auto",
+						"default": "scroll",
 						"enum": [
 							"auto",
 							"zoom",
