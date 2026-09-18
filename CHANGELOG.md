@@ -11,8 +11,11 @@ Unreleased
 - [ World Map Previewer ] A folder of files such as `history/states` or the country files behind `common/country_tags` is read a few files at a time instead of all at once, so a large mod no longer holds every file in memory during a load, and a single file that cannot be read is skipped and listed under the map's warnings instead of failing the whole preview. Issue #193.
 - Scan references on a mod with thousands of events no longer freezes the editor for minutes and no longer holds every event and localisation file in memory at once; an event or localisation file that cannot be read is now reported in the output log instead of being skipped silently. Issue #194.
 - The trigger and effect evaluators behind every preview now have their own tests, so a wrong branch shown for an `if`/`else`, `NOT` or `count_triggers` block is caught before release. Issue #199.
+- Greyscale and colour-mapped TGA images now decode in the previews and the image viewer instead of being refused as unsupported.
 
   Bugfixes:
+
+- An empty or comment-only localisation file no longer stops "Scan references" with a YAML error.
 
 - [ CI ] The GitHub release and its version tag are only created once the build reached the VS Code Marketplace or Open VSX, so a release that reached neither no longer burns its version number. Issue #197.
 - [ CI ] A release no longer fails outright when Open VSX is briefly unavailable: the publish is retried for up to half an hour, and a fix pull request is only opened once that has given up too.
