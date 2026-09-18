@@ -3,6 +3,7 @@ Unreleased
   Bugfixes:
 
 - Closing VS Code while a DDS or TGA image is still being decoded no longer leaves that decode waiting forever, and a decode that hangs is abandoned after 30 seconds instead of stalling the preview that asked for it. Issue #195.
+- An image decode worker that crashes while starting no longer logs a second "exited with jobs in flight" error after its jobs were already reported failed. Issue #190.
 
 v1.1.36
 

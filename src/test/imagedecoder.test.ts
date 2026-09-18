@@ -12,6 +12,7 @@ import {
 	_getWorkerCountForTest,
 	_setImageJobTimeoutForTest,
 	_isWorkerPoolDisabledForTest,
+	_getLiveWorkerCountForTest,
 } from "../util/image/imagedecoder";
 import { UserError } from "../util/common";
 // Imported only so tsc emits the worker file into this test's outDir; it is import-safe on the main
@@ -190,6 +191,11 @@ describe("util/image/imagedecoder", () => {
 				// Worker survives a decode error: a subsequent valid decode still succeeds.
 				const ok = await decodeImageToPng(makeTga(), "tga");
 				assert.strictEqual(ok.width, 2);
+				// A decode error is not a crash: the pool and the live-thread set still agree.
+				assert.strictEqual(
+					_getLiveWorkerCountForTest(),
+					_getWorkerCountForTest(),
+				);
 			} finally {
 				console.error = originalConsoleError;
 			}
@@ -219,9 +225,10 @@ describe("util/image/imagedecoder", () => {
 	});
 
 	describe("decodeImageToPng (unusable worker file)", () => {
-		// The doomed worker's crash/exit is handled and logged by onWorkerError/onWorkerExit, and can
-		// land after either `it` below has already returned; stub console.error for the whole block
-		// rather than racing per-test capture against that async cleanup.
+		// The doomed worker's crash is handled and logged by onWorkerError, and can land after either
+		// `it` below has already returned; stub console.error for the whole block rather than racing
+		// per-test capture against that async cleanup. Its later 'exit' is awaited by the teardown,
+		// which the last test in this block pins down.
 		let originalConsoleError: typeof console.error;
 
 		before(() => {
@@ -255,6 +262,35 @@ describe("util/image/imagedecoder", () => {
 			assert.strictEqual(result.width, 4);
 			assert.strictEqual(result.height, 4);
 			assertValidPng(result.pngBuffer, 4, 4);
+		});
+
+		it("teardown waits for the doomed worker to exit, so nothing it logs escapes the block", async () => {
+			// Re-arm the pool so this decode spawns its own doomed worker instead of taking the
+			// fallback the earlier crash left in place.
+			await _terminateImageWorkerForTest();
+			const result = await decodeImageToPng(makeTga(), "tga");
+			assert.strictEqual(result.width, 2);
+
+			await _terminateImageWorkerForTest();
+			assert.strictEqual(
+				_getLiveWorkerCountForTest(),
+				0,
+				"no spawned thread should outlive the teardown",
+			);
+
+			// With the thread gone and its listeners removed, nothing can reach console.error once
+			// the teardown has returned - which is what lets the next suite trust its own stub.
+			const blockStub = console.error;
+			const calls: unknown[][] = [];
+			console.error = (...args: unknown[]) => {
+				calls.push(args);
+			};
+			try {
+				await new Promise((resolve) => setTimeout(resolve, 50));
+				assert.deepStrictEqual(calls, []);
+			} finally {
+				console.error = blockStub;
+			}
 		});
 	});
 

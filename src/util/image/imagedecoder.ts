@@ -66,6 +66,10 @@ export function decodeImageToPngSync(
 const pendingJobs = new Map<number, PendingJob>();
 let nextJobId = 1;
 const workers: WorkerState[] = [];
+// Every spawned worker whose thread has not yet exited. A worker that crashes is dropped from
+// `workers` on its 'error' event but stays alive until its 'exit' event, so disposal and the test
+// teardown look here rather than at the pool to find threads that still need terminating.
+const liveWorkers = new Set<WorkerState>();
 // Once every worker has failed to spawn or crashed we never respawn; every subsequent decode uses the
 // sync fallback (see the brief). In-flight jobs at crash time are rejected.
 let workerUnavailable = false;
@@ -123,6 +127,7 @@ if (!IS_WEB_EXT) {
 			spawned.on("error", (e: unknown) => onWorkerError(state, e));
 			spawned.on("exit", (code: number) => onWorkerExit(state, code));
 			workers.push(state);
+			liveWorkers.add(state);
 			debug("[imagedecoder] spawned image decode worker: " + workerPath);
 			return state;
 		} catch (e) {
@@ -176,6 +181,7 @@ function onWorkerError(state: WorkerState, e: unknown): void {
 }
 
 function onWorkerExit(state: WorkerState, code: number): void {
+	liveWorkers.delete(state);
 	// Fail the jobs before the pool is touched: emptying it disables the pool, which rejects
 	// whatever is still pending with the generic disposal reason instead of the exit code.
 	if (state.inFlight > 0) {
@@ -216,12 +222,18 @@ function removeWorker(state: WorkerState): void {
 	if (idx >= 0) {
 		workers.splice(idx, 1);
 	}
+	// Only the pool flag flips here: the worker being removed is crashing on its own and keeps
+	// its listeners, so its 'exit' event still reaches onWorkerExit (and liveWorkers) rather
+	// than being cut off by disableWorker's terminate.
 	if (workers.length === 0) {
-		disableWorker();
+		workerUnavailable = true;
 	}
 }
 
 function terminateWorker(state: WorkerState): void {
+	// The listeners are going away, so the worker's 'exit' event can no longer reach onWorkerExit:
+	// the live-thread set is maintained here instead of waiting for an exit that will not be seen.
+	liveWorkers.delete(state);
 	try {
 		state.worker.removeAllListeners();
 		void state.worker.terminate();
@@ -232,9 +244,10 @@ function terminateWorker(state: WorkerState): void {
 
 function disableWorker(): void {
 	workerUnavailable = true;
-	for (const state of workers) {
+	for (const state of liveWorkers) {
 		terminateWorker(state);
 	}
+	liveWorkers.clear();
 	workers.length = 0;
 	// Nothing is left to answer them; reject so each caller's await settles and falls back to the
 	// sync decode instead of hanging for the rest of the host's life.
@@ -259,6 +272,9 @@ function failWorkerJobs(state: WorkerState, reason: Error): void {
 			job.reject(reason);
 		}
 	}
+	// The rejected jobs are no longer in flight, so the 'exit' that follows a crash's 'error'
+	// event does not report them a second time.
+	state.inFlight = 0;
 }
 
 function reviveError(info: { message: string; name: string }): Error {
@@ -400,9 +416,13 @@ export function _isWorkerPoolDisabledForTest(): boolean {
 	return workerUnavailable;
 }
 
-// Test-only: terminate the worker pool so the test process can settle between cases.
+// Test-only: terminate every spawned worker so the test process can settle between cases. It
+// drains liveWorkers rather than the pool because a worker that crashed on startup has already
+// left the pool but may not have exited yet; terminate() resolves on its 'exit', so nothing of
+// its shutdown (in particular its exit handler's logging) can land after this returns.
 export async function _terminateImageWorkerForTest(): Promise<void> {
-	const dead = workers.slice();
+	const dead = Array.from(liveWorkers);
+	liveWorkers.clear();
 	workers.length = 0;
 	workerUnavailable = false;
 	for (const state of dead) {
@@ -414,4 +434,9 @@ export async function _terminateImageWorkerForTest(): Promise<void> {
 // Test-only: current pool size, so a test can assert the pool grew under a decode burst.
 export function _getWorkerCountForTest(): number {
 	return workers.length;
+}
+
+// Test-only: spawned workers whose thread has not exited yet, pool members or not.
+export function _getLiveWorkerCountForTest(): number {
+	return liveWorkers.size;
 }
