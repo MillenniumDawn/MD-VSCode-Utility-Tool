@@ -8,6 +8,8 @@
     "hoi4modutilities.useConditionInFocus.desc": "Отображать условия в предпросмотре дерева фокусов. Требуется перезагрузка после изменения.",
     "hoi4modutilities.eventTreePreview.title": "Предпросмотр дерева событий",
     "hoi4modutilities.eventTreePreview.desc": "Включить предпросмотр дерева событий. Требуется перезагрузка после изменения.",
+    "hoi4modutilities.decisionPreview.title": "Предпросмотр решений",
+    "hoi4modutilities.decisionPreview.desc": "Включить предпросмотр решений. Требуется перезагрузка после изменения.",
     "hoi4modutilities.ideaPreview.title": "Предпросмотр идей",
     "hoi4modutilities.ideaPreview.desc": "Включить предпросмотр идей. Требуется перезагрузка после изменения.",
     "hoi4modutilities.characterPreview.title": "Предпросмотр персонажей",
@@ -18,6 +20,8 @@
     "hoi4modutilities.sharedFocusIndex.desc": "Построить индекс общих фокусов для поиска по файлам. Требуется перезагрузка после изменения.",
     "hoi4modutilities.gfxIndex.title": "GFX Индекс",
     "hoi4modutilities.gfxIndex.desc": "Построить индекс GFX спрайтов. Требует больше памяти. Требуется перезагрузка после изменения.",
+    "hoi4modutilities.imageDecodeWorkers.title": "Потоки декодирования изображений",
+    "hoi4modutilities.imageDecodeWorkers.desc": "Максимальное число рабочих потоков для декодирования DDS/TGA в PNG. Большие значения быстрее отрисовывают предпросмотры с множеством иконок (деревья фокусов), но используют больше процессора и памяти. Требуется перезагрузка после изменения.",
     "hoi4modutilities.localisationIndex.title": "Индекс локализации",
     "hoi4modutilities.localisationIndex.desc": "Построить индекс локализации для отображения переведённого текста в предпросмотрах. Требует больше памяти. Требуется перезагрузка после изменения.",
     "hoi4modutilities.installPath.title": "Установить путь",
@@ -29,7 +33,11 @@
     "hoi4modutilities.preview.title": "Предпросмотр файла HOI4",
     "hoi4modutilities.previewworld.title": "Предпросмотр карты мира",
     "hoi4modutilities.scanreferences.title": "Найти похожее",
+    "hoi4modutilities.selecthoifolder.title": "Выбрать путь установки HOI4",
+    "hoi4modutilities.showindexstatus.title": "Показать состояние индексов",
     "hoi4modutilities.selectmodfile.title": "Выбрать файл мода",
     "hoi4modutilities.enableSupplyArea.title": "Включить зону снабжения",
-    "hoi4modutilities.enableSupplyArea.desc": "Если вы разрабатываете мод для HOI4(version<=1.10). Проверьте этот параметр перед включением зоны снабжения."
+    "hoi4modutilities.enableSupplyArea.desc": "Если вы разрабатываете мод для HOI4(version<=1.10). Проверьте этот параметр перед включением зоны снабжения.",
+    "hoi4modutilities.previewLocalisation.title": "Язык предпросмотра",
+    "hoi4modutilities.previewLocalisation.desc": "Язык содержимого в предпросмотре дерева событий."
 }
