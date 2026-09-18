@@ -4,6 +4,8 @@ v1.1.37
 
   Functionality:
 
+- Previews drop a malformed message from their own page instead of acting on it, the condition filters in the focus tree and MIO previews show a trigger as the text it is written as, and the loading page carries a content security policy like the finished preview. Issue #201.
+- A DLC archive entry that claims an unreasonable size is refused before it is unpacked. Issue #201.
 - Indexing and file listings read mod, game and DLC folders several directories at a time instead of one after another, and the DLC archives are checked together instead of one by one, so a large mod indexes and its previews open faster. Issue #200.
 - Previews do less work on every refresh: an unchanged document is recognised without re-hashing it, effects are grouped under their conditions without rescanning, and translated text no longer rebuilds its placeholder pattern per message. Issue #200.
 - [ World Map Previewer ] A folder of files such as `history/states` or the country files behind `common/country_tags` is read a few files at a time instead of all at once, so a large mod no longer holds every file in memory during a load, and a single file that cannot be read is skipped and listed under the map's warnings instead of failing the whole preview. Issue #193.
@@ -13,6 +15,8 @@ v1.1.37
 
   Bugfixes:
 
+- [ World Map Previewer ] A provinces or rivers BMP with a small, top-down, compressed or unusual-depth header is reported as a clear error instead of failing the preview or reading colours no province has. Issue #201.
+- A mod key named `__proto__` or `constructor` no longer vanishes from a parsed file or from a MIO's trait list. Issue #201.
 - [ World Map Previewer ] Exporting the map no longer leaves mouse handlers behind that made panning heavier after every export, hovering the selected province no longer paints the hover highlight over the selection, resource icons load once per map instead of on every progress update, and the warnings list is only rebuilt when the warnings change. Issue #200.
 - Dragging to pan a preview scrolls once per frame instead of once per mouse event, and a decision chain routed through several hidden decisions is bridged without repeating the same walk. Issue #200.
 - Closing VS Code while a DDS or TGA image is still being decoded no longer leaves that decode waiting forever, and a decode that hangs is abandoned after 30 seconds instead of stalling the preview that asked for it. Issue #195.

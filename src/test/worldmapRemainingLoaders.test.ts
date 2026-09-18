@@ -55,14 +55,15 @@ function buildBmp(
 	pixels: Record<string, number> = {},
 ): Buffer {
 	const bytesPerRow = ((((width * bitsPerPixel + 7) >> 3) + 3) & 0xfffffffc) >>> 0;
-	const dataOffset = 30;
+	const dataOffset = 54;
 	const buf = Buffer.alloc(dataOffset + bytesPerRow * height, 200);
 	buf.write("BM", 0, "ascii");
 	buf.writeUInt32LE(dataOffset, 10);
-	buf.writeUInt32LE(4, 14);
+	buf.writeUInt32LE(40, 14);
 	buf.writeUInt32LE(width, 18);
 	buf.writeUInt32LE(height, 22);
 	buf.writeUInt16LE(bitsPerPixel, 28);
+	buf.writeUInt32LE(0, 30);
 	for (const key of Object.keys(pixels)) {
 		const [x, y] = key.split(",").map(Number);
 		buf[dataOffset + (height - 1 - y) * bytesPerRow + x] = pixels[key];

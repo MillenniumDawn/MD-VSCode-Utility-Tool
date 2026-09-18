@@ -22,6 +22,14 @@ const EOCD_SIZE = 22;
 /** The comment is a uint16 length, so the record can start no further back than this from the end. */
 const MAX_EOCD_SEARCH = EOCD_SIZE + 0xffff;
 
+/**
+ * The most one entry may unpack to. The largest files in a DLC archive are map and texture
+ * images of a few tens of megabytes; an entry whose directory record claims more than this is
+ * not one of them, and refusing it here keeps a crafted record from turning into a
+ * multi-gigabyte inflate on the extension host.
+ */
+export const MAX_ENTRY_SIZE = 256 * 1024 * 1024;
+
 const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
 const ZIP64_LOCATOR_SIZE = 20;
 const ZIP64_EOCD_SIGNATURE = 0x06064b50;
@@ -141,6 +149,12 @@ async function readEntry(
 		throw new Error(`Entry ${name} in ${fsPath} is encrypted.`);
 	}
 
+	if (record.uncompressedSize > MAX_ENTRY_SIZE) {
+		throw new Error(
+			`Entry ${name} in ${fsPath} claims ${record.uncompressedSize} bytes, above the ${MAX_ENTRY_SIZE} byte limit for one archive entry.`,
+		);
+	}
+
 	if (record.compressedSize === 0) {
 		if (record.uncompressedSize !== 0) {
 			// A streamed archive whose central directory was never fixed up. Handing back an empty
@@ -203,7 +217,15 @@ async function readEntry(
 	if (record.compressionMethod === METHOD_STORED) {
 		data = compressed;
 	} else if (record.compressionMethod === METHOD_DEFLATED) {
-		data = await inflateRaw(compressed);
+		// Inflating stops at the size the directory promised: past it the entry is wrong either
+		// way, and the size check below reports it without the rest having been unpacked first.
+		const inflated = await inflateRaw(compressed, record.uncompressedSize);
+		if (inflated === null) {
+			throw new Error(
+				`Entry ${name} in ${fsPath} unpacks to more than the ${record.uncompressedSize} bytes its directory entry claims.`,
+			);
+		}
+		data = inflated;
 	} else {
 		throw new Error(
 			`Entry ${name} in ${fsPath} uses unsupported compression method ${record.compressionMethod}.`,
@@ -283,11 +305,19 @@ function requireWithinFile(
 	}
 }
 
-function inflateRaw(compressed: Buffer): Promise<Buffer> {
+/** Inflates at most `maxOutputLength` bytes; null when the stream would have produced more. */
+function inflateRaw(compressed: Buffer, maxOutputLength: number): Promise<Buffer | null> {
 	return new Promise((resolve, reject) => {
-		zlib.inflateRaw(compressed, (error: Error | null, result: Buffer) => {
+		// zlib rejects a zero limit outright; a deflated entry that claims zero bytes is caught by
+		// the size comparison after the inflate, so give it room for that one byte of evidence.
+		const options = { maxOutputLength: Math.max(1, maxOutputLength) };
+		zlib.inflateRaw(compressed, options, (error: Error | null, result: Buffer) => {
 			if (error) {
-				reject(error);
+				if ((error as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE") {
+					resolve(null);
+				} else {
+					reject(error);
+				}
 			} else {
 				resolve(result);
 			}
