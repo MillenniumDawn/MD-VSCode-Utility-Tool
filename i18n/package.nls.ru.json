@@ -39,5 +39,9 @@
     "hoi4modutilities.enableSupplyArea.title": "Включить зону снабжения",
     "hoi4modutilities.enableSupplyArea.desc": "Если вы разрабатываете мод для HOI4(version<=1.10). Проверьте этот параметр перед включением зоны снабжения.",
     "hoi4modutilities.previewLocalisation.title": "Язык предпросмотра",
-    "hoi4modutilities.previewLocalisation.desc": "Язык содержимого в предпросмотре дерева событий."
+    "hoi4modutilities.previewLocalisation.desc": "Язык содержимого в предпросмотре дерева событий.",
+    "hoi4modutilities.section.gameAndMod": "Игра и мод",
+    "hoi4modutilities.section.previews": "Предпросмотр",
+    "hoi4modutilities.section.worldMap": "Карта мира",
+    "hoi4modutilities.section.indexes": "Индексы и производительность"
 }

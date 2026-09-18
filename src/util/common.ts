@@ -166,10 +166,12 @@ export function debounceByInput<TI extends unknown[], TO>(
 	keySelector: (...input: TI) => string,
 	wait?: number,
 	debounceSettings?: DebounceSettings,
-): (...input: TI) => TO {
-	const cachedMethods: Record<string, (input: TI) => TO> = {};
+): (...input: TI) => TO | undefined {
+	// A debounced call returns the previous invocation's result, or undefined before there is
+	// one -- which is what lodash's DebouncedFunc says, and what callers here already expect.
+	const cachedMethods: Record<string, (input: TI) => TO | undefined> = {};
 
-	function result(...input: TI): TO {
+	function result(...input: TI): TO | undefined {
 		const key = keySelector(...input);
 		const method = cachedMethods[key];
 		if (method) {
