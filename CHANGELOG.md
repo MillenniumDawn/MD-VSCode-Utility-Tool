@@ -15,6 +15,7 @@ Unreleased
 
   Bugfixes:
 
+- A plain mouse wheel scrolls the focus tree, technology, MIO, event and decision previews again. It had zoomed instead, which shrank the tree until it fit the pane, took the scrollbar with it and left the wheel doing nothing. Zoom with Ctrl+wheel, the zoom buttons or the +/- keys, or set `mdHoi4Utilities.previewWheel` to `auto` or `zoom` to have the wheel zoom. Issue #336.
 - An empty or comment-only localisation file no longer stops "Scan references" with a YAML error.
 
 - [ CI ] The GitHub release and its version tag are only created once the build reached the VS Code Marketplace or Open VSX, so a release that reached neither no longer burns its version number. Issue #197.

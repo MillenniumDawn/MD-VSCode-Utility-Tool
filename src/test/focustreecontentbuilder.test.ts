@@ -229,7 +229,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		);
 		assert.ok(payload);
 		const html = buildFocusTreeHtml(payload!, webview, uri);
-		assert.ok(html.includes('window.previewWheel = "auto";'));
+		assert.ok(html.includes('window.previewWheel = "scroll";'));
 	});
 
 	it("buildFocusTreeHtml renders the warnings panel as a list, not a textarea", async () => {
