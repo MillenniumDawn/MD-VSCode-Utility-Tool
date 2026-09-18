@@ -1,5 +1,7 @@
 Unreleased
 
+v1.1.37
+
   Bugfixes:
 
 - An image decode worker that crashes while starting no longer logs a second "exited with jobs in flight" error after its jobs were already reported failed. Issue #190.
