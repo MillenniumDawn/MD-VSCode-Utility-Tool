@@ -6,7 +6,7 @@ export function parseYaml(content: string): unknown {
 	const yaml = require("js-yaml");
 	let original: unknown;
 	try {
-		return yaml.load(content, { schema: yaml.JSON_SCHEMA });
+		return loadDocument(yaml, content);
 	} catch (e) {
 		original = e;
 	}
@@ -18,8 +18,18 @@ export function parseYaml(content: string): unknown {
 		.replace(/:\d+\s*"/g, ': "')
 		.replace(/(?<=")((?:\\.|[^\\"\n\r])*?)"(?!\s*$)/gm, '$1\\"');
 	try {
-		return yaml.load(repaired, { schema: yaml.JSON_SCHEMA });
+		return loadDocument(yaml, repaired);
 	} catch {
 		throw original;
 	}
+}
+
+// js-yaml 5 rejects input with no document (empty, or comments only) where 4.x returned undefined;
+// loadAll gives [] for that. More than one document is still an error, as with load().
+function loadDocument(yaml: typeof import("js-yaml"), text: string): unknown {
+	const docs: unknown[] = yaml.loadAll(text, { schema: yaml.JSON_SCHEMA });
+	if (docs.length > 1) {
+		throw new yaml.YAMLException("expected a single document in the stream, but found more than one");
+	}
+	return docs[0];
 }

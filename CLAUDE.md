@@ -107,10 +107,18 @@ targets that already have the old one. If the branch already has an open pull re
 someone is on it, and the new run is reported as a comment rather than force-pushed over. A
 failed *pre-release* gets none of this — it runs on every push and the next one supersedes it.
 
-**The Marketplace publish retries.** A `Request timeout: /_apis/gallery` once failed a
-release whose build had nothing wrong with it. `scripts/publish-marketplace.js` now runs
-`vsce publish` up to three times, pausing between, when the failure reads like the gallery or
-the network rather than the extension; a rejected token or a bad manifest fails at once.
+**Both registry publishes retry.** A `Request timeout: /_apis/gallery` once failed a release
+whose build had nothing wrong with it, and a `503: Service Unavailable` from Open VSX did the
+same to v1.1.36. `scripts/publish-extension.js` runs `vsce publish` or `ovsx publish` up to
+three times, pausing between, when the failure reads like the registry or the network rather
+than the extension; a rejected token or a bad manifest fails at once. Open VSX gets a second
+chance on top: when those quick attempts all fail on something transient, the job says so in
+its `transient` output and **Release: Open VSX (retry later)** asks again five, ten and
+fifteen minutes on. The fix pull request is opened only when that job fails too, or was
+skipped because the failure was never transient — the first Open VSX job going red is what
+starts the retry, not a release to fix. The retry waits inside the run rather than
+dispatching another, because a dispatched run would sit in the same `publish` concurrency
+group while it waited; the cost is that a push to `main` in that half hour queues behind it.
 
 The pre-release half builds every push to `main` and publishes it to both registries on the
 **pre-release** channel, plus a GitHub prerelease with the `.vsix` attached. It is skipped on

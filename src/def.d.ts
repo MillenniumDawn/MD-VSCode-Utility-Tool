@@ -43,14 +43,9 @@ declare const IS_WEB_EXT: boolean;
 
 declare module 'tga' {
     class TGA {
-        constructor(buffer: Buffer, opt?: unknown);
+        constructor(buffer: Buffer, opt?: { dontFixAlpha?: boolean });
         static createTgaBuffer(width: number, height: number, pixels: [], dontFlipY: boolean): Buffer;
-        static getHeader(buffer: Buffer): unknown;
         parse(): void;
-        readHeader(): unknown;
-        check(): boolean;
-        addPixel(arr: number[], offset: number, idx: number): void;
-        readPixels(): void;
         width: number;
         height: number;
         pixels: Uint8Array | undefined;

@@ -14,6 +14,7 @@ v1.1.37
 - Scan references on a mod with thousands of events no longer freezes the editor for minutes and no longer holds every event and localisation file in memory at once; an event or localisation file that cannot be read is now reported in the output log instead of being skipped silently. Issue #194.
 - The trigger and effect evaluators behind every preview now have their own tests, so a wrong branch shown for an `if`/`else`, `NOT` or `count_triggers` block is caught before release. Issue #199.
 - Checkbox labels are read through the input's label property with a document query fallback. Drag-panning coalesces mouse moves into one scroll per animation frame. Decision bridging memoises its traversal per removed node.
+- Greyscale and colour-mapped TGA images now decode in the previews and the image viewer instead of being refused as unsupported.
 
   Bugfixes:
 
@@ -26,6 +27,8 @@ v1.1.37
 - Dragging to pan a preview scrolls once per frame instead of once per mouse event, and a decision chain routed through several hidden decisions is bridged without repeating the same walk. Issue #200.
 - Closing VS Code while a DDS or TGA image is still being decoded no longer leaves that decode waiting forever, and a decode that hangs is abandoned after 30 seconds instead of stalling the preview that asked for it. Issue #195.
 - An image decode worker that crashes while starting no longer logs a second "exited with jobs in flight" error after its jobs were already reported failed. Issue #190.
+- An empty or comment-only localisation file no longer stops "Scan references" with a YAML error.
+- [ CI ] A release no longer fails outright when Open VSX is briefly unavailable: the publish is retried for up to half an hour, and a fix pull request is only opened once that has given up too.
 
 v1.1.36
 
