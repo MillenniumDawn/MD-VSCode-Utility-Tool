@@ -32,3 +32,15 @@ updates:
         dependency-type: production
       development:
         dependency-type: development
+    # Three packages are pinned to something else in the repository and cannot move on their own;
+    # a bump of any of them broke `npm ci`, the workflows test or `vsce package` in one go (#334).
+    ignore:
+      # TypeScript 7 on npm is the native compiler and ships no JavaScript API, so ts-loader and
+      # typescript-eslint cannot load it. Lift this once typescript-eslint accepts TypeScript 7.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # The types follow the Node major in .nvmrc and engines.node; bump those first.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # vsce refuses a package whose @types/vscode is newer than engines.vscode.
+      - dependency-name: "@types/vscode"
