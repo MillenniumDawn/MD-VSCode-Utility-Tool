@@ -363,8 +363,12 @@ describe('.github/workflows', function () {
             assert.doesNotMatch(github?.if ?? '', /always\(\)/);
 
             // A pre-release is superseded by the next push and has no fix branch, so its GitHub
-            // prerelease stays independent of the registries.
-            assert.deepStrictEqual([jobs['pre-release-github']?.needs ?? []].flat(), ['build-pre-release']);
+            // prerelease stays independent of the registries. It still waits for verify, like
+            // every other target, so a build that fails lint or the unit tests publishes nothing.
+            assert.deepStrictEqual(
+                [jobs['pre-release-github']?.needs ?? []].flat(),
+                ['build-pre-release', 'verify'],
+            );
 
             // The fix pull request lists the skipped GitHub release: that line is what says there
             // is no tag.
