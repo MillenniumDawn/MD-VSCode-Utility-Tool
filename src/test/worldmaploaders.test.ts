@@ -432,6 +432,60 @@ describe("previewdef/worldmap/loader missing files (0% → smoke)", () => {
 		}
 	});
 
+	it("Country loader skips a tag whose country file is missing and keeps the rest", async () => {
+		const fileloader: any = await import("../util/fileloader");
+		const origJson = fileloader.readFileFromModOrHOI4AsJson;
+		const origList = fileloader.listFilesFromModOrHOI4;
+		const origToken = fileloader.hoiFileExpiryToken;
+		const originalConsoleError = console.error;
+		console.error = () => undefined;
+		fileloader.listFilesFromModOrHOI4 = async () => ["00_tags.txt"];
+		// The expiry stat runs before the country file is read, so a tag whose file does not
+		// exist rejects there, ahead of any catch inside the country read.
+		fileloader.hoiFileExpiryToken = async (file: string) => {
+			if (file.includes("gone.txt")) {
+				throw new UserError("Can't find file " + file);
+			}
+			return "v1";
+		};
+		fileloader.readFileFromModOrHOI4AsJson = async (path: string) => {
+			if (path.includes("country_tags")) {
+				return {
+					_map: {
+						AAA: { _key: "AAA", _value: "countries/aaa.txt" },
+						BBB: { _key: "BBB", _value: "countries/gone.txt" },
+						CCC: { _key: "CCC", _value: "countries/ccc.txt" },
+					},
+				};
+			}
+			if (path.includes("colors.txt")) {
+				return { _map: {} };
+			}
+			return { color: { _value: { _values: ["1", "2", "3"] } } };
+		};
+		try {
+			const { CountriesLoader } = await import(
+				"../previewdef/worldmap/loader/countries"
+			);
+			const loader = new CountriesLoader();
+			const result = await loader.load(new LoaderSession(false));
+			assert.deepStrictEqual(
+				result.result.map((c) => c.tag),
+				["AAA", "CCC"],
+			);
+			assert.strictEqual(result.warnings.length, 1);
+			assert.deepStrictEqual(result.warnings[0]?.relatedFiles, [
+				"common/countries/gone.txt",
+			]);
+			assert.ok(result.warnings[0]?.text.includes("Failed to load"));
+		} finally {
+			fileloader.readFileFromModOrHOI4AsJson = origJson;
+			fileloader.listFilesFromModOrHOI4 = origList;
+			fileloader.hoiFileExpiryToken = origToken;
+			console.error = originalConsoleError;
+		}
+	});
+
 	it("Terrain loader handles missing file", async () => {
 		const fileloader: any = await import("../util/fileloader");
 		const orig = fileloader.readFileFromModOrHOI4AsJson;

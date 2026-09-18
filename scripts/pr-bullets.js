@@ -6,7 +6,8 @@
 // main since the tag is asked which pull request it came from, so a squash merge ("Title (#108)")
 // and a merge commit ("Merge pull request #97 from ...") both resolve to the real pull request --
 // parsing the subject line would only handle one of the two. A commit that belongs to no pull
-// request falls back to its own subject.
+// request gets no bullet -- it is named in the log instead -- and a pull request Dependabot opened
+// gets none either.
 //
 // The output is JSON: { bullets, pullRequests, entries }, where bullets[i] belongs to
 // pullRequests[i] and entries[i] carries what the rest of the release needs to know about it --
@@ -28,6 +29,16 @@ function lines(output) {
 	return output ? output.split(/\r?\n/).filter(Boolean) : [];
 }
 
+// Workflow annotations go to stderr on purpose: the workflow sends this script's stdout, which is
+// the JSON result, to /dev/null. The runner reads commands from either stream.
+function warn(message) {
+	process.stderr.write(`::warning::${message}\n`);
+}
+
+function notice(message) {
+	process.stderr.write(`::notice::${message}\n`);
+}
+
 // The pure half: a list of pull requests in merge order becomes the changelog bullets. A pull
 // request listed twice (two commits, one pull request) contributes one bullet.
 //
@@ -41,7 +52,7 @@ function bulletsFromPullRequests(pullRequests) {
 
 	for (const pr of pullRequests ?? []) {
 		const number = Number(pr?.number);
-		if (!Number.isInteger(number) || seen.has(number)) {
+		if (!Number.isInteger(number) || seen.has(number) || isDependencyBump(pr)) {
 			continue;
 		}
 		seen.add(number);
@@ -55,6 +66,13 @@ function bulletsFromPullRequests(pullRequests) {
 	}
 
 	return { bullets, pullRequests: numbers, entries };
+}
+
+// A pull request Dependabot opened. A dependency bump says nothing to a user of the extension, and
+// .github/dependabot.yml opens one a week, so it is left out of the changelog rather than left for
+// whoever merges the release pull request to delete every time.
+function isDependencyBump(pullRequest) {
+	return String(pullRequest?.user?.login ?? '').toLowerCase() === 'dependabot[bot]';
 }
 
 // "- Title." becomes "- [ Focus Tree ] Title." A bullet that already carries a prefix keeps it.
@@ -71,11 +89,15 @@ function api(path, args = []) {
 		const output = execFileSync(
 			'gh',
 			['api', path, '-H', 'Accept: application/vnd.github+json', ...args],
-			{ encoding: 'utf8' });
+			{ encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 		return JSON.parse(output);
-	} catch {
+	} catch (error) {
 		// An unauthenticated gh, a rate limit or a commit pushed straight to main all land here; every
-		// caller has something sensible to do with nothing.
+		// caller has something sensible to do with nothing. It is said in the log all the same: an
+		// expired token used to route every merge into "no pull request" and seed the release from
+		// raw commit subjects with nothing to show why.
+		const detail = String(error?.stderr ?? error?.message ?? '').split(/\r?\n/).find(Boolean) ?? '';
+		warn(`gh api ${path} failed${detail ? `: ${detail}` : ''}`);
 		return undefined;
 	}
 }
@@ -87,9 +109,10 @@ function pullRequestsForCommit(repo, sha) {
 
 // The paths a pull request touched, for the "[ Component ]" prefix. Capped at one page: a pull
 // request with more than a hundred files has no single component anyway, and the majority rule in
-// componentForFiles reads a sample the same way it reads the whole.
+// componentForFiles reads a sample the same way it reads the whole. No --paginate, which would
+// print one JSON array per page back to back and leave nothing JSON.parse accepts.
 function filesForPullRequest(repo, number) {
-	const parsed = api(`repos/${repo}/pulls/${number}/files`, ['--paginate', '-X', 'GET', '-f', 'per_page=100']);
+	const parsed = api(`repos/${repo}/pulls/${number}/files`, ['-X', 'GET', '-f', 'per_page=100']);
 	return Array.isArray(parsed) ? parsed.map((file) => file?.filename).filter(Boolean) : [];
 }
 
@@ -129,7 +152,7 @@ function collect(options) {
 			continue;
 		}
 		for (const pr of prs) {
-			found.push({ number: pr.number, title: pr.title, body: pr.body, labels: pr.labels });
+			found.push({ number: pr.number, title: pr.title, body: pr.body, labels: pr.labels, user: pr.user });
 		}
 	}
 
@@ -140,7 +163,7 @@ function collect(options) {
 	// and bulletsFromPullRequests would only discard the second one afterwards.
 	const seen = new Set();
 	const once = found.filter((pr) => {
-		if (seen.has(pr.number)) {
+		if (seen.has(pr.number) || isDependencyBump(pr)) {
 			return false;
 		}
 		seen.add(pr.number);
@@ -148,12 +171,18 @@ function collect(options) {
 	});
 	const result = bulletsFromPullRequests(once.map((pr) => enrich(options.repo, pr)));
 
-	for (const sha of withoutPullRequest.reverse()) {
-		const subject = git(['log', '-1', '--pretty=%s', sha]);
-		// A merge commit with no pull request behind it says nothing a reader wants.
-		if (!/^Merge (pull request|branch|remote-tracking)/i.test(subject)) {
-			result.bullets.push(bulletFor(subject));
-		}
+	// A commit with no pull request behind it -- pushed straight to main -- used to seed a bullet
+	// from its subject, which is how "- workflow." and "- Update task.yml." reached the changelog:
+	// a web-editor default is not a sentence for a user. There is nothing to write one from, so
+	// none is written; the commits are named in the log for whoever merges the release pull request
+	// to add one by hand if the change deserves it.
+	const bare = withoutPullRequest
+		.reverse()
+		.map((sha) => ({ sha, subject: git(['log', '-1', '--pretty=%s', sha]) }))
+		.filter(({ subject }) => !/^Merge (pull request|branch|remote-tracking)/i.test(subject));
+	if (bare.length > 0) {
+		notice(`${bare.length} commit(s) on main came from no pull request and seed no changelog bullet: `
+			+ bare.map(({ sha, subject }) => `${sha.slice(0, 7)} "${subject}"`).join(', '));
 	}
 
 	if (result.bullets.length === 0) {
@@ -209,6 +238,7 @@ module.exports = {
 	bulletsFromPullRequests,
 	collect,
 	filesForPullRequest,
+	isDependencyBump,
 	issueLabels,
 	parseArgs,
 	pullRequestsForCommit,

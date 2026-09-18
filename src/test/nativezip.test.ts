@@ -3,7 +3,7 @@ import * as path from "path";
 import * as os from "os";
 import * as fs from "fs/promises";
 import * as zlib from "zlib";
-import { crc32Table, openZipIndex } from "../util/nativezip";
+import { crc32Table, MAX_ENTRY_SIZE, openZipIndex } from "../util/nativezip";
 
 // The reader runs on node's own fs against real archives, so it is tested against real files. Two
 // fixture builders, because they cover different ground: adm-zip writes archives shaped the way the
@@ -478,6 +478,31 @@ describe("util/nativezip openZipIndex", function () {
 		raw.writeUInt32LE(9999, centralSizeOffset);
 		const index = await openZipIndex(await write("short.zip", raw));
 		await assert.rejects(() => index.readEntry("a.txt"), /unpacked to 5 bytes/);
+	});
+
+	it("refuses an entry whose directory record claims more than the per-entry limit before reading it", async function () {
+		const raw = buildZip([{ name: "a.txt", data: Buffer.from("hello") }]);
+		const centralSizeOffset = raw.indexOf(Buffer.from("hello")) + 5 + 24;
+		raw.writeUInt32LE(MAX_ENTRY_SIZE + 1, centralSizeOffset);
+		const index = await openZipIndex(await write("bomb.zip", raw));
+		await assert.rejects(() => index.readEntry("a.txt"), /above the \d+ byte limit/);
+	});
+
+	it("stops inflating at the size the directory record promised", async function () {
+		// Two hundred bytes of one character deflate to a handful, and the record says five: the
+		// inflate has to stop there rather than unpack the whole thing and then notice.
+		const raw = buildZip([
+			{ name: "a.txt", data: Buffer.from("x".repeat(200)), method: 8 },
+		]);
+		const centralHeader = raw.indexOf(
+			Buffer.from([0x50, 0x4b, 0x01, 0x02]),
+		);
+		raw.writeUInt32LE(5, centralHeader + 24);
+		const index = await openZipIndex(await write("understated.zip", raw));
+		await assert.rejects(
+			() => index.readEntry("a.txt"),
+			/unpacks to more than the 5 bytes/,
+		);
 	});
 
 	it("throws when a local header is not where the central directory says", async function () {

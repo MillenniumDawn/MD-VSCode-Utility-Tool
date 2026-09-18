@@ -88,7 +88,7 @@ export class SupplyAreasLoader extends FolderLoader<
 		return super.loadImpl(session);
 	}
 
-	protected async mergeFiles(
+	protected async mergeLoadedFiles(
 		fileResults: LoadResult<SupplyAreaNoRegion[]>[],
 		session: LoaderSession,
 	): Promise<LoadResult<SupplyAreasLoaderResult>> {

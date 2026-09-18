@@ -88,6 +88,30 @@ describe("util/nativewalk walkFilesWithMtime", function () {
 		assert.deepStrictEqual(sorted(entries.map((e) => e.relativePath)), ["top.txt"]);
 	});
 
+	it("walks sibling directories concurrently and still lists them in directory order", async function () {
+		// Wider than the per-parent concurrency, with a file directly in the root listed among the
+		// directories, so both the fan-out and the interleaving are exercised.
+		const names = Array.from({ length: 12 }, (_, i) => `d${i.toString().padStart(2, "0")}`);
+		for (const name of names) {
+			await writeFile(root, `${name}/inner/f.txt`);
+		}
+		await writeFile(root, "root.txt");
+
+		const entries = await walkFilesWithMtime(root, { recursively: true });
+
+		assert.deepStrictEqual(
+			sorted(entries.map((e) => e.relativePath)),
+			sorted([...names.map((n) => `${n}/inner/f.txt`), "root.txt"]),
+		);
+		// The root's own files come first, then each subdirectory's files in the order readdir
+		// listed the subdirectories, however the concurrent descents happened to complete.
+		const listed = (await fs.readdir(root)).filter((n) => n !== "root.txt");
+		assert.deepStrictEqual(
+			entries.map((e) => e.relativePath),
+			["root.txt", ...listed.map((n) => `${n}/inner/f.txt`)],
+		);
+	});
+
 	it("throws for a root that is not on disk, so the caller can fall back", async function () {
 		await assert.rejects(() => walkFilesWithMtime(path.join(root, "nope")));
 	});

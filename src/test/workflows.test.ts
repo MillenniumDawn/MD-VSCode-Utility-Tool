@@ -121,6 +121,62 @@ describe('.github/workflows', function () {
         }
     });
 
+    it('gives every job a time limit', function () {
+        // None had one, so each inherited GitHub's six-hour default. release.yml never cancels a
+        // run, so one stuck publish would have parked every later release for that long.
+        // The patient Open VSX retry is the one job whose work is the waiting: five, ten and
+        // fifteen minutes between attempts, so its limit has to hold that half hour plus the
+        // attempts themselves.
+        const allowed = (id: string) => (id === 'release-open-vsx-retry' ? 45 : 30);
+        for (const file of workflowFiles()) {
+            for (const [id, job] of Object.entries(load(file).jobs ?? {})) {
+                const limit = (job as Record<string, unknown>)['timeout-minutes'];
+                assert.strictEqual(typeof limit, 'number', `${file}: ${id} has no timeout-minutes`);
+                assert.ok((limit as number) > 0 && (limit as number) <= allowed(id), `${file}: ${id} allows ${limit} minutes`);
+            }
+        }
+    });
+
+    it('names the token scope every job runs with', function () {
+        // Every workflow runs npm lifecycle scripts or gh over branch code; the default token scope
+        // is whatever the repository settings say, which is not something a reviewer can see here.
+        for (const file of workflowFiles()) {
+            const workflow = load(file) as Workflow & { permissions?: unknown };
+            if (workflow.permissions !== undefined) {
+                continue;
+            }
+            for (const [id, job] of Object.entries(workflow.jobs ?? {})) {
+                assert.ok(job.permissions !== undefined, `${file}: ${id} runs with the default token scope`);
+            }
+        }
+    });
+
+    it('runs on a pull request whatever branch it targets', function () {
+        // `branches: "*"` names the base branch, and "*" does not match a "/" -- a pull request into
+        // release/version-bump or feature/x used to trigger nothing.
+        for (const file of workflowFiles()) {
+            const on = triggers(load(file));
+            const pullRequest = on.pull_request as Record<string, unknown> | null | undefined;
+            if (pullRequest === undefined) {
+                continue;
+            }
+            assert.strictEqual(pullRequest?.branches, undefined, `${file}: pull_request carries a branches filter`);
+            assert.strictEqual(pullRequest?.['branches-ignore'], undefined, `${file}: pull_request carries a branches-ignore filter`);
+        }
+    });
+
+    it('never force-pushes over a commit it has not seen', function () {
+        for (const file of workflowFiles()) {
+            for (const step of steps(load(file))) {
+                for (const line of (step.run ?? '').split('\n')) {
+                    if (/git push\b/.test(line) && /--force\b/.test(line)) {
+                        assert.match(line, /--force-with-lease/, `${file}: "${line.trim()}" would discard a push that landed since the checkout`);
+                    }
+                }
+            }
+        }
+    });
+
     it('declares the Node version once and keeps the types on it', function () {
         const root = path.join(workflowDir, '..', '..');
         const major = fs.readFileSync(path.join(root, '.nvmrc'), 'utf8').trim();
@@ -196,6 +252,35 @@ describe('.github/workflows', function () {
             for (const job of Object.keys(jobs)) {
                 assert.strictEqual(usesIn(workflow, job, 'HaaLeo/publish-vscode-extension'), undefined, `${job} still publishes through the action`);
             }
+        });
+
+        it('builds beside the tests and publishes only after both', function () {
+            // The build used to queue behind `verify` although neither reads the other's output;
+            // now they run side by side and the publish jobs wait for both.
+            for (const build of ['build-pre-release', 'build-release']) {
+                const needs = [jobs[build]?.needs ?? []].flat();
+                assert.ok(needs.includes('check'), `${build} does not wait for check`);
+                assert.ok(!needs.includes('verify'), `${build} still queues behind verify`);
+            }
+            for (const [target, build] of [
+                ...preReleaseTargets.map((target) => [target, 'build-pre-release']),
+                ...releaseTargets.map((target) => [target, 'build-release']),
+            ]) {
+                const needs = [jobs[target]?.needs ?? []].flat();
+                assert.ok(needs.includes(build), `${target} does not wait for ${build}`);
+                assert.ok(needs.includes('verify'), `${target} could publish a build the tests failed`);
+            }
+        });
+
+        it('takes main\'s package.json when the catch-up merge conflicts on it', function () {
+            // `--ours` on package.json kept the release branch's copy wholesale, which quietly
+            // reverted whatever a branch on main had added to it; only the version is this
+            // branch's to keep, and merge-changelog.js writes that back.
+            const refresh = runsIn(workflow, 'release-pull-request', 'git merge --no-edit origin/main');
+            assert.ok(refresh, 'no catch-up merge step');
+            assert.doesNotMatch(refresh.run ?? '', /git checkout --ours -- \$conflicts/);
+            assert.match(refresh.run ?? '', /git checkout --theirs -- "\$conflict"/);
+            assert.match(refresh.run ?? '', /merge-changelog\.js --theirs .* --version "\$higher"/);
         });
 
         it('skips the pre-release on the push that is a release', function () {
@@ -297,6 +382,38 @@ describe('.github/workflows', function () {
                         `${target} does not take the build from ${artifact}`);
                 }
             }
+        });
+
+        it('creates the GitHub release and its tag only after a registry took the build', function () {
+            // The GitHub release is the tag, and the tag is what release-check.js reads as "this
+            // version shipped". It used to run beside the registries, so a release both of them
+            // rejected still got its tag and the version was burned while nobody could install it.
+            const github = jobs['release-github'];
+            const needs = [github?.needs ?? []].flat();
+            for (const registry of ['release-marketplace', 'release-open-vsx']) {
+                assert.ok(needs.includes(registry), `release-github does not wait for ${registry}`);
+            }
+            // At least one, not both: a single registry outage still costs only that registry.
+            assert.match(github?.if ?? '', /needs\.release-marketplace\.result == 'success'/);
+            assert.match(github?.if ?? '', /needs\.release-open-vsx\.result == 'success'/);
+            assert.match(github?.if ?? '', /\|\|/);
+            assert.match(github?.if ?? '', /needs\.build-release\.result == 'success'/);
+            // Evaluated even though a needed job failed, but never on a run someone stopped.
+            assert.match(github?.if ?? '', /!cancelled\(\)/);
+            assert.doesNotMatch(github?.if ?? '', /always\(\)/);
+
+            // A pre-release is superseded by the next push and has no fix branch, so its GitHub
+            // prerelease stays independent of the registries. It still waits for verify, like
+            // every other target, so a build that fails lint or the unit tests publishes nothing.
+            assert.deepStrictEqual(
+                [jobs['pre-release-github']?.needs ?? []].flat(),
+                ['build-pre-release', 'verify'],
+            );
+
+            // The fix pull request lists the skipped GitHub release: that line is what says there
+            // is no tag.
+            const summary = runsIn(workflow, 'release-failed', 'Publishing **$TAG** failed');
+            assert.match(summary?.run ?? '', /startswith\("Release:"\)/);
         });
 
         it('opens a draft pull request on a branch when a release fails', function () {

@@ -19,7 +19,6 @@ const mainConfig = {
     libraryTarget: 'commonjs2',
     devtoolModuleFilenameTemplate: '../[resource-path]'
   },
-  devtool: 'source-map',
   externals: {
     vscode: 'commonjs vscode', // the vscode-module is created on-the-fly and must be excluded. Add other modules that cannot be webpack'ed, 📖 -> https://webpack.js.org/configuration/externals/
     'original-fs': 'original-fs',
@@ -85,7 +84,6 @@ const imageWorkerConfig = {
     libraryTarget: 'commonjs2',
     devtoolModuleFilenameTemplate: '../[resource-path]'
   },
-  devtool: 'source-map',
   externals: {
     vscode: 'commonjs vscode',
     'original-fs': 'original-fs',
@@ -137,7 +135,6 @@ const mainWebConfig = {
     libraryTarget: 'commonjs2',
     devtoolModuleFilenameTemplate: '../[resource-path]'
   },
-  devtool: 'source-map',
   externals: {
     vscode: 'commonjs vscode', // the vscode-module is created on-the-fly and must be excluded. Add other modules that cannot be webpack'ed, 📖 -> https://webpack.js.org/configuration/externals/
     'original-fs': 'original-fs',
@@ -230,7 +227,6 @@ const webviewJsConfig = {
     filename: '[name].js',
   },
 
-  devtool: 'source-map',
 
   resolve: {
     extensions: ['.ts', '.js']
@@ -282,4 +278,21 @@ const webviewJsConfig = {
   }
 };
 
-module.exports = [ mainConfig, imageWorkerConfig, mainWebConfig, webviewJsConfig ];
+const configs = [ mainConfig, imageWorkerConfig, mainWebConfig, webviewJsConfig ];
+
+// What every config shares is set here once rather than four times.
+//
+// Source maps only in development: the .vscodeignore drops every *.map from the package, so the
+// production build used to spend its time writing several megabytes of maps that shipped nowhere.
+// The filesystem cache lives under node_modules/.cache/webpack and makes the second `npm run
+// package` on a machine a fraction of the first.
+/**
+ * @param {Record<string, unknown>} _env
+ * @param {{ mode?: string }} argv
+ * @returns {import('webpack').Configuration[]}
+ */
+module.exports = (_env, argv) => configs.map((config) => ({
+  ...config,
+  devtool: argv.mode === 'production' ? false : 'source-map',
+  cache: { type: 'filesystem' },
+}));

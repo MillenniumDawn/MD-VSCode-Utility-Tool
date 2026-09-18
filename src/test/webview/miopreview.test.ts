@@ -23,12 +23,16 @@ function trait(id: string, x: number, y: number): MioTrait {
 // organization list at module scope; and again when the page is rendered, because every webview
 // test file shares one window and a preview module loaded in the same run reassigns these globals
 // from any `updateBody` message dispatched at it -- focustree.ts takes window.gridBox that way.
+const hostileCondition = `has_country_flag = "x'"><img src=x onerror=alert(1)>"`;
+
 function installPayload(): void {
     (global as any).window.mios = [{
         id: 'mio_test',
         traits: { alpha: trait('alpha', 0, 0), beta: trait('beta', 1, 0) },
         textHeaders: [],
-        conditionExprs: [],
+        // A trigger as a mod could write it, with the characters that would break out of the
+        // option markup the filter lists it in.
+        conditionExprs: [{ scopeName: 'ROOT', nodeContent: hostileCondition }],
         warnings: [],
     }];
     (global as any).window.renderedTrait = { mio_test: { alpha: '<span>alpha</span>', beta: '<span>beta</span>' } };
@@ -153,6 +157,18 @@ describe('webview/miopreview rendering', () => {
 
     it('draws the tree the payload describes', () => {
         assert.strictEqual(placeholder().querySelectorAll('.trait').length, 2);
+    });
+
+    // The condition filter lists trigger text straight from the mod. It has to come out as the
+    // text it went in as, not as markup the page then runs.
+    it('lists a condition as text, however it is written', () => {
+        const select = document.getElementById('conditions');
+        assert.ok(select, 'expected the condition select');
+        const options = select!.querySelectorAll('.option');
+        assert.strictEqual(options.length, 1);
+        assert.strictEqual(options[0].getAttribute('value'), `ROOT!|${hostileCondition}`);
+        assert.strictEqual(options[0].textContent, `[ROOT]${hostileCondition}`);
+        assert.strictEqual(select!.querySelector('img'), null);
     });
 
     // The grid defaults to off, so a grid on screen can only have come from the stored option.

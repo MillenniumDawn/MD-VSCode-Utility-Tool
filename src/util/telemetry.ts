@@ -25,6 +25,15 @@ export interface TelemetryMessage {
     args: unknown[];
 }
 
+const telemetryTypes: ReadonlySet<string> = new Set<TelemetryMessage['telemetryType']>(['event', 'error', 'exception']);
+
+export function isTelemetryMessage(msg: unknown): msg is TelemetryMessage {
+    return typeof msg === 'object' && msg !== null
+        && (msg as Record<string, unknown>).command === 'telemetry'
+        && telemetryTypes.has((msg as Record<string, unknown>).telemetryType as string)
+        && Array.isArray((msg as Record<string, unknown>).args);
+}
+
 export function registerTelemetryReporter() {
     // Telemetry is disabled: no reporter is constructed, so every send* call is a no-op.
     return {
