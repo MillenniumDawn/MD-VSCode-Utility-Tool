@@ -37,6 +37,7 @@ interface PendingJob {
 	resolve: (value: DecodedImage) => void;
 	reject: (reason: unknown) => void;
 	state: WorkerState;
+	timer?: NodeJS.Timeout;
 }
 
 interface WorkerState {
@@ -96,6 +97,13 @@ export function resolveWorkerPoolSize(configured: number | undefined): number {
 // build (no worker).
 let workerPoolSize = 1;
 
+// A worker wedged inside a CPU-bound decode never answers, so every job is given this long before
+// its caller is failed and the worker replaced. Generous because the mod ships full-size map
+// textures that legitimately take seconds on a slow machine.
+const JOB_TIMEOUT_MS = 30_000;
+let jobTimeoutMs = JOB_TIMEOUT_MS;
+const TIMEOUT_ERROR_NAME = "ImageDecodeTimeoutError";
+
 let ensureWorkers: (() => WorkerState[] | null) | null = null;
 let spawnWorker: (() => WorkerState | null) | null = null;
 
@@ -151,7 +159,7 @@ function onWorkerMessage(state: WorkerState, response: WorkerResponse): void {
 		return;
 	}
 
-	pendingJobs.delete(response.id);
+	settleJob(response.id, job);
 	if (response.error) {
 		job.reject(reviveError(response.error));
 	} else if (response.png) {
@@ -174,7 +182,8 @@ function onWorkerError(state: WorkerState, e: unknown): void {
 
 function onWorkerExit(state: WorkerState, code: number): void {
 	liveWorkers.delete(state);
-	removeWorker(state);
+	// Fail the jobs before the pool is touched: emptying it disables the pool, which rejects
+	// whatever is still pending with the generic disposal reason instead of the exit code.
 	if (state.inFlight > 0) {
 		const reason = new Error(
 			"image decode worker exited (code " + code + ") with jobs in flight",
@@ -182,6 +191,30 @@ function onWorkerExit(state: WorkerState, code: number): void {
 		error(reason);
 		failWorkerJobs(state, reason);
 	}
+	removeWorker(state);
+}
+
+// A worker that has not answered within jobTimeoutMs is stuck in a decode and will never answer.
+// Its caller is failed, along with every other job queued on that thread, and the thread is dropped
+// without disabling the pool, so the next decode spawns a fresh one: one pathological image must
+// not cost the whole session its workers.
+function onJobTimeout(id: number): void {
+	const job = pendingJobs.get(id);
+	if (!job) {
+		return;
+	}
+	const reason = new Error(
+		"image decode timed out after " + jobTimeoutMs + "ms",
+	);
+	reason.name = TIMEOUT_ERROR_NAME;
+	error(reason);
+	const state = job.state;
+	const idx = workers.indexOf(state);
+	if (idx >= 0) {
+		workers.splice(idx, 1);
+	}
+	terminateWorker(state);
+	failWorkerJobs(state, reason);
 }
 
 function removeWorker(state: WorkerState): void {
@@ -197,24 +230,45 @@ function removeWorker(state: WorkerState): void {
 	}
 }
 
+function terminateWorker(state: WorkerState): void {
+	// The listeners are going away, so the worker's 'exit' event can no longer reach onWorkerExit:
+	// the live-thread set is maintained here instead of waiting for an exit that will not be seen.
+	liveWorkers.delete(state);
+	try {
+		state.worker.removeAllListeners();
+		void state.worker.terminate();
+	} catch (e) {
+		// The worker is already gone; nothing to clean up.
+	}
+}
+
 function disableWorker(): void {
 	workerUnavailable = true;
 	for (const state of liveWorkers) {
-		try {
-			state.worker.removeAllListeners();
-			void state.worker.terminate();
-		} catch (e) {
-			// The worker is already gone; nothing to clean up.
-		}
+		terminateWorker(state);
 	}
 	liveWorkers.clear();
 	workers.length = 0;
+	// Nothing is left to answer them; reject so each caller's await settles and falls back to the
+	// sync decode instead of hanging for the rest of the host's life.
+	const reason = new Error("image decode worker pool disposed");
+	for (const [id, job] of pendingJobs) {
+		settleJob(id, job);
+		job.reject(reason);
+	}
+}
+
+function settleJob(id: number, job: PendingJob): void {
+	pendingJobs.delete(id);
+	if (job.timer !== undefined) {
+		clearTimeout(job.timer);
+	}
 }
 
 function failWorkerJobs(state: WorkerState, reason: Error): void {
 	for (const [id, job] of pendingJobs) {
 		if (job.state === state) {
-			pendingJobs.delete(id);
+			settleJob(id, job);
 			job.reject(reason);
 		}
 	}
@@ -273,7 +327,8 @@ function postJob(buffer: Buffer, kind: "dds" | "tga"): Promise<DecodedImage> {
 			reject(e);
 			return;
 		}
-		pendingJobs.set(id, { resolve, reject, state });
+		const job: PendingJob = { resolve, reject, state };
+		pendingJobs.set(id, job);
 		try {
 			// Copy into a private ArrayBuffer before transferring: the source Buffer is shared and
 			// cached in fileContentCache, so it must never be detached. The copy is the only cost
@@ -288,7 +343,11 @@ function postJob(buffer: Buffer, kind: "dds" | "tga"): Promise<DecodedImage> {
 			pendingJobs.delete(id);
 			state.inFlight = Math.max(0, state.inFlight - 1);
 			reject(e);
+			return;
 		}
+		// unref: a pending decode must not keep the host process alive on its own.
+		job.timer = setTimeout(() => onJobTimeout(id), jobTimeoutMs);
+		job.timer.unref();
 	});
 }
 
@@ -302,6 +361,11 @@ export async function decodeImageToPng(
 			try {
 				return await postJob(buffer, kind);
 			} catch (e) {
+				// A decode that did not finish on a worker would freeze the extension host if it were
+				// retried synchronously here; let the caller treat the image as missing instead.
+				if (e instanceof Error && e.name === TIMEOUT_ERROR_NAME) {
+					throw e;
+				}
 				// `new Worker` reports a missing entry file asynchronously, so a pool that can never
 				// work still looks spawned; without this the whole first render decodes to nothing and
 				// getImage caches that undefined for the image cache's full life.
@@ -338,6 +402,18 @@ export function _setImageWorkerPathForTest(newPath: string): void {
 export function _resetImageWorkerPathForTest(): void {
 	workerPath = defaultWorkerPath;
 	workerUnavailable = true;
+	jobTimeoutMs = JOB_TIMEOUT_MS;
+}
+
+// Test-only: shorten the per-job timeout so a wedged-worker test does not wait the real 30s.
+export function _setImageJobTimeoutForTest(ms: number): void {
+	jobTimeoutMs = ms;
+}
+
+// Test-only: whether the pool has been given up on, so a test can tell an evicted worker (pool
+// regrows) from a disabled pool (every later decode is synchronous).
+export function _isWorkerPoolDisabledForTest(): boolean {
+	return workerUnavailable;
 }
 
 // Test-only: terminate every spawned worker so the test process can settle between cases. It
