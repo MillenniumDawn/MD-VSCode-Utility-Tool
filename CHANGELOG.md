@@ -30,6 +30,7 @@ v1.1.37
 - An empty or comment-only localisation file no longer stops "Scan references" with a YAML error.
 - [ CI ] A release no longer fails outright when Open VSX is briefly unavailable: the publish is retried for up to half an hour, and a fix pull request is only opened once that has given up too.
 - The release run retries a transient Open VSX outage before opening a fix pull request, so a momentary service outage no longer triggers a fix pull request.
+- The development toolchain installs cleanly again after a dependency update broke it. Dependency updates that are incompatible with the supported Node and Visual Studio Code versions are held back until those support windows move.
 
 v1.1.36
 
