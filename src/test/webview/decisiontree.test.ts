@@ -1,4 +1,4 @@
-import "./setup";
+import { takePostedMessages } from "./setup";
 import * as assert from "assert";
 import {
 	DecisionGraphDecisionNode,
@@ -144,6 +144,7 @@ const shellHtml = `
         <input type="checkbox" id="show-conditions">
         <input type="checkbox" id="show-effects">
         <input type="checkbox" id="show-scripted-gui">
+        <input type="checkbox" id="collapse-categories">
         <div id="dec-filter-container">
             <div class="select-container">
                 <div id="dec-filters" class="select multiple-select" tabindex="0" role="combobox">
@@ -236,6 +237,15 @@ describe("webview/decisiontree filteredGraph", () => {
 
 		assert.ok(ids.includes("d:POL_start_sre"));
 		assert.ok(ids.includes("d:POL_sre_main_countdown_mission"));
+	});
+
+	it("keeps the placeholder a surviving decision calls, so the arrow off the file is not lost", () => {
+		const graph = decisiontree.filteredGraph(integrationPayload, ["missions"]);
+
+		assert.ok(graph.nodes.some((n) => n.id === "u:POL_elsewhere"));
+		assert.ok(
+			graph.edges.some((e) => e.from === "d:POL_sre_main_countdown_mission" && e.to === "u:POL_elsewhere"),
+		);
 	});
 
 	it("bridges a call that ran through a decision the filter removed", () => {
@@ -362,6 +372,129 @@ describe("webview/decisiontree chipTextFor", () => {
 	});
 });
 
+describe("webview/decisiontree readCollapseExceptions", () => {
+	it("keeps only the strings of a stored list, and nothing from anything else", () => {
+		assert.deepStrictEqual(decisiontree.readCollapseExceptions(["a", 7, null, "b"]), ["a", "b"]);
+		assert.deepStrictEqual(decisiontree.readCollapseExceptions("a"), []);
+		assert.deepStrictEqual(decisiontree.readCollapseExceptions(undefined), []);
+	});
+});
+
+describe("webview/decisiontree collapseCategories", () => {
+	const category = "c:POL_state_controlled_economy_category";
+	const other = "c:POL_other_category";
+
+	// A second tab whose decisions are called from the first tab's mission and call back into it,
+	// so a chain crosses the collapsed tab in both directions.
+	function twoTabs(): DecisionGraphPayload {
+		return {
+			...integrationPayload,
+			nodes: [
+				...integrationPayload.nodes,
+				{
+					kind: "category",
+					id: other,
+					categoryKey: "POL_other_category",
+					name: { key: "POL_other_category", text: "Other" },
+					desc: { key: "POL_other_category_desc", text: "" },
+					priority: 1,
+					visibleWhenEmpty: false,
+					allowed: true,
+					hasAllowed: false,
+					visible: true,
+					hasVisible: false,
+					defined: true,
+					nav: { start: 40, end: 50, file: "common/decisions/Poland.txt" },
+				},
+				decision("POL_other_step", { category: "POL_other_category" }),
+				decision("POL_other_end", { category: "POL_other_category" }),
+			],
+			edges: [
+				...integrationPayload.edges,
+				structural(other, "d:POL_other_step"),
+				structural(other, "d:POL_other_end"),
+				call("d:POL_sre_main_countdown_mission", "d:POL_other_step", "activate"),
+				call("d:POL_other_step", "d:POL_other_end", "activate"),
+				call("d:POL_other_end", "d:POL_start_sre", "unlock"),
+			],
+		};
+	}
+
+	it("leaves the graph alone when nothing is collapsed", () => {
+		const filtered = decisiontree.filteredGraph(twoTabs(), []);
+		const { graph, hidden } = decisiontree.collapseCategories(filtered, () => false);
+
+		assert.strictEqual(graph, filtered);
+		assert.strictEqual(hidden.size, 0);
+	});
+
+	it("takes a collapsed tab's decisions away and keeps the tab, with a record of what it hides", () => {
+		const filtered = decisiontree.filteredGraph(twoTabs(), []);
+		const { graph, hidden } = decisiontree.collapseCategories(filtered, (id) => id === other);
+		const ids = graph.nodes.map((n) => n.id);
+
+		assert.ok(ids.includes(other), "the collapsed tab stays so it can be opened again");
+		assert.ok(!ids.includes("d:POL_other_step"));
+		assert.ok(!ids.includes("d:POL_other_end"));
+		assert.ok(ids.includes("d:POL_start_sre"), "the open tab is untouched");
+		assert.deepStrictEqual(hidden.get(other), ["d:POL_other_step", "d:POL_other_end"]);
+		assert.ok(graph.roots.includes(other));
+	});
+
+	it("bridges a chain that runs through a collapsed tab and drops the calls that start inside it", () => {
+		const filtered = decisiontree.filteredGraph(twoTabs(), []);
+		const { graph } = decisiontree.collapseCategories(filtered, (id) => id === other);
+
+		const bridged = graph.edges.find(
+			(e) => e.from === "d:POL_sre_main_countdown_mission" && e.to === "d:POL_start_sre",
+		);
+		assert.ok(bridged, "the call through the collapsed tab keeps its arrow");
+		assert.deepStrictEqual(bridged?.skipped, ["d:POL_other_step", "d:POL_other_end"]);
+		assert.ok(!graph.edges.some((e) => e.from === "d:POL_other_end"));
+	});
+
+	it("keeps a placeholder a chain still reaches, and drops one only a hidden decision pointed at", () => {
+		// The other tab's chain runs through the collapsed tab and on to the placeholder, so the
+		// bridged arrow keeps it on the canvas.
+		const filtered = decisiontree.filteredGraph(twoTabs(), []);
+		const reached = decisiontree.collapseCategories(filtered, (id) => id === category).graph;
+		assert.ok(reached.nodes.some((n) => n.id === "u:POL_elsewhere"));
+		assert.ok(reached.edges.some((e) => e.from === "d:POL_other_end" && e.to === "u:POL_elsewhere"));
+
+		// With only the one tab, nothing visible points at the placeholder any more.
+		const alone = decisiontree.filteredGraph(integrationPayload, []);
+		const dropped = decisiontree.collapseCategories(alone, (id) => id === category).graph;
+		assert.ok(!dropped.nodes.some((n) => n.id === "u:POL_elsewhere"));
+	});
+
+	it("keeps what a filter already skipped when a collapse bridges the same arrow again", () => {
+		const chain = twoTabs();
+		chain.nodes = [
+			...chain.nodes,
+			decision("POL_far_mission", { isMission: true, daysMissionTimeout: 10 }),
+		];
+		chain.edges = [
+			...chain.edges,
+			structural(category, "d:POL_far_mission"),
+			call("d:POL_start_sre", "d:POL_far_mission", "activate"),
+		];
+		// Missions only: POL_start_sre goes, so the arrow into it from the other tab is bridged on to
+		// the far mission with POL_start_sre skipped. Collapsing the other tab then bridges the
+		// mission's call into it through both of its steps, on top of that.
+		const filtered = decisiontree.filteredGraph(chain, ["missions"]);
+		const { graph } = decisiontree.collapseCategories(filtered, (id) => id === other);
+
+		const bridged = graph.edges.find(
+			(e) => e.from === "d:POL_sre_main_countdown_mission" && e.to === "d:POL_far_mission",
+		);
+		assert.deepStrictEqual(bridged?.skipped, [
+			"d:POL_other_step",
+			"d:POL_other_end",
+			"d:POL_start_sre",
+		]);
+	});
+});
+
 describe("webview/decisiontree rendering", () => {
 	let previousBody = "";
 
@@ -377,6 +510,10 @@ describe("webview/decisiontree rendering", () => {
 
 	function cards(): HTMLElement[] {
 		return Array.from(document.querySelectorAll("#decisiontreecontent .ev-card"));
+	}
+
+	function storedState(): Record<string, any> {
+		return (global as any).acquireVsCodeApi().getState();
 	}
 
 	function cardFor(id: string): HTMLElement {
@@ -489,5 +626,75 @@ describe("webview/decisiontree rendering", () => {
 
 		box.value = "";
 		box.dispatchEvent(new Event("keyup"));
+	});
+	it("folds every tab down to its card when the collapse toggle is on, and opens one from its chevron", () => {
+		const category = "c:POL_state_controlled_economy_category";
+		const toggle = document.getElementById("collapse-categories") as HTMLInputElement;
+		toggle.checked = true;
+		toggle.dispatchEvent(new Event("change"));
+
+		assert.strictEqual(
+			document.querySelectorAll('#decisiontreecontent .ev-node[data-id^="d:"]').length,
+			0,
+		);
+		const folded = cardFor(category);
+		assert.ok(folded.classList.contains("dec-card-collapsed"));
+		assert.strictEqual(folded.querySelector(".dec-badge-hidden")?.textContent, "2 hidden");
+		const chevron = folded.querySelector(".dec-collapse") as HTMLButtonElement;
+		assert.strictEqual(chevron.getAttribute("aria-expanded"), "false");
+
+		takePostedMessages();
+		chevron.dispatchEvent(new (window as any).MouseEvent("click", { bubbles: true }));
+
+		assert.ok(cardFor("d:POL_start_sre"), "the tab opened on its own");
+		assert.ok(!cardFor(category).classList.contains("dec-card-collapsed"));
+		assert.strictEqual(
+			cardFor(category).querySelector(".dec-collapse")?.getAttribute("aria-expanded"),
+			"true",
+		);
+		assert.deepStrictEqual(
+			takePostedMessages().filter((m) => m.command === "navigate"),
+			[],
+			"the chevron must not also open the file",
+		);
+		assert.deepStrictEqual(storedState().decCollapseExceptions, [
+			"POL_state_controlled_economy_category",
+		]);
+
+		// Flipping the toggle is a fresh start: the tab opened by hand is forgotten with it.
+		toggle.checked = false;
+		toggle.dispatchEvent(new Event("change"));
+		assert.deepStrictEqual(storedState().decCollapseExceptions, []);
+		assert.ok(cardFor("d:POL_start_sre"));
+	});
+
+	it("closes one tab from its chevron while the rest stay open", () => {
+		const category = "c:POL_state_controlled_economy_category";
+		const chevron = cardFor(category).querySelector(".dec-collapse") as HTMLButtonElement;
+		assert.strictEqual(chevron.getAttribute("aria-expanded"), "true");
+
+		chevron.dispatchEvent(new (window as any).MouseEvent("click", { bubbles: true }));
+		assert.ok(cardFor(category).classList.contains("dec-card-collapsed"));
+		assert.strictEqual(
+			document.querySelector('#decisiontreecontent .ev-node[data-id="d:POL_start_sre"]'),
+			null,
+		);
+		const toggle = document.getElementById("collapse-categories") as HTMLInputElement;
+		assert.strictEqual(toggle.checked, false);
+
+		(cardFor(category).querySelector(".dec-collapse") as HTMLButtonElement).dispatchEvent(
+			new (window as any).MouseEvent("click", { bubbles: true }),
+		);
+		assert.ok(cardFor("d:POL_start_sre"));
+	});
+
+	it("keeps Enter on the chevron from opening the file through the card", () => {
+		const category = "c:POL_state_controlled_economy_category";
+		const chevron = cardFor(category).querySelector(".dec-collapse") as HTMLButtonElement;
+		takePostedMessages();
+		chevron.dispatchEvent(
+			new (window as any).KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+		);
+		assert.deepStrictEqual(takePostedMessages().filter((m) => m.command === "navigate"), []);
 	});
 });

@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- The decision preview can collapse its categories: a "Collapse categories" toggle in the toolbar folds every tab down to its category card, and a chevron on each card opens or closes that one on its own, so a large file can be folded up and read one tab at a time. Issue #272.
 - [ CI ] The extension package no longer ships developer files (contributor notes, lint and duplication configuration, stray log and temp files), and every CI job now has a time limit so a stuck publish cannot block later releases for hours. Issue #202.
 - The extension's own interface — preview toolbars, filters, warnings and the settings descriptions — is now fully translated into Korean, Russian and Simplified Chinese, where the newer previews (characters, decisions, ideas, index status) had been showing English. Issue #191.
 - Previews drop a malformed message from their own page instead of acting on it, the condition filters in the focus tree and MIO previews show a trigger as the text it is written as, and the loading page carries a content security policy like the finished preview. Issue #201.
@@ -15,6 +16,7 @@ Unreleased
 
   Bugfixes:
 
+- With a filter selected, the decision preview kept dropping the "Not defined in this file" placeholder a surviving decision called, and the arrow with it; the placeholder now stays as long as something on the canvas points at it.
 - An empty or comment-only localisation file no longer stops "Scan references" with a YAML error.
 
 - [ CI ] The GitHub release and its version tag are only created once the build reached the VS Code Marketplace or Open VSX, so a release that reached neither no longer burns its version number. Issue #197.
