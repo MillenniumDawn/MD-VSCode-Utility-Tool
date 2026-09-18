@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { html, loadingShellHtml, errorPageContent } from './util/html';
 import { StyleTable } from './util/styletable';
 import { sendEvent } from './util/telemetry';
-import { readFile } from './util/vsccommon';
+import { previewWebviewOptions, readFile } from './util/vsccommon';
 import { decodeImageToPng } from './util/image/imagedecoder';
 
 // Runs in the viewer page: asks the host for the image bytes and shows them through a blob URL.
@@ -75,7 +75,8 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
             });
 
             // Custom editor webviews start with scripts disabled, and the page needs one to build the blob URL.
-            webviewPanel.webview.options = { enableScripts: true };
+            // The shared options also scope localResourceRoots to the extension folder, like the other panels.
+            webviewPanel.webview.options = previewWebviewOptions();
             webviewPanel.webview.html = html(
                 webviewPanel.webview,
                 `<div class="${styleTable.oneTimeStyle('imagePreview', () => `width:${width}px;height:${height}px;`)}">
