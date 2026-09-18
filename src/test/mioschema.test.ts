@@ -62,3 +62,33 @@ describe('previewdef/mio/schema tree_header_text', () => {
         ]);
     });
 });
+
+describe('previewdef/mio/schema trait tokens', () => {
+    // A token is whatever the file wrote. One named after a prototype slot has to be a trait
+    // like any other, and overriding it must not reach past the map to Object itself.
+    it('keeps a trait whose token is a prototype slot name', () => {
+        const input = `
+            test_org = {
+                name = test_org
+                trait = {
+                    token = __proto__
+                    position = { x = 1 y = 0 }
+                }
+                trait = {
+                    token = constructor
+                    position = { x = 2 y = 0 }
+                }
+                override_trait = {
+                    token = constructor
+                    position = { x = 3 y = 0 }
+                }
+            }
+        `;
+        const before = Object.getOwnPropertyNames(Object);
+        const mios = getMiosFromFile(parseHoi4File(input), [], 'test.txt');
+        assert.deepStrictEqual(Object.keys(mios[0].traits).sort(), ['__proto__', 'constructor']);
+        assert.strictEqual(mios[0].traits['__proto__'].x, 1);
+        assert.strictEqual(mios[0].traits['constructor'].x, 3);
+        assert.deepStrictEqual(Object.getOwnPropertyNames(Object), before);
+    });
+});

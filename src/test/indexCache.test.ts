@@ -1,5 +1,7 @@
 import * as assert from 'assert';
-import { cacheNamespaceFor, computeStaleFiles } from '../util/indexCache';
+import * as vscode from 'vscode';
+import { cacheNamespaceFor, computeStaleFiles, getFileMtimes } from '../util/indexCache';
+import { restoreVscodeStubs, stubVscode } from './_vscode_stub';
 
 describe('util/indexCache', () => {
     describe('cacheNamespaceFor', () => {
@@ -165,6 +167,38 @@ describe('util/indexCache', () => {
             assert.deepStrictEqual(result.stale.sort(), ['changed.txt']);
             assert.deepStrictEqual(result.removed, ['removed.txt']);
             assert.deepStrictEqual(result.added, ['added.txt']);
+        });
+    });
+
+    describe('getFileMtimes', () => {
+        afterEach(() => restoreVscodeStubs());
+
+        it('stats through a bounded pool, keeps input order and drops what cannot be resolved', async () => {
+            const paths = Array.from({ length: 100 }, (_, i) => `f${i}.txt`);
+            let inFlight = 0;
+            let peak = 0;
+            stubVscode({
+                stat: async (uri: any) => {
+                    inFlight++;
+                    peak = Math.max(peak, inFlight);
+                    await new Promise(resolve => setTimeout(resolve, 1));
+                    inFlight--;
+                    return { type: vscode.FileType.File, mtime: Number(String(uri.path).match(/f(\d+)/)![1]), ctime: 0, size: 0 };
+                },
+            });
+            const resolveUri = async (relativePath: string) => {
+                if (relativePath === 'f7.txt') {
+                    throw new Error('unreadable');
+                }
+                return relativePath === 'f3.txt' ? undefined : vscode.Uri.file('/root/' + relativePath);
+            };
+
+            const result = await getFileMtimes(paths, resolveUri);
+
+            assert.ok(peak > 1, `peak ${peak}`);
+            assert.ok(peak <= 32, `peak ${peak}`);
+            assert.deepStrictEqual([...result.keys()], paths.filter(p => p !== 'f3.txt' && p !== 'f7.txt'));
+            assert.strictEqual(result.get('f42.txt'), 42);
         });
     });
 });

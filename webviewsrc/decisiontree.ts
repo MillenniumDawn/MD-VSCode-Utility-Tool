@@ -275,17 +275,19 @@ function bridgeEdges(
 		}
 	}
 
-	const result: DecisionGraphEdge[] = [];
-	for (const edge of edges) {
-		if (edge.structural || kept.has(edge.to)) {
-			result.push(edge);
-			continue;
+	// What a removed decision reaches depends only on that decision, not on which edge led to it,
+	// so the walk from each one is done once however many kept decisions call it.
+	const bridgeCache = new Map<string, { to: string; skipped: string[] }[]>();
+	const bridgesFrom = (start: string): { to: string; skipped: string[] }[] => {
+		const cached = bridgeCache.get(start);
+		if (cached !== undefined) {
+			return cached;
 		}
-
 		// Breadth first from the removed decision, collecting what it reaches that survived.
-		const seen = new Set<string>([edge.to]);
-		const skipped: string[] = [edge.to];
-		const queue = [edge.to];
+		const bridges: { to: string; skipped: string[] }[] = [];
+		const seen = new Set<string>([start]);
+		const skipped: string[] = [start];
+		const queue = [start];
 		while (queue.length > 0) {
 			const current = queue.shift();
 			if (current === undefined) {
@@ -297,12 +299,25 @@ function bridgeEdges(
 				}
 				seen.add(next.to);
 				if (kept.has(next.to)) {
-					result.push({ ...edge, to: next.to, skipped: [...skipped] });
+					bridges.push({ to: next.to, skipped: [...skipped] });
 				} else {
 					skipped.push(next.to);
 					queue.push(next.to);
 				}
 			}
+		}
+		bridgeCache.set(start, bridges);
+		return bridges;
+	};
+
+	const result: DecisionGraphEdge[] = [];
+	for (const edge of edges) {
+		if (edge.structural || kept.has(edge.to)) {
+			result.push(edge);
+			continue;
+		}
+		for (const bridge of bridgesFrom(edge.to)) {
+			result.push({ ...edge, to: bridge.to, skipped: [...bridge.skipped] });
 		}
 	}
 
