@@ -533,6 +533,43 @@ describe("util/fileloader DLC roots", function () {
 		]);
 	});
 
+	it("keeps DLC precedence when the first DLC's folder is the slowest to answer", async function () {
+		// The folders are probed together; a slow stat on the one that wins must not let a faster
+		// later DLC take the file or reorder the listing.
+		const slowStat = "dlc/dlc028_la_resistance/interface";
+		const inFlight: string[] = [];
+		stubVscode({
+			stat: async (uri: any) => {
+				const p = rel(uri);
+				if (p === slowStat || p === slowStat + "/lar.gfx") {
+					await new Promise((resolve) => setTimeout(resolve, 15));
+				}
+				inFlight.push(p);
+				if (p in dirs) {
+					return { type: Directory, mtime: 1, ctime: 0, size: 0 };
+				}
+				if (files.includes(p)) {
+					return { type: File, mtime: 1, ctime: 0, size: 0 };
+				}
+				throw new Error("not found: " + p);
+			},
+		});
+
+		assert.strictEqual(
+			rel(await getFilePathFromModOrHOI4("interface/lar.gfx")),
+			"dlc/dlc028_la_resistance/interface/lar.gfx",
+		);
+		assert.deepStrictEqual(await listFilesFromModOrHOI4("interface"), [
+			"lar.gfx",
+			"tfv.gfx",
+			"dod.gfx",
+			"wtt.gfx",
+			"mtg.gfx",
+		]);
+		// The slow DLC answered last, so the probes did run together.
+		assert.strictEqual(inFlight[inFlight.length - 1], slowStat);
+	});
+
 	it("behaves as before on an install without integrated_dlc", async function () {
 		setLayout(baseRoot);
 
@@ -845,6 +882,37 @@ describe("util/fileloader read error cause", function () {
 		assert.match(thrown.message, /Can't find file interface\/missing\.gfx/);
 		assert.ok(thrown.cause instanceof UserError);
 		assert.notStrictEqual(thrown.cause, thrown);
+	});
+
+	it("does not re-stat a DLC archive on every read within the same half minute", async function () {
+		const AdmZip = require("adm-zip");
+		const zip = new AdmZip();
+		zip.addFile("interface/present.gfx", Buffer.from("spriteTypes = { }"));
+		const zipPath = path.join(root, "dlc001.zip");
+		zip.writeZip(zipPath);
+		const resolvedUri = vscode.Uri.file(zipPath).with({
+			fragment: "interface/present.gfx",
+		});
+
+		let now = 1_000_000;
+		let zipStats = 0;
+		stubVscode({
+			now: () => now,
+			stat: async (uri: any) => {
+				if (String(uri.fsPath ?? uri.path).endsWith("dlc001.zip")) {
+					zipStats++;
+				}
+				return { type: vscode.FileType.File, mtime: 1, ctime: 0, size: 0 };
+			},
+		});
+
+		await readFileFromModOrHOI4("interface/present.gfx", undefined, resolvedUri);
+		const afterFirst = zipStats;
+		now += 5_000;
+		await readFileFromModOrHOI4("interface/present.gfx", undefined, resolvedUri);
+
+		// The default 200ms grace would have stat'd the archive again five seconds later.
+		assert.strictEqual(zipStats, afterFirst);
 	});
 });
 

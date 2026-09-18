@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { localize } from './i18n';
-import { UserError } from './common';
+import { UserError, mapLimit } from './common';
 import { isSamePath } from './nodecommon';
 import { ConfigurationKey } from '../constants';
 import { defaultYmlSuffix, ymlSuffixBySettingName } from './locales';
@@ -51,21 +51,35 @@ export async function readDirFiles(dir: vscode.Uri): Promise<string[]> {
     return (await vscode.workspace.fs.readDirectory(dir)).filter(f => f[1] === vscode.FileType.File).map(f => f[0]);
 }
 
+/**
+ * Every directory listing is a round trip to the extension host (two for `hoi4installpath:`, whose
+ * provider answers by asking `vscode.workspace.fs` again), so subdirectories are read several at a
+ * time rather than each waiting on the whole subtree of the one listed before it. Results keep the
+ * listing order a serial walk produced.
+ */
+const DIR_CONCURRENCY = 8;
+
 export async function readDirFilesRecursively(dir: vscode.Uri): Promise<string[]> {
-    const result: string[] = [];
-    await readDirFilesRecursivelyImpl(dir, '', result);
-    return result;
+    return readDirFilesRecursivelyImpl(dir, '');
 }
 
-async function readDirFilesRecursivelyImpl(dir: vscode.Uri, prefix: string, result: string[]): Promise<void> {
+async function readDirFilesRecursivelyImpl(dir: vscode.Uri, prefix: string): Promise<string[]> {
     const items = await vscode.workspace.fs.readDirectory(dir);
-    for (const [name, type] of items) {
+    const nested = await mapLimit(items, DIR_CONCURRENCY, async ([name, type]) => {
         if (type === vscode.FileType.File) {
-            result.push(prefix + name);
+            return [prefix + name];
         } else if (type === vscode.FileType.Directory) {
-            await readDirFilesRecursivelyImpl(vscode.Uri.joinPath(dir, name), prefix + name + '/', result);
+            return readDirFilesRecursivelyImpl(vscode.Uri.joinPath(dir, name), prefix + name + '/');
+        }
+        return [];
+    });
+    const result: string[] = [];
+    for (const files of nested) {
+        for (const file of files) {
+            result.push(file);
         }
     }
+    return result;
 }
 
 export async function readFile(path: vscode.Uri): Promise<Buffer> {

@@ -154,6 +154,31 @@ describe('util/loader/loader', () => {
             assert.strictEqual(parent.isLoaded(loader), true);
         });
 
+        it('forChild carries every field: force, cancellation, reload marks and the loader cache', () => {
+            const loader = {} as Loader<unknown, unknown>;
+            class T extends Loader<{}> {
+                constructor(_file: string) { super(); this.disableTelemetry = true; }
+                protected async loadImpl(): Promise<LoadResult<{}>> { return { result: {}, dependencies: [] }; }
+            }
+            let cancelled = false;
+            const parent = new LoaderSession(true, () => cancelled);
+            parent.setShouldReload(loader);
+            const cached = parent.createOrGetCachedLoader('/foo', T);
+
+            const child = parent.forChild();
+
+            assert.ok(child instanceof LoaderSession);
+            assert.strictEqual(child.force, true);
+            assert.strictEqual(child.shouldReload(loader), true);
+            assert.strictEqual(child.createOrGetCachedLoader('/foo', T), cached);
+            assert.doesNotThrow(() => child.throwIfCancelled());
+            cancelled = true;
+            assert.throws(() => child.throwIfCancelled(), (e: unknown) => e instanceof UserError);
+            // And the marks are shared both ways, not copied.
+            child.clearShouldReload(loader);
+            assert.strictEqual(parent.shouldReload(loader), false);
+        });
+
         it('throwIfCancelled does nothing when no callback is set', () => {
             const session = new LoaderSession(false);
             assert.doesNotThrow(() => session.throwIfCancelled());
@@ -325,6 +350,37 @@ describe('util/loader/loader', () => {
             await loader.load(new LoaderSession(false));
 
             assert.strictEqual(loader.postLoadCalls.length, 1);
+        });
+
+        it('reloads only when the provided content differs, including a same-length edit', async () => {
+            // The real shouldReloadImpl, not the stub above: it decides from the text alone.
+            class PlainContentLoader extends ContentLoader<{ payload: string }> {
+                public postLoadCalls = 0;
+                constructor(provider: () => Promise<string>) {
+                    super('a.txt', provider);
+                    this.disableTelemetry = true;
+                    this.readDependency = false;
+                }
+                protected async postLoad(content: string | undefined): Promise<LoadResultOD<{ payload: string }>> {
+                    this.postLoadCalls++;
+                    return { result: { payload: content ?? '' } };
+                }
+            }
+            let payload = 'aaa';
+            const loader = new PlainContentLoader(async () => payload);
+
+            await loader.load(new LoaderSession(false));
+            await loader.load(new LoaderSession(false));
+            assert.strictEqual(loader.postLoadCalls, 1);
+
+            payload = 'aab';
+            const changed = await loader.load(new LoaderSession(false));
+            assert.strictEqual(changed.result.payload, 'aab');
+            assert.strictEqual(loader.postLoadCalls, 2);
+
+            payload = 'aab' + 'b';
+            await loader.load(new LoaderSession(false));
+            assert.strictEqual(loader.postLoadCalls, 3);
         });
 
         it('throws a UserError when the same file is already loading in the session (circular dependency)', async () => {

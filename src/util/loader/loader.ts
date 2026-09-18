@@ -7,7 +7,6 @@ import {
 } from "../fileloader";
 import { error } from "../debug";
 import { mapLimit, UserError } from "../common";
-import { fnv1a32 } from "../hash";
 import { Dependency, getDependenciesFromText } from "../dependency";
 import { sendEvent } from "../telemetry";
 export { Dependency } from "../dependency";
@@ -69,9 +68,16 @@ export class LoaderSession {
 	}
 
 	public forChild(): LoaderSession {
-		const clone = { ...this };
+		// Built field by field rather than spread-then-setPrototypeOf: this runs once per
+		// Loader.load(), and swapping an object's prototype after construction puts it in V8's
+		// slow dictionary mode for the rest of its life.
+		const clone = Object.create(LoaderSession.prototype) as LoaderSession;
+		clone.loadedLoader = this.loadedLoader;
+		clone.shouldLoaderReload = this.shouldLoaderReload;
+		clone.cachedLoader = this.cachedLoader;
 		clone.loadingLoader = [...this.loadingLoader];
-		Object.setPrototypeOf(clone, Object.getPrototypeOf(this));
+		clone.force = this.force;
+		clone.cancelled = this.cancelled;
 		return clone;
 	}
 
@@ -326,7 +332,9 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 	private expiryToken: string = "";
 	protected loaderDependencies = new LoaderDependencies();
 	protected readDependency = true;
-	private lastContentHash = 0;
+	// The text the last load saw, kept whole. Comparing strings is a length check and a memcmp,
+	// where hashing walked every character of the document on every render, changed or not.
+	private lastContent: string | undefined = undefined;
 	private pendingContent: string | undefined = undefined;
 
 	constructor(
@@ -343,15 +351,14 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 				this.loaderDependencies.shouldReload(session)
 			);
 		}
-		// Peek at in-memory content to compute hash; store it to avoid a second call in loadImpl
+		// Peek at in-memory content; store it to avoid a second call in loadImpl
 		const content = await this.contentProvider();
-		const hash = fnv1a32(content);
 		const depsChanged = await this.loaderDependencies.shouldReload(session);
-		if (hash === this.lastContentHash && !depsChanged) {
+		if (content === this.lastContent && !depsChanged) {
 			return false;
 		}
 		this.pendingContent = content;
-		this.lastContentHash = hash;
+		this.lastContent = content;
 		return true;
 	}
 
@@ -369,14 +376,17 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 		let content: string | undefined = undefined;
 		let errorValue: unknown = undefined;
 		try {
-			content =
-				this.contentProvider === undefined
-					? (await readFileFromModOrHOI4(this.file))[0]
-							.toString("utf-8")
-							.replace(/^\uFEFF/, "")
-					: this.pendingContent !== undefined
-						? this.pendingContent
-						: await this.contentProvider();
+			if (this.contentProvider === undefined) {
+				content = (await readFileFromModOrHOI4(this.file))[0]
+					.toString("utf-8")
+					.replace(/^\uFEFF/, "");
+			} else {
+				content = this.pendingContent ?? (await this.contentProvider());
+				// The first load never goes through shouldReloadImpl, so it records the text
+				// itself; otherwise the next check had nothing to compare against and every
+				// second render reloaded an unchanged document.
+				this.lastContent = content;
+			}
 			this.pendingContent = undefined;
 		} catch (e) {
 			this.pendingContent = undefined;

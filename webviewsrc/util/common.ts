@@ -500,13 +500,27 @@ export function initCommon(): void {
 				setPressed(true);
 			});
 
+			// Mouse events arrive faster than frames are painted, and every scroll forced a layout.
+			// The target is absolute -- pageX is clientX plus the current scroll, so the old
+			// `pageXOffset - pageX + mdx` is `mdx - clientX` -- which is what makes applying only
+			// the last position of a frame exact.
+			let lastClientX = 0;
+			let lastClientY = 0;
+			let scrollScheduled = false;
 			document.body.addEventListener("mousemove", function (e) {
-				if (pressed) {
-					window.scroll(
-						window.pageXOffset - e.pageX + mdx,
-						window.pageYOffset - e.pageY + mdy,
-					);
+				if (!pressed) {
+					return;
 				}
+				lastClientX = e.clientX;
+				lastClientY = e.clientY;
+				if (scrollScheduled) {
+					return;
+				}
+				scrollScheduled = true;
+				window.requestAnimationFrame(() => {
+					scrollScheduled = false;
+					window.scroll(mdx - lastClientX, mdy - lastClientY);
+				});
 			});
 
 			document.body.addEventListener("mouseup", function () {
