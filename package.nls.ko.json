@@ -39,5 +39,9 @@
     "hoi4modutilities.enableSupplyArea.title": "보급구역 활성화",
     "hoi4modutilities.enableSupplyArea.desc": "HOI4 1.10 이하 버전용 모드를 개발하는 경우 이 옵션을 켜서 보급구역을 활성화하세요.",
     "hoi4modutilities.previewLocalisation.title": "미리보기 언어",
-    "hoi4modutilities.previewLocalisation.desc": "이벤트 트리 미리보기에 표시되는 내용의 언어입니다."
+    "hoi4modutilities.previewLocalisation.desc": "이벤트 트리 미리보기에 표시되는 내용의 언어입니다.",
+    "hoi4modutilities.section.gameAndMod": "게임 및 모드",
+    "hoi4modutilities.section.previews": "미리보기",
+    "hoi4modutilities.section.worldMap": "세계 지도",
+    "hoi4modutilities.section.indexes": "인덱스 및 성능"
 }

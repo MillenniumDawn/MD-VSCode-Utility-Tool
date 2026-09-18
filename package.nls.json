@@ -39,5 +39,9 @@
     "hoi4modutilities.enableSupplyArea.title": "Enable Supply Area",
     "hoi4modutilities.enableSupplyArea.desc": "If you are developing mod for HOI4(version<=1.10). Check this to enable supply area.",
     "hoi4modutilities.previewLocalisation.title": "Preview Localization",
-    "hoi4modutilities.previewLocalisation.desc": "Language of content in event tree preview."
+    "hoi4modutilities.previewLocalisation.desc": "Language of content in event tree preview.",
+    "hoi4modutilities.section.gameAndMod": "Game and mod",
+    "hoi4modutilities.section.previews": "Previews",
+    "hoi4modutilities.section.worldMap": "World map",
+    "hoi4modutilities.section.indexes": "Indexes and performance"
 }
