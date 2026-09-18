@@ -1,9 +1,9 @@
 Unreleased
 
+v1.1.37
+
   Functionality:
 
-- The decision preview can collapse its categories: a "Collapse categories" toggle in the toolbar folds every tab down to its category card, and a chevron on each card opens or closes that one on its own, so a large file can be folded up and read one tab at a time. Issue #272.
-- The extension's settings are grouped into sections — Game and mod, Previews, World map, Indexes and performance — each its own page in the Settings editor, instead of one long list. Issue #335.
 - [ CI ] The extension package no longer ships developer files (contributor notes, lint and duplication configuration, stray log and temp files), and every CI job now has a time limit so a stuck publish cannot block later releases for hours. Issue #202.
 - The extension's own interface — preview toolbars, filters, warnings and the settings descriptions — is now fully translated into Korean, Russian and Simplified Chinese, where the newer previews (characters, decisions, ideas, index status) had been showing English. Issue #191.
 - Previews drop a malformed message from their own page instead of acting on it, the condition filters in the focus tree and MIO previews show a trigger as the text it is written as, and the loading page carries a content security policy like the finished preview. Issue #201.
@@ -13,17 +13,14 @@ Unreleased
 - [ World Map Previewer ] A folder of files such as `history/states` or the country files behind `common/country_tags` is read a few files at a time instead of all at once, so a large mod no longer holds every file in memory during a load, and a single file that cannot be read is skipped and listed under the map's warnings instead of failing the whole preview. Issue #193.
 - Scan references on a mod with thousands of events no longer freezes the editor for minutes and no longer holds every event and localisation file in memory at once; an event or localisation file that cannot be read is now reported in the output log instead of being skipped silently. Issue #194.
 - The trigger and effect evaluators behind every preview now have their own tests, so a wrong branch shown for an `if`/`else`, `NOT` or `count_triggers` block is caught before release. Issue #199.
+- Checkbox labels are read through the input's label property with a document query fallback. Drag-panning coalesces mouse moves into one scroll per animation frame. Decision bridging memoises its traversal per removed node.
 - Greyscale and colour-mapped TGA images now decode in the previews and the image viewer instead of being refused as unsupported.
+- The decision preview can collapse its categories: a "Collapse categories" toggle in the toolbar folds every tab down to its category card, and a chevron on each card opens or closes that one on its own, so a large file can be folded up and read one tab at a time. Issue #272.
+- The extension's settings are grouped into sections — Game and mod, Previews, World map, Indexes and performance — each its own page in the Settings editor, instead of one long list. Issue #335.
 
   Bugfixes:
 
-- A plain mouse wheel scrolls the focus tree, technology, MIO, event and decision previews again. It had zoomed instead, which shrank the tree until it fit the pane, took the scrollbar with it and left the wheel doing nothing. Zoom with Ctrl+wheel, the zoom buttons or the +/- keys, or set `mdHoi4Utilities.previewWheel` to `auto` or `zoom` to have the wheel zoom. Issue #336.
-- With a filter selected, the decision preview kept dropping the "Not defined in this file" placeholder a surviving decision called, and the arrow with it; the placeholder now stays as long as something on the canvas points at it.
-- The DDS and TGA image viewer now limits the files its page may load to the extension's own folder, like the other previews, instead of the whole workspace. Issue #317.
-- An empty or comment-only localisation file no longer stops "Scan references" with a YAML error.
-
 - [ CI ] The GitHub release and its version tag are only created once the build reached the VS Code Marketplace or Open VSX, so a release that reached neither no longer burns its version number. Issue #197.
-- [ CI ] A release no longer fails outright when Open VSX is briefly unavailable: the publish is retried for up to half an hour, and a fix pull request is only opened once that has given up too.
 
 - A sprite whose name contains quotes or braces no longer breaks the page styling of the GUI, focus tree, technology and MIO previews that draw it. Issue #218.
 - [ World Map Previewer ] A provinces or rivers BMP with a small, top-down, compressed or unusual-depth header is reported as a clear error instead of failing the preview or reading colours no province has. Issue #201.
@@ -32,6 +29,13 @@ Unreleased
 - Dragging to pan a preview scrolls once per frame instead of once per mouse event, and a decision chain routed through several hidden decisions is bridged without repeating the same walk. Issue #200.
 - Closing VS Code while a DDS or TGA image is still being decoded no longer leaves that decode waiting forever, and a decode that hangs is abandoned after 30 seconds instead of stalling the preview that asked for it. Issue #195.
 - An image decode worker that crashes while starting no longer logs a second "exited with jobs in flight" error after its jobs were already reported failed. Issue #190.
+- An empty or comment-only localisation file no longer stops "Scan references" with a YAML error.
+- [ CI ] A release no longer fails outright when Open VSX is briefly unavailable: the publish is retried for up to half an hour, and a fix pull request is only opened once that has given up too.
+- The release run retries a transient Open VSX outage before opening a fix pull request, so a momentary service outage no longer triggers a fix pull request.
+- The development toolchain installs cleanly again after a dependency update broke it. Dependency updates that are incompatible with the supported Node and Visual Studio Code versions are held back until those support windows move.
+- With a filter selected, the decision preview kept dropping the "Not defined in this file" placeholder a surviving decision called, and the arrow with it; the placeholder now stays as long as something on the canvas points at it.
+- The DDS and TGA image viewer now limits the files its page may load to the extension's own folder, like the other previews, instead of the whole workspace. Issue #317.
+- A plain mouse wheel scrolls the focus tree, technology, MIO, event and decision previews again. It had zoomed instead, which shrank the tree until it fit the pane, took the scrollbar with it and left the wheel doing nothing. Zoom with Ctrl+wheel, the zoom buttons or the +/- keys, or set `mdHoi4Utilities.previewWheel` to `auto` or `zoom` to have the wheel zoom. Issue #336.
 
 v1.1.36
 
