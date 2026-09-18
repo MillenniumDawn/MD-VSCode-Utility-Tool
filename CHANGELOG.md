@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- Scan references on a mod with thousands of events no longer freezes the editor for minutes and no longer holds every event and localisation file in memory at once; an event or localisation file that cannot be read is now reported in the output log instead of being skipped silently. Issue #194.
 - The trigger and effect evaluators behind every preview now have their own tests, so a wrong branch shown for an `if`/`else`, `NOT` or `count_triggers` block is caught before release. Issue #199.
 
   Bugfixes:
