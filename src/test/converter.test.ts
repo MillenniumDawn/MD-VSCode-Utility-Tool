@@ -397,12 +397,51 @@ describe("TGA malformed input", () => {
 		}
 	});
 
+	it("refuses a header with no image data", () => {
+		const buf = makeTgaHeader(2, 2);
+		buf.writeInt8(0, 2);
+		assert.throws(() => tgaToPng(buf), isUserError(/Unsupported tga format/));
+	});
+
+	it("refuses a pixel depth the decoder does not handle", () => {
+		const buf = Buffer.concat([makeTgaHeader(2, 2), Buffer.alloc(16)]);
+		buf.writeInt8(12, 16);
+		assert.throws(() => tgaToPng(buf), isUserError(/Unsupported tga format/));
+	});
+
 	it("refuses uncompressed pixel data cut short", () => {
 		const buf = Buffer.concat([makeTgaHeader(2, 2), Buffer.alloc(8)]);
 		assert.throws(
 			() => tgaToPng(buf),
 			isUserError(/pixel data is truncated/),
 		);
+	});
+
+	it("refuses uncompressed greyscale pixel data cut short", () => {
+		const buf = Buffer.concat([makeTgaHeader(2, 2), Buffer.alloc(3)]);
+		buf.writeInt8(3, 2); // greyscale
+		buf.writeInt8(8, 16);
+		assert.throws(
+			() => tgaToPng(buf),
+			isUserError(/pixel data is truncated/),
+		);
+	});
+
+	it("decodes uncompressed greyscale pixel data", () => {
+		const buf = Buffer.concat([makeTgaHeader(2, 2), Buffer.from([1, 2, 3, 4])]);
+		buf.writeInt8(3, 2); // greyscale
+		buf.writeInt8(8, 16);
+		const png = tgaToPng(buf);
+		assert.strictEqual(png.width, 2);
+		assert.strictEqual(png.height, 2);
+		// Bottom-left origin, so the last two bytes are the top row.
+		assert.deepStrictEqual(Array.from(png.data.subarray(0, 8)), [3, 3, 3, 255, 4, 4, 4, 255]);
+	});
+
+	it("keeps a fully transparent image transparent", () => {
+		const buf = Buffer.concat([makeTgaHeader(1, 1), Buffer.from([10, 20, 30, 0])]);
+		const png = tgaToPng(buf);
+		assert.deepStrictEqual(Array.from(png.data), [30, 20, 10, 0]);
 	});
 
 	it("still decodes uncompressed pixel data of exactly the right length", () => {
