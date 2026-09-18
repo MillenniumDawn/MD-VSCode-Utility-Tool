@@ -317,6 +317,7 @@ const table: Partial<typeof __table> = {
     "worldmap.error.fieldnotindefaultmap": "default.map中缺少字段“{0}”。",
     "worldmap.error.multiply256": "地图长宽必须为256的倍数：{0}x{1}。",
     "worldmap.error.provinceidtoolarge": "地块编号过大，最大值：{0}。",
+    "worldmap.error.provinceimagebpp": "省份图片必须为每像素24比特，当前图片为{0}比特。",
     "worldmap.export.error": "无法导出地图：{0}。",
     "worldmap.export.error.imgformat": "无法导出地图：图像格式问题。",
     "worldmap.export.success": "成功导出地图。",

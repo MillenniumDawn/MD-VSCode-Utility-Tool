@@ -317,6 +317,7 @@ const table: Partial<typeof __table> = {
     "worldmap.error.fieldnotindefaultmap": "default.map 내에서 \"{0}\"에 해당하는 필드를 찾을수 없음.",
     "worldmap.error.multiply256": "높이와 너비는 반드시 256을 곱한 수여야 합니다: {0}x{1}.",
     "worldmap.error.provinceidtoolarge": "최대 프로빈스 ID가 너무 큼: {0}.",
+    "worldmap.error.provinceimagebpp": "프로빈스 이미지는 픽셀당 24비트여야 하지만, {0} 입니다.",
     "worldmap.export.error": "지도를 내보낼수 없음: {0}.",
     "worldmap.export.error.imgformat": "지도를 내보낼수 없음: 이미지 형식이 유효하지 않음.",
     "worldmap.export.success": "성공적으로 지도를 내보냄.",
