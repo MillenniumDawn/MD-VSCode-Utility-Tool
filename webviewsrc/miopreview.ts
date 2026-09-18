@@ -4,6 +4,7 @@ import { DivDropdown } from "./util/dropdown";
 import { minBy, maxBy } from "lodash";
 import { renderGridBoxCommon, GridBoxItem, GridBoxConnection } from "../src/util/hoi4gui/gridboxcommon";
 import { StyleTable } from "../src/util/styletable";
+import { escapeAttr } from "../src/util/escape";
 import { applyCondition, ConditionItem } from "../src/hoiformat/condition";
 import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
@@ -255,7 +256,7 @@ function updateSelectedMio(clearCondition: boolean) {
     if (conditions) {
         conditions.select.innerHTML = `<span class="value"></span>
             ${conditionExprs.map(option =>
-                `<div class="option" value='${option.scopeName}!|${option.nodeContent}'>${option.scopeName ? `[${option.scopeName}]` : ''}${option.nodeContent}</div>`
+                `<div class="option" value="${escapeAttr(`${option.scopeName}!|${option.nodeContent}`)}">${option.scopeName ? `[${escapeAttr(option.scopeName)}]` : ''}${escapeAttr(option.nodeContent)}</div>`
             ).join('')}`;
         conditions.selectedValues$.next(clearCondition ? [] : selectedExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
     }

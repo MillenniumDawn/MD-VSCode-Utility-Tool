@@ -1,5 +1,7 @@
 import * as assert from 'assert';
-import { fileOrUriStringToUri } from '../util/vsccommon';
+import * as vscode from 'vscode';
+import { fileOrUriStringToUri, readDirFilesRecursively } from '../util/vsccommon';
+import { restoreVscodeStubs, stubVscode } from './_vscode_stub';
 
 describe('util/vsccommon', () => {
     describe('fileOrUriStringToUri', () => {
@@ -45,6 +47,42 @@ describe('util/vsccommon', () => {
 
         it('parses a value that carries a scheme, quotes stripped first', () => {
             assert.strictEqual(fileOrUriStringToUri('"vscode-vfs://github/org/repo"')?.toString(), 'vscode-vfs://github/org/repo');
+        });
+    });
+
+    describe('readDirFilesRecursively', () => {
+        afterEach(() => restoreVscodeStubs());
+
+        // Directories are read several at a time; the listing order must not follow completion order.
+        function stubTree(delays: Record<string, number> = {}) {
+            const tree: Record<string, [string, number][]> = {
+                '/root': [['a.txt', vscode.FileType.File], ['sub', vscode.FileType.Directory], ['b.txt', vscode.FileType.File], ['other', vscode.FileType.Directory], ['link', vscode.FileType.SymbolicLink]],
+                '/root/sub': [['c.txt', vscode.FileType.File], ['deep', vscode.FileType.Directory]],
+                '/root/sub/deep': [['d.txt', vscode.FileType.File]],
+                '/root/other': [['e.txt', vscode.FileType.File]],
+            };
+            stubVscode({
+                readDirectory: async (uri: vscode.Uri) => {
+                    const key = uri.fsPath.replace(/\\/g, '/');
+                    const delay = delays[key];
+                    if (delay !== undefined) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                    return tree[key] ?? [];
+                },
+            });
+        }
+
+        it('lists files in directory order, descending into subdirectories where they are listed', async () => {
+            stubTree();
+            const result = await readDirFilesRecursively(vscode.Uri.file('/root'));
+            assert.deepStrictEqual(result, ['a.txt', 'sub/c.txt', 'sub/deep/d.txt', 'b.txt', 'other/e.txt']);
+        });
+
+        it('keeps that order when an earlier directory answers after a later one', async () => {
+            stubTree({ '/root/sub': 20, '/root/sub/deep': 10 });
+            const result = await readDirFilesRecursively(vscode.Uri.file('/root'));
+            assert.deepStrictEqual(result, ['a.txt', 'sub/c.txt', 'sub/deep/d.txt', 'b.txt', 'other/e.txt']);
         });
     });
 });

@@ -163,6 +163,37 @@ describe('Cache', () => {
         (cache as any).tryClean();
 
         assert.deepStrictEqual(keys(cache), ['fresh']);
+        assert.strictEqual((cache as any)._size, 1);
+    });
+
+    it('keeps its running size right across remove, clear, sweep and eviction', () => {
+        // The count-only limit is answered from the running size rather than by counting keys, so
+        // a size that drifted high would evict early and one that drifted low would never evict.
+        const cache = track(new Cache<string>({ factory: key => key, life: 1000, maxSize: 2 }));
+        cache.get('a');
+        cache.get('b');
+        cache.remove('a');
+        cache.remove('a'); // removing twice must not count twice
+        cache.get('c');
+        assert.deepStrictEqual(keys(cache), ['b', 'c']);
+
+        cache.get('d'); // over the limit: 'b' is the least recently used
+        assert.deepStrictEqual(keys(cache), ['c', 'd']);
+        assert.strictEqual((cache as any)._size, 2);
+
+        (cache as any)._cache['c'].lastAccess = Date.now() - 5000;
+        (cache as any).tryClean();
+        assert.strictEqual((cache as any)._size, 1);
+        cache.get('e');
+        cache.get('f');
+        assert.deepStrictEqual(keys(cache), ['e', 'f']);
+
+        cache.clear();
+        assert.strictEqual((cache as any)._size, 0);
+        cache.get('g');
+        cache.get('h');
+        cache.get('i');
+        assert.deepStrictEqual(keys(cache), ['h', 'i']);
     });
 
     it('serves a hot entry forever when only life guards it', () => {

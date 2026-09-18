@@ -19,7 +19,9 @@ import {
 } from "../../../webviewsrc/worldmap/renderContext";
 import {
 	getResourcesSize,
+	loadResourceImages,
 	renderMapLabels,
+	resourceImages,
 } from "../../../webviewsrc/worldmap/stateLayer";
 import { renderAllEdges } from "../../../webviewsrc/worldmap/provinceLayer";
 import {
@@ -29,7 +31,7 @@ import {
 	renderSupplyRelated,
 } from "../../../webviewsrc/worldmap/overlayLayer";
 import { Renderer } from "../../../webviewsrc/worldmap/renderer";
-import { TopBar, topBarHeight } from "../../../webviewsrc/worldmap/topbar";
+import { TopBar, topBarHeight, warningsText } from "../../../webviewsrc/worldmap/topbar";
 import { ViewPoint } from "../../../webviewsrc/worldmap/viewpoint";
 
 function province(overrides: Partial<Province> = {}): Province {
@@ -524,6 +526,111 @@ describe("webview/worldmap/stateLayer", function () {
 		assert.strictEqual(labels.length, 1);
 		assert.deepStrictEqual(labels[0]?.args.slice(1), [5, 6]);
 	});
+
+	it("requests each resource icon once per URI, however often the map is re-emitted", function () {
+		// The map is emitted on every progress step of a load; each emit used to start a fresh
+		// download of every icon.
+		const originalImage = (globalThis as any).Image;
+		const created: { src: string; onload?: () => void }[] = [];
+		(globalThis as any).Image = class {
+			public onload?: () => void;
+			private _src = "";
+			get src() {
+				return this._src;
+			}
+			set src(value: string) {
+				this._src = value;
+				created.push(this);
+			}
+		};
+		try {
+			const resources = [
+				{ name: "steel", imageUri: "https://x/steel.png" },
+				{ name: "oil", imageUri: "https://x/oil.png" },
+			];
+			loadResourceImages(resources);
+			loadResourceImages(resources);
+			loadResourceImages([...resources]);
+			assert.deepStrictEqual(created.map((i) => i.src), ["https://x/steel.png", "https://x/oil.png"]);
+
+			// A resource whose icon moved is fetched again, and the stale load does not win.
+			const stale = created[0]!;
+			loadResourceImages([{ name: "steel", imageUri: "https://x/steel2.png" }]);
+			assert.strictEqual(created.length, 3);
+			stale.onload?.();
+			assert.strictEqual(resourceImages["steel"], undefined);
+			created[2]!.onload?.();
+			assert.strictEqual(resourceImages["steel"], created[2] as unknown as HTMLImageElement);
+		} finally {
+			(globalThis as any).Image = originalImage;
+			delete resourceImages["steel"];
+			delete resourceImages["oil"];
+		}
+	});
+});
+
+describe("webview/worldmap/topbar warningsText", function () {
+	it("names each warning's sources before its text, one per line", function () {
+		const text = warningsText([
+			{ source: [{ type: "province", id: 12 }], text: "no owner", relatedFiles: [] },
+			{ source: [{ type: "state", id: 3 }, { type: "river", name: "x" }], text: "bad river", relatedFiles: [] },
+		] as any);
+		assert.strictEqual(text, "World map warnings: \n\n[Province 12] no owner\n[State 3, River x] bad river");
+	});
+
+	it("says so when there are none", function () {
+		assert.strictEqual(warningsText([]), "No warnings.");
+	});
+});
+
+describe("webview/worldmap/ViewPoint", function () {
+	function bodyListenerCounter() {
+		const added: string[] = [];
+		const removed: string[] = [];
+		const originalAdd = document.body.addEventListener;
+		const originalRemove = document.body.removeEventListener;
+		document.body.addEventListener = function (this: unknown, type: string, ...rest: any[]) {
+			added.push(type);
+			return (originalAdd as any).call(this, type, ...rest);
+		} as any;
+		document.body.removeEventListener = function (this: unknown, type: string, ...rest: any[]) {
+			removed.push(type);
+			return (originalRemove as any).call(this, type, ...rest);
+		} as any;
+		return {
+			added,
+			removed,
+			restore() {
+				document.body.addEventListener = originalAdd;
+				document.body.removeEventListener = originalRemove;
+			},
+		};
+	}
+
+	it("follows the mouse by default and lets go of the page on dispose", function () {
+		const counter = bodyListenerCounter();
+		try {
+			const viewPoint = new ViewPoint(document.createElement("canvas"), { worldMap: undefined }, 0, { x: 0, y: 0, scale: 1 });
+			assert.ok(counter.added.includes("mousemove"), counter.added.join(","));
+			viewPoint.dispose();
+			assert.deepStrictEqual([...counter.removed].sort(), [...counter.added].sort());
+		} finally {
+			counter.restore();
+		}
+	});
+
+	it("touches no page listener when made for an offscreen canvas", function () {
+		// The export builds one per click; before, each left its mouse handlers on the page.
+		const counter = bodyListenerCounter();
+		try {
+			const viewPoint = new ViewPoint(document.createElement("canvas"), { worldMap: undefined }, 0, { x: 3, y: 4, scale: 2 }, { interactive: false });
+			assert.deepStrictEqual(counter.added, []);
+			assert.strictEqual(viewPoint.convertX(5), 4);
+			viewPoint.dispose();
+		} finally {
+			counter.restore();
+		}
+	});
 });
 
 describe("webview/worldmap/Renderer.renderMapImpl", function () {
@@ -963,6 +1070,38 @@ describe("webview/worldmap/overlayLayer", function () {
 					call.fillStyle === "rgba(255, 255, 255, 0.7)",
 			),
 		);
+	});
+
+	it("does not paint the hover highlight over the province that is already selected", function () {
+		// The guard compared the two subjects, which are never the same object, so the selected
+		// province was painted twice on every frame it was hovered.
+		const selected = province({
+			id: 1,
+			coverZones: [{ x: 0, y: 0, w: 2, h: 2 }],
+		});
+		const { canvasContext, calls } = recordingContext();
+		renderHoverSelectionByViewMode({
+			backCanvasContext: canvasContext,
+			viewPoint: identityViewPoint(),
+			topBar: {
+				viewMode$: { value: "province" },
+				selectedProvinceId$: { value: 1 },
+				hoverProvinceId$: { value: 1 },
+				display: { selectedValues$: { value: ["mousehighlight"] } },
+			} as unknown as TopBar,
+			worldMap: emptyMap({
+				width: 8,
+				provinces: [undefined, selected],
+				provincesCount: 2,
+			}),
+			cursorX: 10,
+			cursorY: 10,
+			canvasWidth: 400,
+			canvasHeight: 400,
+		});
+		const fills = calls.filter((call) => call.method === "fillRect");
+		assert.ok(fills.some((call) => call.fillStyle === "rgba(128, 255, 128, 0.7)"));
+		assert.ok(!fills.some((call) => call.fillStyle === "rgba(255, 255, 255, 0.7)"));
 	});
 
 	it("does not hover-highlight when mousehighlight is off", function () {

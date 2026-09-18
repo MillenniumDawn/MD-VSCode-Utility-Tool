@@ -43,6 +43,10 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // it applied, mirroring the base's own rule that bookkeeping does not advance when the apply
     // throws -- otherwise a failed html assign would leave the early-out skipping every retry.
     private pendingTreeFingerprints: { structural: string; icon: string } | undefined = undefined;
+    // The trees the current render has already fingerprinted, so the early-out check and the render
+    // result do not each serialise every tree. Cleared per render: the fingerprint folds in live
+    // config, so it must not survive to the next one.
+    private fingerprintedTrees: { trees: FocusTree[]; fingerprints: { structural: string; icon: string } } | undefined = undefined;
     private lastGoodHadFocusTrees = false;
     // Bug #36: the most recent real-icon CSS pushed to the webview, re-posted when the webview is
     // reloaded (hide->show tears it down) or the panel becomes visible again. Tagged with the
@@ -105,7 +109,10 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // which refreshes the module flag but does NOT reload the preview, moves the hash and blocks a stale
     // skip. Read once here per call so the early-out compare and the baseline seed use the same values.
     private treeFingerprintsFor(focusTrees: FocusTree[]): { structural: string; icon: string } {
-        return {
+        if (this.fingerprintedTrees?.trees === focusTrees) {
+            return this.fingerprintedTrees.fingerprints;
+        }
+        const fingerprints = {
             structural: computeTreeStructuralFingerprint({
                 focusTrees,
                 gridBox: focusTreeGridBox,
@@ -116,6 +123,8 @@ class FocusTreePreview extends UpdateablePreviewBase {
             }),
             icon: computeTreeIconFingerprint(focusTrees),
         };
+        this.fingerprintedTrees = { trees: focusTrees, fingerprints };
+        return fingerprints;
     }
 
     public onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
@@ -168,6 +177,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
             this.dependencyEpoch++;
         }
         this.pendingTreeFingerprints = undefined;
+        this.fingerprintedTrees = undefined;
         this.content = document.getText();
         // Progress is only reported for a full render: a partial update patches a tree that is
         // already on screen, so its spinner would be noise.
@@ -309,6 +319,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         this.lastTreeStructural = undefined;
         this.lastTreeIcon = undefined;
         this.pendingTreeFingerprints = undefined;
+        this.fingerprintedTrees = undefined;
         this.lastGoodHadFocusTrees = false;
     }
 

@@ -5,6 +5,31 @@ import { isSupplyVisible, RenderContext } from "./renderContext";
 
 export const resourceImages: Record<string, HTMLImageElement | undefined> = {};
 
+// The URI each resource icon was last requested from. The map is re-emitted on every progress
+// step of a load, up to once a frame, and each emit used to start a fresh download of every
+// icon; keyed on the request rather than on the loaded image so the burst before the first load
+// completes is deduplicated too.
+const requestedResourceSrc = new Map<string, string>();
+
+export function loadResourceImages(
+	resources: readonly { name: string; imageUri: string }[],
+): void {
+	for (const resource of resources) {
+		if (requestedResourceSrc.get(resource.name) === resource.imageUri) {
+			continue;
+		}
+		requestedResourceSrc.set(resource.name, resource.imageUri);
+		const image = new Image();
+		image.onload = () => {
+			// A later request for the same name supersedes this one.
+			if (requestedResourceSrc.get(resource.name) === resource.imageUri) {
+				resourceImages[resource.name] = image;
+			}
+		};
+		image.src = resource.imageUri;
+	}
+}
+
 export function renderMapLabels(
 	renderContext: RenderContext,
 	worldMap: FEWorldMap,

@@ -131,6 +131,18 @@ function getProvincesByPosition(provinceMapImage: BMP): {
 		);
 	}
 
+	// The loop below reads three bytes per pixel; any other depth would be read as colours
+	// that no province has.
+	if (provinceMapImage.bitsPerPixel !== 24) {
+		throw new UserError(
+			localize(
+				"worldmap.error.provinceimagebpp",
+				"The provinces image should be 24 bits per pixel, but it is {0}.",
+				provinceMapImage.bitsPerPixel,
+			),
+		);
+	}
+
 	const colorByPosition = new Uint32Array(
 		provinceMapImage.width * provinceMapImage.height,
 	);
