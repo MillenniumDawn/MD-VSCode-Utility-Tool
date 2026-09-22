@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { PreviewBase } from "./previewbase";
-import { fnv1a32 } from "../util/hash";
+import { fnv1a32, fnv1a32Value } from "../util/hash";
 
 // Shared base for previews that re-render in place instead of tearing the webview down on every
 // change. LoaderPreview (event/gui/mio/technology), GfxPreview and FocusTreePreview all extend it;
@@ -50,7 +50,7 @@ export interface LoaderRenderResult {
 	// error pages return.
 	html: string | (() => string);
 	update?: LoaderUpdateMessage;
-	// Change-detection identity for this render. Defaults to the serialized update payload (or the
+	// Change-detection identity for this render. Defaults to a hash of the update payload (or the
 	// nonce-normalized html for a plain-string render). Supplied when the payload's key order is
 	// unstable, or when the change detection has to cover more than the payload carries (the focus
 	// tree fingerprints its styleTable records, which never reach the webview as payload).
@@ -90,11 +90,13 @@ export function renderedHtml(rendered: LoaderRenderResult): string {
 	return rendered.html;
 }
 
-// Stable serialization of the update payload for change detection. Unlike the full html (which
-// carries fresh random CSP nonces per render and so never hashes equal), the update parts are
-// deterministic for identical input, so hashing them makes the skip actually fire.
-export function serializeUpdate(update: LoaderUpdateMessage): string {
-	return JSON.stringify(update);
+// Change-detection hash of the update payload. Unlike the full html (which carries fresh random
+// CSP nonces per render and so never hashes equal), the update parts are deterministic for
+// identical input, so hashing them makes the skip actually fire. The payload is walked straight
+// into the hash rather than serialized first: JSON.stringify over a multi-megabyte payload was a
+// second full pass and a string that size, per debounced edit, only to be hashed and dropped.
+export function hashUpdate(update: LoaderUpdateMessage): number {
+	return fnv1a32Value(update);
 }
 
 // The full html embeds a fresh randomString nonce per render (util/html.ts) — in each script/style
@@ -108,17 +110,16 @@ export function normalizeNoncesForHash(html: string): string {
 		.replace(/'nonce-[^']+'/g, "'nonce-'");
 }
 
-// The change-detection input for a render: the preview's own fingerprint when it supplies one,
-// otherwise the update payload, otherwise the nonce-normalized html. Only the last case — a render
-// with no update to post — builds the html, memoized on the render so an assign reuses it; the
-// decision can still be skip, leaving the page built but unassigned. A plain page builds nothing.
-function renderHashInput(rendered: LoaderRenderResult): string {
+// The change-detection hash for a render: fingerprint first, then the update payload walked
+// directly (without serializing it), then nonce-normalized html. The last case builds through the
+// memoized renderedHtml helper, so lazy pages remain unbuilt for update-capable renders.
+function renderHash(rendered: LoaderRenderResult): number {
 	if (rendered.fingerprint !== undefined) {
-		return rendered.fingerprint;
+		return hashHtml(rendered.fingerprint);
 	}
 	return rendered.update
-		? serializeUpdate(rendered.update)
-		: normalizeNoncesForHash(renderedHtml(rendered));
+		? hashUpdate(rendered.update)
+		: hashHtml(normalizeNoncesForHash(renderedHtml(rendered)));
 }
 
 // The bookkeeping every action carries, so the caller advances all of it at once after the apply
@@ -160,7 +161,7 @@ export function decideLoaderRender(
 	visible: boolean,
 ): LoaderUpdateAction {
 	const updateCapable = rendered.update !== undefined;
-	const hash = hashHtml(renderHashInput(rendered));
+	const hash = renderHash(rendered);
 	// The shell (a toolbar rendered into the html) cannot be patched by a post, so a change to it
 	// needs a full reload even when the update payload alone would have sufficed.
 	const shellChanged = rendered.shellFingerprint !== previous.shellFingerprint;
@@ -330,7 +331,7 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		// this render's capability. It assigns the property itself, so run the pre-assign hook here.
 		this.beforeRenderAssign();
 		this.latestUpdateMessage = undefined;
-		this.lastRenderHash = hashHtml(renderHashInput(rendered));
+		this.lastRenderHash = renderHash(rendered);
 		this.lastPageUpdateCapable = rendered.update !== undefined;
 		this.lastShellFingerprint = rendered.shellFingerprint;
 		this.lastSideFingerprint = rendered.sideFingerprint;

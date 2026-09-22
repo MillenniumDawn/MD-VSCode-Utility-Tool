@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { renderEventFile } from '../previewdef/event/contentbuilder';
-import { serializeUpdate, renderedHtml, LoaderRenderResult } from '../previewdef/loaderpreview';
+import { hashUpdate, renderedHtml, LoaderRenderResult } from '../previewdef/loaderpreview';
 import { EffectTreeNode, EventGraphEventNode, EventGraphOptionNode, EventGraphPayload } from '../previewdef/event/payload';
 import { conditionToString } from '../hoiformat/condition';
 import { contextContainer } from '../context';
@@ -9,7 +9,7 @@ import { contextContainer } from '../context';
 // renderEventFile returns the in-place update parts { html, update } on success and a plain html
 // string on the error branch. The graph is laid out and rendered in the webview, so the update
 // payload carries data rather than markup. These drive it against a stub loader to assert the
-// return shape, that serializeUpdate is stable for identical input -- the property the
+// return shape, that hashUpdate is stable for identical input -- the property the
 // LoaderPreview skip relies on -- and that the triggers and per-call conditions reach the payload.
 
 const webview = { asWebviewUri: (u: unknown) => u, cspSource: '' } as unknown as vscode.Webview;
@@ -103,19 +103,19 @@ describe('previewdef/event renderEventFile in-place update', () => {
         assert.strictEqual(node.eventId, 'test.1');
     });
 
-    it('serializeUpdate is stable for identical input, even though the full html nonces differ', async () => {
+    it('hashUpdate is stable for identical input, even though the full html nonces differ', async () => {
         const a = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         const b = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         // The full html carries fresh CSP nonces per render so it never hashes equal; the update parts
         // must be byte-identical so a no-op edit skips.
         assert.notStrictEqual(renderedHtml(a), renderedHtml(b));
-        assert.strictEqual(serializeUpdate(a.update!), serializeUpdate(b.update!));
+        assert.strictEqual(hashUpdate(a.update!), hashUpdate(b.update!));
     });
 
-    it('serializeUpdate differs when the input changed', async () => {
+    it('hashUpdate differs when the input changed', async () => {
         const a = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         const c = await renderEventFile(loaderFor(['test.2']), uri, webview) as LoaderRenderResult;
-        assert.notStrictEqual(serializeUpdate(a.update!), serializeUpdate(c.update!));
+        assert.notStrictEqual(hashUpdate(a.update!), hashUpdate(c.update!));
     });
 
     it('keeps the shell class names stable across renders so an in-place update never strands them', async () => {
@@ -469,11 +469,11 @@ describe('previewdef/event renderEventFile in-place update', () => {
             assert.strictEqual(flags.hasEffects, true);
         });
 
-        it('changes the serialized update, so a flags-only change is never skipped', async () => {
+        it('changes the hashed update, so a flags-only change is never skipped', async () => {
             const plain = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
             const hidden = await renderEventFile(
                 loaderFor([{ id: 'test.1', hidden: true }]), uri, webview) as LoaderRenderResult;
-            assert.notStrictEqual(serializeUpdate(plain.update!), serializeUpdate(hidden.update!));
+            assert.notStrictEqual(hashUpdate(plain.update!), hashUpdate(hidden.update!));
         });
     });
 

@@ -36,6 +36,47 @@ export function fnv1a32(
 }
 
 /**
+ * 32-bit FNV-1a over a plain-data value (what `JSON.stringify` would accept), fed into the hash
+ * as it is walked rather than serialized first. A multi-megabyte preview payload hashed through
+ * `fnv1a32(JSON.stringify(value))` costs a full JSON pass and a string that size before the hash
+ * even starts; this walks the same keys and leaves once.
+ *
+ * Equal structures hash equal. Object keys are taken in insertion order, as `JSON.stringify`
+ * takes them, so the hash differs whenever the stringified forms differ, and can also differ
+ * where they do not (NaN/Infinity fold to null there, undefined values are dropped there), so
+ * it can only post more often, never falsely skip. Strings are length-prefixed and containers
+ * bracketed, so `{a: "ab", b: "c"}` does not collide with `{a: "a", b: "bc"}`. Cycles are not
+ * detected: the values this is for are posted to a webview, which already requires them to be
+ * acyclic.
+ */
+export function fnv1a32Value(
+	value: unknown,
+	offsetBasis: number = FNV_OFFSET_BASIS,
+): number {
+	if (typeof value === "string") {
+		return fnv1a32(value, fnv1a32(`"${value.length}:`, offsetBasis));
+	}
+	if (Array.isArray(value)) {
+		let hash = fnv1a32(`[${value.length}`, offsetBasis);
+		for (const item of value) {
+			hash = fnv1a32Value(item, hash);
+		}
+		return fnv1a32("]", hash);
+	}
+	if (typeof value === "object" && value !== null) {
+		let hash = fnv1a32("{", offsetBasis);
+		for (const key of Object.keys(value)) {
+			hash = fnv1a32Value(key, hash);
+			hash = fnv1a32Value((value as Record<string, unknown>)[key], hash);
+		}
+		return fnv1a32("}", hash);
+	}
+	// number, boolean, null, undefined, bigint, symbol, function: the tag keeps `1` apart from
+	// `"1"` and `null` from `"null"`.
+	return fnv1a32(`${typeof value}:${String(value)}`, offsetBasis);
+}
+
+/**
  * 16 hex characters, from two 32-bit passes: one over the text, one over it backwards from a
  * different offset basis, so the two halves do not move together.
  */

@@ -1,7 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { renderDecisionFile } from "../previewdef/decision/contentbuilder";
-import { serializeUpdate, renderedHtml, LoaderRenderResult } from "../previewdef/loaderpreview";
+import { hashUpdate, renderedHtml, LoaderRenderResult } from "../previewdef/loaderpreview";
 import {
 	DecisionGraphCategoryNode,
 	DecisionGraphDecisionNode,
@@ -17,7 +17,7 @@ import { contextContainer } from "../context";
 // renderDecisionFile returns the in-place update parts { html, update } on success and a plain html
 // string on the error branch. The graph is laid out and rendered in the webview, so the update
 // payload carries data rather than markup. These drive it against a stub loader to assert the
-// return shape, that serializeUpdate is stable for identical input -- the property the
+// return shape, that hashUpdate is stable for identical input -- the property the
 // LoaderPreview skip relies on -- and that the categories, calls and conditions reach the payload.
 
 const webview = { asWebviewUri: (u: unknown) => u, cspSource: "" } as unknown as vscode.Webview;
@@ -96,11 +96,11 @@ describe("previewdef/decision/contentbuilder", () => {
 		assert.ok(result.update?.data?.decisionGraph);
 	});
 
-	it("serializes identically for identical input, which is what lets an unchanged edit skip", async () => {
+	it("hashes identically for identical input, which is what lets an unchanged edit skip", async () => {
 		const first = (await renderDecisionFile(loaderFor(simpleFile), uri, webview)) as LoaderRenderResult;
 		const second = (await renderDecisionFile(loaderFor(simpleFile), uri, webview)) as LoaderRenderResult;
 
-		assert.strictEqual(serializeUpdate(first.update!), serializeUpdate(second.update!));
+		assert.strictEqual(hashUpdate(first.update!), hashUpdate(second.update!));
 	});
 
 	it("exposes the payload on window.decisionGraph and loads the shared stylesheets", async () => {
