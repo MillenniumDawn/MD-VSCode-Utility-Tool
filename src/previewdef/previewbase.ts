@@ -23,6 +23,9 @@ export abstract class PreviewBase {
     // the preview (and its cached dependencies) through its emitters.
     protected readonly subscriptions: vscode.Disposable[] = [];
     protected panelInitialized = false;
+    // Renders run one at a time, so a slow render can never land after a newer one and overwrite
+    // it. A queued render reads the live document when it starts, so edits in between coalesce.
+    private renderQueue: Promise<void> = Promise.resolve();
 
     constructor(
         readonly uri: vscode.Uri,
@@ -31,7 +34,17 @@ export abstract class PreviewBase {
         this.registerEvents(panel);
     }
 
-    public async onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
+    public onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
+        return this.enqueueRender(() => this.renderDocument(document, dependencyChanged));
+    }
+
+    protected enqueueRender(task: () => Promise<void>): Promise<void> {
+        const run = this.renderQueue.then(task);
+        this.renderQueue = run.catch(() => undefined);
+        return run;
+    }
+
+    private async renderDocument(document: vscode.TextDocument, dependencyChanged: boolean): Promise<void> {
         if (this.isDisposed) {
             return;
         }
@@ -78,13 +91,15 @@ export abstract class PreviewBase {
         return this.disposed;
     }
 
-    public async initializePanelContent(document: vscode.TextDocument): Promise<void> {
-        if (this.isDisposed) {
-            return;
-        }
-        this.panelInitialized = false;
-        this.panel.webview.html = this.getLoadingShellHtml();
-        await this.onDocumentChange(document);
+    public initializePanelContent(document: vscode.TextDocument): Promise<void> {
+        return this.enqueueRender(async () => {
+            if (this.isDisposed) {
+                return;
+            }
+            this.panelInitialized = false;
+            this.panel.webview.html = this.getLoadingShellHtml();
+            await this.renderDocument(document, false);
+        });
     }
 
     protected getLoadingShellHtml(): string {
@@ -175,8 +190,12 @@ export abstract class PreviewBase {
             return;
         }
 
-        this.panelInitialized = false;
-        void this.onDocumentChange(document, dependencyChanged);
+        // The reset runs inside the queue: set now, a render in flight would set it back on
+        // finishing and this full reload would go out as a partial update.
+        void this.enqueueRender(() => {
+            this.panelInitialized = false;
+            return this.renderDocument(document, dependencyChanged);
+        });
     }
 
     protected abstract getContent(document: vscode.TextDocument, dependencyChanged?: boolean): Promise<string>;

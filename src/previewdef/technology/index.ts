@@ -55,7 +55,7 @@ class TechnologyTreePreview extends LoaderPreview<TechnologyTreeLoader> {
 
         const document = getDocumentByUri(this.uri);
         if (document) {
-            await this.sendPartialUpdate(document);
+            await this.onDocumentChange(document);
         }
     }
 
