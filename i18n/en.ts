@@ -271,6 +271,8 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"installpath.notdirectory":
 		"Hearts of Iron IV install path does not exist: {0}",
 	"installpath.notset": "Install path of Hearts of Iron IV is not set.",
+	"installpath.savefailed":
+		"Couldn't save the Hearts of Iron IV install path: {0}",
 	loading: "Loading...",
 	"localisationIndex.building": "Building localisation index...",
 	"localisationIndex.workspace.building":
@@ -305,6 +307,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"modfile.globalsetting": "Global setting",
 	"modfile.infolder": "In folder {0}",
 	"modfile.nomodfile": "(No mod descriptor)",
+	"modfile.savefailed": "Couldn't save the working mod file: {0}",
 	"modfile.select": "Browse a .mod file...",
 	"modfile.selectworkingmod": "Select working mod",
 	"modfile.type": "Mod file",

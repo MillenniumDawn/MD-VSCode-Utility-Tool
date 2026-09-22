@@ -283,6 +283,9 @@ const pristine = {
     showWorkspaceFolderPick: stub.window.showWorkspaceFolderPick,
     createWebviewPanel: stub.window.createWebviewPanel,
     registerWebviewPanelSerializer: stub.window.registerWebviewPanelSerializer,
+    showOpenDialog: stub.window.showOpenDialog,
+    showQuickPick: stub.window.showQuickPick,
+    registerCommand: stub.commands.registerCommand,
     withProgress: stub.window.withProgress,
     now: Date.now,
 };
@@ -314,6 +317,15 @@ export interface VscodeStubOverrides {
     createWebviewPanel?: (viewType: string, title: string, showOptions: any, options: any) => any;
     /** Captures the serializer a suite's `register()` call installs, e.g. to drive it directly. */
     registerWebviewPanelSerializer?: (viewType: string, serializer: any) => { dispose(): void };
+    /** Answers the folder or file picker, for suites driving a command that opens one. */
+    showOpenDialog?: (options?: any) => Promise<any>;
+    /** Answers a quick pick, for suites driving a command that asks one. */
+    showQuickPick?: (items: any, options?: any) => Promise<any>;
+    /**
+     * Captures the handler a suite's `register()` call installs, so a command that is otherwise
+     * only reachable through the palette can be invoked directly.
+     */
+    registerCommand?: (command: string, handler: (...args: any[]) => any) => { dispose(): void };
     /**
      * Drives an index build's progress notification: hand the task an already-cancelled token to
      * exercise cancellation, or capture what it reports.
@@ -390,6 +402,15 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.registerWebviewPanelSerializer !== undefined) {
         window.registerWebviewPanelSerializer = overrides.registerWebviewPanelSerializer;
     }
+    if (overrides.showOpenDialog !== undefined) {
+        window.showOpenDialog = overrides.showOpenDialog;
+    }
+    if (overrides.showQuickPick !== undefined) {
+        window.showQuickPick = overrides.showQuickPick;
+    }
+    if (overrides.registerCommand !== undefined) {
+        (stub.commands as any).registerCommand = overrides.registerCommand;
+    }
     if (overrides.withProgress !== undefined) {
         window.withProgress = overrides.withProgress;
     }
@@ -420,6 +441,9 @@ export function restoreVscodeStubs(): void {
     window.showWorkspaceFolderPick = pristine.showWorkspaceFolderPick;
     window.createWebviewPanel = pristine.createWebviewPanel;
     window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
+    window.showOpenDialog = pristine.showOpenDialog;
+    window.showQuickPick = pristine.showQuickPick;
+    (stub.commands as any).registerCommand = pristine.registerCommand;
     window.withProgress = pristine.withProgress;
     Date.now = pristine.now;
 }
