@@ -153,7 +153,6 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
         position: fixed;
         left:0;
         top:0;
-        background:#101010;
     `)}">
     </div>
     <div
