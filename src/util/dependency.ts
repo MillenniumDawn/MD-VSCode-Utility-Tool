@@ -19,6 +19,11 @@ import {
 import { flatMap, flatten } from "lodash";
 import { parseYaml } from "./yaml";
 import { indexParseQueue } from "./indexBuild";
+import {
+	noProgress,
+	ProgressReport,
+	withCancellableProgress,
+} from "./progress";
 import { Logger } from "./logger";
 
 export type Dependency = { type: string; path: string };
@@ -65,10 +70,16 @@ async function scanReferences(): Promise<void> {
 		if (
 			contextContainer.contextValue[ContextName.Hoi4PreviewType] === "event"
 		) {
-			await scanReferencesForEvents(editor);
-			void vscode.window.showInformationMessage(
-				localize("scanref.done", "Scan reference done."),
+			const result = await withCancellableProgress(
+				localize("scanref.progress", "Scanning references"),
+				(progress) => scanReferencesForEvents(editor, progress),
 			);
+			// A cancel says nothing: the user pressed Cancel and already knows.
+			if (result === "done") {
+				void vscode.window.showInformationMessage(
+					localize("scanref.done", "Scan reference done."),
+				);
+			}
 		} else {
 			void vscode.window.showErrorMessage(
 				localize(
@@ -79,6 +90,9 @@ async function scanReferences(): Promise<void> {
 		}
 	} catch (e) {
 		error(e);
+		void vscode.window.showErrorMessage(
+			localize("scanref.failed", "Scan references failed: {0}", `${e}`),
+		);
 	}
 }
 
@@ -194,21 +208,32 @@ export function localisationKeysOf(events: HOIEvent[]): Set<string> {
 	return keys;
 }
 
-export async function scanReferencesForEvents(editor: vscode.TextEditor) {
+export async function scanReferencesForEvents(
+	editor: vscode.TextEditor,
+	progress: ProgressReport = noProgress,
+): Promise<"done" | "cancelled"> {
 	const eventFiles = await listFilesFromModOrHOI4("events");
 	const document = editor.document;
+	// One counter across both passes: two bars for one action reads as two actions.
+	let total = eventFiles.length;
+	let done = 0;
 	const events = await loadBounded<HOIEvents>(eventFiles, async (file) => {
+		if (progress.token.isCancellationRequested || document.isClosed) {
+			return undefined;
+		}
 		const filePath = "events/" + file;
 		const [buffer, realPath] = await readFileFromModOrHOI4(filePath);
 		const realPathUri = getHoiOpenedFileOriginalUri(realPath);
 		if (isSameUri(document.uri, realPathUri)) {
 			return undefined;
 		}
-		return getEvents(parseHoi4File(buffer.toString()), filePath);
+		const parsed = getEvents(parseHoi4File(buffer.toString()), filePath);
+		progress.report(++done, total);
+		return parsed;
 	});
 
-	if (document.isClosed) {
-		return;
+	if (document.isClosed || progress.token.isCancellationRequested) {
+		return "cancelled";
 	}
 
 	const eventItems = flatMap(events, (e) =>
@@ -228,8 +253,8 @@ export async function scanReferencesForEvents(editor: vscode.TextEditor) {
 		eventItems,
 	);
 
-	if (document.isClosed) {
-		return;
+	if (document.isClosed || progress.token.isCancellationRequested) {
+		return "cancelled";
 	}
 
 	const existingDependency = getDependenciesFromText(document.getText());
@@ -252,11 +277,16 @@ export async function scanReferencesForEvents(editor: vscode.TextEditor) {
 	const localizationFiles = (await listFilesFromModOrHOI4("localisation"))
 		.map((file) => "localisation/" + file)
 		.filter((filePath) => !existingLocalizationDependency.has(filePath));
+	total += localizationFiles.length;
 	// Only the file name comes back: the parsed yml is checked against the wanted keys inside
 	// the callback and dropped, so no more than the queue's worth of them is ever alive.
 	const localizations = await loadBounded<string>(
 		localizationFiles,
 		async (filePath) => {
+			if (progress.token.isCancellationRequested || document.isClosed) {
+				return undefined;
+			}
+			progress.report(++done, total);
 			const [buffer, realPath] = await readFileFromModOrHOI4(filePath);
 			const realPathUri = getHoiOpenedFileOriginalUri(realPath);
 			if (isSameUri(document.uri, realPathUri)) {
@@ -283,8 +313,9 @@ export async function scanReferencesForEvents(editor: vscode.TextEditor) {
 		.map((lf) => `#!localisation:${lf}\n`)
 		.join("");
 
-	if (document.isClosed) {
-		return;
+	// Checked once more here so a cancel in the last moment does not still write to the file.
+	if (document.isClosed || progress.token.isCancellationRequested) {
+		return "cancelled";
 	}
 
 	await editor.edit((eb) => {
@@ -293,4 +324,6 @@ export async function scanReferencesForEvents(editor: vscode.TextEditor) {
 			moreEventDependencyContent + moreLocalizationDependencyContent,
 		);
 	});
+
+	return "done";
 }
