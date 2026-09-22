@@ -142,6 +142,101 @@ describe("util/indexBuild createIndexBuilder", function () {
 		assert.strictEqual(await builder.ensureBuilt(), "late");
 	});
 
+	it("keeps gate work behind an overdue build until its real work finishes", async function () {
+		const build = deferred<string>();
+		const builder = createIndexBuilder({
+			name: "slow",
+			message: "building",
+			build: () => build.promise,
+			timeout: 20,
+		});
+
+		await assert.rejects(builder.ensureBuilt(), /timed out/);
+
+		let afterBuildRuns = 0;
+		builder.gate.runAfterBuild(() => {
+			afterBuildRuns++;
+		});
+		let followOnStarts = 0;
+		const followOn = builder.gate.followOn(async () => {
+			followOnStarts++;
+			return "follow-on";
+		});
+
+		// The caller timed out, but the index writer is still active. Neither mutation may race it.
+		assert.strictEqual(afterBuildRuns, 0);
+		assert.strictEqual(followOnStarts, 0);
+
+		build.resolve("late");
+		assert.strictEqual(await followOn, "follow-on");
+		await waitForAsyncTasks();
+		assert.strictEqual(afterBuildRuns, 1);
+		assert.strictEqual(followOnStarts, 1);
+	});
+
+	it("runs queued gate work when an overdue build rejects", async function () {
+		const build = deferred<string>();
+		const builder = createIndexBuilder({
+			name: "slow",
+			message: "building",
+			build: () => build.promise,
+			timeout: 20,
+		});
+
+		await assert.rejects(builder.ensureBuilt(), /timed out/);
+
+		let afterBuildRuns = 0;
+		builder.gate.runAfterBuild(() => {
+			afterBuildRuns++;
+		});
+
+		build.reject(new Error("listing failed"));
+		await waitForAsyncTasks();
+
+		assert.strictEqual(afterBuildRuns, 1);
+		assert.strictEqual(builder.hasStarted(), false);
+	});
+
+	it("keeps queued gate work behind a pending follow-on after an overdue build rejects", async function () {
+		const build = deferred<string>();
+		const followOnWork = deferred<void>();
+		const builder = createIndexBuilder({
+			name: "slow",
+			message: "building",
+			build: () => build.promise,
+			timeout: 20,
+		});
+
+		await assert.rejects(builder.ensureBuilt(), /timed out/);
+
+		let earlierRuns = 0;
+		builder.gate.runAfterBuild(() => {
+			earlierRuns++;
+		});
+		let followOnStarts = 0;
+		const followOn = builder.gate.followOn(() => {
+			followOnStarts++;
+			return followOnWork.promise;
+		});
+
+		build.reject(new Error("listing failed"));
+		await waitForAsyncTasks();
+		assert.strictEqual(followOnStarts, 1);
+
+		let laterRuns = 0;
+		builder.gate.runAfterBuild(() => {
+			laterRuns++;
+		});
+		assert.strictEqual(earlierRuns, 0);
+		assert.strictEqual(laterRuns, 0);
+
+		followOnWork.resolve();
+		await followOn;
+		await waitForAsyncTasks();
+		assert.strictEqual(earlierRuns, 1);
+		assert.strictEqual(laterRuns, 1);
+	});
+
 	// The point of making the work cancellable: a cancelled build must leave nothing behind, or the
 	// next lookup would serve whatever half-built index the cancel interrupted.
 	it("starts a fresh build after a cancelled one rather than reusing it", async function () {
