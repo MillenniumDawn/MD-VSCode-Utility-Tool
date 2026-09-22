@@ -266,6 +266,8 @@ export function createIndexBuilder<T>(
 		});
 
 		buildTask = task;
+		// The gate tracks the real work rather than the timeout wrapper: at the deadline the wrapper has
+		// settled but the build is still writing, so queued mutations wait for it instead of racing it.
 		gate.start(underlying);
 
 		// Retry policy, keyed on the real work rather than on `task`: a build that overran the
