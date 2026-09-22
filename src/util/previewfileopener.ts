@@ -93,7 +93,7 @@ export async function openOrCopyHoiFile(
 		return;
 	}
 	let targetFolderUri = firstWorkspaceFolder.uri;
-	if (vscode.workspace.workspaceFolders.length >= 1) {
+	if (vscode.workspace.workspaceFolders.length > 1) {
 		const folder = await vscode.window.showWorkspaceFolderPick({
 			placeHolder: options.selectFolderMessage,
 		});
