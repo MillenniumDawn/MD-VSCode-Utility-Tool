@@ -1,7 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { renderDecisionFile } from "../previewdef/decision/contentbuilder";
-import { serializeUpdate, LoaderRenderResult } from "../previewdef/loaderpreview";
+import { serializeUpdate, renderedHtml, LoaderRenderResult } from "../previewdef/loaderpreview";
 import {
 	DecisionGraphCategoryNode,
 	DecisionGraphDecisionNode,
@@ -90,7 +90,7 @@ describe("previewdef/decision/contentbuilder", () => {
 			webview,
 		)) as LoaderRenderResult;
 
-		assert.ok(typeof result.html === "string");
+		assert.ok(typeof result.html === "function");
 		assert.ok(result.update);
 		assert.ok(typeof result.update?.styleCss === "string");
 		assert.ok(result.update?.data?.decisionGraph);
@@ -115,11 +115,11 @@ describe("previewdef/decision/contentbuilder", () => {
 				webview,
 			)) as LoaderRenderResult;
 
-			assert.ok(result.html.includes("window.decisionGraph = "));
-			assert.ok(result.html.includes("hoicard.css"), "the card primitives must be loaded");
-			assert.ok(result.html.includes("hoigraph.css"), "the shared canvas must be loaded");
-			assert.ok(result.html.includes("decisiontree.css"));
-			assert.ok(result.html.includes("decisiontree.js"));
+			assert.ok(renderedHtml(result).includes("window.decisionGraph = "));
+			assert.ok(renderedHtml(result).includes("hoicard.css"), "the card primitives must be loaded");
+			assert.ok(renderedHtml(result).includes("hoigraph.css"), "the shared canvas must be loaded");
+			assert.ok(renderedHtml(result).includes("decisiontree.css"));
+			assert.ok(renderedHtml(result).includes("decisiontree.js"));
 		} finally {
 			contextContainer.current = previous;
 		}
@@ -137,7 +137,7 @@ describe("previewdef/decision/contentbuilder", () => {
 			"show-scripted-gui",
 			"collapse-categories",
 		]) {
-			assert.ok(result.html.includes(`id="${id}"`), `expected ${id} in the shell`);
+			assert.ok(renderedHtml(result).includes(`id="${id}"`), `expected ${id} in the shell`);
 		}
 		for (const filter of [
 			"missions",
@@ -148,7 +148,7 @@ describe("previewdef/decision/contentbuilder", () => {
 			"conditions",
 			"scriptedgui",
 		]) {
-			assert.ok(result.html.includes(`value="${filter}"`), `expected the ${filter} filter`);
+			assert.ok(renderedHtml(result).includes(`value="${filter}"`), `expected the ${filter} filter`);
 		}
 	});
 
@@ -159,7 +159,7 @@ describe("previewdef/decision/contentbuilder", () => {
 			webview,
 		)) as LoaderRenderResult;
 
-		assert.ok(!result.html.includes("</script><script>alert(1)"));
+		assert.ok(!renderedHtml(result).includes("</script><script>alert(1)"));
 	});
 
 	it("renders the error branch as plain html when the loader throws", async () => {

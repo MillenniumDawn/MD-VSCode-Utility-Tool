@@ -2,6 +2,7 @@ import * as assert from "assert";
 import { PNG } from "pngjs";
 import * as vscode from "vscode";
 import { renderGfxFile } from "../previewdef/gfx/contentbuilder";
+import { renderedHtml, LoaderRenderResult } from "../previewdef/updateablepreview";
 import { _clearImageCachesForTest } from "../util/image/imagecache";
 import { clearDlcZipCache } from "../util/fileloader";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
@@ -93,12 +94,12 @@ ${entries
 }`;
 	}
 
-	function render(content: string): Promise<{ html: string }> {
+	function render(content: string): Promise<LoaderRenderResult> {
 		return renderGfxFile(
 			content,
 			vscode.Uri.file("/ws/interface/test.gfx"),
 			webview,
-		) as Promise<{ html: string }>;
+		);
 	}
 
 	function countOccurrences(haystack: string, needle: string): number {
@@ -122,27 +123,27 @@ ${entries
 		);
 
 		assert.strictEqual(
-			countOccurrences(result.html, "data:image/png;base64,"),
+			countOccurrences(renderedHtml(result), "data:image/png;base64,"),
 			1,
 			"the shared texture should contribute exactly one data URI",
 		);
 		for (const name of ["GFX_a", "GFX_b", "GFX_c"]) {
 			assert.ok(
-				result.html.includes(`id="${name}"`),
+				renderedHtml(result).includes(`id="${name}"`),
 				`expected a card for ${name}`,
 			);
 		}
 		assert.strictEqual(
-			countOccurrences(result.html, "st-spriteTypePreview"),
+			countOccurrences(renderedHtml(result), "st-spriteTypePreview"),
 			4, // one CSS rule plus one class reference per card
 			"all three sprites should still be rendered",
 		);
 		assert.strictEqual(
-			countOccurrences(result.html, 'aria-hidden="true"'),
+			countOccurrences(renderedHtml(result), 'aria-hidden="true"'),
 			3,
 			"each CSS texture should be hidden because its caption names the sprite",
 		);
-		assert.ok(!result.html.includes("<img"), "GFX textures stay CSS backgrounds");
+		assert.ok(!renderedHtml(result).includes("<img"), "GFX textures stay CSS backgrounds");
 	});
 
 	it("keeps distinct textures apart", async function () {
@@ -156,13 +157,13 @@ ${entries
 		);
 
 		assert.strictEqual(
-			countOccurrences(result.html, "data:image/png;base64,"),
+			countOccurrences(renderedHtml(result), "data:image/png;base64,"),
 			2,
 			"two textures should contribute two data URIs",
 		);
-		const textureRules = result.html.match(/\.st-gfx-texture-[\w_]+ \{/g) ?? [];
+		const textureRules = renderedHtml(result).match(/\.st-gfx-texture-[\w_]+ \{/g) ?? [];
 		assert.strictEqual(textureRules.length, 2);
-		assert.ok(result.html.includes("width: 16px;"), "second texture's width");
+		assert.ok(renderedHtml(result).includes("width: 16px;"), "second texture's width");
 	});
 
 	it("bounds how many sprite renders decode at once", async function () {
@@ -197,7 +198,7 @@ ${entries
 		);
 		for (let i = 0; i < spriteCount; i++) {
 			assert.ok(
-				result.html.includes(`id="GFX_icon${i}"`),
+				renderedHtml(result).includes(`id="GFX_icon${i}"`),
 				`expected a card for GFX_icon${i}`,
 			);
 		}
@@ -212,8 +213,8 @@ ${entries
 					{ name: "GFX_gone", texturefile: "gfx/interface/gone.png" },
 				]),
 			);
-			assert.ok(result.html.includes("MISSING"));
-			assert.ok(!result.html.includes("data:image/png;base64,"));
+			assert.ok(renderedHtml(result).includes("MISSING"));
+			assert.ok(!renderedHtml(result).includes("data:image/png;base64,"));
 		} finally {
 			console.error = originalConsoleError;
 		}
@@ -229,7 +230,7 @@ ${entries
 			]),
 		);
 
-		const captionRules = result.html.match(/\.st-imageName-w\d+ \{/g) ?? [];
+		const captionRules = renderedHtml(result).match(/\.st-imageName-w\d+ \{/g) ?? [];
 		assert.deepStrictEqual(captionRules, [".st-imageName-w200 {"]);
 	});
 });

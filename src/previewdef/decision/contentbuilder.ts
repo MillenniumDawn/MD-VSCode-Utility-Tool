@@ -27,9 +27,14 @@ export async function renderDecisionFile(
 		const styleTable = new StyleTable();
 		const decisionGraph = await buildDecisionGraphPayload(loadResult.result, styleTable);
 
-		const fullHtml = html(
+		// The shell is rendered now, not inside the thunk: it registers its styles on the styleTable
+		// the update's styleCss is read from below.
+		const baseContent = renderShell(styleTable);
+		// The full page is assembled only when the base assigns it; a skipped or posted edit never
+		// pays for it.
+		const fullHtml = () => html(
 			webview,
-			renderShell(styleTable),
+			baseContent,
 			[
 				previewedFileUriScript(uri),
 				// jsonForScript, not JSON.stringify: the payload carries localisation text straight

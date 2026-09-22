@@ -36,7 +36,9 @@ export async function renderEventFile(
 
 		const baseContent = renderShell(styleTable);
 
-		const fullHtml = html(
+		// The full page is assembled only when the base assigns it; a skipped or posted edit never
+		// pays for it.
+		const fullHtml = () => html(
 			webview,
 			baseContent,
 			[

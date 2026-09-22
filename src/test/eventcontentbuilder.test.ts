@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { renderEventFile } from '../previewdef/event/contentbuilder';
-import { serializeUpdate, LoaderRenderResult } from '../previewdef/loaderpreview';
+import { serializeUpdate, renderedHtml, LoaderRenderResult } from '../previewdef/loaderpreview';
 import { EffectTreeNode, EventGraphEventNode, EventGraphOptionNode, EventGraphPayload } from '../previewdef/event/payload';
 import { conditionToString } from '../hoiformat/condition';
 import { contextContainer } from '../context';
@@ -91,7 +91,7 @@ describe('previewdef/event renderEventFile in-place update', () => {
     it('returns { html, update } carrying the event graph payload', async () => {
         const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         assert.strictEqual(typeof rendered, 'object');
-        assert.strictEqual(typeof rendered.html, 'string');
+        assert.strictEqual(typeof rendered.html, 'function');
         assert.ok(rendered.update);
         assert.strictEqual(typeof rendered.update.styleCss, 'string');
 
@@ -108,7 +108,7 @@ describe('previewdef/event renderEventFile in-place update', () => {
         const b = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         // The full html carries fresh CSP nonces per render so it never hashes equal; the update parts
         // must be byte-identical so a no-op edit skips.
-        assert.notStrictEqual(a.html, b.html);
+        assert.notStrictEqual(renderedHtml(a), renderedHtml(b));
         assert.strictEqual(serializeUpdate(a.update!), serializeUpdate(b.update!));
     });
 
@@ -122,12 +122,12 @@ describe('previewdef/event renderEventFile in-place update', () => {
         const one = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         const two = await renderEventFile(loaderFor(['test.1', 'test.2']), uri, webview) as LoaderRenderResult;
 
-        const draggerOne = classOf(one.html, 'dragger');
-        const contentOne = classOf(one.html, 'eventtreecontent');
+        const draggerOne = classOf(renderedHtml(one), 'dragger');
+        const contentOne = classOf(renderedHtml(one), 'eventtreecontent');
         assert.strictEqual(draggerOne, 'st-dragger');
         assert.strictEqual(contentOne, 'st-eventtreecontent');
-        assert.strictEqual(classOf(two.html, 'dragger'), draggerOne);
-        assert.strictEqual(classOf(two.html, 'eventtreecontent'), contentOne);
+        assert.strictEqual(classOf(renderedHtml(two), 'dragger'), draggerOne);
+        assert.strictEqual(classOf(renderedHtml(two), 'eventtreecontent'), contentOne);
 
         const styleCss = two.update!.styleCss!;
         assert.ok(styleCss.includes(`.${draggerOne} {`));
@@ -137,7 +137,7 @@ describe('previewdef/event renderEventFile in-place update', () => {
     it('writes the shell in the order the layers stack', async () => {
         // What actually keeps the toolbar on top is the --ev-layer-* scale in eventtree.css; the
         // document order no longer decides it. Kept so the shell still reads bottom layer first.
-        const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+        const html = renderedHtml(await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult);
         const dragger = html.indexOf('id="dragger"');
         const toolbar = html.indexOf('class="toolbar-outer');
         assert.ok(dragger > 0 && toolbar > 0, 'both must be rendered');
@@ -151,19 +151,19 @@ describe('previewdef/event renderEventFile in-place update', () => {
         const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
         for (const id of ['show-localisation', 'show-option-triggers', 'show-edge-conditions',
             'show-event-conditions', 'show-picture', 'show-effects']) {
-            assert.ok(rendered.html.includes(`id="${id}"`), `expected a toggle with id="${id}"`);
+            assert.ok(renderedHtml(rendered).includes(`id="${id}"`), `expected a toggle with id="${id}"`);
         }
-        assert.ok(rendered.html.includes('id="ev-searchbox"'), 'the search box must be rendered');
-        assert.ok(rendered.html.includes('id="ev-search-count"'), 'the match counter must be rendered');
-        assert.ok(rendered.html.includes('class="toolbar-outer'));
+        assert.ok(renderedHtml(rendered).includes('id="ev-searchbox"'), 'the search box must be rendered');
+        assert.ok(renderedHtml(rendered).includes('id="ev-search-count"'), 'the match counter must be rendered');
+        assert.ok(renderedHtml(rendered).includes('class="toolbar-outer'));
     });
 
     it('writes out every filter entry, for the webview to gate', async () => {
         const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
-        assert.ok(rendered.html.includes('id="ev-filters"'), 'the filter list must be rendered');
+        assert.ok(renderedHtml(rendered).includes('id="ev-filters"'), 'the filter list must be rendered');
         for (const value of ['mtth', 'triggered', 'news', 'hidden', 'major', 'chains']) {
             assert.ok(
-                rendered.html.includes(`class="option" value="${value}"`),
+                renderedHtml(rendered).includes(`class="option" value="${value}"`),
                 `expected a filter entry for ${value}`,
             );
         }
@@ -172,7 +172,7 @@ describe('previewdef/event renderEventFile in-place update', () => {
     // The glyph rides on an attribute because the dropdown flattens an option with textContent, and
     // markup inside the div would be dropped from the item and left as class names in the caption.
     it('carries each filter glyph on the entry, so the list shows what the cards show', async () => {
-        const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+        const html = renderedHtml(await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult);
         for (const kind of ['mtth', 'triggered', 'news', 'hidden', 'major']) {
             assert.ok(
                 html.includes(`data-glyph="ev-marker ev-marker-${kind}"`),
@@ -184,7 +184,7 @@ describe('previewdef/event renderEventFile in-place update', () => {
     });
 
     it('puts the search box before the toggles, where a narrow pane cannot scroll it away', async () => {
-        const { html } = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
+        const html = renderedHtml(await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult);
         assert.ok(html.indexOf('id="ev-searchbox"') < html.indexOf('id="show-localisation"'));
     });
 
@@ -195,9 +195,9 @@ describe('previewdef/event renderEventFile in-place update', () => {
         contextContainer.current = { extensionUri: vscode.Uri.file('/ext') } as any;
         try {
             const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
-            assert.ok(rendered.html.includes('common.css'), 'the shared widget stylesheet must be loaded');
-            assert.ok(rendered.html.includes('eventtree.css'), 'the workflow stylesheet must be loaded');
-            assert.ok(rendered.html.includes('codicon.css'));
+            assert.ok(renderedHtml(rendered).includes('common.css'), 'the shared widget stylesheet must be loaded');
+            assert.ok(renderedHtml(rendered).includes('eventtree.css'), 'the workflow stylesheet must be loaded');
+            assert.ok(renderedHtml(rendered).includes('codicon.css'));
         } finally {
             contextContainer.current = previous;
         }
@@ -205,7 +205,7 @@ describe('previewdef/event renderEventFile in-place update', () => {
 
     it('exposes the graph to the webview as window.eventGraph', async () => {
         const rendered = await renderEventFile(loaderFor(['test.1']), uri, webview) as LoaderRenderResult;
-        assert.ok(rendered.html.includes('window.eventGraph = '));
+        assert.ok(renderedHtml(rendered).includes('window.eventGraph = '));
     });
 
     it('escapes a payload string that would otherwise end the inline script', async () => {
@@ -217,7 +217,7 @@ describe('previewdef/event renderEventFile in-place update', () => {
             webview,
         ) as LoaderRenderResult;
 
-        const script = /window\.eventGraph = (.*?);<\/script>/.exec(rendered.html);
+        const script = /window\.eventGraph = (.*?);<\/script>/.exec(renderedHtml(rendered));
         assert.ok(script, 'expected the payload script');
         assert.ok(!script![1]!.includes('</script'), script![1]!);
         const parsed = JSON.parse(script![1]!) as EventGraphPayload;

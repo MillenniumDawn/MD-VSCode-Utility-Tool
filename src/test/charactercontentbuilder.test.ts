@@ -1,7 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { renderCharacterFile } from "../previewdef/character/contentbuilder";
-import { serializeUpdate, LoaderRenderResult } from "../previewdef/loaderpreview";
+import { serializeUpdate, renderedHtml, LoaderRenderResult } from "../previewdef/loaderpreview";
 import { CharacterPreviewPayload } from "../previewdef/character/payload";
 import { toolbarFlagsOf } from "../previewdef/character/build";
 import { getCharactersFromFile } from "../previewdef/character/schema";
@@ -123,7 +123,7 @@ describe("previewdef/character renderCharacterFile in-place update", () => {
 		)) as LoaderRenderResult;
 
 		assert.strictEqual(typeof rendered, "object");
-		assert.strictEqual(typeof rendered.html, "string");
+		assert.strictEqual(typeof rendered.html, "function");
 		assert.ok(rendered.update);
 		assert.strictEqual(typeof rendered.update.styleCss, "string");
 
@@ -152,7 +152,7 @@ describe("previewdef/character renderCharacterFile in-place update", () => {
 
 		// The full html carries fresh CSP nonces per render so it never hashes equal; the update
 		// parts must be byte-identical so a no-op edit skips.
-		assert.notStrictEqual(a.html, b.html);
+		assert.notStrictEqual(renderedHtml(a), renderedHtml(b));
 		assert.strictEqual(serializeUpdate(a.update!), serializeUpdate(b.update!));
 	});
 
@@ -183,9 +183,9 @@ describe("previewdef/character renderCharacterFile in-place update", () => {
 			webview,
 		)) as LoaderRenderResult;
 
-		const content = classOf(one.html, "characterpreviewcontent");
+		const content = classOf(renderedHtml(one), "characterpreviewcontent");
 		assert.strictEqual(content, "st-characterpreviewcontent");
-		assert.strictEqual(classOf(two.html, "characterpreviewcontent"), content);
+		assert.strictEqual(classOf(renderedHtml(two), "characterpreviewcontent"), content);
 		assert.ok(two.update!.styleCss!.includes(`.${content} {`));
 	});
 
@@ -202,9 +202,9 @@ describe("previewdef/character renderCharacterFile in-place update", () => {
 				uri,
 				webview,
 			)) as LoaderRenderResult;
-			assert.ok(rendered.html.includes("hoicard.css"));
-			assert.ok(rendered.html.includes("characterpreview.css"));
-			assert.ok(rendered.html.includes("characterpreview.js"));
+			assert.ok(renderedHtml(rendered).includes("hoicard.css"));
+			assert.ok(renderedHtml(rendered).includes("characterpreview.css"));
+			assert.ok(renderedHtml(rendered).includes("characterpreview.js"));
 		} finally {
 			contextContainer.current = previous;
 		}
