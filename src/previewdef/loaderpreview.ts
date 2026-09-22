@@ -21,7 +21,7 @@ export {
 	RenderContentOptions,
 	normalizeRender,
 	renderedHtml,
-	serializeUpdate,
+	hashUpdate,
 	normalizeNoncesForHash,
 	decideLoaderRender,
 	hashHtml,

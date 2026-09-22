@@ -5,7 +5,7 @@ import {
     shouldReplaceHtml,
     normalizeRender,
     renderedHtml,
-    serializeUpdate,
+    hashUpdate,
     normalizeNoncesForHash,
     decideLoaderRender,
     LoaderRenderResult,
@@ -64,17 +64,23 @@ describe('previewdef/loaderpreview', () => {
         });
     });
 
-    describe('serializeUpdate', () => {
+    describe('hashUpdate', () => {
         it('is stable for equal payloads (unlike nonce-laden full html)', () => {
             const a = { styleCss: '.x{}', data: { mios: [1, 2] } };
             const b = { styleCss: '.x{}', data: { mios: [1, 2] } };
-            assert.strictEqual(serializeUpdate(a), serializeUpdate(b));
+            assert.strictEqual(hashUpdate(a), hashUpdate(b));
         });
 
         it('differs when the payload changes', () => {
             const a = { styleCss: '.x{}', data: { mios: [1] } };
             const b = { styleCss: '.x{}', data: { mios: [2] } };
-            assert.notStrictEqual(serializeUpdate(a), serializeUpdate(b));
+            assert.notStrictEqual(hashUpdate(a), hashUpdate(b));
+        });
+
+        it('is the hash the skip decision compares, so an unchanged payload skips against it', () => {
+            const rendered: LoaderRenderResult = { html: '<full nonce="x"/>', update: { styleCss: '.x{}', data: { mios: [1, 2] } } };
+            const decision = decideLoaderRender(rendered, { hash: hashUpdate(rendered.update!), pageUpdateCapable: true, shellFingerprint: undefined, sideFingerprint: undefined }, true);
+            assert.strictEqual(decision.kind, 'skip');
         });
     });
 
