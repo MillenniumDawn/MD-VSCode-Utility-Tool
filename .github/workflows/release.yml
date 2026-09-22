@@ -64,8 +64,10 @@ jobs:
     # the last tag, so a release pull request has to carry the next version -- a branch that bumped
     # package.json by itself has that bump carried into the release pull request rather than
     # shipping on its own, so a run of merges becomes one release instead of one release each. Both
-    # false means only documentation and CI changed: a pre-release build and nothing else. The
-    # script owns that decision for every job in this file.
+    # false means only documentation and CI changed: a pre-release build and nothing else. The same
+    # answer for an untagged version that an earlier push merged from the release pull request --
+    # its publish failed, and the fix pull request is what publishes it, so it is neither published
+    # again from here nor adopted. The script owns that decision for every job in this file.
     - name: Check version
       id: check
       env:
