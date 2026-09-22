@@ -16,6 +16,9 @@ const renderConcurrency = 8;
 // Renders the .gfx preview as a full html doc plus an in-place update payload. The update carries the
 // sprite list markup (contentHtml) and the accumulated CSS (styleCss); the webview swaps only the
 // image-list innerHTML on edit, so the filter bar, scroll and the filter input's listeners survive.
+// The full doc is handed over as a thunk: the CSS carries every texture as base64, so the page is
+// megabytes, and it is only assembled when the base actually assigns it (never for an edit that is
+// skipped or posted in place).
 // A parse/render error returns a plain-string html with no update, which flips the loaded page to
 // not-update-capable so the next valid render does a full reload.
 export async function renderGfxFile(
@@ -35,7 +38,7 @@ export async function renderGfxFile(
 		const baseContent =
 			renderFilterBar(styleTable) + renderImageList(imageList, styleTable);
 		return {
-			html: html(
+			html: () => html(
 				webview,
 				baseContent,
 				[previewedFileUriScript(uri), "common.js", "gfx.js"],

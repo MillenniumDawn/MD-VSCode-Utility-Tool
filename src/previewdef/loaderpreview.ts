@@ -20,6 +20,7 @@ export {
 	LoaderRenderPrevious,
 	RenderContentOptions,
 	normalizeRender,
+	renderedHtml,
 	serializeUpdate,
 	normalizeNoncesForHash,
 	decideLoaderRender,

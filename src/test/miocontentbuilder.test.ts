@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { renderMioFile } from '../previewdef/mio/contentbuilder';
-import { LoaderRenderResult } from '../previewdef/loaderpreview';
+import { renderedHtml, LoaderRenderResult } from '../previewdef/loaderpreview';
 import { getMiosFromFile } from '../previewdef/mio/schema';
 import { parseHoi4File } from '../hoiformat/hoiparser';
 import { stubLocalisation, restoreLocalisation } from './_localisation_stub';
@@ -56,7 +56,7 @@ function classOf(html: string, id: string): string {
 describe('previewdef/mio renderMioFile shell class stability', () => {
     it('returns { html, update } with styleCss and data', async () => {
         const rendered = await renderMioFile(loaderFor(1), uri, webview) as LoaderRenderResult;
-        assert.strictEqual(typeof rendered.html, 'string');
+        assert.strictEqual(typeof rendered.html, 'function');
         assert.ok(rendered.update);
         assert.strictEqual(typeof rendered.update.styleCss, 'string');
         assert.ok(rendered.update.data);
@@ -67,12 +67,12 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
         const one = await renderMioFile(loaderFor(1), uri, webview) as LoaderRenderResult;
         const two = await renderMioFile(loaderFor(2), uri, webview) as LoaderRenderResult;
 
-        const dragger = classOf(one.html, 'dragger');
-        const content = classOf(one.html, 'miopreviewcontent');
+        const dragger = classOf(renderedHtml(one), 'dragger');
+        const content = classOf(renderedHtml(one), 'miopreviewcontent');
         assert.strictEqual(dragger, 'st-dragger');
         assert.strictEqual(content, 'st-miopreviewcontent');
-        assert.strictEqual(classOf(two.html, 'dragger'), dragger);
-        assert.strictEqual(classOf(two.html, 'miopreviewcontent'), content);
+        assert.strictEqual(classOf(renderedHtml(two), 'dragger'), dragger);
+        assert.strictEqual(classOf(renderedHtml(two), 'miopreviewcontent'), content);
 
         for (const rendered of [one, two]) {
             const styleCss = rendered.update!.styleCss!;
@@ -90,7 +90,7 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
 
         assert.ok(/\.st-toolbar-height \{[^}]*height: 52px;/.test(styleCss), styleCss);
         assert.ok(/\.st-miopreviewcontent \{[^}]*top:52px/.test(styleCss), styleCss);
-        assert.ok(rendered.html.includes('window.toolbarHeight = 52'));
+        assert.ok(renderedHtml(rendered).includes('window.toolbarHeight = 52'));
     });
 
     // The parser accepts quoted identifiers, so an organization or trait id is workspace text. The
@@ -129,14 +129,14 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
         const rendered = await renderMioFile(loader, uri, webview) as LoaderRenderResult;
 
         for (const name of ['mios', 'renderedTrait', 'renderedHeaders']) {
-            const script = new RegExp(`window\\.${name} = (.*?)</script>`, 's').exec(rendered.html);
+            const script = new RegExp(`window\\.${name} = (.*?)</script>`, 's').exec(renderedHtml(rendered));
             assert.ok(script, `expected the ${name} payload script`);
             assert.ok(!script![1]!.includes('</script'), script![1]!);
         }
-        const mios = JSON.parse(/window\.mios = (.*?)<\/script>/s.exec(rendered.html)![1]!);
+        const mios = JSON.parse(/window\.mios = (.*?)<\/script>/s.exec(renderedHtml(rendered))![1]!);
         assert.strictEqual(mios[0].id, hostileId);
         assert.strictEqual(mios[0].traits[hostileId].id, hostileId);
-        const renderedTrait = JSON.parse(/window\.renderedTrait = (.*?)<\/script>/s.exec(rendered.html)![1]!);
+        const renderedTrait = JSON.parse(/window\.renderedTrait = (.*?)<\/script>/s.exec(renderedHtml(rendered))![1]!);
         assert.ok(renderedTrait[hostileId]?.[hostileId], Object.keys(renderedTrait).join(','));
     });
 
@@ -144,7 +144,7 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
     // panel. The page cannot read globalState, so it is rendered in.
     it('hands the page the stored toolbar options', async () => {
         const rendered = await renderMioFile(loaderFor(1), uri, webview) as LoaderRenderResult;
-        assert.ok(rendered.html.includes('window.previewOptions = '));
+        assert.ok(renderedHtml(rendered).includes('window.previewOptions = '));
     });
 });
 

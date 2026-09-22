@@ -12,6 +12,7 @@ Unreleased
   Functionality:
 
 - [ CI ] A changelog model that stalls can no longer hold up the release pull request for hours: bullets it has not reworded within a few minutes keep their pull request titles, and a large release now asks for a reply long enough to hold every bullet instead of falling back to one call per bullet. Issue #223.
+- A preview no longer assembles its whole page for an edit that changes nothing on screen (a comment, whitespace) or that is applied in place; the page is only built when the panel needs to reload it, which matters most for a `.gfx` file whose textures are inlined. Issue #224.
 
 v1.1.38
 
