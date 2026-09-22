@@ -2,9 +2,9 @@ import * as vscode from 'vscode';
 import { FocusTree, Focus } from './schema';
 import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconResolveStats } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
-import { forceError, randomString, mapLimit, jsonForScript } from '../../util/common';
+import { randomString, mapLimit, jsonForScript } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
+import { errorPage, escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { GridBoxType, IconType, ButtonType } from '../../hoiformat/gui';
 import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
@@ -208,22 +208,7 @@ export function buildNoFocusTreeHtml(webview: vscode.Webview, uri: vscode.Uri): 
  * never stuck in a dead loading spinner when a render is too slow or fails.
  */
 export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri, e: unknown): string {
-    const reloadScript = {
-        content: `(function(){
-            var api = acquireVsCodeApi();
-            var btn = document.getElementById('ft-reload');
-            if (btn) { btn.addEventListener('click', function(){ api.postMessage({ command: 'reload' }); }); }
-        })();`,
-    };
-    const message = htmlEscape(forceError(e).toString());
-    const reloadLabel = htmlEscape(localize('focustree.reload', 'Reload'));
-    const title = htmlEscape(localize('focustree.loading.slow_title', 'The focus tree is taking too long to render (large file or low memory).'));
-    const baseContent = `<div style="padding:16px; font:13px var(--vscode-font-family); color:var(--vscode-foreground);">
-        <p>${title}</p>
-        <pre style="white-space:pre-wrap; opacity:0.8;">${message}</pre>
-        <button id="ft-reload">${reloadLabel}</button>
-    </div>`;
-    return html(webview, baseContent, [ previewedFileUriScript(uri), reloadScript ], []);
+    return errorPage(webview, uri, e, localize('focustree.loading.slow_title', 'The focus tree is taking too long to render (large file or low memory).'));
 }
 
 const leftPaddingBase = 50;

@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { html, htmlEscape, loadingShellHtml } from '../util/html';
+import { errorPage, errorPageContent, html, htmlEscape, loadingShellHtml } from '../util/html';
 import { StyleTable } from '../util/styletable';
 import { refreshFeatureFlags } from '../util/featureflags';
 import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
@@ -74,6 +74,43 @@ describe('util/html', () => {
 
     // The shell is assigned to webview.html directly, not through html(), so it carries its own
     // policy: nothing from outside, and its one <style> and one <script> admitted by nonce.
+    describe('errorPage', () => {
+        // A transient failure used to leave a dead page: the shared error page shipped no script,
+        // so nothing could send the reload the preview base already handled. Issue #203.
+        const webview = { cspSource: '', asWebviewUri: (u: unknown) => u } as unknown as vscode.Webview;
+        const uri = vscode.Uri.file('/ws/events/a.txt');
+
+        it('offers a Retry button wired to the reload message', () => {
+            const page = errorPage(webview, uri, new Error('boom'));
+
+            assert.ok(page.includes('<button'), 'no button on the error page');
+            assert.ok(page.includes('Reload'));
+            assert.ok(page.includes('acquireVsCodeApi()'), 'the button has no api handle');
+            assert.ok(page.includes("command: 'reload'"), 'the button posts no reload');
+        });
+
+        it('still shows what was thrown', () => {
+            const page = errorPage(webview, uri, new Error('boom'));
+
+            assert.ok(page.includes('boom'));
+            assert.ok(page.includes('Error'));
+        });
+
+        it('leads with the heading its caller passed, when there is one', () => {
+            const page = errorPage(webview, uri, new Error('boom'), 'Slow');
+
+            assert.ok(page.includes('Slow'));
+        });
+
+        it('errorPageContent alone carries neither button nor script', () => {
+            const body = errorPageContent(new Error('boom'));
+
+            assert.ok(!body.includes('<button'));
+            assert.ok(!body.includes('acquireVsCodeApi'));
+            assert.ok(body.includes('boom'));
+        });
+    });
+
     describe('loadingShellHtml', () => {
         it('locks the page down to its own style and script', () => {
             const page = loadingShellHtml('Loading <b>x</b>');

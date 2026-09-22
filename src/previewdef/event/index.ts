@@ -1,3 +1,4 @@
+import { localize } from '../../util/i18n';
 import * as vscode from 'vscode';
 import { renderEventFile } from './contentbuilder';
 import { matchPathEnd } from '../../util/nodecommon';
@@ -35,6 +36,8 @@ class EventPreview extends LoaderPreview<EventsLoader> {
 
 export const eventPreviewDef: PreviewProviderDef = {
     type: 'event',
+    displayName: () => localize('preview.type.event', 'Event tree (events/*.txt)'),
+    isEnabled: () => eventTreePreview,
     canPreview: canPreviewEvent,
     previewConstructor: EventPreview,
 };

@@ -1,3 +1,4 @@
+import { localize } from "../../util/i18n";
 import * as vscode from "vscode";
 import { renderDecisionFile } from "./contentbuilder";
 import { matchPathEnd } from "../../util/nodecommon";
@@ -51,6 +52,8 @@ class DecisionPreview extends LoaderPreview<DecisionsLoader> {
 
 export const decisionPreviewDef: PreviewProviderDef = {
 	type: "decision",
+	displayName: () => localize("preview.type.decision", "Decisions (common/decisions/*.txt)"),
+	isEnabled: () => decisionPreview,
 	canPreview: canPreviewDecision,
 	previewConstructor: DecisionPreview,
 };

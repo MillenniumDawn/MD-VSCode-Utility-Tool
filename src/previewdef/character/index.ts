@@ -1,3 +1,4 @@
+import { localize } from "../../util/i18n";
 import * as vscode from "vscode";
 import { renderCharacterFile } from "./contentbuilder";
 import { matchPathEnd } from "../../util/nodecommon";
@@ -46,6 +47,8 @@ class CharacterPreview extends LoaderPreview<CharactersLoader> {
 
 export const characterPreviewDef: PreviewProviderDef = {
 	type: "character",
+	displayName: () => localize("preview.type.character", "Characters (common/characters/*.txt)"),
+	isEnabled: () => characterPreview,
 	canPreview: canPreviewCharacter,
 	previewConstructor: CharacterPreview,
 };

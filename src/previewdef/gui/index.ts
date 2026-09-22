@@ -1,3 +1,4 @@
+import { localize } from '../../util/i18n';
 import * as vscode from 'vscode';
 import { PreviewProviderDef } from '../previewmanager';
 import { LoaderPreview } from '../loaderpreview';
@@ -23,6 +24,7 @@ class GuiPreview extends LoaderPreview<GuiFileLoader> {
 
 export const guiPreviewDef: PreviewProviderDef = {
     type: 'gui',
+    displayName: () => localize('preview.type.gui', 'Interface window (*.gui)'),
     canPreview: canPreviewGui,
     previewConstructor: GuiPreview,
 };

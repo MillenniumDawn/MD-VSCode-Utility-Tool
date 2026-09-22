@@ -1,3 +1,4 @@
+import { localize } from "../../util/i18n";
 import * as vscode from "vscode";
 import { renderIdeaFile } from "./contentbuilder";
 import { matchPathEnd } from "../../util/nodecommon";
@@ -51,6 +52,8 @@ class IdeaPreview extends LoaderPreview<IdeasLoader> {
 
 export const ideaPreviewDef: PreviewProviderDef = {
 	type: "idea",
+	displayName: () => localize("preview.type.idea", "Ideas (common/ideas/*.txt)"),
+	isEnabled: () => ideaPreview,
 	canPreview: canPreviewIdea,
 	previewConstructor: IdeaPreview,
 };
