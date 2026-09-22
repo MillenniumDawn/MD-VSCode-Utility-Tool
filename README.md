@@ -119,7 +119,8 @@ The Settings editor lists them under the extension in these sections.
 | `mdHoi4Utilities.localisationIndex` | Index localisation so previews show translated text. Uses more memory. |
 | `mdHoi4Utilities.imageDecodeWorkers` | Threads used to decode `.dds` / `.tga` images. More is faster on icon-heavy trees. |
 
-Settings that say so in their description need a window reload to take effect. **Show Index
+Settings that say so in their description need a window reload, or the preview reopened,
+to take effect. **Show Index
 Status** in the command palette tells you what the indexes are doing.
 
 ## Pre-release builds

@@ -78,19 +78,19 @@
 						"description": "%hoi4modutilities.modFile.desc%"
 					},
 					"mdHoi4Utilities.parentModPaths": {
-						"title": "Parent mod paths",
+						"title": "%hoi4modutilities.parentModPaths.title%",
 						"type": "array",
 						"default": [],
 						"items": {
 							"type": "string"
 						},
-						"description": "Absolute folders of the mods this workspace extends (for a submod), searched in order after the workspace folders and before the Hearts of Iron IV install and DLCs. The mods named in the selected .mod file's dependencies are found through the launcher's mod registry and appended after these; an entry here wins over the registry for the same mod."
+						"description": "%hoi4modutilities.parentModPaths.desc%"
 					},
 					"mdHoi4Utilities.userDataPath": {
-						"title": "User data path",
+						"title": "%hoi4modutilities.userDataPath.title%",
 						"type": "string",
 						"default": "",
-						"description": "The Hearts of Iron IV user data folder, the one holding dlc_load.json and the mod folder the launcher writes. Used to resolve the dependencies of the selected .mod file to folders. Found automatically when empty."
+						"description": "%hoi4modutilities.userDataPath.desc%"
 					},
 					"mdHoi4Utilities.loadDlcContents": {
 						"title": "%hoi4modutilities.loadDlcContents.title%",
@@ -122,7 +122,7 @@
 						"description": "%hoi4modutilities.previewLocalisation.desc%"
 					},
 					"mdHoi4Utilities.previewWheel": {
-						"title": "Previews: what the mouse wheel does",
+						"title": "%hoi4modutilities.previewWheel.title%",
 						"type": "string",
 						"default": "scroll",
 						"enum": [
@@ -131,11 +131,11 @@
 							"scroll"
 						],
 						"enumDescriptions": [
-							"Zoom when the wheel is a mouse wheel, scroll when it is a two-finger trackpad swipe.",
-							"The wheel always zooms.",
-							"The wheel always scrolls; zoom with Ctrl+wheel, the zoom buttons or the +/- keys."
+							"%hoi4modutilities.previewWheel.enum.auto%",
+							"%hoi4modutilities.previewWheel.enum.zoom%",
+							"%hoi4modutilities.previewWheel.enum.scroll%"
 						],
-						"description": "What a plain mouse wheel does in the focus tree, technology, MIO, event and decision previews. Ctrl+wheel, the zoom buttons and the +/- keys zoom whatever this is set to. Reopen the preview after changing this."
+						"description": "%hoi4modutilities.previewWheel.desc%"
 					},
 					"mdHoi4Utilities.eventTreePreview": {
 						"title": "%hoi4modutilities.eventTreePreview.title%",
@@ -168,7 +168,7 @@
 						"description": "%hoi4modutilities.useConditionInFocus.desc%"
 					},
 					"mdHoi4Utilities.inlayWindowGfxRoots": {
-						"title": "Focus inlay window GFX roots",
+						"title": "%hoi4modutilities.inlayWindowGfxRoots.title%",
 						"type": "array",
 						"default": [
 							"interface/scripted_gui"
@@ -176,22 +176,22 @@
 						"items": {
 							"type": "string"
 						},
-						"description": "Workspace/mod/HOI4-relative root folders to scan recursively for .gfx files used by focus inlay windows."
+						"description": "%hoi4modutilities.inlayWindowGfxRoots.desc%"
 					},
 					"mdHoi4Utilities.technologyGfxRoots": {
-						"title": "Technology GFX roots",
+						"title": "%hoi4modutilities.technologyGfxRoots.title%",
 						"type": "array",
 						"default": [],
 						"items": {
 							"type": "string"
 						},
-						"description": "Workspace/mod-relative root folders to scan recursively for .gfx files used by the technology tree preview, including country-specific technology icons (e.g. \"interface/technologies\")."
+						"description": "%hoi4modutilities.technologyGfxRoots.desc%"
 					},
 					"mdHoi4Utilities.technologyCountryIcons": {
-						"title": "Technology tree: country-specific icons",
+						"title": "%hoi4modutilities.technologyCountryIcons.title%",
 						"type": "boolean",
 						"default": false,
-						"description": "Add a country selector to the technology tree preview and prefer that country's icons (GFX_<TAG>_<technology>) over the generic ones, the way the game does. Needs the GFX index to list the countries."
+						"description": "%hoi4modutilities.technologyCountryIcons.desc%"
 					}
 				}
 			},
@@ -206,10 +206,10 @@
 						"description": "%hoi4modutilities.enableSupplyArea.desc%"
 					},
 					"mdHoi4Utilities.worldMapRetainContextWhenHidden": {
-						"title": "World map: keep webview in memory when hidden",
+						"title": "%hoi4modutilities.worldMapRetainContextWhenHidden.title%",
 						"type": "boolean",
 						"default": true,
-						"description": "Keep the world map preview's webview loaded while the tab is hidden (faster to switch back, uses more memory). Turn off to free the webview when hidden and reload it on return, lowering memory use on large maps. The extension-host copy of the map is always released while hidden."
+						"description": "%hoi4modutilities.worldMapRetainContextWhenHidden.desc%"
 					}
 				}
 			},
