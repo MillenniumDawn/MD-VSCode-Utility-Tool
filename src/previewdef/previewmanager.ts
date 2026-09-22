@@ -136,6 +136,17 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             document = vscode.window.activeTextEditor?.document;
         } else {
             document = getDocumentByUri(requestUri);
+            if (document === undefined) {
+                // The explorer context menu hands us a file that need not be open in an editor, and
+                // getDocumentByUri only scans the already-open ones. Loading it here costs no editor
+                // tab -- openTextDocument does not show one -- and lets the menu reach the same path
+                // the title-bar button does.
+                try {
+                    document = await vscode.workspace.openTextDocument(requestUri);
+                } catch (e) {
+                    error(e);
+                }
+            }
         }
 
         if (document === undefined) {

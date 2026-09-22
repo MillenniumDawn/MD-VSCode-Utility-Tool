@@ -256,10 +256,7 @@
 			{
 				"command": "mdhoi4utilities.preview",
 				"title": "%hoi4modutilities.preview.title%",
-				"icon": {
-					"dark": "static/preview_icon.png",
-					"light": "static/preview_icon.png"
-				},
+				"icon": "$(open-preview)",
 				"category": "%hoi4modutilities.category%"
 			},
 			{
@@ -309,17 +306,39 @@
 				]
 			}
 		],
+		"keybindings": [
+			{
+				"command": "mdhoi4utilities.preview",
+				"key": "ctrl+shift+alt+v",
+				"mac": "cmd+shift+alt+v",
+				"when": "editorTextFocus && shouldShowMdHoi4Preview && resourceScheme != webview-panel"
+			}
+		],
 		"menus": {
 			"editor/title": [
 				{
 					"command": "mdhoi4utilities.preview",
-					"when": "!shouldShowMdHoi4Preview && resourceExtname == '.txt' && !shouldHideMdHoi4Preview",
+					"when": "shouldShowMdHoi4Preview && resourceScheme != webview-panel",
 					"group": "navigation"
 				},
 				{
+					"command": "mdhoi4utilities.scanreferences",
+					"when": "mdHoi4PreviewType == event && resourceScheme != webview-panel",
+					"group": "navigation"
+				}
+			],
+			"editor/context": [
+				{
 					"command": "mdhoi4utilities.preview",
 					"when": "shouldShowMdHoi4Preview && resourceScheme != webview-panel",
-					"group": "navigation"
+					"group": "navigation@100"
+				}
+			],
+			"explorer/context": [
+				{
+					"command": "mdhoi4utilities.preview",
+					"when": "resourceExtname == '.gfx' || resourceExtname == '.gui' || resourceFilename == 'default.map' || resourcePath =~ /[\\\\/](national_focus|events|technologies|ideas|decisions|characters|organizations)[\\\\/][^\\\\/]+\\.txt$/i",
+					"group": "navigation@100"
 				}
 			],
 			"commandPalette": [

@@ -73,8 +73,10 @@ for `replace_path` too, as it does in the game.
    extension at your Hearts of Iron IV installation.
 3. Open your mod folder. If it holds more than one `.mod` file, run **Select Mod File** to choose
    the one to work with.
-4. Open a file and press the preview button in the editor's title bar, or run **Preview HOI4
-   file** from the command palette. **Preview World Map** opens the map.
+4. Open a file and press the preview button in the editor's title bar, press
+   `Ctrl+Shift+Alt+V`, or run **Preview HOI4 file** from the command palette. You can also
+   right-click the file, in the editor or in the explorer, and choose **Preview HOI4 file**.
+   **Preview World Map** opens the map.
 
 ## Settings
 
