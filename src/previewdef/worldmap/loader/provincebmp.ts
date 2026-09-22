@@ -325,7 +325,7 @@ export function fillEdgesOfProvince<T extends EdgeDef>(
 	height: number,
 ): void {
 	const color = colorByPosition[index] ?? 0;
-	const edgePixels = findEdgePixels(
+	const edgePixelsByAdjecentProvince = findEdgePixels(
 		index,
 		accessedPixels,
 		color,
@@ -333,14 +333,6 @@ export function fillEdgesOfProvince<T extends EdgeDef>(
 		width,
 		height,
 	);
-	const edgePixelsByAdjecentProvince: Record<number, [Point, Point][]> = {};
-	edgePixels.forEach(([p, line]) => {
-		let lines = edgePixelsByAdjecentProvince[p];
-		if (lines === undefined) {
-			edgePixelsByAdjecentProvince[p] = lines = [];
-		}
-		lines.push(line);
-	});
 
 	const province = colorToProvince[color];
 	if (province === undefined) {
@@ -357,7 +349,7 @@ export function fillEdgesOfProvince<T extends EdgeDef>(
 		if (edgeSet === undefined) {
 			edgeSet = { toColor: numKey, path: [] };
 		}
-		const concatedEdges = concatEdges(value);
+		const concatedEdges = concatFlatEdges(value, height + 1);
 		edgeSet.path.push(...concatedEdges);
 		if (isNew) {
 			province.edges.push(edgeSet);
@@ -366,24 +358,10 @@ export function fillEdgesOfProvince<T extends EdgeDef>(
 	}
 }
 
-const indicesToOffset: [number, number][][] = [
-	[
-		[0, 1],
-		[0, 0],
-	],
-	[
-		[0, 0],
-		[1, 0],
-	],
-	[
-		[1, 0],
-		[1, 1],
-	],
-	[
-		[1, 1],
-		[0, 1],
-	],
-];
+// Flood-fills the province under `index` and returns its boundary segments grouped by the colour
+// on their far side (-1 past the top or bottom of the map). Each segment is four numbers
+// x0, y0, x1, y1 in its group's array rather than a pair of points: a world map has millions of
+// them, and an object per endpoint was most of what a load left for the garbage collector.
 function findEdgePixels(
 	index: number,
 	accessedPixels: Uint8Array,
@@ -391,10 +369,41 @@ function findEdgePixels(
 	colorByPosition: Uint32Array,
 	width: number,
 	height: number,
-) {
-	const edgePixels: [number, [Point, Point]][] = [];
+): Record<number, number[]> {
+	const edgesByAdjecentColor: Record<number, number[]> = {};
 	const pixelStack: number[] = [index];
-	const indices: number[] = new Array(4);
+
+	const addEdge = (
+		adjecentColor: number,
+		x0: number,
+		y0: number,
+		x1: number,
+		y1: number,
+	): void => {
+		let edges = edgesByAdjecentColor[adjecentColor];
+		if (edges === undefined) {
+			edgesByAdjecentColor[adjecentColor] = edges = [];
+		}
+		edges.push(x0, y0, x1, y1);
+	};
+	const visit = (
+		adjecentIndex: number,
+		x0: number,
+		y0: number,
+		x1: number,
+		y1: number,
+	): void => {
+		if (adjecentIndex < 0) {
+			addEdge(-1, x0, y0, x1, y1);
+			return;
+		}
+		const adjecentColor = colorByPosition[adjecentIndex] ?? 0;
+		if (color !== adjecentColor) {
+			addEdge(adjecentColor, x0, y0, x1, y1);
+		} else {
+			pixelStack.push(adjecentIndex);
+		}
+	};
 
 	while (pixelStack.length > 0) {
 		const pixelIndex = pixelStack.pop()!;
@@ -405,63 +414,59 @@ function findEdgePixels(
 		const x = pixelIndex % width;
 		const y = Math.floor(pixelIndex / width);
 
-		indices[0] = x === 0 ? pixelIndex + width - 1 : pixelIndex - 1;
-		indices[1] = pixelIndex - width;
-		indices[2] = x === width - 1 ? pixelIndex - width + 1 : pixelIndex + 1;
-		indices[3] = y === height - 1 ? -1 : pixelIndex + width;
-
-		for (let i = 0; i < 4; i++) {
-			const adjecentIndex = indices[i];
-			const offsets = indicesToOffset[i];
-			if (offsets === undefined) {
-				continue;
-			}
-			if (adjecentIndex === undefined || adjecentIndex < 0) {
-				edgePixels.push([
-					-1,
-					offsets.map(([xOff, yOff]) => ({ x: x + xOff, y: y + yOff })) as [
-						Point,
-						Point,
-					],
-				]);
-			} else {
-				const adjecentColor = colorByPosition[adjecentIndex] ?? 0;
-				if (color !== adjecentColor) {
-					edgePixels.push([
-						adjecentColor,
-						offsets.map(([xOff, yOff]) => ({ x: x + xOff, y: y + yOff })) as [
-							Point,
-							Point,
-						],
-					]);
-				} else {
-					pixelStack.push(adjecentIndex);
-				}
-			}
-		}
+		// Left, up, right, down; the map wraps horizontally but not vertically. Each side is
+		// traced in the same rotational direction, so a province's segments chain head to tail.
+		visit(x === 0 ? pixelIndex + width - 1 : pixelIndex - 1, x, y + 1, x, y);
+		visit(pixelIndex - width, x, y, x + 1, y);
+		visit(
+			x === width - 1 ? pixelIndex - width + 1 : pixelIndex + 1,
+			x + 1,
+			y,
+			x + 1,
+			y + 1,
+		);
+		visit(
+			y === height - 1 ? -1 : pixelIndex + width,
+			x + 1,
+			y + 1,
+			x,
+			y + 1,
+		);
 
 		accessedPixels[pixelIndex] = 1;
 	}
 
-	return edgePixels;
+	return edgesByAdjecentColor;
+}
+
+export function concatEdges(edges: [Point, Point][]): Point[][] {
+	const flatEdges: number[] = [];
+	let maxY = 0;
+	for (const [head, tail] of edges) {
+		flatEdges.push(head.x, head.y, tail.x, tail.y);
+		maxY = Math.max(maxY, head.y, tail.y);
+	}
+	return concatFlatEdges(flatEdges, maxY + 1);
 }
 
 type EdgeBucket = { idx: number[]; ptr: number };
-export function concatEdges(edges: [Point, Point][]): Point[][] {
+// Joins directed segments, four numbers x0, y0, x1, y1 each, into paths. A point is keyed as
+// x * stride + y, so stride has to be larger than every y: the map height plus one.
+function concatFlatEdges(edges: number[], stride: number): Point[][] {
 	const result: Point[][] = [];
-	const accessedEdges = new Array<boolean>(edges.length).fill(false);
+	const edgeCount = edges.length >> 2;
+	const accessedEdges = new Uint8Array(edgeCount);
 
 	// Index segments by endpoint coordinates so joining is O(1) amortized per join
 	// instead of a linear findIndex scan. byTail keys a point to the ascending list
-	// of edges whose tail (e[1]) is that point; byHead keys by head (e[0]). Each
+	// of edges whose tail (x1, y1) is that point; byHead keys by head (x0, y0). Each
 	// bucket keeps a pointer that only skips forward past already-consumed edges, so
 	// firstUnaccessed returns the same lowest-index unconsumed match findIndex did.
-	const pointKey = (p: Point): string => `${p.x},${p.y}`;
-	const byTail = new Map<string, EdgeBucket>();
-	const byHead = new Map<string, EdgeBucket>();
+	const byTail = new Map<number, EdgeBucket>();
+	const byHead = new Map<number, EdgeBucket>();
 	const pushInto = (
-		map: Map<string, EdgeBucket>,
-		key: string,
+		map: Map<number, EdgeBucket>,
+		key: number,
 		i: number,
 	): void => {
 		let bucket = map.get(key);
@@ -470,16 +475,13 @@ export function concatEdges(edges: [Point, Point][]): Point[][] {
 		}
 		bucket.idx.push(i);
 	};
-	for (let i = 0; i < edges.length; i++) {
-		const edge = edges[i];
-		if (edge) {
-			pushInto(byHead, pointKey(edge[0]), i);
-			pushInto(byTail, pointKey(edge[1]), i);
-		}
+	for (let i = 0, j = 0; i < edgeCount; i++, j += 4) {
+		pushInto(byHead, (edges[j] ?? 0) * stride + (edges[j + 1] ?? 0), i);
+		pushInto(byTail, (edges[j + 2] ?? 0) * stride + (edges[j + 3] ?? 0), i);
 	}
 	const firstUnaccessed = (
-		map: Map<string, EdgeBucket>,
-		key: string,
+		map: Map<number, EdgeBucket>,
+		key: number,
 	): number => {
 		const bucket = map.get(key);
 		if (bucket === undefined) {
@@ -498,79 +500,79 @@ export function concatEdges(edges: [Point, Point][]): Point[][] {
 		return bucket.ptr < bucket.idx.length ? (bucket.idx[bucket.ptr] ?? -1) : -1;
 	};
 
-	for (let i = 0; i < edges.length; i++) {
+	for (let i = 0; i < edgeCount; i++) {
 		if (accessedEdges[i]) {
 			continue;
 		}
+		accessedEdges[i] = 1;
 
-		const edge = edges[i];
-		if (edge === undefined) {
-			continue;
-		}
-		// A path grows at both ends. Collecting the head side in its own array and reversing it
-		// once keeps that linear: unshifting each new point into a single array moved every point
-		// already found, so assembling one border of k segments cost k^2 element moves, and a
-		// coastline or the ocean/land boundary runs to thousands of segments. headPoints holds
-		// them in the order they were found, which is the reverse of their order in the path.
-		const headPoints: Point[] = [];
-		const tailPoints: Point[] = [...edge];
-		accessedEdges[i] = true;
+		// A path grows at both ends. Collecting the head side in its own array and reading it
+		// backwards keeps that linear: unshifting each new point into a single array moved every
+		// point already found, so assembling one border of k segments cost k^2 element moves, and
+		// a coastline or the ocean/land boundary runs to thousands of segments. headPoints holds
+		// x, y pairs in the order they were found, which is the reverse of their order in the path.
+		const j = i * 4;
+		let headX = edges[j] ?? 0;
+		let headY = edges[j + 1] ?? 0;
+		let tailX = edges[j + 2] ?? 0;
+		let tailY = edges[j + 3] ?? 0;
+		const headPoints: number[] = [];
+		const tailPoints: number[] = [headX, headY, tailX, tailY];
 
 		let foundNew = true;
 		while (foundNew) {
 			foundNew = false;
-			const head = headPoints[headPoints.length - 1] ?? tailPoints[0];
-			if (head === undefined) {
-				break;
-			}
-			const headTail = firstUnaccessed(byTail, pointKey(head));
+			const headTail = firstUnaccessed(byTail, headX * stride + headY);
 			if (headTail !== -1) {
-				accessedEdges[headTail] = foundNew = true;
-				const previousEdge = edges[headTail];
-				if (previousEdge) {
-					headPoints.push(previousEdge[0]);
-				}
+				accessedEdges[headTail] = 1;
+				foundNew = true;
+				headX = edges[headTail * 4] ?? 0;
+				headY = edges[headTail * 4 + 1] ?? 0;
+				headPoints.push(headX, headY);
 			}
 
-			const tail = tailPoints[tailPoints.length - 1];
-			if (tail === undefined) {
-				break;
-			}
-			const tailHead = firstUnaccessed(byHead, pointKey(tail));
+			const tailHead = firstUnaccessed(byHead, tailX * stride + tailY);
 			if (tailHead !== -1) {
-				accessedEdges[tailHead] = foundNew = true;
-				const nextEdge = edges[tailHead];
-				if (nextEdge) {
-					tailPoints.push(nextEdge[1]);
-				}
+				accessedEdges[tailHead] = 1;
+				foundNew = true;
+				tailX = edges[tailHead * 4 + 2] ?? 0;
+				tailY = edges[tailHead * 4 + 3] ?? 0;
+				tailPoints.push(tailX, tailY);
 			}
 		}
 
-		headPoints.reverse();
-		const edgePoints: Point[] = headPoints.concat(tailPoints);
+		// Walk the path in order, dropping the middle points of straight runs. It is kept as
+		// coordinates until the end so only the points that survive become objects.
+		const kept: number[] = [];
+		const headLength = headPoints.length;
+		const pathLength = headLength + tailPoints.length;
+		let lastX = headX;
+		let lastY = headY;
+		for (let k = 0; k < pathLength; k += 2) {
+			const x =
+				(k < headLength
+					? headPoints[headLength - 2 - k]
+					: tailPoints[k - headLength]) ?? 0;
+			const y =
+				(k < headLength
+					? headPoints[headLength - 1 - k]
+					: tailPoints[k - headLength + 1]) ?? 0;
+			if (kept.length < 4) {
+				kept.push(x, y);
+			} else if (x === lastX || y === lastY) {
+				kept[kept.length - 2] = x;
+				kept[kept.length - 1] = y;
+			} else {
+				lastX = kept[kept.length - 2] ?? 0;
+				lastY = kept[kept.length - 1] ?? 0;
+				kept.push(x, y);
+			}
+		}
 
 		const newEdge: Point[] = [];
-		const firstPoint = edgePoints[0];
-		if (firstPoint === undefined) {
-			continue;
+		for (let k = 0; k < kept.length; k += 2) {
+			newEdge.push({ x: kept[k] ?? 0, y: kept[k + 1] ?? 0 });
 		}
-		let lastPoint: Point = firstPoint;
-		for (const point of edgePoints) {
-			if (newEdge.length < 2) {
-				newEdge.push(point);
-			} else {
-				if (point.x === lastPoint.x || point.y === lastPoint.y) {
-					newEdge[newEdge.length - 1] = point;
-				} else {
-					const previousPoint = newEdge[newEdge.length - 1];
-					if (previousPoint) {
-						lastPoint = previousPoint;
-					}
-					newEdge.push(point);
-				}
-			}
-		}
-
 		result.push(newEdge);
 	}
 
