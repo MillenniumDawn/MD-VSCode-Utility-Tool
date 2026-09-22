@@ -218,6 +218,29 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(rendered[hostileId], Object.keys(rendered).join(","));
 	});
 
+	it("buildFocusTreeHtml embeds the useConditionInFocus setting so a hostile value cannot end the inline script", async () => {
+		// Issue #220: the value comes from settings.json, which may hold anything, not only the
+		// boolean the setting is declared as.
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([minimalFocusTree()]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		const html = buildFocusTreeHtml(
+			{ ...payload!, useConditionInFocus: "</script><img src=x>" as unknown as boolean },
+			webview,
+			uri,
+		);
+		const script = /window\.useConditionInFocus = (.*?)<\/script>/s.exec(html);
+		assert.ok(script, "expected the useConditionInFocus script");
+		assert.ok(!script![1]!.includes("</script"), script![1]!);
+		assert.strictEqual(JSON.parse(script![1]!.trim()), "</script><img src=x>");
+
+		const plain = buildFocusTreeHtml({ ...payload!, useConditionInFocus: true }, webview, uri);
+		assert.ok(/window\.useConditionInFocus = true\s*<\/script>/.test(plain));
+	});
+
 	it("buildFocusTreeHtml renders the wheel setting the zoom reads", async () => {
 		// html() puts it into every preview, so the webview's shared zoom code has it without each
 		// contentbuilder carrying a copy. The stubbed configuration has no value for it, which is

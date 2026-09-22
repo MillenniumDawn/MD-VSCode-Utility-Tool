@@ -2,6 +2,8 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { html, htmlEscape, loadingShellHtml } from '../util/html';
 import { StyleTable } from '../util/styletable';
+import { refreshFeatureFlags } from '../util/featureflags';
+import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 describe('util/html', () => {
     describe('htmlEscape', () => {
@@ -50,6 +52,23 @@ describe('util/html', () => {
             assert.ok(!styleSrc.includes('nonce-'));
             assert.ok(/script-src ('nonce-[^']+' )+stub-csp/.test(page));
             assert.ok(page.includes('.st-x { color: red; }'));
+        });
+
+        it('embeds the previewWheel setting so a hostile value cannot end the inline script', () => {
+            // Issue #220: the setting is a workspace value, and the HTML parser ends a script at the
+            // first `</script` whatever the JavaScript around it means.
+            stubVscode({ configuration: { previewWheel: '</script><img src=x>' } });
+            try {
+                refreshFeatureFlags();
+                const page = html(webview, '', []);
+                const script = /window\.previewWheel = (.*?)<\/script>/s.exec(page);
+                assert.ok(script, 'expected the previewWheel script');
+                assert.ok(!script![1]!.includes('</script'), script![1]!);
+                assert.strictEqual(JSON.parse(script![1]!.replace(/;\s*$/, '')), '</script><img src=x>');
+            } finally {
+                restoreVscodeStubs();
+                refreshFeatureFlags();
+            }
         });
     });
 

@@ -14,7 +14,7 @@ import {
 } from "./definitions";
 import { matchPathEnd } from "../../util/nodecommon";
 import { writeFile, getConfiguration } from "../../util/vsccommon";
-import { slice, debounceByInput, forceError } from "../../util/common";
+import { slice, debounceByInput, forceError, jsonForScript } from "../../util/common";
 import { openOrCopyHoiFile } from "../../util/previewfileopener";
 import { WorldMapLoader } from "./loader/worldmaploader";
 import { buildWorldMapChangeMessages } from "./worldmapchanges";
@@ -106,9 +106,12 @@ export class WorldMap {
 			[
 				{ content: i18nTableAsScript() },
 				{
+					// jsonForScript, not concatenation: the setting is whatever the workspace's
+					// settings.json says it is, not necessarily the boolean it is declared as. An
+					// absent value takes the setting's declared default.
 					content:
 						"window.__enableSupplyArea = " +
-						getConfiguration().enableSupplyArea +
+						jsonForScript(getConfiguration().enableSupplyArea ?? false) +
 						";",
 				},
 				"common.js",
