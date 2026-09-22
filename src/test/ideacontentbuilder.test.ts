@@ -1,7 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { renderIdeaFile } from "../previewdef/idea/contentbuilder";
-import { serializeUpdate, LoaderRenderResult } from "../previewdef/loaderpreview";
+import { serializeUpdate, renderedHtml, LoaderRenderResult } from "../previewdef/loaderpreview";
 import { IdeaPreviewPayload } from "../previewdef/idea/payload";
 import { getIdeasFromFile } from "../previewdef/idea/schema";
 import { parseHoi4File } from "../hoiformat/hoiparser";
@@ -82,7 +82,7 @@ describe("previewdef/idea renderIdeaFile in-place update", () => {
 		)) as LoaderRenderResult;
 
 		assert.strictEqual(typeof rendered, "object");
-		assert.strictEqual(typeof rendered.html, "string");
+		assert.strictEqual(typeof rendered.html, "function");
 		assert.ok(rendered.update);
 		assert.strictEqual(typeof rendered.update.styleCss, "string");
 
@@ -103,7 +103,7 @@ describe("previewdef/idea renderIdeaFile in-place update", () => {
 
 		// The full html carries fresh CSP nonces per render so it never hashes equal; the update
 		// parts must be byte-identical so a no-op edit skips.
-		assert.notStrictEqual(a.html, b.html);
+		assert.notStrictEqual(renderedHtml(a), renderedHtml(b));
 		assert.strictEqual(serializeUpdate(a.update!), serializeUpdate(b.update!));
 	});
 
@@ -126,9 +126,9 @@ describe("previewdef/idea renderIdeaFile in-place update", () => {
 			webview,
 		)) as LoaderRenderResult;
 
-		const content = classOf(one.html, "ideapreviewcontent");
+		const content = classOf(renderedHtml(one), "ideapreviewcontent");
 		assert.strictEqual(content, "st-ideapreviewcontent");
-		assert.strictEqual(classOf(two.html, "ideapreviewcontent"), content);
+		assert.strictEqual(classOf(renderedHtml(two), "ideapreviewcontent"), content);
 		assert.ok(two.update!.styleCss!.includes(`.${content} {`));
 	});
 
@@ -140,11 +140,11 @@ describe("previewdef/idea renderIdeaFile in-place update", () => {
 			extensionUri: vscode.Uri.file("/ext"),
 		} as any;
 		try {
-			const { html } = (await renderIdeaFile(
+			const html = renderedHtml((await renderIdeaFile(
 				loaderFor(twoIdeas),
 				uri,
 				webview,
-			)) as LoaderRenderResult;
+			)) as LoaderRenderResult);
 
 			// The cards are the ones hoicard.css draws; without it they would render unstyled.
 			assert.ok(html.includes("hoicard.css"), "the shared card stylesheet must be loaded");

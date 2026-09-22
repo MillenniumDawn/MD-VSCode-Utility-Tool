@@ -4,6 +4,7 @@ import {
     hashHtml,
     shouldReplaceHtml,
     normalizeRender,
+    renderedHtml,
     serializeUpdate,
     normalizeNoncesForHash,
     decideLoaderRender,
@@ -124,6 +125,30 @@ describe('previewdef/loaderpreview', () => {
             const b = normalizeRender('<script nonce="BBB">bodyB</script>');
             const d = decideLoaderRender(b, previous(first.hash, false), true);
             assert.strictEqual(d.kind, 'assign');
+        });
+
+        it('decides an update-capable render without ever building its page', () => {
+            // The page is a thunk so a skipped or posted render never pays for it; deciding must not
+            // run it either, whichever way the decision goes.
+            const html = () => { throw new Error('page built'); };
+            const first = decideLoaderRender({ html, update: { styleCss: '.a{}' } }, previous(undefined, true), true);
+            assert.strictEqual(first.kind, 'post');
+            assert.strictEqual(decideLoaderRender({ html, update: { styleCss: '.a{}' } }, after(first, true), true).kind, 'skip');
+            assert.strictEqual(decideLoaderRender({ html, update: { styleCss: '.b{}' } }, after(first, true), false).kind, 'assign');
+        });
+
+        it('hashes a lazy render with no update over its page, and memoizes the build', () => {
+            // With nothing else to identify the render by, the page is what is hashed; it is built once
+            // and kept on the render, so the assign that follows reuses it.
+            let builds = 0;
+            const rendered: LoaderRenderResult = { html: () => { builds++; return '<script nonce="AAA">same</script>'; } };
+            const first = decideLoaderRender(rendered, previous(undefined, false), true);
+            assert.strictEqual(first.kind, 'assign');
+            assert.strictEqual(builds, 1);
+            assert.strictEqual(renderedHtml(rendered), '<script nonce="AAA">same</script>');
+            assert.strictEqual(builds, 1);
+            const d = decideLoaderRender(normalizeRender('<script nonce="BBB">same</script>'), previous(first.hash, false), true);
+            assert.strictEqual(d.kind, 'skip');
         });
 
         it('posts (not assigns) when there is no prior hash but the panel is visible, update-capable, and the loaded page has the listener', () => {

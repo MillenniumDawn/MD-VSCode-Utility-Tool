@@ -273,10 +273,12 @@ class FocusTreePreview extends UpdateablePreviewBase {
     }
 
     /**
-     * Turns a structure-only payload into the base's render result. The html is the full page (a
-     * cheap string assembly over the payload that is already built, which the base needs so a hidden
-     * panel can be flushed back to current content), the update is what a visible page is patched
-     * with, and the three fingerprints are the change detection:
+     * Turns a structure-only payload into the base's render result. The html is the full page, handed
+     * over as a thunk: the base builds it only when it assigns it or flushes a hidden panel back to
+     * current content, so a skipped or posted edit never serializes the payload into the page. The
+     * update is what a visible page is patched with, and the three fingerprints are the change
+     * detection, all computed from the structure payload, so they are the same whether or not the
+     * page is ever built:
      *  - `fingerprint` covers everything the rendered page shows, including the styleTable records
      *    that never reach the webview as payload. Always computed from a structure-only payload so
      *    the same edit fingerprints identically whether or not the icon pass has run.
@@ -290,7 +292,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         this.pendingTreeFingerprints = this.treeFingerprintsFor(structure.focusTrees);
         this.lastGoodHadFocusTrees = true;
         return {
-            html: buildFocusTreeHtml(structure, webview, uri),
+            html: () => buildFocusTreeHtml(structure, webview, uri),
             update: {
                 data: {
                     focusTrees: structure.focusTrees,

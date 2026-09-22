@@ -77,6 +77,7 @@ describe('previewdef/updateablepreview extension points', () => {
         let postDelivered = true;
         const posted: any[] = [];
         let lastAssignedHtml: string | undefined;
+        let viewStateListener: (() => void) | undefined;
         const webview = {
             postMessage: (msg: any) => {
                 postCount++;
@@ -95,7 +96,10 @@ describe('previewdef/updateablepreview extension points', () => {
         const panel = {
             webview,
             visible,
-            onDidChangeViewState: () => ({ dispose() { /* no-op */ } }),
+            onDidChangeViewState: (listener: () => void) => {
+                viewStateListener = listener;
+                return { dispose() { /* no-op */ } };
+            },
             onDidDispose: () => ({ dispose() { /* no-op */ } }),
         };
         const preview = new TestPreview(vscode.Uri.file('/tmp/tree.txt'), panel as any);
@@ -106,6 +110,12 @@ describe('previewdef/updateablepreview extension points', () => {
             get postCount() { return postCount; },
             get lastAssignedHtml() { return lastAssignedHtml; },
             dropPosts() { postDelivered = false; },
+            // The tab is switched away from (or back to): what VS Code reports through the
+            // panel's view-state event.
+            setVisible(value: boolean) {
+                panel.visible = value;
+                viewStateListener?.();
+            },
         };
     }
 
@@ -281,5 +291,100 @@ describe('previewdef/updateablepreview extension points', () => {
         assert.strictEqual(first, '<full>S1</full>');
         // A full render must not decline; falling back to what is on screen beats blanking it.
         assert.strictEqual(await h.preview.runFull(document), '<full>S1</full>');
+    });
+
+    // The full page is the expensive half of a render and most renders never assign it, so a
+    // preview hands it over as a thunk. These pin down when the base runs it: on the first render,
+    // on an assign, and on the flush when a posted page goes hidden -- never on a skip or a post.
+    describe('lazy html', () => {
+        // A render whose page counts how often it was built.
+        function lazyRender(fingerprint: string) {
+            let builds = 0;
+            const rendered: LoaderRenderResult = {
+                html: () => {
+                    builds++;
+                    return `<full>${fingerprint}</full>`;
+                },
+                update: { data: { n: fingerprint } },
+                fingerprint,
+            };
+            return { rendered, get builds() { return builds; } };
+        }
+
+        it('builds the page once on the first render', async () => {
+            const h = makePreview(true);
+            const r = lazyRender('S1');
+            h.preview.queueRender(r.rendered);
+            assert.strictEqual(await h.preview.runFull(document), '<full>S1</full>');
+            assert.strictEqual(r.builds, 1);
+        });
+
+        it('never builds the page for a skipped or posted render', async () => {
+            const h = makePreview(true);
+            const same = lazyRender('S1');
+            const changed = lazyRender('S2');
+            h.preview.queueRender(lazyRender('S1').rendered, same.rendered, changed.rendered);
+            await h.preview.runFull(document);
+
+            await h.preview.run(document); // skip
+            assert.strictEqual(same.builds, 0);
+
+            await h.preview.run(document); // post
+            assert.strictEqual(h.postCount, 1);
+            assert.strictEqual(changed.builds, 0);
+        });
+
+        it('builds a posted page only when the panel goes hidden, and only once', async () => {
+            const h = makePreview(true);
+            const changed = lazyRender('S2');
+            h.preview.queueRender(lazyRender('S1').rendered, changed.rendered);
+            await h.preview.runFull(document);
+            await h.preview.run(document); // post
+            assert.strictEqual(changed.builds, 0);
+
+            h.setVisible(false);
+            assert.strictEqual(changed.builds, 1);
+            assert.strictEqual(h.htmlSetCount, 1);
+            assert.strictEqual(h.lastAssignedHtml, '<full>S2</full>');
+
+            // Showing and hiding again finds the property current, so nothing is written or built.
+            h.setVisible(true);
+            h.setVisible(false);
+            assert.strictEqual(changed.builds, 1);
+            assert.strictEqual(h.htmlSetCount, 1);
+        });
+
+        it('builds the page once when a changed render against a hidden panel assigns', async () => {
+            const h = makePreview(false);
+            const changed = lazyRender('S2');
+            h.preview.queueRender(lazyRender('S1').rendered, changed.rendered);
+            await h.preview.runFull(document);
+            await h.preview.run(document); // hidden: assign
+            assert.strictEqual(changed.builds, 1);
+            assert.strictEqual(h.lastAssignedHtml, '<full>S2</full>');
+        });
+
+        it('builds the page once when a dropped post falls back to an assign', async () => {
+            const h = makePreview(true);
+            const changed = lazyRender('S2');
+            h.preview.queueRender(lazyRender('S1').rendered, changed.rendered);
+            await h.preview.runFull(document);
+            h.dropPosts();
+            await h.preview.run(document);
+            assert.strictEqual(h.postCount, 1);
+            assert.strictEqual(changed.builds, 1);
+            assert.strictEqual(h.lastAssignedHtml, '<full>S2</full>');
+        });
+
+        it('hands a declined full render the flushed page without building it again', async () => {
+            const h = makePreview(true);
+            const changed = lazyRender('S2');
+            h.preview.queueRender(lazyRender('S1').rendered, changed.rendered, null);
+            await h.preview.runFull(document);
+            await h.preview.run(document); // post
+            h.setVisible(false); // flush builds it
+            assert.strictEqual(await h.preview.runFull(document), '<full>S2</full>');
+            assert.strictEqual(changed.builds, 1);
+        });
     });
 });

@@ -15,6 +15,12 @@ import { fnv1a32 } from "../util/hash";
 // assignment tears the page down and rebuilds it (blank flash, lost scroll/zoom), so a debounced
 // edit that produces identical output does nothing, and a changed edit updates in place.
 //
+// The full html is the expensive part of a render result and most renders never assign it, so a
+// preview hands it over as a thunk and the base builds it only when it is about to be written to the
+// webview: the first render, an assign, or the hidden-panel flush after a post. A skip never builds
+// it. The thunk is memoized on the render result, so a page that is flushed and later read back
+// (getContent declining) is assembled once.
+//
 // A post is only valid when the html currently loaded in the webview is itself update-capable (it
 // loaded the preview script, so it has the update listener). The no-mio and error pages are plain
 // strings with no listener, so a post into them is silently dropped. We track the loaded page's
@@ -39,7 +45,10 @@ export interface LoaderUpdateMessage {
 }
 
 export interface LoaderRenderResult {
-	html: string;
+	// The full page, or a thunk that assembles it. A thunk runs only when the html is actually
+	// written to the webview (see renderedHtml); a plain string is what the cheap no-content and
+	// error pages return.
+	html: string | (() => string);
 	update?: LoaderUpdateMessage;
 	// Change-detection identity for this render. Defaults to the serialized update payload (or the
 	// nonce-normalized html for a plain-string render). Supplied when the payload's key order is
@@ -71,6 +80,16 @@ export function normalizeRender(rendered: LoaderRender): LoaderRenderResult {
 	return typeof rendered === "string" ? { html: rendered } : rendered;
 }
 
+// The render's full page, built on first read. The thunk is replaced by its result on the render
+// result itself, so every later read (a flush after a post, a declined full render reading back
+// what is on screen) gets the same string without assembling it again.
+export function renderedHtml(rendered: LoaderRenderResult): string {
+	if (typeof rendered.html === "function") {
+		rendered.html = rendered.html();
+	}
+	return rendered.html;
+}
+
 // Stable serialization of the update payload for change detection. Unlike the full html (which
 // carries fresh random CSP nonces per render and so never hashes equal), the update parts are
 // deterministic for identical input, so hashing them makes the skip actually fire.
@@ -90,14 +109,16 @@ export function normalizeNoncesForHash(html: string): string {
 }
 
 // The change-detection input for a render: the preview's own fingerprint when it supplies one,
-// otherwise the update payload, otherwise the nonce-normalized html.
+// otherwise the update payload, otherwise the nonce-normalized html. Only the last case — a render
+// with no update to post — builds the html, memoized on the render so an assign reuses it; the
+// decision can still be skip, leaving the page built but unassigned. A plain page builds nothing.
 function renderHashInput(rendered: LoaderRenderResult): string {
 	if (rendered.fingerprint !== undefined) {
 		return rendered.fingerprint;
 	}
 	return rendered.update
 		? serializeUpdate(rendered.update)
-		: normalizeNoncesForHash(rendered.html);
+		: normalizeNoncesForHash(renderedHtml(rendered));
 }
 
 // The bookkeeping every action carries, so the caller advances all of it at once after the apply
@@ -115,7 +136,7 @@ export type LoaderUpdateAction =
 			kind: "post";
 			message: LoaderUpdateMessage & { type: "updateBody" };
 	  } & LoaderRenderState)
-	| ({ kind: "assign"; html: string; updateCapable: boolean } & LoaderRenderState);
+	| ({ kind: "assign"; updateCapable: boolean } & LoaderRenderState);
 
 export interface LoaderRenderPrevious {
 	hash: number | undefined;
@@ -129,7 +150,10 @@ export interface LoaderRenderPrevious {
 // update (changed, update-capable, visible, the loaded page can receive it and the shell is
 // unchanged), or assign the full html (changed but no update support, hidden panel, the loaded page
 // has no listener, or the shell changed). `updateCapable` on the assign result is the capability of
-// the html being assigned, so the caller can update its tracking after the reload.
+// the html being assigned, so the caller can update its tracking after the reload. The html itself
+// is not carried: the caller reads it from the render through renderedHtml. Deciding builds a page
+// only when hashing a render with neither fingerprint nor update, and that build is memoized on the
+// render, so an assign that follows reuses it.
 export function decideLoaderRender(
 	rendered: LoaderRenderResult,
 	previous: LoaderRenderPrevious,
@@ -174,7 +198,7 @@ export function decideLoaderRender(
 			...state,
 		};
 	}
-	return { kind: "assign", html: rendered.html, updateCapable, ...state };
+	return { kind: "assign", updateCapable, ...state };
 }
 
 export abstract class UpdateablePreviewBase extends PreviewBase {
@@ -185,10 +209,11 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 	private lastPageUpdateCapable = false;
 	private lastShellFingerprint: string | undefined = undefined;
 	private lastSideFingerprint: string | undefined = undefined;
-	// The most recent full html. Kept so a panel that received in-place updates while visible can be
-	// flushed back to a current html when it is hidden (see the view-state handler), avoiding a stale
-	// reload on the next show.
-	private latestHtml: string | undefined = undefined;
+	// The most recent applied render. Kept so a panel that received in-place updates while visible
+	// can be flushed back to a current html when it is hidden (see the view-state handler), avoiding
+	// a stale reload on the next show. It is the render rather than its html because a posted render
+	// has not built its page yet, and only the flush needs it to.
+	private latestRender: LoaderRenderResult | undefined = undefined;
 	private htmlPropertyStale = false;
 	// The last update message actually delivered to the live page, cleared whenever the html is
 	// assigned (a fresh page already embeds that structure). A webview that reloads without the
@@ -210,13 +235,14 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 			if (
 				!this.panel.visible &&
 				this.htmlPropertyStale &&
-				this.latestHtml !== undefined
+				this.latestRender !== undefined
 			) {
 				// Re-syncing the property with content the live page already shows, not a render, so
 				// beforeRenderAssign is deliberately not called: nothing about the current render is
-				// superseded. The stored update is dropped because this html embeds it.
+				// superseded. The stored update is dropped because this html embeds it. This is where
+				// a posted render's page gets built.
 				this.latestUpdateMessage = undefined;
-				this.panel.webview.html = this.latestHtml;
+				this.panel.webview.html = renderedHtml(this.latestRender);
 				this.htmlPropertyStale = false;
 			}
 		}));
@@ -262,13 +288,20 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		}
 	}
 
-	private assignHtml(html: string): void {
+	private assignHtml(rendered: LoaderRenderResult): void {
 		if (this.isDisposed) {
 			return;
 		}
 		this.beforeRenderAssign();
 		this.latestUpdateMessage = undefined;
-		this.panel.webview.html = html;
+		this.panel.webview.html = renderedHtml(rendered);
+	}
+
+	// What the panel currently shows, for the paths that have no new page to hand out.
+	private currentHtml(): string {
+		return this.latestRender !== undefined
+			? renderedHtml(this.latestRender)
+			: this.getLoadingShellHtml();
 	}
 
 	protected async getContent(
@@ -276,7 +309,7 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		dependencyChanged = false,
 	): Promise<string> {
 		if (this.isDisposed) {
-			return this.latestHtml ?? this.getLoadingShellHtml();
+			return this.currentHtml();
 		}
 		const result = await this.renderContent(
 			document,
@@ -285,12 +318,12 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 			{ partial: false, dependencyChanged },
 		);
 		if (this.isDisposed) {
-			return this.latestHtml ?? this.getLoadingShellHtml();
+			return this.currentHtml();
 		}
 		if (result === null) {
 			// A full render must not decline: there is no page to keep. Fall back to what is already
 			// on screen rather than blanking the panel.
-			return this.latestHtml ?? this.getLoadingShellHtml();
+			return this.currentHtml();
 		}
 		const rendered = normalizeRender(result);
 		// PreviewBase assigns the returned html to the webview, so the loaded page's capability is
@@ -301,10 +334,10 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		this.lastPageUpdateCapable = rendered.update !== undefined;
 		this.lastShellFingerprint = rendered.shellFingerprint;
 		this.lastSideFingerprint = rendered.sideFingerprint;
-		this.latestHtml = rendered.html;
+		this.latestRender = rendered;
 		this.htmlPropertyStale = false;
 		await this.onRenderApplied(rendered, true, true);
-		return rendered.html;
+		return renderedHtml(rendered);
 	}
 
 	protected async sendPartialUpdate(
@@ -352,7 +385,8 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		if (decision.kind === "post") {
 			const delivered = await this.panel.webview.postMessage(decision.message);
 			if (delivered) {
-				this.latestHtml = rendered.html;
+				// The page is not built here: the render is kept so the flush on hide can build it.
+				this.latestRender = rendered;
 				this.latestUpdateMessage = decision.message;
 				// The live page keeps its listener (not reloaded), so capability is unchanged; the html
 				// property still holds the pre-update document, so mark it for flush on hide.
@@ -364,15 +398,15 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 			// The post was dropped (webview not ready/gone): fall back to a full html assign so the
 			// stored state reflects what actually got applied. The assigned html is update-capable
 			// (post is only chosen for update renders), so the reloaded page keeps its listener.
-			this.assignHtml(rendered.html);
-			this.latestHtml = rendered.html;
+			this.assignHtml(rendered);
+			this.latestRender = rendered;
 			this.htmlPropertyStale = false;
 			this.applyRenderState(decision);
 			this.lastPageUpdateCapable = true;
 			await this.onRenderApplied(rendered, true, decision.sideChanged);
 		} else {
-			this.assignHtml(decision.html);
-			this.latestHtml = rendered.html;
+			this.assignHtml(rendered);
+			this.latestRender = rendered;
 			this.htmlPropertyStale = false;
 			this.applyRenderState(decision);
 			this.lastPageUpdateCapable = decision.updateCapable;

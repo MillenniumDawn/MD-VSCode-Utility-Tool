@@ -6,6 +6,7 @@ import {
 } from "../previewdef/technology/contentbuilder";
 import {
 	serializeUpdate,
+	renderedHtml,
 	LoaderRenderResult,
 } from "../previewdef/loaderpreview";
 import * as featureflags from "../util/featureflags";
@@ -78,7 +79,7 @@ describe("previewdef/technology renderTechnologyFile in-place update", () => {
 			webview,
 		)) as LoaderRenderResult;
 		assert.strictEqual(typeof rendered, "object");
-		assert.strictEqual(typeof rendered.html, "string");
+		assert.strictEqual(typeof rendered.html, "function");
 		assert.ok(rendered.update);
 		assert.strictEqual(typeof rendered.update.styleCss, "string");
 		const data = rendered.update.data as {
@@ -104,7 +105,7 @@ describe("previewdef/technology renderTechnologyFile in-place update", () => {
 		)) as LoaderRenderResult;
 		// The full html carries fresh CSP nonces per render so it never hashes equal; the update parts
 		// must be byte-identical so a no-op edit skips.
-		assert.notStrictEqual(a.html, b.html);
+		assert.notStrictEqual(renderedHtml(a), renderedHtml(b));
 		assert.strictEqual(serializeUpdate(a.update!), serializeUpdate(b.update!));
 	});
 
@@ -142,9 +143,9 @@ describe("previewdef/technology renderTechnologyFile in-place update", () => {
 
 		for (const rendered of [a, b]) {
 			const styleCss = rendered.update!.styleCss!;
-			assert.strictEqual(classOf(rendered.html, "dragger"), "st-dragger");
+			assert.strictEqual(classOf(renderedHtml(rendered), "dragger"), "st-dragger");
 			assert.ok(
-				classOf(rendered.html, "techtreecontent")
+				classOf(renderedHtml(rendered), "techtreecontent")
 					.split(" ")
 					.includes("st-mainContent"),
 			);
@@ -166,11 +167,11 @@ describe("previewdef/technology renderTechnologyFile in-place update", () => {
 		)) as LoaderRenderResult;
 		const data = rendered.update!.data as { folderOptionsHtml: string; folders: string[] };
 
-		assert.ok(!rendered.html.includes(hostileFolder), rendered.html);
-		assert.ok(!rendered.html.includes("<b>"), rendered.html);
+		assert.ok(!renderedHtml(rendered).includes(hostileFolder), renderedHtml(rendered));
+		assert.ok(!renderedHtml(rendered).includes("<b>"), renderedHtml(rendered));
 		assert.ok(!data.folderOptionsHtml.includes(hostileFolder), data.folderOptionsHtml);
-		assert.ok(rendered.html.includes('<option value="techfolder_arty&quot; onload=&quot;x&lt;b&gt;">arty&quot;&nbsp;onload=&quot;x&lt;b&gt;</option>'), rendered.html);
-		assert.ok(rendered.html.includes('id="techfolder_arty&quot; onload=&quot;x&lt;b&gt;"'), rendered.html);
+		assert.ok(renderedHtml(rendered).includes('<option value="techfolder_arty&quot; onload=&quot;x&lt;b&gt;">arty&quot;&nbsp;onload=&quot;x&lt;b&gt;</option>'), renderedHtml(rendered));
+		assert.ok(renderedHtml(rendered).includes('id="techfolder_arty&quot; onload=&quot;x&lt;b&gt;"'), renderedHtml(rendered));
 		// The page matches option values and ids against these raw names after the browser has
 		// decoded the attributes, so the data itself stays unescaped.
 		assert.deepStrictEqual(data.folders, [hostileFolder]);
@@ -351,7 +352,7 @@ describe("previewdef/technology country selector", () => {
 			webview,
 		)) as LoaderRenderResult;
 
-		assert.ok(!rendered.html.includes('id="tech-country"'));
+		assert.ok(!renderedHtml(rendered).includes('id="tech-country"'));
 	});
 
 	it("is drawn with only the generic option, which the page fills in per folder", async () => {
@@ -362,11 +363,11 @@ describe("previewdef/technology country selector", () => {
 			webview,
 		)) as LoaderRenderResult;
 
-		assert.ok(rendered.html.includes('id="tech-country"'));
+		assert.ok(renderedHtml(rendered).includes('id="tech-country"'));
 		// The selection is deliberately not baked into the shell: a country change is applied by an
 		// in-place update, which cannot patch the shell, so anything of the choice written here would
 		// force a full page reload instead.
-		assert.ok(!/id="tech-country"[\s\S]*?selected/.test(rendered.html));
+		assert.ok(!/id="tech-country"[\s\S]*?selected/.test(renderedHtml(rendered)));
 	});
 
 	it("hands the page the country lists, so it can re-list them per folder", async () => {
@@ -377,8 +378,8 @@ describe("previewdef/technology country selector", () => {
 			webview,
 		)) as LoaderRenderResult;
 
-		assert.ok(rendered.html.includes("window.techCountries = "));
-		assert.ok(rendered.html.includes("window.techCountry = "));
+		assert.ok(renderedHtml(rendered).includes("window.techCountries = "));
+		assert.ok(renderedHtml(rendered).includes("window.techCountry = "));
 		assert.ok((rendered.update!.data as { countries: unknown }).countries);
 	});
 
@@ -393,7 +394,7 @@ describe("previewdef/technology country selector", () => {
 			webview,
 		)) as LoaderRenderResult;
 
-		const script = /window\.techCountries = (.*?);<\/script>/s.exec(rendered.html);
+		const script = /window\.techCountries = (.*?);<\/script>/s.exec(renderedHtml(rendered));
 		assert.ok(script, "expected the countries payload script");
 		assert.ok(!script![1]!.includes("</script"), script![1]!);
 		const countries = JSON.parse(script![1]!);
