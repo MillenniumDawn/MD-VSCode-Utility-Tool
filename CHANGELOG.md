@@ -8,6 +8,7 @@ Unreleased
 - Jumping to a vanilla file no longer asks which folder to copy it into when only one workspace folder is open. Issue #240.
 - [ World Map Previewer ] A workspace setting whose value is not what the extension expects can no longer break out of a preview's page script; the world map and focus tree previews and the mouse-wheel setting now embed settings values safely. Issue #220.
 - [ CI ] A merge landing after a release whose publish failed no longer opens a second release pull request for the same version, one that could never publish once the fix was merged and left the version stuck. Issue #222.
+- [ World Map Previewer ] The warning for a state whose provinces all fail to resolve now reads "State 12 doesn't have valid provinces." instead of the garbled "State 12 in doesn't have valid provinces.". Issue #244.
 
   Functionality:
 

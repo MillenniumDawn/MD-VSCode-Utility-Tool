@@ -35,7 +35,7 @@ export class RiverLoader extends FileLoader<RiverBmp> {
 	}
 }
 
-async function loadRivers(
+export async function loadRivers(
 	file: string,
 	progressReporter: ProgressReporter,
 	warnings: WorldMapWarning[],
@@ -77,7 +77,7 @@ async function loadRivers(
 	return result;
 }
 
-function findRiverPointsList(riversImage: BMP): River[] {
+export function findRiverPointsList(riversImage: BMP): River[] {
 	const result: River[] = [];
 
 	for (
@@ -179,7 +179,7 @@ function findRiverPoints(
 	};
 }
 
-function validateRivers(
+export function validateRivers(
 	file: string,
 	rivers: River[],
 	warnings: WorldMapWarning[],

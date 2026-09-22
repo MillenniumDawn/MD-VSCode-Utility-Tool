@@ -198,6 +198,36 @@ export function mergeRegion<K extends string, T extends { [k in K]: number[] }>(
 	return result;
 }
 
+export function mergeRegionWithWarnings<
+	K extends string,
+	T extends { id: number; file: string } & { [k in K]: number[] },
+>(
+	input: T,
+	subRegionIdType: K,
+	subRegions: (Region | undefined | null)[],
+	width: number,
+	sourceType: "state" | "strategicregion" | "supplyarea",
+	warnings: WorldMapWarning[],
+	regionNotExistText: (regionId: number) => string,
+	noRegionText: () => string,
+): T & Region {
+	const pushWarning = (text: string) =>
+		warnings.push({
+			source: [{ type: sourceType, id: input.id }],
+			relatedFiles: [input.file],
+			text,
+		});
+
+	return mergeRegion(
+		input,
+		subRegionIdType,
+		subRegions,
+		width,
+		(regionId) => pushWarning(regionNotExistText(regionId)),
+		() => pushWarning(noRegionText()),
+	);
+}
+
 export function mergeRegions(
 	regions: (Zone | Region)[],
 	width: number,

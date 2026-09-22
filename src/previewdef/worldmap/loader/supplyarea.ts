@@ -6,7 +6,7 @@ import {
 	LoadResult,
 	mergeInLoadResult,
 	sortItems,
-	mergeRegion,
+	mergeRegionWithWarnings,
 	LoadResultOD,
 	shouldReloadDependencies,
 } from "./common";
@@ -119,11 +119,26 @@ export class SupplyAreasLoader extends FolderLoader<
 		for (let i = -badSupplyAreasCount; i < sortedSupplyAreas.length; i++) {
 			const sortedArea = sortedSupplyAreas[i];
 			if (sortedArea) {
-				filledSupplyAreas[i] = calculateBoundingBox(
+				filledSupplyAreas[i] = mergeRegionWithWarnings(
 					sortedArea,
+					"states",
 					states,
 					width,
+					"supplyarea",
 					warnings,
+					(stateId) =>
+						localize(
+							"worldmap.warnings.stateinsupplyareanotexist",
+							"State {0} used in supply area {1} doesn't exist.",
+							stateId,
+							sortedArea.id,
+						),
+					() =>
+						localize(
+							"worldmap.warnings.supplyareanovalidstates",
+							"Supply area {0} doesn't have valid states.",
+							sortedArea.id,
+						),
 				);
 			}
 		}
@@ -278,41 +293,6 @@ function sortSupplyAreas(
 		sortedSupplyAreas: sorted,
 		badSupplyAreaId: badId,
 	};
-}
-
-function calculateBoundingBox(
-	supplyAreaNoRegion: SupplyAreaNoRegion,
-	states: (State | undefined | null)[],
-	width: number,
-	warnings: WorldMapWarning[],
-): SupplyArea {
-	return mergeRegion(
-		supplyAreaNoRegion,
-		"states",
-		states,
-		width,
-		(stateId) =>
-			warnings.push({
-				source: [{ type: "supplyarea", id: supplyAreaNoRegion.id }],
-				relatedFiles: [supplyAreaNoRegion.file],
-				text: localize(
-					"worldmap.warnings.stateinsupplyareanotexist",
-					"State {0} used in supply area {1} doesn't exist.",
-					stateId,
-					supplyAreaNoRegion.id,
-				),
-			}),
-		() =>
-			warnings.push({
-				source: [{ type: "supplyarea", id: supplyAreaNoRegion.id }],
-				relatedFiles: [supplyAreaNoRegion.file],
-				text: localize(
-					"worldmap.warnings.supplyareanovalidstates",
-					"Supply area {0} doesn't have valid states.",
-					supplyAreaNoRegion.id,
-				),
-			}),
-	);
 }
 
 function validateStatesInSupplyAreas(
