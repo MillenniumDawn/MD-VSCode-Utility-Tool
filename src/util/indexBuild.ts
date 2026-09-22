@@ -260,11 +260,13 @@ export function createIndexBuilder<T>(
 				`[Index] ${name}: build still running after ${timeout}ms, giving up on it. ` +
 					`Live index phases: ${describeLiveIndexBuilds().join("; ") || "none"}`,
 			);
-			return new TimeoutError(`${name} index build timed out after ${timeout}ms`);
+			return new TimeoutError(
+				`${name} index build timed out after ${timeout}ms`,
+			);
 		});
 
 		buildTask = task;
-		gate.start(task);
+		gate.start(underlying);
 
 		// Retry policy, keyed on the real work rather than on `task`: a build that overran the
 		// deadline is still running, and clearing the memo then would start a second one behind it.
@@ -279,7 +281,6 @@ export function createIndexBuilder<T>(
 			() => {
 				if (buildTask === task) {
 					buildTask = undefined;
-					gate.reset();
 				}
 			},
 		);
