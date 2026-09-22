@@ -18,6 +18,12 @@ class MioPreview extends LoaderPreview<MioLoader> {
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
         super(uri, panel, (file, contentProvider) => new MioLoader(file, contentProvider), renderMioFile);
     }
+
+    // localisationIndex and previewLocalisation change every trait and organization name;
+    // gfxIndex changes which trait icons resolve.
+    protected get reloadOnConfigurationChange(): readonly string[] {
+        return ['localisationIndex', 'previewLocalisation', 'gfxIndex'];
+    }
 }
 
 export const mioPreviewDef: PreviewProviderDef = {

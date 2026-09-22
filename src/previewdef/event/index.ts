@@ -5,7 +5,6 @@ import { PreviewProviderDef } from '../previewmanager';
 import { LoaderPreview } from '../loaderpreview';
 import { EventsLoader } from './loader';
 import { eventTreePreview } from '../../util/featureflags';
-import { ConfigurationKey } from '../../constants';
 
 function canPreviewEvent(document: vscode.TextDocument) {
     if (!eventTreePreview) {
@@ -22,29 +21,15 @@ function canPreviewEvent(document: vscode.TextDocument) {
 }
 
 class EventPreview extends LoaderPreview<EventsLoader> {
-    private configurationHandler: vscode.Disposable;
-
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
         super(uri, panel, (file, contentProvider) => new EventsLoader(file, contentProvider), renderEventFile);
-        this.configurationHandler = vscode.workspace.onDidChangeConfiguration(e => {
-            // previewLocalisation changes the text in the payload; localisationIndex changes whether
-            // there is any text to show and so whether the localisation toggle is offered at all;
-            // gfxIndex changes which pictures resolve, and so whether the picture toggle is.
-            //
-            // registerFeatureFlags subscribes to this same event during activation, long before any
-            // preview exists, and VS Code fires listeners in subscription order -- so the module
-            // flags graph.ts reads are already refreshed by the time this runs.
-            if (e.affectsConfiguration(`${ConfigurationKey}.previewLocalisation`) ||
-                e.affectsConfiguration(`${ConfigurationKey}.localisationIndex`) ||
-                e.affectsConfiguration(`${ConfigurationKey}.gfxIndex`)) {
-                this.reload();
-            }
-        });
     }
 
-    public dispose(): void {
-        super.dispose();
-        this.configurationHandler.dispose();
+    // previewLocalisation changes the text in the payload; localisationIndex changes whether
+    // there is any text to show and so whether the localisation toggle is offered at all;
+    // gfxIndex changes which pictures resolve, and so whether the picture toggle is.
+    protected get reloadOnConfigurationChange(): readonly string[] {
+        return ['previewLocalisation', 'localisationIndex', 'gfxIndex'];
     }
 }
 
