@@ -1,7 +1,7 @@
 {
 	"name": "hearts-of-iron-iv-utilities-2026",
 	"displayName": "%hoi4modutilities.displayName%",
-	"description": "Utilities for Heart of Iron IV mods developers",
+	"description": "Utilities for Hearts of Iron IV mod developers",
 	"version": "1.1.38",
 	"author": "TheGeneral",
 	"publisher": "MilleniumDawnModTeam",
@@ -10,25 +10,31 @@
 		"type": "git",
 		"url": "https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool"
 	},
+	"bugs": {
+		"url": "https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool/issues"
+	},
+	"homepage": "https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool#readme",
+	"license": "MIT",
 	"engines": {
 		"node": ">=24",
 		"vscode": "^1.74.0"
 	},
 	"categories": [
+		"Visualization",
 		"Other"
 	],
 	"keywords": [
-		"mod",
+		"hoi4",
+		"hearts of iron",
 		"paradox",
-		"hoi",
-		"Heart of Iron"
+		"mod",
+		"millennium dawn",
+		"hoi"
 	],
 	"activationEvents": [
-		"onCustomEditor:mdhoi4utilities.dds",
-		"onCustomEditor:mdhoi4utilities.tga",
 		"onWebviewPanel:mdftpreview",
 		"onWebviewPanel:mdworldmappreview",
-		"workspaceContains:**/*.gfx",
+		"workspaceContains:interface/**/*.gfx",
 		"workspaceContains:common/characters/*.txt",
 		"workspaceContains:common/decisions/*.txt",
 		"workspaceContains:common/ideas/*.txt",
