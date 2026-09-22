@@ -5,7 +5,7 @@ import {
 	getTechnologyIconNames,
 } from "../previewdef/technology/contentbuilder";
 import {
-	serializeUpdate,
+	hashUpdate,
 	renderedHtml,
 	LoaderRenderResult,
 } from "../previewdef/loaderpreview";
@@ -21,7 +21,7 @@ import { Technology } from "../previewdef/technology/schema";
 // renderTechnologyFile returns the in-place update parts { html, update } on success and a plain html
 // string on the no-tree / error branches. These drive it against a stub loader (a countrytechtreeview
 // with no folder children, so every folder takes the deterministic "can't find folder" fallback) to
-// assert the return shape and that serializeUpdate is stable for identical input -- the property the
+// assert the return shape and that hashUpdate is stable for identical input -- the property the
 // LoaderPreview skip relies on -- and differs when the input changed.
 
 const webview = {
@@ -92,7 +92,7 @@ describe("previewdef/technology renderTechnologyFile in-place update", () => {
 		assert.deepStrictEqual(data.folders, ["artillery", "infantry"]);
 	});
 
-	it("serializeUpdate is stable for identical input, even though the full html nonces differ", async () => {
+	it("hashUpdate is stable for identical input, even though the full html nonces differ", async () => {
 		const a = (await renderTechnologyFile(
 			loaderFor(["artillery", "infantry"]),
 			uri,
@@ -106,10 +106,10 @@ describe("previewdef/technology renderTechnologyFile in-place update", () => {
 		// The full html carries fresh CSP nonces per render so it never hashes equal; the update parts
 		// must be byte-identical so a no-op edit skips.
 		assert.notStrictEqual(renderedHtml(a), renderedHtml(b));
-		assert.strictEqual(serializeUpdate(a.update!), serializeUpdate(b.update!));
+		assert.strictEqual(hashUpdate(a.update!), hashUpdate(b.update!));
 	});
 
-	it("serializeUpdate differs when the input changed", async () => {
+	it("hashUpdate differs when the input changed", async () => {
 		const a = (await renderTechnologyFile(
 			loaderFor(["artillery", "infantry"]),
 			uri,
@@ -121,8 +121,8 @@ describe("previewdef/technology renderTechnologyFile in-place update", () => {
 			webview,
 		)) as LoaderRenderResult;
 		assert.notStrictEqual(
-			serializeUpdate(a.update!),
-			serializeUpdate(c.update!),
+			hashUpdate(a.update!),
+			hashUpdate(c.update!),
 		);
 	});
 
@@ -429,7 +429,7 @@ describe("previewdef/technology country selector", () => {
 		assert.strictEqual(countryOf(rendered), "");
 	});
 
-	it("serializeUpdate differs when only the country changed", async () => {
+	it("hashUpdate differs when only the country changed", async () => {
 		// Otherwise the payload hashes equal and the in-place update is skipped, leaving the dropdown
 		// moved and the tree not.
 		withCountryIcons(true);
@@ -449,7 +449,7 @@ describe("previewdef/technology country selector", () => {
 			webview,
 		)) as LoaderRenderResult;
 
-		assert.notStrictEqual(serializeUpdate(a.update!), serializeUpdate(b.update!));
+		assert.notStrictEqual(hashUpdate(a.update!), hashUpdate(b.update!));
 	});
 });
 

@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { fnv1a32, fnv1a64Hex } from '../util/hash';
+import { fnv1a32, fnv1a32Value, fnv1a64Hex } from '../util/hash';
 
 describe('util/hash', () => {
     describe('fnv1a32', () => {
@@ -28,6 +28,42 @@ describe('util/hash', () => {
         it('walks the string backwards when asked, giving a different hash', () => {
             assert.strictEqual(fnv1a32('abc', 0x811c9dc5, true), fnv1a32('cba'));
             assert.notStrictEqual(fnv1a32('abc', 0x811c9dc5, true), fnv1a32('abc'));
+        });
+    });
+
+    describe('fnv1a32Value', () => {
+        it('is deterministic for equal structures and stays a 32-bit unsigned value', () => {
+            const make = () => ({ styleCss: '.x{}', data: { mios: [{ id: 'a', traits: { t: { x: 1, y: 2 } } }], flag: true, none: null } });
+            const hash = fnv1a32Value(make());
+            assert.strictEqual(hash, fnv1a32Value(make()));
+            assert.ok(Number.isInteger(hash) && hash >= 0 && hash <= 0xffffffff);
+        });
+
+        it('moves when a leaf changes', () => {
+            assert.notStrictEqual(fnv1a32Value({ data: { mios: [1] } }), fnv1a32Value({ data: { mios: [2] } }));
+            assert.notStrictEqual(fnv1a32Value({ data: { s: 'a' } }), fnv1a32Value({ data: { s: 'b' } }));
+            assert.notStrictEqual(fnv1a32Value({ data: { b: true } }), fnv1a32Value({ data: { b: false } }));
+        });
+
+        it('separates array order, key order and a value that moved between keys', () => {
+            assert.notStrictEqual(fnv1a32Value([1, 2]), fnv1a32Value([2, 1]));
+            assert.notStrictEqual(fnv1a32Value({ a: 1, b: 2 }), fnv1a32Value({ b: 2, a: 1 }));
+            assert.notStrictEqual(fnv1a32Value({ a: 1, b: 2 }), fnv1a32Value({ a: 2, b: 1 }));
+        });
+
+        // The walk feeds the strings into one running hash, so without a boundary the two payloads
+        // below would be the same byte stream.
+        it('does not collide when a string boundary shifts between neighbours', () => {
+            assert.notStrictEqual(fnv1a32Value({ a: 'ab', b: 'c' }), fnv1a32Value({ a: 'a', b: 'bc' }));
+            assert.notStrictEqual(fnv1a32Value(['ab', 'c']), fnv1a32Value(['a', 'bc']));
+        });
+
+        it('keeps a primitive apart from its string form and nesting apart from flattening', () => {
+            assert.notStrictEqual(fnv1a32Value(1), fnv1a32Value('1'));
+            assert.notStrictEqual(fnv1a32Value(null), fnv1a32Value('null'));
+            assert.notStrictEqual(fnv1a32Value(undefined), fnv1a32Value(null));
+            assert.notStrictEqual(fnv1a32Value([[1], 2]), fnv1a32Value([1, [2]]));
+            assert.notStrictEqual(fnv1a32Value({ a: { b: 1 } }), fnv1a32Value({ a: 1, b: 1 }));
         });
     });
 
