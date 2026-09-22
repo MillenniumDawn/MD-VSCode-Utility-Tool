@@ -18,6 +18,12 @@
 // Nothing here is allowed to fail the job. A release pull request that cannot open because an
 // external API is down would be a worse problem than a changelog written from pull request titles,
 // so every error path is a `::warning::` and an exit code of 0.
+//
+// Nothing here is allowed to stall it either. An API that accepts the connection and then sits on
+// it passes the `--check` step and would otherwise be waited on once per bullet -- close to two
+// hours for a full batch, during which the release pull request goes unrefreshed and every later
+// push to main queues behind this run. So the whole rewrite has one wall-clock budget: no request
+// outlives it, and whatever tier two has not reached when it runs out keeps its seeded wording.
 
 'use strict';
 
@@ -31,6 +37,16 @@ const defaultModel = 'z-ai/glm-5.2:free';
 const maxBulletLength = 600;
 const maxBullets = 30;
 const timeoutMs = 120000;
+// The whole rewrite, both tiers together. The job that runs this has a 15 minute cap and still has
+// to bump, commit and push afterwards, so this leaves it comfortable room.
+const rewriteBudgetMs = 6 * 60 * 1000;
+const rateLimitWaitMs = 20000;
+// `max_tokens` covers the reply and, on a reasoning model, the thinking that precedes it. A fixed
+// allowance that fits one bullet truncates a thirty-bullet structured reply into JSON that will
+// not parse, which sent every large release down the one-call-per-bullet path; so the allowance
+// grows with the batch.
+const baseTokens = 2000;
+const tokensPerBullet = 400;
 
 const style = [
 	'You write the changelog for a Visual Studio Code extension that previews Hearts of Iron IV mod files.',
@@ -97,7 +113,13 @@ function assemble(text, entry) {
 	return `- ${prefix}${sentence}${suffix}`;
 }
 
-async function post(path, body, key) {
+function maxTokens(count) {
+	return baseTokens + tokensPerBullet * count;
+}
+
+// `remaining` is the rewrite's time budget in milliseconds; a request never gets longer than what
+// is left of it.
+async function post(path, body, key, remaining) {
 	const response = await fetch(`${endpoint}${path}`, {
 		method: 'POST',
 		headers: {
@@ -108,7 +130,7 @@ async function post(path, body, key) {
 			'X-Title': 'MD VSCode Utility Tool release',
 		},
 		body: JSON.stringify(body),
-		signal: AbortSignal.timeout(timeoutMs),
+		signal: AbortSignal.timeout(Math.max(1, Math.min(timeoutMs, remaining()))),
 	});
 
 	if (!response.ok) {
@@ -125,7 +147,7 @@ function messageContent(payload) {
 	return payload?.choices?.[0]?.message?.content ?? '';
 }
 
-function request(messages, extra) {
+function request(messages, count, extra) {
 	return {
 		model: modelName(),
 		messages,
@@ -133,22 +155,23 @@ function request(messages, extra) {
 		// knobs that make the output repeatable are both pinned.
 		temperature: 0.2,
 		seed: 7,
-		max_tokens: 2000,
+		max_tokens: maxTokens(count),
 		...extra,
 	};
 }
 
 const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
-// One retry, because a free model is rate limited and a release lands several bullets at once.
-async function withRateLimitRetry(call) {
+// One retry, because a free model is rate limited and a release lands several bullets at once --
+// unless the wait alone would use up what is left of the budget, in which case the 429 stands.
+async function withRateLimitRetry(call, remaining) {
 	try {
 		return await call();
 	} catch (error) {
-		if (error?.status !== 429) {
+		if (error?.status !== 429 || remaining() <= rateLimitWaitMs) {
 			throw error;
 		}
-		await wait(20000);
+		await wait(rateLimitWaitMs);
 		return call();
 	}
 }
@@ -172,7 +195,7 @@ function describe(entry) {
 }
 
 // Tier one: every bullet in one request, held to a schema.
-async function rewriteTogether(entries, key) {
+async function rewriteTogether(entries, key, remaining) {
 	const payload = await withRateLimitRetry(() => post('/chat/completions', request(
 		[
 			{ role: 'system', content: style },
@@ -182,6 +205,7 @@ async function rewriteTogether(entries, key) {
 					+ entries.map(describe).join('\n\n---\n\n'),
 			},
 		],
+		entries.length,
 		{
 			response_format: {
 				type: 'json_schema',
@@ -209,7 +233,7 @@ async function rewriteTogether(entries, key) {
 					},
 				},
 			},
-		}), key));
+		}), key, remaining), remaining);
 
 	const content = messageContent(payload);
 	const fenced = /```(?:json)?\s*\n([\s\S]*?)\n?```/.exec(content);
@@ -237,36 +261,46 @@ async function rewriteTogether(entries, key) {
 }
 
 // Tier two: whatever tier one did not produce, one request at a time.
-async function rewriteOne(entry, key) {
+async function rewriteOne(entry, key, remaining) {
 	const payload = await withRateLimitRetry(() => post('/chat/completions', request([
 		{ role: 'system', content: style },
 		{ role: 'user', content: `Rewrite this entry as one changelog sentence. Reply with the sentence and nothing else. ${untrustedNote}\n\n${describe(entry)}` },
-	]), key));
+	], 1), key, remaining), remaining);
 
 	const text = cleanReply(messageContent(payload));
 	return acceptable(text) ? text : undefined;
 }
 
-async function rewrite(entries, key) {
+// `options.budgetMs` overrides the wall-clock budget; the tests are the only caller that does.
+async function rewrite(entries, key, options = {}) {
 	const written = new Map();
 	if (entries.length === 0) {
 		return written;
 	}
 
+	const budgetMs = options.budgetMs ?? rewriteBudgetMs;
+	const deadline = Date.now() + budgetMs;
+	const remaining = () => deadline - Date.now();
+
 	try {
-		for (const [number, text] of await rewriteTogether(entries, key)) {
+		for (const [number, text] of await rewriteTogether(entries, key, remaining)) {
 			written.set(number, text);
 		}
 	} catch (error) {
 		warn(`Could not rewrite the changelog bullets in one request (${error?.message ?? error}); trying them one at a time.`);
 	}
 
-	for (const entry of entries) {
+	for (const [index, entry] of entries.entries()) {
 		if (written.has(entry.number)) {
 			continue;
 		}
+		if (remaining() <= 0) {
+			const left = entries.slice(index).filter((other) => !written.has(other.number)).map((other) => `#${other.number}`);
+			warn(`The changelog model used up its ${Math.round(budgetMs / 1000)} second budget; pull request(s) ${left.join(', ')} keep their titles.`);
+			break;
+		}
 		try {
-			const text = await rewriteOne(entry, key);
+			const text = await rewriteOne(entry, key, remaining);
 			if (text) {
 				written.set(entry.number, text);
 			} else {
@@ -375,4 +409,4 @@ if (require.main === module) {
 	});
 }
 
-module.exports = { acceptable, assemble, check, cleanReply, describe, parseArgs, rewrite, style };
+module.exports = { acceptable, assemble, check, cleanReply, describe, maxTokens, parseArgs, rewrite, style };

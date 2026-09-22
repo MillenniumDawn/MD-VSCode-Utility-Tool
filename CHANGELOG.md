@@ -11,6 +11,10 @@ v1.1.39
 - [ World Map Previewer ] A workspace setting whose value is not what the extension expects can no longer break out of a preview's page script; the world map and focus tree previews and the mouse-wheel setting now embed settings values safely. Issue #220.
 - [ CI ] A merge landing after a release whose publish failed no longer opens a second release pull request for the same version, one that could never publish once the fix was merged and left the version stuck. Issue #222.
 
+  Functionality:
+
+- [ CI ] A changelog model that stalls can no longer hold up the release pull request for hours: bullets it has not reworded within a few minutes keep their pull request titles, and a large release now asks for a reply long enough to hold every bullet instead of falling back to one call per bullet. Issue #223.
+
 v1.1.38
 
   Bugfixes:
