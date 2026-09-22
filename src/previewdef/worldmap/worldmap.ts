@@ -192,6 +192,14 @@ export class WorldMap {
 			}
 		} catch (e) {
 			error(e);
+			await this.postMessageToWebview({
+				command: "error",
+				data: localize(
+					"worldmap.failedtoload",
+					"Failed to load world map: {0}.",
+					forceError(e).toString(),
+				),
+			} as WorldMapMessage);
 		}
 	}
 

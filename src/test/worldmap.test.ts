@@ -43,6 +43,40 @@ describe("previewdef/worldmap/WorldMap", () => {
 		]);
 	});
 
+	it("reports and logs requested province data failures", async () => {
+		const posts: unknown[] = [];
+		const failure = new Error("province request failed");
+		const consoleErrors: unknown[][] = [];
+		const originalConsoleError = console.error;
+		console.error = (...args: unknown[]) => {
+			consoleErrors.push(args);
+		};
+		try {
+			const worldMap = new WorldMap(panel(posts) as any);
+			(worldMap as any).worldMapLoader = {
+				getWorldMap: async () => {
+					throw failure;
+				},
+			};
+
+			await (worldMap as any).onMessage({
+				command: "requestprovinces",
+				start: 0,
+				end: 1,
+			});
+
+			assert.deepStrictEqual(posts, [
+				{
+					command: "error",
+					data: "Failed to load world map: Error: province request failed.",
+				},
+			]);
+			assert.deepStrictEqual(consoleErrors, [[failure]]);
+		} finally {
+			console.error = originalConsoleError;
+		}
+	});
+
 	it("writes a successful export only once when the webview replays it", async () => {
 		const writes: string[] = [];
 		stubVscode({
