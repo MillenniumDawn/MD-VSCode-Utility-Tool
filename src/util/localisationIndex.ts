@@ -390,11 +390,17 @@ export function parseLocalisation(fileContent: string): LocalisationData {
 }
 
 function removeWorkspaceLocalisationFile(relative: string): void {
-	const langKey = getLangKeyFromPath(relative);
-	const fileKeys = workspaceLocalisationFileMap[langKey]?.[relative];
-	if (fileKeys && workspaceLocalisationIndex[langKey]) {
-		for (const key of fileKeys) {
-			delete workspaceLocalisationIndex[langKey][key];
+	for (const langKey of Object.keys(workspaceLocalisationFileMap)) {
+		const fileKeys = workspaceLocalisationFileMap[langKey]?.[relative];
+		if (!fileKeys) {
+			continue;
+		}
+
+		const languageIndex = workspaceLocalisationIndex[langKey];
+		if (languageIndex) {
+			for (const key of fileKeys) {
+				delete languageIndex[key];
+			}
 		}
 		delete workspaceLocalisationFileMap[langKey]?.[relative];
 	}
@@ -488,11 +494,6 @@ const watchers = createIndexWatchers({
 
 export function registerLocalisationIndex(): vscode.Disposable {
 	return watchers.register();
-}
-
-function getLangKeyFromPath(filePath: string): string {
-	const match = filePath.match(localisationFileFilter);
-	return match?.[1] ?? "l_english";
 }
 
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
