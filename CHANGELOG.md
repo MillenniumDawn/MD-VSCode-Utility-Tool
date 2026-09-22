@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- [ World Map Previewer ] A failed map data request now shows its error instead of leaving the preview stuck on the loading message. Issue #241.
+
 v1.1.38
 
   Bugfixes:
