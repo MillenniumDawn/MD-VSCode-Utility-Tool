@@ -84,7 +84,7 @@ what broke and re-running one job republishes one target. **The GitHub release c
 both, and only when at least one registry took the build**, because that release is the tag
 and the tag is what says a version shipped. A release both registries rejected used to get
 its tag anyway, so the version read as released while nobody could install it; now it keeps
-no tag, and the next release pull request takes that version over instead of bumping past it.
+no tag and waits for the fix pull request the failed release opens.
 
 **A registry with no token fails.** It used to skip and leave the job green, which is how
 the extension reached nobody on Open VSX for months while every run said success. `VSCE_PAT`
@@ -105,7 +105,10 @@ second release pull request is involved. The one thing to remember: if the fix c
 ships — anything outside `.github/` and documentation — bump `package.json` and the
 `Unreleased` heading on the fix branch first, or the new build replaces `v<version>` on the
 targets that already have the old one. If the branch already has an open pull request,
-someone is on it, and the new run is reported as a comment rather than force-pushed over. A
+someone is on it, and the new run is reported as a comment rather than force-pushed over. Until
+that merge, every other push to `main` builds a pre-release and nothing else: the version has no
+tag, but `release-check.js` asks the commit that changed `"version"` where it came from, sees the
+release pull request, and neither publishes it again nor adopts it as a hand bump. A
 failed *pre-release* gets none of this — it runs on every push and the next one supersedes it.
 
 **Both registry publishes retry.** A `Request timeout: /_apis/gallery` once failed a release
