@@ -2116,6 +2116,81 @@ describe('scripts/rewrite-bullets', function () {
 
             assert.strictEqual((await rewriteBullets.rewrite([], 'key')).size, 0);
         });
+
+        it('asks for a reply long enough to hold the whole batch', async function () {
+            const asked: number[] = [];
+            globalThis.fetch = (async (_url: string, init: { body: string }) => {
+                asked.push(JSON.parse(init.body).max_tokens);
+                return reply(JSON.stringify({ bullets: [] }));
+            }) as unknown as typeof globalThis.fetch;
+
+            const many = Array.from({ length: 30 }, (_, i) => ({ number: i + 1, title: `Change ${i + 1}`, section: 'Bugfixes' }));
+            await rewriteBullets.rewrite(many, 'key', { budgetMs: 0 });
+            await rewriteBullets.rewrite(entries, 'key', { budgetMs: 0 });
+
+            assert.strictEqual(asked[0], rewriteBullets.maxTokens(30));
+            assert.strictEqual(asked[1], rewriteBullets.maxTokens(2));
+            assert.ok(asked[0] > asked[1]);
+            // Well past what a fixed 2000 tokens allowed, which truncated a full release's reply.
+            assert.ok(asked[0] >= 10000);
+        });
+
+        it('stops asking one at a time once the time budget is spent', async function () {
+            globalThis.fetch = (async (_url: string, init: { body: string }) => {
+                calls.push(init.body);
+                await new Promise((resolve) => setTimeout(resolve, 30));
+                return reply('not json at all');
+            }) as unknown as typeof globalThis.fetch;
+
+            const written = await rewriteBullets.rewrite(entries, 'key', { budgetMs: 10 });
+            // The structured call went out and stalled past the budget; neither bullet was asked
+            // about on its own, so both keep their seeded wording.
+            assert.strictEqual(calls.length, 1);
+            assert.strictEqual(written.size, 0);
+        });
+
+        it('cuts a stalled request when the budget runs out', async function () {
+            globalThis.fetch = (async (_url: string, init: { body: string; signal: AbortSignal }) => {
+                calls.push(init.body);
+                return await new Promise((resolve, reject) => {
+                    const giveUp = () => reject(new Error('aborted'));
+                    if (init.signal.aborted) {
+                        giveUp();
+                        return;
+                    }
+                    init.signal.addEventListener('abort', giveUp);
+                    // A real sleep, far past the budget. If the budget never reaches the request,
+                    // the reply lands anyway and both bullets are rewritten.
+                    setTimeout(() => resolve(reply(JSON.stringify({
+                        bullets: [
+                            { number: 1, text: 'The first thing works.' },
+                            { number: 2, text: 'The second is fixed.' },
+                        ],
+                    }))), 200);
+                });
+            }) as unknown as typeof globalThis.fetch;
+
+            const written = await rewriteBullets.rewrite(entries, 'key', { budgetMs: 50 });
+            // The abort the budget arms reached the stalled batch call at the deadline, so the
+            // reply that arrived later was never used, and nothing was asked one at a time.
+            assert.strictEqual(written.size, 0);
+            assert.strictEqual(calls.length, 1);
+        });
+
+        it('does not wait for a rate-limit retry it cannot afford', async function () {
+            globalThis.fetch = (async (_url: string, init: { body: string }) => {
+                calls.push(init.body);
+                return { ok: false, status: 429, text: async () => 'rate limited' };
+            }) as unknown as typeof globalThis.fetch;
+
+            const started = Date.now();
+            const written = await rewriteBullets.rewrite(entries, 'key', { budgetMs: 5000 });
+            // The retry waits twenty seconds, which is more than the budget has, so each tier fails
+            // on its first 429 rather than sleeping through the deadline.
+            assert.ok(Date.now() - started < 2000);
+            assert.strictEqual(written.size, 0);
+            assert.strictEqual(calls.length, 3);
+        });
     });
 
     describe('check', function () {
