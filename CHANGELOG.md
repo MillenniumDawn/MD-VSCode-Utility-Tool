@@ -7,6 +7,7 @@ Unreleased
 - Editing or deleting localisation files now removes old entries from every language they contain, even when the filename does not name the language. Issue #235.
 - Jumping to a vanilla file no longer asks which folder to copy it into when only one workspace folder is open. Issue #240.
 - [ World Map Previewer ] A workspace setting whose value is not what the extension expects can no longer break out of a preview's page script; the world map and focus tree previews and the mouse-wheel setting now embed settings values safely. Issue #220.
+- [ CI ] A merge landing after a release whose publish failed no longer opens a second release pull request for the same version, one that could never publish once the fix was merged and left the version stuck. Issue #222.
 
 v1.1.38
 

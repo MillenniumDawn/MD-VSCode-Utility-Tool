@@ -15,18 +15,28 @@
 // package.json on its own no longer ships the moment it is merged; the bump is carried into the
 // open release pull request instead, so a run of merges becomes one release.
 //
-// The four outcomes:
-//   release=true            an untagged version arrived from release/version-bump, so publish it.
-//                           Also the merge of a fix/release-v<version> branch -- the one
-//                           release.yml opens when publishing failed -- whatever the tag says:
-//                           the version goes out again, and a target that already has it is
-//                           left alone by the publish jobs.
+// Where an untagged version came from is asked of the commit that delivered it -- the last one on
+// main's first-parent line that changed "version" in package.json -- not of the push being
+// checked. The two differ when a merge lands after the bump: a release whose publish failed on
+// both registries keeps no tag, and the next feature merge used to read that as a hand bump of
+// its own, adopt it under the wrong pull request number, and open a second release pull request
+// for a version that was about to be tagged out from under it.
+//
+// The outcomes:
+//   release=true            an untagged version arrived from release/version-bump on this very
+//                           push, so publish it. Also the merge of a fix/release-v<version>
+//                           branch -- the one release.yml opens when publishing failed --
+//                           whatever the tag says: the version goes out again, and a target that
+//                           already has it is left alone by the publish jobs.
 //   adopt=true bump=true    an untagged version arrived from somewhere else -- a branch bumped by
 //                           hand. The release pull request takes that version over instead of
 //                           bumping past it, and publishing waits for that pull request.
 //   bump=true               the tag is taken and the extension itself changed, so a release pull
 //                           request has to carry the next version
-//   release=false bump=false  only documentation and CI changed since the tag; nothing to ship
+//   release=false bump=false  only documentation and CI changed since the tag; nothing to ship.
+//                           Also an untagged version that an earlier push merged from
+//                           release/version-bump: its publish failed, the fix pull request is
+//                           what publishes it, and this push builds a pre-release and no more.
 
 'use strict';
 
@@ -59,16 +69,26 @@ function gitSucceeds(args) {
 	}
 }
 
+function releaseBranchReachable(sha) {
+	const tip = `refs/remotes/origin/${releaseBranch}`;
+	return gitSucceeds(['rev-parse', '--verify', '--quiet', tip])
+		&& gitSucceeds(['merge-base', '--is-ancestor', tip, sha]);
+}
+
 // Only the merge that brought the release branch in has it reachable from the commit but not from
 // the commit's first parent. Reachability alone is not enough -- the branch stays reachable for
 // every later push to main as well.
 function mergedReleaseBranch(sha) {
+	return releaseBranchReachable(sha) && !gitSucceeds(['merge-base', '--is-ancestor', `refs/remotes/origin/${releaseBranch}`, `${sha}^`]);
+}
+
+// An adopted release branch starts at the commit that bumped the version by hand. Its empty
+// release commit is therefore the first commit after that bump that can identify the release on
+// later pushes, even though `mergedReleaseBranch` quite correctly rejects those later pushes.
+function releaseBranchMergedAfter(sha, bumpSha) {
 	const tip = `refs/remotes/origin/${releaseBranch}`;
-	if (!gitSucceeds(['rev-parse', '--verify', '--quiet', tip])) {
-		return false;
-	}
-	return gitSucceeds(['merge-base', '--is-ancestor', tip, sha])
-		&& !gitSucceeds(['merge-base', '--is-ancestor', tip, `${sha}^`]);
+	return releaseBranchReachable(sha)
+		&& gitSucceeds(['merge-base', '--is-ancestor', bumpSha, tip]);
 }
 
 // The fix branch is deleted the moment its pull request merges, so unlike the release branch there
@@ -83,23 +103,60 @@ function mergedFixBranch(sha) {
 	return /^Merge pull request #\d+ from [^/\s]+\/fix\/release-v\d+\.\d+\.\d+$/.test(subject);
 }
 
-// Which pull request this commit arrived on main with, and whether that was the release pull
-// request or the fix pull request for a failed release.
+// The commit that delivered the version package.json carries now: the newest one on the
+// first-parent line of `sha` whose diff touched a "version" line holding exactly that value. On
+// main that is the merge of the pull request that bumped, whether it was the release pull request
+// or a branch bumping by hand. Empty when nothing matches -- a shallow clone, or a version that
+// was never written -- and the caller falls back to the push itself.
+function versionBumpCommit(sha, version) {
+	const literal = String(version).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	try {
+		return git(['log', '--first-parent', '-1', '--format=%H', `-G"version"\\s*:\\s*"${literal}"`, sha, '--', 'package.json']);
+	} catch {
+		return '';
+	}
+}
+
+// Which pull request delivered the version, and whether that was the release pull request; and
+// whether this push merged the fix pull request for a failed release.
 //
-// The pull request behind the commit is the reliable answer, because it survives a squash merge as
+// Two commits, because they answer two questions. `bumpSha` is the commit that changed "version"
+// -- see versionBumpCommit -- and says where the version came from, which is the same answer on
+// the push that merged it and on every push after it. `sha` is the push itself, which is the only
+// commit that can be the merge of the fix branch. When the two are the same commit, one lookup
+// answers both.
+//
+// The pull request behind a commit is the reliable answer, because it survives a squash merge as
 // well as a merge commit -- the same lookup scripts/pr-bullets.js uses to name the pull requests in
 // the changelog. When it finds nothing (an unauthenticated gh, a rate limit) the shape of the
-// history answers both halves on its own.
-function pushSource(repo, sha) {
-	const pullRequests = repo ? pullRequestsForCommit(repo, sha) : [];
-	const fromReleaseBranch = pullRequests.some((pr) => pr?.head?.ref === releaseBranch);
-	const fromFixBranch = pullRequests.some((pr) => isFixBranch(pr?.head?.ref));
+// history answers on its own.
+function pushSource(repo, sha, bumpSha = sha) {
+	const lookup = (commit) => (repo ? pullRequestsForCommit(repo, commit) : []);
+	const bumpPullRequests = lookup(bumpSha);
+	const pushPullRequests = bumpSha === sha ? bumpPullRequests : lookup(sha);
+	const fromReleaseBranch = bumpPullRequests.some((pr) => pr?.head?.ref === releaseBranch);
+	const mergedRelease = pushPullRequests.some((pr) => pr?.head?.ref === releaseBranch)
+		|| (pushPullRequests.length === 0 && mergedReleaseBranch(sha));
+	const fromFixBranch = pushPullRequests.some((pr) => isFixBranch(pr?.head?.ref));
 
 	return {
-		number: pullRequests[0]?.number ?? '',
-		fromReleaseBranch: fromReleaseBranch || (pullRequests.length === 0 && mergedReleaseBranch(sha)),
-		fromFixBranch: fromFixBranch || (pullRequests.length === 0 && mergedFixBranch(sha)),
+		number: bumpPullRequests[0]?.number ?? '',
+		fromReleaseBranch:
+			fromReleaseBranch
+			|| (bumpPullRequests.length === 0 && mergedReleaseBranch(bumpSha))
+			|| releaseBranchMergedAfter(sha, bumpSha),
+		mergedReleaseBranch: mergedRelease,
+		fromFixBranch: fromFixBranch || (pushPullRequests.length === 0 && mergedFixBranch(sha)),
+		bumpedEarlier: bumpSha !== sha,
 	};
+}
+
+function resolveCommit(ref) {
+	try {
+		return git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
+	} catch {
+		return ref;
+	}
 }
 
 function tagExists(tag) {
@@ -153,7 +210,9 @@ function decide(state) {
 
 	if (!state.tagExists) {
 		// A manual run is someone asking for this version to go out now, whatever opened it.
-		if (state.fromReleaseBranch || state.manual) {
+		// The push that merged the release branch publishes even when that branch only appended
+		// bullets to a version a hand bump had already written.
+		if (state.manual || state.mergedReleaseBranch || (state.fromReleaseBranch && !state.bumpedEarlier)) {
 			return {
 				tag,
 				version,
@@ -161,6 +220,25 @@ function decide(state) {
 				bump: false,
 				adopt: false,
 				notice: `Tag ${tag} does not exist yet and this push came from the release pull request, so it is published.`,
+			};
+		}
+
+		// The release pull request was merged by an earlier push and its version never got a tag,
+		// which means neither registry took the build. The fix pull request that failure opened
+		// is what publishes it. Publishing again from here would ship this push's code under a
+		// version whose changelog does not mention it, and adopting it would open a second release
+		// pull request for a version the fix is about to tag -- one that could then never publish.
+		if (state.fromReleaseBranch) {
+			return {
+				tag,
+				version,
+				release: false,
+				bump: false,
+				adopt: false,
+				notice:
+					`Tag ${tag} does not exist yet: ${version} was merged from ${releaseBranch} by an earlier push and ` +
+					'did not publish, so the fix pull request for it is what publishes it. This push builds a ' +
+					'pre-release and nothing else.',
 			};
 		}
 
@@ -209,16 +287,21 @@ function evaluate(options = {}) {
 	const tag = `v${version}`;
 	const exists = tagExists(tag);
 
-	// Asked in every case, one API call per push: a tagged version still has to know whether this
-	// push merged the fix branch for it.
-	const source = pushSource(options.repo, options.sha);
+	// Resolved to a hash so it compares with the commit versionBumpCommit names; GITHUB_SHA is one
+	// already, HEAD is not.
+	const sha = resolveCommit(options.sha);
+	// Asked in every case: a tagged version still has to know whether this push merged the fix
+	// branch for it. Only an untagged one has to know which commit brought the version in.
+	const source = pushSource(options.repo, sha, exists ? sha : versionBumpCommit(sha, version) || sha);
 
 	const result = decide({
 		tag,
 		tagExists: exists,
 		manual: options.manual === true,
 		fromReleaseBranch: source.fromReleaseBranch,
+		mergedReleaseBranch: source.mergedReleaseBranch,
 		fromFixBranch: source.fromFixBranch,
+		bumpedEarlier: source.bumpedEarlier,
 		changedFiles: exists ? changedSince(tag) : [],
 	});
 
@@ -284,4 +367,4 @@ if (require.main === module) {
 	main();
 }
 
-module.exports = { decide, evaluate, isFixBranch, lastReleaseTag, parseArgs, pushSource, releaseBranch };
+module.exports = { decide, evaluate, isFixBranch, lastReleaseTag, parseArgs, pushSource, releaseBranch, versionBumpCommit };

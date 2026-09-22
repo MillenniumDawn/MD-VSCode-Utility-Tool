@@ -1023,6 +1023,204 @@ describe('scripts/release-check', function () {
             assert.strictEqual(result.bump, false);
             assert.strictEqual(result.adopt, false);
         });
+
+        // A release whose publish failed on both registries keeps no tag, and the next feature
+        // merge used to read that untagged version as a hand bump of its own: it adopted it, and
+        // opened a second release pull request for a version the fix pull request was about to
+        // tag, which could then never publish.
+        it('waits for the fix pull request when an earlier push merged the untagged version from the release branch', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.31',
+                tagExists: false,
+                fromReleaseBranch: true,
+                bumpedEarlier: true,
+                changedFiles: [],
+            });
+            assert.strictEqual(result.release, false);
+            assert.strictEqual(result.bump, false);
+            assert.strictEqual(result.adopt, false);
+            assert.ok(result.notice.includes('fix pull request'));
+        });
+
+        it('still publishes an untagged version from an earlier push when asked by hand', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.31',
+                tagExists: false,
+                fromReleaseBranch: true,
+                bumpedEarlier: true,
+                manual: true,
+                changedFiles: [],
+            });
+            assert.strictEqual(result.release, true);
+        });
+
+        it('adopts a hand bump that an earlier push merged', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.31',
+                tagExists: false,
+                fromReleaseBranch: false,
+                bumpedEarlier: true,
+                changedFiles: [],
+            });
+            assert.strictEqual(result.adopt, true);
+            assert.strictEqual(result.bump, true);
+        });
+
+        it('lets the fix pull request publish an untagged version whoever merged it', function () {
+            const result = releaseCheck.decide({
+                tag: 'v1.1.31',
+                tagExists: false,
+                fromReleaseBranch: true,
+                fromFixBranch: true,
+                bumpedEarlier: true,
+                changedFiles: [],
+            });
+            assert.strictEqual(result.release, true);
+        });
+    });
+
+    describe('versionBumpCommit and evaluate', function () {
+        // The pickaxe and the first-parent walk are git features, so this drives the real thing
+        // through a throwaway repository, without gh: the release branch is recognised by the
+        // remote ref left behind, the way the script falls back when the API answers nothing.
+        let dir: string;
+        let cwd: string;
+
+        function git(...args: string[]): string {
+            return require('child_process').execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+        }
+
+        function setVersion(version: string) {
+            fs.writeFileSync(path.join(dir, 'package.json'), `{\n\t"name": "x",\n\t"version": "${version}"\n}\n`);
+        }
+
+        function feature(name: string) {
+            fs.writeFileSync(path.join(dir, 'extension.ts'), `source ${name}\n`);
+            git('commit', '-qam', `Feature ${name}`);
+            return git('rev-parse', 'HEAD');
+        }
+
+        beforeEach(function () {
+            dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bumpcommit-')));
+            git('init', '-q', '-b', 'main');
+            git('config', 'user.email', 'a@b.c');
+            git('config', 'user.name', 'Tester');
+            git('config', 'core.autocrlf', 'false');
+            setVersion('1.1.30');
+            fs.writeFileSync(path.join(dir, 'extension.ts'), 'source\n');
+            git('add', '-A');
+            git('commit', '-qm', 'Initial');
+            git('tag', 'v1.1.30');
+            cwd = process.cwd();
+            process.chdir(dir);
+        });
+
+        afterEach(function () {
+            process.chdir(cwd);
+            fs.rmSync(dir, { recursive: true, force: true });
+        });
+
+        // The release pull request merged as a merge commit, and the remote ref still points at
+        // its tip, as it does on main after the merge.
+        function mergeReleaseBranch(version: string, bump = true) {
+            git('checkout', '-qb', 'release/version-bump');
+            if (bump) {
+                setVersion(version);
+                git('commit', '-qam', `Bump version to ${version}`);
+            } else {
+                git('commit', '--allow-empty', '-qm', `Release v${version}`);
+            }
+            git('update-ref', 'refs/remotes/origin/release/version-bump', 'HEAD');
+            git('checkout', '-q', 'main');
+            git('merge', '-q', '--no-ff', '--no-edit', 'release/version-bump');
+            return git('rev-parse', 'HEAD');
+        }
+
+        function mergeFixBranch(version: string) {
+            const branch = `fix/release-v${version}`;
+            git('checkout', '-qb', branch);
+            git('commit', '--allow-empty', '-qm', 'Retry failed release');
+            git('checkout', '-q', 'main');
+            git('merge', '-q', '--no-ff', '-m', `Merge pull request #42 from test/${branch}`, branch);
+            return git('rev-parse', 'HEAD');
+        }
+
+        it('names the merge that brought the version in, not the push after it', function () {
+            const merge = mergeReleaseBranch('1.1.31');
+            const later = feature('a');
+
+            assert.strictEqual(releaseCheck.versionBumpCommit(later, '1.1.31'), merge);
+            assert.strictEqual(releaseCheck.versionBumpCommit('HEAD', '1.1.31'), merge);
+            assert.strictEqual(releaseCheck.versionBumpCommit(merge, '1.1.31'), merge);
+        });
+
+        it('answers nothing for a version that was never written', function () {
+            mergeReleaseBranch('1.1.31');
+            assert.strictEqual(releaseCheck.versionBumpCommit('HEAD', '9.9.9'), '');
+        });
+
+        it('publishes on the push that merged the release branch and waits on the pushes after it', function () {
+            const merge = mergeReleaseBranch('1.1.31');
+            const later = feature('a');
+
+            const release = releaseCheck.evaluate({ cwd: dir, repo: '', sha: merge });
+            assert.strictEqual(release.release, true);
+            assert.strictEqual(release.adopt, false);
+
+            const wait = releaseCheck.evaluate({ cwd: dir, repo: '', sha: later });
+            assert.strictEqual(wait.release, false);
+            assert.strictEqual(wait.bump, false);
+            assert.strictEqual(wait.adopt, false);
+            assert.strictEqual(wait.lastTag, 'v1.1.30');
+        });
+
+        it('publishes an adopted version on its release merge, waits after it, and publishes the fix merge', function () {
+            setVersion('1.1.31');
+            git('commit', '-qam', 'Bump by hand');
+            const merge = mergeReleaseBranch('1.1.31', false);
+
+            const release = releaseCheck.evaluate({ cwd: dir, repo: '', sha: merge });
+            assert.strictEqual(release.release, true);
+            assert.strictEqual(release.bump, false);
+            assert.strictEqual(release.adopt, false);
+
+            const later = feature('a');
+            const wait = releaseCheck.evaluate({ cwd: dir, repo: '', sha: later });
+            assert.strictEqual(wait.release, false);
+            assert.strictEqual(wait.bump, false);
+            assert.strictEqual(wait.adopt, false);
+            assert.strictEqual(wait.lastTag, 'v1.1.30');
+
+            const fixMerge = mergeFixBranch('1.1.31');
+            const fixed = releaseCheck.evaluate({ cwd: dir, repo: '', sha: fixMerge });
+            assert.strictEqual(fixed.release, true);
+            assert.strictEqual(fixed.bump, false);
+            assert.strictEqual(fixed.adopt, false);
+        });
+
+        it('adopts a hand bump on the pushes after it as well as on its own', function () {
+            setVersion('1.1.31');
+            git('commit', '-qam', 'Bump by hand');
+            const bump = git('rev-parse', 'HEAD');
+            const later = feature('a');
+
+            for (const sha of [bump, later]) {
+                const result = releaseCheck.evaluate({ cwd: dir, repo: '', sha });
+                assert.strictEqual(result.adopt, true, sha);
+                assert.strictEqual(result.release, false, sha);
+            }
+        });
+
+        it('asks for a release pull request once the tag exists, whoever bumped', function () {
+            mergeReleaseBranch('1.1.31');
+            git('tag', 'v1.1.31');
+            feature('a');
+
+            const result = releaseCheck.evaluate({ cwd: dir, repo: '', sha: 'HEAD' });
+            assert.strictEqual(result.release, false);
+            assert.strictEqual(result.bump, true);
+            assert.strictEqual(result.adopt, false);
+        });
     });
 
     describe('isFixBranch', function () {
