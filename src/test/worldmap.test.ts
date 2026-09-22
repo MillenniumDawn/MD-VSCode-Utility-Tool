@@ -209,4 +209,31 @@ describe("previewdef/worldmap/WorldMap", () => {
 		assert.deepStrictEqual(writes, [oldUri.toString(), newUri.toString()]);
 		assert.strictEqual(state.lastRequestedExportUri, undefined);
 	});
+	// Issue #220: the setting is embedded as JSON, not concatenated, so a settings.json value that
+	// is not the boolean it is declared as cannot end the inline script and land in the page as markup.
+	it("embeds the supply-area setting so a hostile value cannot end the inline script", () => {
+		const webview = { asWebviewUri: (u: unknown) => u, cspSource: "test-csp" };
+		const render = (enableSupplyArea: unknown): string => {
+			stubVscode({ configuration: { enableSupplyArea } });
+			return (new WorldMap({ webview } as any) as any).renderWorldMap(webview);
+		};
+
+		const hostile = render("</script><img src=x>");
+		const script = /window\.__enableSupplyArea = (.*?)<\/script>/s.exec(hostile);
+		assert.ok(script, "expected the supply-area script");
+		assert.ok(!script![1]!.includes("</script"), script![1]!);
+		assert.strictEqual(JSON.parse(script![1]!.replace(/;\s*$/, "")), "</script><img src=x>");
+
+		assert.ok(render(true).includes("window.__enableSupplyArea = true;"));
+		assert.ok(render(false).includes("window.__enableSupplyArea = false;"));
+	});
+
+	// Issue #220: with the setting unset the page must carry the declared default (false),
+	// not undefined, so the webview reads a usable boolean either way.
+	it("renders the supply-area default when the setting is absent", () => {
+		const webview = { asWebviewUri: (u: unknown) => u, cspSource: "test-csp" };
+		stubVscode({ configuration: {} });
+		const html = (new WorldMap({ webview } as any) as any).renderWorldMap(webview);
+		assert.ok(html.includes("window.__enableSupplyArea = false;"));
+	});
 });

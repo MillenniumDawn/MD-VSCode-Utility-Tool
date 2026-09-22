@@ -173,7 +173,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
     jsCodes.push('window.renderedInlayWindows = ' + jsonForScript(payload.renderedInlayWindows));
     jsCodes.push('window.gridBox = ' + jsonForScript(payload.gridBox));
     jsCodes.push('window.styleNonce = ' + jsonForScript(payload.styleNonce));
-    jsCodes.push('window.useConditionInFocus = ' + payload.useConditionInFocus);
+    jsCodes.push('window.useConditionInFocus = ' + jsonForScript(payload.useConditionInFocus));
     jsCodes.push('window.xGridSize = ' + payload.xGridSize);
     jsCodes.push(i18nTableAsScript());
 
