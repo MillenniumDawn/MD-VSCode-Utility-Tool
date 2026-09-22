@@ -7,6 +7,7 @@ v1.1.39
 - [ World Map Previewer ] A failed map data request now shows its error instead of leaving the preview stuck on the loading message. Issue #241.
 - Index updates now wait for an overdue build to finish instead of changing the index while it is still being built. Issue #233.
 - Editing or deleting localisation files now removes old entries from every language they contain, even when the filename does not name the language. Issue #235.
+- Jumping to a vanilla file no longer asks which folder to copy it into when only one workspace folder is open. Issue #240.
 
 v1.1.38
 
