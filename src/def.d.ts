@@ -7,6 +7,7 @@ declare module 'vscode' {
             readonly parentModPaths: string[];
             readonly userDataPath: string;
             readonly useConditionInFocus: boolean;
+            readonly focusTreeLayout: 'standard' | 'gui';
             readonly eventTreePreview: boolean;
             readonly ideaPreview: boolean;
             readonly decisionPreview: boolean;

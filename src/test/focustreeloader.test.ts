@@ -6,6 +6,7 @@ import { listGuiGfxFiles, resolveInlayGuiWindows, resolveInlayGfxFiles } from '.
 import { clearDlcZipCache } from '../util/fileloader';
 import { Logger } from '../util/logger';
 import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
+import { refreshFeatureFlags } from '../util/featureflags';
 
 // Drives FocusTreeLoader.postLoad against a stubbed interface/ tree (two .gfx, one .gui) served from
 // the HOI4 install path (no workspace folders). Feature flags are off, so getGfxContainerFiles is a
@@ -109,5 +110,81 @@ describe('previewdef/focustree/loader inlay short-circuit', function () {
         assert.strictEqual(warnings.length, 1, warnings.join('; '));
         assert.ok(warnings[0].includes('mdHoi4Utilities.inlayWindowGfxRoots'), warnings[0]);
         assert.ok(warnings[0].includes('"interfaec"'), warnings[0]);
+    });
+});
+
+// The focusTreeLayout setting: `gui` reads interface/nationalfocusview.gui through the dependency
+// loaders and reports it, `standard` leaves both the result and the dependency list as they were.
+describe('previewdef/focustree/loader gui layout', function () {
+    const File = vscode.FileType.File;
+    const guiText = `guiTypes = {
+    positionType = { name = "focus_spacing" position = { x = 120 y = 150 } }
+}`;
+    const config: Record<string, unknown> = { modFile: '', loadDlcContents: false, inlayWindowGfxRoots: [], focusTreeLayout: 'gui' };
+
+    function isLayoutGui(uri: any): boolean {
+        return String(uri.fsPath ?? uri.path ?? '').replace(/\\/g, '/').endsWith('interface/nationalfocusview.gui');
+    }
+
+    beforeEach(function () {
+        config.focusTreeLayout = 'gui';
+        stubVscode({
+            getConfiguration: () => ({ get: () => undefined, update: () => Promise.resolve(), inspect: () => undefined, ...config }),
+            stat: async (uri: any) => {
+                if (!isLayoutGui(uri)) {
+                    throw new Error('not found');
+                }
+                return { type: File, mtime: 1, ctime: 0, size: guiText.length };
+            },
+            readDirectory: async () => [],
+            readFile: async (uri: any) => {
+                if (!isLayoutGui(uri)) {
+                    throw new Error('not found');
+                }
+                return Buffer.from(guiText);
+            },
+        });
+        refreshFeatureFlags();
+    });
+
+    afterEach(async function () {
+        restoreVscodeStubs();
+        refreshFeatureFlags();
+        await clearDlcZipCache();
+    });
+
+    const tree = `focus_tree = {
+    id = test_layout
+    focus = { id = focus_a x = 0 y = 0 }
+}`;
+
+    function newLoader(): FocusTreeLoader {
+        return new FocusTreeLoader('common/national_focus/test_tree.txt', () => Promise.resolve(tree));
+    }
+
+    it('takes the layout from nationalfocusview.gui and reports the file as a dependency', async function () {
+        const result = await newLoader().load(new LoaderSession(false));
+        assert.deepStrictEqual(result.result.layout?.spacing, { x: 120, y: 150 });
+        assert.deepStrictEqual(result.result.layout?.grid, { x: 50, y: 50 });
+        assert.ok(result.dependencies.includes('interface/nationalfocusview.gui'));
+    });
+
+    it('leaves the layout and the dependencies alone on the standard setting', async function () {
+        config.focusTreeLayout = 'standard';
+        refreshFeatureFlags();
+        const result = await newLoader().load(new LoaderSession(false));
+        assert.strictEqual(result.result.layout, undefined);
+        assert.ok(!result.dependencies.includes('interface/nationalfocusview.gui'));
+    });
+
+    it('reloads an unchanged document when the setting flips', async function () {
+        const loader = newLoader();
+        await loader.load(new LoaderSession(false));
+        assert.strictEqual(await loader.shouldReload(new LoaderSession(false)), false);
+        config.focusTreeLayout = 'standard';
+        refreshFeatureFlags();
+        assert.strictEqual(await loader.shouldReload(new LoaderSession(false)), true);
+        const result = await loader.load(new LoaderSession(false));
+        assert.strictEqual(result.result.layout, undefined);
     });
 });

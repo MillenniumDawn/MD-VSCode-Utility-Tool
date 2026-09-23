@@ -161,6 +161,20 @@
 						"default": true,
 						"description": "%hoi4modutilities.useConditionInFocus.desc%"
 					},
+					"mdHoi4Utilities.focusTreeLayout": {
+						"title": "Focus tree: layout",
+						"type": "string",
+						"default": "standard",
+						"enum": [
+							"standard",
+							"gui"
+						],
+						"enumDescriptions": [
+							"The built-in layout, the same for every mod.",
+							"Take the layout from the mod's interface/nationalfocusview.gui (then parent mods, then the game): focus spacing, grid offset, where the icon, title bar, name and overlay sit, the prerequisite line ends and the mutually exclusive link. Anything the file does not define keeps the built-in value."
+						],
+						"description": "Where the focus tree preview takes its layout from. Pick gui for a mod that changes nationalfocusview.gui."
+					},
 					"mdHoi4Utilities.inlayWindowGfxRoots": {
 						"title": "Focus inlay window GFX roots",
 						"type": "array",

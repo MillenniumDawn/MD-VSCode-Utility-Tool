@@ -9,6 +9,7 @@ import {
     computeTreeStructuralFingerprint,
     computeTreeIconFingerprint,
 } from '../previewdef/focustree/fingerprint';
+import { standardFocusTreeLayout } from '../previewdef/focustree/layout';
 
 function structureInput(overrides: Partial<FocusTreeStructureInput> = {}): FocusTreeStructureInput {
     return {
@@ -18,6 +19,7 @@ function structureInput(overrides: Partial<FocusTreeStructureInput> = {}): Focus
         gridBox: { position: { x: 50, y: 50 } },
         useConditionInFocus: false,
         xGridSize: 96,
+        layout: { mode: 'standard' },
         styleRecords: {
             'st-focus-common': 'position: relative;',
             'st-focus-icon-goal_a': 'background-color: rgba(127, 127, 127, 0.25);',
@@ -35,6 +37,12 @@ describe('previewdef/focustree/fingerprint', () => {
         it('changes when the rendered focus HTML changes', () => {
             const before = computeStructuralFingerprint(structureInput());
             const after = computeStructuralFingerprint(structureInput({ renderedFocus: { a: '<div start="1" end="2">a renamed</div>' } }));
+            assert.notStrictEqual(before, after);
+        });
+
+        it('changes when the gui layout moves something the payload does not carry elsewhere', () => {
+            const before = computeStructuralFingerprint(structureInput());
+            const after = computeStructuralFingerprint(structureInput({ layout: { mode: 'gui', links: { parent: { x: 0, y: 4 }, child: { x: 0, y: 0 } } } }));
             assert.notStrictEqual(before, after);
         });
 
@@ -121,6 +129,7 @@ describe('previewdef/focustree/fingerprint', () => {
             gridBox: { position: { x: 50, y: 50 } },
             useConditionInFocus: false,
             xGridSize: 96,
+            layout: { mode: 'standard' },
             localisationIndex: false,
             previewLocalisation: '',
             ...overrides,
@@ -178,6 +187,12 @@ describe('previewdef/focustree/fingerprint', () => {
                 }],
             }));
             assert.strictEqual(before, after);
+        });
+
+        it('changes when the layout changes (same trees)', () => {
+            const before = computeTreeStructuralFingerprint(treeObjectInput());
+            const after = computeTreeStructuralFingerprint(treeObjectInput({ layout: { mode: 'gui' } }));
+            assert.notStrictEqual(before, after);
         });
 
         it('changes when the localisation index flag toggles (same trees)', () => {
@@ -260,14 +275,14 @@ describe('previewdef/focustree/fingerprint', () => {
             const trees = [{ id: 'tree', focuses: { a: { id: 'a', x: 0, y: 0 } } }];
             const other = [{ id: 'tree', focuses: { a: { id: 'a', x: 1, y: 0 } } }];
 
-            const first = p.treeFingerprintsFor(trees);
-            assert.strictEqual(p.treeFingerprintsFor(trees), first);
-            assert.notStrictEqual(p.treeFingerprintsFor(other), first);
-            assert.notStrictEqual(p.treeFingerprintsFor(trees), first);
-            assert.deepStrictEqual(p.treeFingerprintsFor(trees), first);
+            const first = p.treeFingerprintsFor(trees, standardFocusTreeLayout);
+            assert.strictEqual(p.treeFingerprintsFor(trees, standardFocusTreeLayout), first);
+            assert.notStrictEqual(p.treeFingerprintsFor(other, standardFocusTreeLayout), first);
+            assert.notStrictEqual(p.treeFingerprintsFor(trees, standardFocusTreeLayout), first);
+            assert.deepStrictEqual(p.treeFingerprintsFor(trees, standardFocusTreeLayout), first);
 
             p.resetStructureState();
-            const again = p.treeFingerprintsFor(trees);
+            const again = p.treeFingerprintsFor(trees, standardFocusTreeLayout);
             assert.notStrictEqual(again, first);
             assert.deepStrictEqual(again, first);
             p.dispose();

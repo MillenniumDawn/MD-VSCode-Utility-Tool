@@ -378,6 +378,7 @@ async function buildContent() {
 						),
 				),
 			cornerPosition: 0.5,
+			connectionOffsets: (window as any).focusLinkOffsets,
 		},
 	);
 
@@ -1077,6 +1078,7 @@ window.addEventListener("message", tryRun(async (event) => {
 	useConditionInFocus = data.useConditionInFocus;
 	(window as any).useConditionInFocus = data.useConditionInFocus;
 	(window as any).xGridSize = data.xGridSize;
+	(window as any).focusLinkOffsets = data.layout?.links;
 
 	if (selectedFocusTreeIndex >= focusTrees.length) {
 		selectedFocusTreeIndex = Math.max(0, focusTrees.length - 1);

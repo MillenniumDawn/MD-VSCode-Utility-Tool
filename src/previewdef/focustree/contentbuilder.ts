@@ -21,7 +21,8 @@ import { renderSprite } from "../../util/hoi4gui/nodecommon";
 import { registerWarningStyles, warningListClass } from "./warningstyles";
 import { registerTraceStyles } from "./tracestyles";
 import { registerExclusiveLinkStyles } from "../../util/hoi4gui/exclusivelink";
-import { loadExclusiveLinkImages } from "../../util/hoi4gui/exclusivelinkimages";
+import { loadExclusiveLinkImages, nationalFocusViewGfxFile } from "../../util/hoi4gui/exclusivelinkimages";
+import { FocusItemLayout, FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "./layout";
 import { describeParseFailure } from "../../util/indexHalf";
 import { Logger } from "../../util/logger";
 
@@ -37,6 +38,7 @@ export interface FocusTreeUpdatePayload {
     gridBox: HOIPartial<GridBoxType>;
     useConditionInFocus: boolean;
     xGridSize: number;
+    layout: FocusTreeLayout;
 }
 
 export interface FocusTreePayload extends FocusTreeUpdatePayload {
@@ -64,6 +66,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         if (focusTrees.length === 0) {
             return null;
         }
+        const layout = loadResult.result.layout ?? standardFocusTreeLayout;
 
         const styleTable = new StyleTable();
         const styleNonce = randomString(32);
@@ -74,7 +77,10 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
 
         // Registered on both passes: without the resolved textures the class falls back to the plain
         // line, so the structure only render still draws the mutually exclusive links.
-        registerExclusiveLinkStyles(styleTable, resolveIcons ? await loadExclusiveLinkImages() : undefined, xGridSize);
+        const exclusiveLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
+            ? await loadExclusiveLinkImages(layout.exclusive.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
+            : await loadExclusiveLinkImages();
+        registerExclusiveLinkStyles(styleTable, exclusiveLinkImages, layout.spacing.x, layout.exclusive.offsetY);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
@@ -83,7 +89,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         }
         let renderedFocusCount = 0;
         await mapLimit(allFocuses, renderConcurrency, async (focus) => {
-            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles, resolveIcons)).replace(/\s\s+/g, ' ');
+            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles, layout.item, resolveIcons)).replace(/\s\s+/g, ' ');
             renderedFocusCount++;
             if (progress) {
                 progress(focusMessage, renderedFocusCount, allFocuses.length);
@@ -130,9 +136,10 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             focusTrees,
             renderedFocus,
             renderedInlayWindows,
-            gridBox: focusTreeGridBox,
+            gridBox: focusTreeGridBoxFor(layout),
             useConditionInFocus,
-            xGridSize,
+            xGridSize: layout.spacing.x,
+            layout,
             styleTable,
             styleNonce,
             toolbarFlags,
@@ -149,10 +156,10 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
  * Because it shares the loader's content-hash cache, a same-tick buildFocusTreePayload reuses this parse
  * instead of re-parsing, so the fall-through path never double-parses. Returns null when empty or on error.
  */
-export async function loadFocusTreesOnly(loader: FocusTreeLoader): Promise<FocusTree[] | null> {
+export async function loadFocusTreesOnly(loader: FocusTreeLoader): Promise<{ focusTrees: FocusTree[]; layout: FocusTreeLayout } | null> {
     try {
         const r = await loader.load(new LoaderSession(false));
-        return r.result.focusTrees.length ? r.result.focusTrees : null;
+        return r.result.focusTrees.length ? { focusTrees: r.result.focusTrees, layout: r.result.layout ?? standardFocusTreeLayout } : null;
     } catch (e) {
         Logger.warn(`Focus tree structure check skipped, load failed: ${describeParseFailure(e)}`);
         return null;
@@ -175,6 +182,9 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
     jsCodes.push('window.styleNonce = ' + jsonForScript(payload.styleNonce));
     jsCodes.push('window.useConditionInFocus = ' + jsonForScript(payload.useConditionInFocus));
     jsCodes.push('window.xGridSize = ' + payload.xGridSize);
+    if (payload.layout.links) {
+        jsCodes.push('window.focusLinkOffsets = ' + jsonForScript(payload.layout.links));
+    }
     jsCodes.push(i18nTableAsScript());
 
     const baseContent = renderFocusTreeShell(payload.focusTrees, payload.styleTable, payload.toolbarFlags, payload.styleNonce);
@@ -226,21 +236,9 @@ export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri
     return html(webview, baseContent, [ previewedFileUriScript(uri), reloadScript ], []);
 }
 
-const leftPaddingBase = 50;
-const topPaddingBase = 50;
-const xGridSize = 96;
-const yGridSize = 130;
-
-// The grid layout is derived entirely from these constants, so the payload gridBox is identical on every
-// render. It is a shared const (not rebuilt per call) so the partial-update early-out can reproduce the
-// exact same gridBox fingerprint contribution as a full buildFocusTreePayload without re-deriving it.
-export const focusTreeXGridSize = xGridSize;
-export const focusTreeGridBox: HOIPartial<GridBoxType> = {
-    position: { x: toNumberLike(leftPaddingBase), y: toNumberLike(topPaddingBase) },
-    format: toStringAsSymbolIgnoreCase('up'),
-    size: { width: toNumberLike(xGridSize), height: undefined },
-    slotsize: { width: toNumberLike(xGridSize), height: toNumberLike(yGridSize) },
-} as HOIPartial<GridBoxType>;
+// The standard layout's grid, which every render uses unless the focusTreeLayout setting is `gui`.
+export const focusTreeXGridSize = standardFocusTreeLayout.spacing.x;
+export const focusTreeGridBox: HOIPartial<GridBoxType> = focusTreeGridBoxFor(standardFocusTreeLayout);
 
 /**
  * Renders the static page shell (dragger, content placeholders, warnings container,
@@ -601,6 +599,7 @@ async function renderFocus(
     gfxFiles: string[],
     file: string,
     titlebarStyles: Record<string, string>,
+    item: FocusItemLayout,
     resolveIcons: boolean = true,
 ): Promise<string> {
     // Skips the expensive per-texture DDS->PNG conversions in the structure-only pass and registers a neutral placeholder.
@@ -676,8 +675,8 @@ async function renderFocus(
         class="{{iconClass}} ${styleTable.style('focus-icon-layer', () => `
             position: absolute;
             inset: 0;
-            background-position-x: center;
-            background-position-y: calc(50% - 18px);
+            background-position-x: ${item.iconOffsetX === 0 ? 'center' : withOffset('50%', item.iconOffsetX)};
+            background-position-y: ${withOffset('50%', item.iconOffsetY)};
             background-repeat: no-repeat;
             z-index: 1;
             pointer-events: none;
@@ -685,8 +684,8 @@ async function renderFocus(
         <div
         class="focus-titlebar-layer ${titlebarClass} ${styleTable.style('focus-titlebar-layer', () => `
             position: absolute;
-            left: 50%;
-            top: 70px;
+            left: ${withOffset('50%', item.titlebarOffsetX)};
+            top: ${item.titlebarTop}px;
             transform: translateX(-50%);
             background-repeat: no-repeat;
             pointer-events: none;
@@ -698,7 +697,7 @@ async function renderFocus(
             position: absolute;
             left: 50%;
             top: 50%;
-            transform: translate(-50%, calc(-50% - 3px));
+            transform: translate(${withOffset('-50%', item.overlayOffsetX)}, ${withOffset('-50%', item.overlayOffsetY)});
             background-repeat: no-repeat;
             pointer-events: none;
             z-index: 2;
@@ -712,13 +711,19 @@ async function renderFocus(
             position: relative;
             z-index: 3;
             margin: 10px -400px;
-            margin-top: 85px;
+            margin-top: ${item.textTop}px;${item.textOffsetX === 0 ? '' : `
+            left: ${item.textOffsetX}px;`}
             text-align: center;
             display: inline-block;
         `)}">
         ${textContent}
         </span>
     </div>`;
+}
+
+// `base` moved by `offset` pixels, written the way the standard layout always has been.
+function withOffset(base: string, offset: number): string {
+    return offset === 0 ? base : `calc(${base} ${offset < 0 ? '-' : '+'} ${Math.abs(offset)}px)`;
 }
 
 export async function getFocusIcon(name: string, gfxFiles: string[]): Promise<Image | undefined> {

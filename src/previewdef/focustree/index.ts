@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { buildFocusTreeHtml, buildNoFocusTreeHtml, buildFocusTreeErrorHtml, buildFocusTreePayload, loadFocusTreesOnly, focusTreeGridBox, focusTreeXGridSize, FocusTreePayload } from './contentbuilder';
+import { buildFocusTreeHtml, buildNoFocusTreeHtml, buildFocusTreeErrorHtml, buildFocusTreePayload, loadFocusTreesOnly, FocusTreePayload } from './contentbuilder';
 import { matchPathEnd } from '../../util/nodecommon';
 import { UpdateablePreviewBase, LoaderRender, LoaderRenderResult, RenderContentOptions } from '../updateablepreview';
 import { PreviewProviderDef } from '../previewmanager';
@@ -11,6 +11,8 @@ import { loadingShellHtml } from '../../util/html';
 import { withTimeout, TimeoutError } from '../../util/common';
 import { error } from '../../util/debug';
 import { useConditionInFocus, localisationIndex } from '../../util/featureflags';
+import { FocusTreeLayout, focusTreeGridBoxFor } from './layout';
+import { ConfigurationKey } from '../../constants';
 import { computeStructuralFingerprint, computeIconSourceFingerprint, computeTreeStructuralFingerprint, computeTreeIconFingerprint } from './fingerprint';
 
 // A render taking longer than this is treated as stuck. The underlying load keeps running
@@ -88,6 +90,13 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 this.repushCachedIconStyles();
             }
         }));
+        // The layout setting decides the page's grid and the focus markup, so a flip reloads the page.
+        // The loader notices the flip on its own and does not answer from its cache.
+        this.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration(`${ConfigurationKey}.focusTreeLayout`)) {
+                this.reload(true);
+            }
+        }));
         // Belt-and-suspenders for bug #36: also restore icons when the panel becomes visible again.
         this.subscriptions.push(this.panel.onDidChangeViewState(() => {
             if (this.panel.visible) {
@@ -102,22 +111,23 @@ class FocusTreePreview extends UpdateablePreviewBase {
         }
     }
 
-    // Object-level fingerprints of the parsed trees. gridBox/useConditionInFocus/xGridSize are static, so
-    // sourcing them from the shared const here reproduces the exact values a full payload carries, letting
+    // Object-level fingerprints of the parsed trees. The grid and the layout come from the same load
+    // result the payload is built from, so this reproduces the exact values a full payload carries, letting
     // the early-out compare against a baseline seeded from structure.focusTrees without a payload in hand.
     // The live localisation config (index flag + preview language) is folded in too so that a config flip,
     // which refreshes the module flag but does NOT reload the preview, moves the hash and blocks a stale
     // skip. Read once here per call so the early-out compare and the baseline seed use the same values.
-    private treeFingerprintsFor(focusTrees: FocusTree[]): { structural: string; icon: string } {
+    private treeFingerprintsFor(focusTrees: FocusTree[], layout: FocusTreeLayout): { structural: string; icon: string } {
         if (this.fingerprintedTrees?.trees === focusTrees) {
             return this.fingerprintedTrees.fingerprints;
         }
         const fingerprints = {
             structural: computeTreeStructuralFingerprint({
                 focusTrees,
-                gridBox: focusTreeGridBox,
+                gridBox: focusTreeGridBoxFor(layout),
                 useConditionInFocus,
-                xGridSize: focusTreeXGridSize,
+                xGridSize: layout.spacing.x,
+                layout,
                 localisationIndex,
                 previewLocalisation: getConfiguration().previewLocalisation ?? '',
             }),
@@ -243,7 +253,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
      * fall-through buildFocusTreePayload reuses this same parse -- there is no double parse.
      */
     private async unchangedBeforeRender(dependencyChanged: boolean): Promise<boolean> {
-        let trees: FocusTree[] | null = null;
+        let trees: { focusTrees: FocusTree[]; layout: FocusTreeLayout } | null = null;
         try {
             trees = await withTimeout(loadFocusTreesOnly(this.focusTreeLoader), focusTreeRenderTimeout);
         } catch (e) {
@@ -262,7 +272,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
             // dependencyChanged) -- the object fingerprint cannot see it. (See task-07 report.)
             return false;
         }
-        const treeFingerprints = this.treeFingerprintsFor(trees);
+        const treeFingerprints = this.treeFingerprintsFor(trees.focusTrees, trees.layout);
         if (treeFingerprints.structural !== this.lastTreeStructural || treeFingerprints.icon !== this.lastTreeIcon) {
             return false;
         }
@@ -289,7 +299,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
      */
     private renderResultFor(structure: FocusTreePayload, webview: vscode.Webview, uri: vscode.Uri): LoaderRenderResult {
         const styleRecords = structure.styleTable.styleRecords;
-        this.pendingTreeFingerprints = this.treeFingerprintsFor(structure.focusTrees);
+        this.pendingTreeFingerprints = this.treeFingerprintsFor(structure.focusTrees, structure.layout);
         this.lastGoodHadFocusTrees = true;
         return {
             html: () => buildFocusTreeHtml(structure, webview, uri),
@@ -301,6 +311,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
                     gridBox: structure.gridBox,
                     useConditionInFocus: structure.useConditionInFocus,
                     xGridSize: structure.xGridSize,
+                    layout: structure.layout,
                 },
             },
             fingerprint: computeStructuralFingerprint({
@@ -310,6 +321,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 gridBox: structure.gridBox,
                 useConditionInFocus: structure.useConditionInFocus,
                 xGridSize: structure.xGridSize,
+                layout: structure.layout,
                 styleRecords,
             }),
             shellFingerprint: JSON.stringify(structure.toolbarFlags),
