@@ -4,6 +4,7 @@ import { waitFor } from "../waitfor";
 import {
 	EffectTooltipOptions,
 	clampBelowToolbar,
+	hoverDelay,
 	wireEffectTooltip,
 } from "../../../webviewsrc/util/hovertooltip";
 
@@ -23,9 +24,9 @@ const sections = [
 
 // The panel waits out a hover delay before it appears. A test that expects it polls until it is
 // there; a test that expects nothing has to wait the delay out, with a margin, since there is no
-// moment at which "nothing appeared" becomes true.
+// moment at which "nothing appeared" becomes true. The margin is wide because a loaded CI runner
+// can fire a timer well past its due time.
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const hoverDelay = 150;
 
 describe("webview/util/hovertooltip", () => {
 	let previousBody = "";
@@ -88,7 +89,7 @@ describe("webview/util/hovertooltip", () => {
 
 		enter();
 		leave();
-		await wait(hoverDelay + 30);
+		await wait(hoverDelay + 100);
 
 		assert.strictEqual(panels().length, 0);
 	});
@@ -100,7 +101,7 @@ describe("webview/util/hovertooltip", () => {
 
 		enter();
 		host.remove();
-		await wait(hoverDelay + 30);
+		await wait(hoverDelay + 100);
 
 		assert.strictEqual(panels().length, 0);
 	});

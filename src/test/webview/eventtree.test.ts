@@ -1,6 +1,7 @@
 import './setup';
 import * as assert from 'assert';
 import { waitFor } from '../waitfor';
+import { hoverDelay } from '../../../webviewsrc/util/hovertooltip';
 import { ConditionComplexExpr } from '../../hoiformat/condition';
 import {
     EffectTreeNode,
@@ -1295,7 +1296,7 @@ describe('webview/eventtree rendering', () => {
 
         content().querySelector('.ev-card-option')!.parentElement!
             .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
-        await wait(250);
+        await wait(hoverDelay + 100);
         assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
 
         setToggle('show-effects', true);
@@ -1366,7 +1367,7 @@ describe('webview/eventtree rendering', () => {
         it('opens no effects panel for a card the drag passes under', async () => {
             press();
             hover('mouseenter');
-            await wait(250);
+            await wait(hoverDelay + 100);
             assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
         });
 

@@ -11,12 +11,41 @@
 // This setup file is wired into the mocha invocation through the `--require`
 // flag in the npm test script. It runs before any test file is loaded.
 
+// Silences debug() for the whole run; see src/util/debug.ts.
+process.env.MD_UTILITIES_TEST = '1';
+
 const Module = require('module');
 const path = require('path');
 
 function buildStub() {
     function noop() { return undefined; }
     function disposable() { return { dispose: noop }; }
+
+    // Behaves like vscode.EventEmitter: `event` subscribes and hands back a disposable, `fire`
+    // calls every listener still subscribed, `dispose` drops them all. A no-op here left every
+    // production `onDidChange...` built on an emitter untestable.
+    class EventEmitterStub<T> {
+        private listeners: Array<(e: T) => unknown> = [];
+        readonly event = (listener: (e: T) => unknown, thisArgs?: unknown, disposables?: Array<{ dispose(): void }>) => {
+            const bound = thisArgs === undefined ? listener : listener.bind(thisArgs);
+            this.listeners.push(bound);
+            const subscription = { dispose: () => { this.listeners = this.listeners.filter(l => l !== bound); } };
+            disposables?.push(subscription);
+            return subscription;
+        };
+        fire(e: T): void {
+            for (const listener of [...this.listeners]) {
+                listener(e);
+            }
+        }
+        dispose(): void {
+            this.listeners = [];
+        }
+    }
+
+    // Backs workspace.onDidChangeConfiguration, so a handler production code registers is kept
+    // and `fireConfigurationChange` below can reach it.
+    const configurationChanged = new EventEmitterStub<unknown>();
 
     const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 };
 
@@ -90,7 +119,7 @@ function buildStub() {
         }),
         workspaceFolders: undefined,
         getWorkspaceFolder: () => undefined,
-        onDidChangeConfiguration: disposable,
+        onDidChangeConfiguration: configurationChanged.event,
         onDidChangeTextDocument: disposable,
         onDidCloseTextDocument: disposable,
         onDidChangeWorkspaceFolders: disposable,
@@ -201,10 +230,11 @@ function buildStub() {
         Position,
         Range,
         Disposable: DisposableStub,
-        EventEmitter: class { event: any; fire: any; dispose: any; constructor() { this.event = () => undefined; this.fire = noop; this.dispose = noop; } },
+        EventEmitter: EventEmitterStub,
         TreeItem: class { label: any; constructor(label: any) { this.label = label; } },
         TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
         ThemeIcon: class { id: any; constructor(id: any) { this.id = id; } },
+        _configurationChanged: configurationChanged,
     };
 }
 
@@ -407,6 +437,7 @@ export function restoreVscodeStubs(): void {
     workspace.getConfiguration = pristine.getConfiguration;
     workspace.workspaceFolders = pristine.workspaceFolders;
     workspace.onDidChangeConfiguration = pristine.onDidChangeConfiguration;
+    (stub as any)._configurationChanged.dispose();
     workspace.onDidChangeWorkspaceFolders = pristine.onDidChangeWorkspaceFolders;
     fs.stat = pristine.stat;
     fs.readDirectory = pristine.readDirectory;
@@ -422,4 +453,16 @@ export function restoreVscodeStubs(): void {
     window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
     window.withProgress = pristine.withProgress;
     Date.now = pristine.now;
+}
+
+/**
+ * Fires a configuration change at every handler registered through the stub's default
+ * `workspace.onDidChangeConfiguration`, the way VS Code does: `affectsConfiguration(section)` is
+ * true for a changed key and for every section that contains it.
+ */
+export function fireConfigurationChange(...changedKeys: string[]): void {
+    (stub as any)._configurationChanged.fire({
+        affectsConfiguration: (section: string) =>
+            changedKeys.some(key => key === section || key.startsWith(section + '.')),
+    });
 }

@@ -94,7 +94,7 @@ jobs:
     - name: Lint
       run: npm run lint
     - name: Test
-      run: npm test
+      run: npm run test:coverage
 
   # --- Release pull request: every push that changed what ships, until that pull request merges. ---
 

@@ -414,6 +414,19 @@ describe("util/fileloader parseHoi4FileCached", function () {
 		assert.strictEqual(plainAgain, plain); // same cached instance, untouched by the resolve pass
 		assert.strictEqual((child(plainAgain, "x").value as SymbolNode).name, "@A");
 	});
+
+	// Localisation and much of common/ is saved as UTF-8 with a BOM. The tokenizer skips it as
+	// whitespace, but left in it shifts every token one character past the text VS Code shows,
+	// so a click-to-navigate from a preview would land one character off.
+	it("strips a leading UTF-8 byte order mark before parsing", async function () {
+		content = "﻿a = 1\nb = 2";
+
+		const node = await parseHoi4FileCached("common/pc-bom.txt");
+
+		assert.strictEqual(child(node, "a").value, 1);
+		assert.strictEqual(child(node, "a").nameToken?.start, 0);
+		assert.strictEqual(child(node, "b").nameToken?.start, 6);
+	});
 });
 
 // Mirrors the folder layout of a current Steam install: the four integrated DLCs live under

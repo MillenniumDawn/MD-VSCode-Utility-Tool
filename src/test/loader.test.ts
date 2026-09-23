@@ -269,6 +269,45 @@ describe('util/loader/loader', () => {
         });
     });
 
+    describe('ContentLoader (disk path)', () => {
+        class DiskContentLoader extends ContentLoader<{ payload: string }> {
+            public contents: Array<string | undefined> = [];
+
+            constructor(file: string) {
+                super(file);
+                this.disableTelemetry = true;
+            }
+
+            protected async postLoad(content: string | undefined): Promise<LoadResultOD<{ payload: string }>> {
+                this.contents.push(content);
+                return { result: { payload: content ?? '' } };
+            }
+        }
+
+        const original = {
+            read: fileloader.readFileFromModOrHOI4,
+            token: fileloader.hoiFileExpiryToken,
+        };
+
+        afterEach(() => {
+            (fileloader as any).readFileFromModOrHOI4 = original.read;
+            (fileloader as any).hoiFileExpiryToken = original.token;
+        });
+
+        // A file saved as UTF-8 with a BOM would otherwise reach postLoad one character longer
+        // than the text VS Code shows, shifting every token offset a preview navigates by.
+        it('strips a leading UTF-8 byte order mark from a file read off disk', async () => {
+            const bom = Buffer.from([0xEF, 0xBB, 0xBF]);
+            (fileloader as any).hoiFileExpiryToken = async () => 'v1';
+            (fileloader as any).readFileFromModOrHOI4 = async () => [Buffer.concat([bom, Buffer.from('x = 1')]), undefined];
+
+            const loader = new DiskContentLoader('common/bom.txt');
+            await loader.load(new LoaderSession(false));
+
+            assert.deepStrictEqual(loader.contents, ['x = 1']);
+        });
+    });
+
     describe('ContentLoader (contentProvider path)', () => {
         // CapturingContentLoader records what postLoad sees for each call. readDependency
         // is configurable per instance so a single test file can exercise both branches.

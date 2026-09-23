@@ -4,8 +4,11 @@ import {
     getDependenciesFromText,
     loadBounded,
     localisationKeysOf,
+    registerScanReferencesCommand,
     scanReferencesForEvents,
 } from '../util/dependency';
+import { contextContainer } from '../context';
+import { ContextName } from '../constants';
 import * as vscode from 'vscode';
 import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 import { clearDlcZipCache } from '../util/fileloader';
@@ -370,6 +373,98 @@ describe('util/dependency', () => {
             // before the listing; english.yml is new but its section holds none of the keys the
             // reached events show, so the only new marker is the english file.
             assert.deepStrictEqual(inserted, ['#!localisation:localisation/english.yml\n']);
+        });
+
+        // The command wrapper: which editor it scans, which preview types it accepts, and what it
+        // tells the user. The handler is captured from registerCommand rather than exported.
+        describe('the scan references command', () => {
+            const window = vscode.window as any;
+            const commands = vscode.commands as any;
+            const original = {
+                registerCommand: commands.registerCommand,
+                showInformationMessage: window.showInformationMessage,
+                activeTextEditor: window.activeTextEditor,
+                consoleError: console.error,
+            };
+            let handler: () => Promise<void>;
+            let errors: string[];
+            let infos: string[];
+            let inserted: string[];
+
+            function editorWith(edit: (cb: any) => Promise<boolean>): vscode.TextEditor {
+                return {
+                    document: {
+                        uri: vscode.Uri.file('/ws/events/main.txt'),
+                        isClosed: false,
+                        getText: () => eventSource,
+                    },
+                    edit,
+                } as unknown as vscode.TextEditor;
+            }
+
+            beforeEach(() => {
+                errors = [];
+                infos = [];
+                inserted = [];
+                stubVscode({ showErrorMessage: async (message: string) => { errors.push(message); return undefined; } });
+                window.showInformationMessage = async (message: string) => { infos.push(message); return undefined; };
+                commands.registerCommand = (id: string, callback: () => Promise<void>) => {
+                    assert.strictEqual(id, 'mdhoi4utilities.scanreferences');
+                    handler = callback;
+                    return { dispose: () => undefined };
+                };
+                registerScanReferencesCommand();
+                window.activeTextEditor = editorWith(async (cb) => {
+                    cb({ insert: (_pos: unknown, text: string) => inserted.push(text) });
+                    return true;
+                });
+                contextContainer.contextValue[ContextName.Hoi4PreviewType] = 'event';
+            });
+
+            afterEach(() => {
+                commands.registerCommand = original.registerCommand;
+                window.showInformationMessage = original.showInformationMessage;
+                window.activeTextEditor = original.activeTextEditor;
+                console.error = original.consoleError;
+                delete contextContainer.contextValue[ContextName.Hoi4PreviewType];
+            });
+
+            it('reports that there is no editor to scan', async () => {
+                window.activeTextEditor = undefined;
+
+                await handler();
+
+                assert.deepStrictEqual(errors, ['No opened editor.']);
+                assert.deepStrictEqual(infos, []);
+            });
+
+            it('refuses a preview type other than events', async () => {
+                contextContainer.contextValue[ContextName.Hoi4PreviewType] = 'focustree';
+
+                await handler();
+
+                assert.deepStrictEqual(errors, ['Unsupported file type to scan references.']);
+                assert.deepStrictEqual(inserted, []);
+            });
+
+            it('scans an event file and says when it is done', async () => {
+                await handler();
+
+                assert.deepStrictEqual(errors, []);
+                assert.deepStrictEqual(inserted, ['#!event:events/linked.txt\n#!localisation:localisation/english.yml\n']);
+                assert.deepStrictEqual(infos, ['Scan reference done.']);
+            });
+
+            it('does not claim success when the scan fails', async () => {
+                const logged: unknown[] = [];
+                console.error = (e: unknown) => { logged.push(e); };
+                window.activeTextEditor = editorWith(async () => { throw new Error('edit rejected'); });
+
+                await handler();
+
+                assert.deepStrictEqual(infos, []);
+                assert.ok(logged.some(e => String(e).includes('edit rejected')), String(logged));
+            });
         });
     });
 });

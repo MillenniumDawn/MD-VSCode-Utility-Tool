@@ -373,16 +373,13 @@ bad;row
 });
 
 describe("previewdef/worldmap/loader states malformed", () => {
-	it("handles truncated state content without crashing", async () => {
+	it("rejects truncated state content with a UserError at EOF", async () => {
 		const { parseHoi4File } = await import("../hoiformat/hoiparser");
 		const truncated = `state={id=1\nmanpower=`;
-		try {
-			const node = parseHoi4File(truncated, "test");
-			assert.ok(node);
-		} catch (e: any) {
-			assert.ok(e instanceof UserError);
-			assert.ok(e.message.includes("EOF") || e.message.includes("Expect"));
-		}
+		assert.throws(
+			() => parseHoi4File(truncated, "test"),
+			(e: unknown) => e instanceof UserError && /\(EOF\)$/.test(e.message),
+		);
 	});
 
 	it("state history missing owner still parses", async () => {
