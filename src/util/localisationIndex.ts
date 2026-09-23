@@ -129,17 +129,22 @@ function lookupLocalisation(
 	);
 }
 
-const LOC_CACHE_VERSION = 1;
+const LOC_CACHE_VERSION = 2;
 const langSuffixPattern = ymlSuffixes.join("|");
 const localisationFileFilter = new RegExp(
 	`.*_(${langSuffixPattern})\\.yml$`,
 	"i",
 );
 
-interface LocCacheData {
-	index: LocalisationData;
-	fileMap: Record<string, Record<string, string[]>>; // langKey -> filePath -> keys[]
-}
+/**
+ * One language of one .yml file, as one line of the cache. The file's keys are the entries' keys,
+ * so the cache no longer carries a second copy of every key alongside the index.
+ */
+type LocCacheRecord = [
+	langKey: string,
+	filePath: string,
+	entries: Record<string, string>,
+];
 
 const localisationRoot = "localisation";
 const isLocalisationFile = (relativePath: string) =>
@@ -218,7 +223,7 @@ async function buildLocalisationIndexHalf(
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
-	await buildIndexHalf<LocCacheData>(
+	await buildIndexHalf<LocCacheRecord>(
 		{
 			cacheName,
 			version: LOC_CACHE_VERSION,
@@ -231,28 +236,17 @@ async function buildLocalisationIndexHalf(
 					filter: isLocalisationFile,
 					options: { ...options, token },
 				}),
-			hydrate: (cached, skipFiles) => {
-				for (const langKey in cached.index) {
-					const cachedLanguageIndex = cached.index[langKey] ?? {};
-					const targetLanguageIndex =
-						targetIndex[langKey] ?? (targetIndex[langKey] = {});
-					const fileKeysForLang = cached.fileMap?.[langKey] ?? {};
-					for (const filePath in fileKeysForLang) {
-						if (!skipFiles.has(filePath)) {
-							const keys = fileKeysForLang[filePath] ?? [];
-							for (const key of keys) {
-								const value = cachedLanguageIndex[key];
-								if (value !== undefined) {
-									targetLanguageIndex[key] = value;
-								}
-							}
-							if (fileMap) {
-								const fileMapForLang =
-									fileMap[langKey] ?? (fileMap[langKey] = {});
-								fileMapForLang[filePath] = new Set(keys);
-							}
-						}
-					}
+			hydrate: ([langKey, filePath, entries], skipFiles) => {
+				if (skipFiles.has(filePath)) {
+					return;
+				}
+				Object.assign(
+					targetIndex[langKey] ?? (targetIndex[langKey] = {}),
+					entries,
+				);
+				if (fileMap) {
+					const fileMapForLang = fileMap[langKey] ?? (fileMap[langKey] = {});
+					fileMapForLang[filePath] = new Set(Object.keys(entries));
 				}
 			},
 			parseFile: async (file) => {
@@ -264,24 +258,25 @@ async function buildLocalisationIndexHalf(
 					estimatedSize,
 				);
 			},
-			// TODO: serialising this runs on the extension host thread and produces the whole index
-			// plus a second copy of every key in `fileMap` as one string. On a mod the size of
-			// Millennium Dawn that is hundreds of megabytes, enough to stall the host and, at the top
-			// end, to exceed V8's maximum string length outright. Left alone for now because this
-			// index is off by default and off on the machines the hangs were reported from.
-			// Streaming the write, or caching per language, is the way out.
+			// Each value is copied from the index rather than from the file, so a key two files define
+			// is cached with the text that won, as it always was.
 			serialize: () => {
-				const serializedFileMap: Record<string, Record<string, string[]>> = {};
-				if (fileMap) {
-					for (const langKey in fileMap) {
-						const perFile: Record<string, string[]> = {};
-						for (const filePath in fileMap[langKey]) {
-							perFile[filePath] = [...(fileMap[langKey]?.[filePath] ?? [])];
+				const records: LocCacheRecord[] = [];
+				for (const langKey in fileMap ?? {}) {
+					const languageIndex = targetIndex[langKey] ?? {};
+					const filesForLang = fileMap?.[langKey] ?? {};
+					for (const filePath in filesForLang) {
+						const entries: Record<string, string> = {};
+						for (const key of filesForLang[filePath] ?? []) {
+							const value = languageIndex[key];
+							if (value !== undefined) {
+								entries[key] = value;
+							}
 						}
-						serializedFileMap[langKey] = perFile;
+						records.push([langKey, filePath, entries]);
 					}
 				}
-				return { index: targetIndex, fileMap: serializedFileMap };
+				return records;
 			},
 		},
 		progress,

@@ -2,12 +2,18 @@ Unreleased
 
   Bugfixes:
 
+- Previews no longer fall back to older content when you keep typing while they are still updating; every preview now finishes one update before starting the next, as the focus tree already did. Issue #237.
 - [ World Map Previewer ] A failed map data request now shows its error instead of leaving the preview stuck on the loading message. Issue #241.
 - Index updates now wait for an overdue build to finish instead of changing the index while it is still being built. Issue #233.
 - Editing or deleting localisation files now removes old entries from every language they contain, even when the filename does not name the language. Issue #235.
 - Jumping to a vanilla file no longer asks which folder to copy it into when only one workspace folder is open. Issue #240.
 - [ World Map Previewer ] A workspace setting whose value is not what the extension expects can no longer break out of a preview's page script; the world map and focus tree previews and the mouse-wheel setting now embed settings values safely. Issue #220.
 - [ CI ] A merge landing after a release whose publish failed no longer opens a second release pull request for the same version, one that could never publish once the fix was merged and left the version stuck. Issue #222.
+- [ World Map Previewer ] The warning for a state whose provinces all fail to resolve now reads "State 12 doesn't have valid provinces." instead of the garbled "State 12 in doesn't have valid provinces.". Issue #244.
+- Changing a setting now repaints every preview that depends on it. The focus tree, MIO and GUI previews ignored settings changes entirely, and in the event, idea, decision and character previews the preview localisation and index settings redrew the page from a cache, so they appeared to do nothing. Issue #203.
+- [ Technology Previewer ] The technology tree no longer paints a black backdrop on light themes, and [ MIO Previewer ] the MIO grid lines are no longer invisible there. Issue #203.
+- Selecting a mod file or an install path now reports it when the setting cannot be saved, instead of showing the new one in the status bar as though it had been. Issue #203.
+- Seven settings showed English text whatever the display language, and the two world map settings did not mention that the preview has to be reopened before they take effect. Issue #203.
 
   Functionality:
 
@@ -15,6 +21,14 @@ Unreleased
 - A preview no longer assembles its whole page for an edit that changes nothing on screen (a comment, whitespace) or that is applied in place; the page is only built when the panel needs to reload it, which matters most for a `.gfx` file whose textures are inlined. Issue #224.
 - After an edit, the technology, event, decision, idea, character, MIO and GFX previews decide whether anything changed without first serialising the whole preview a second time, so a large file responds sooner after each pause in typing. Issue #225.
 - [ World Map Previewer ] The world map loads faster: while it is still arriving, the preview redraws a few times a second instead of on every frame, and the finished map still appears the moment the last piece arrives. Issue #231.
+- [ World Map Previewer ] The world map loads faster and with less memory churn: tracing province borders no longer creates millions of short-lived objects and text keys along the way. Issue #228.
+- [ Testing ] Texture decoding is now tested on DXT1, DXT3 and DXT5 files, on textures with mipmaps and on sizes that are not a multiple of four, the formats nearly every mod sprite uses. Issue #245.
+- You can now right-click a file in the explorer or the editor and choose **Preview HOI4 file**, or press `Ctrl+Shift+Alt+V`. Issue #203.
+- **Scan References** now shows how far it has got and can be cancelled, and says so when it fails instead of finishing silently. Issue #203.
+- A preview that fails to render now offers a Retry button, so a passing problem no longer leaves a dead page until you edit the file or reopen the preview. Issue #203.
+- "Can't preview this file" now names the folders each preview reads, such as `common/national_focus/*.txt`, instead of listing internal names. Issue #203.
+- The extension is easier to find on the Marketplace: it is listed under Visualization, searchable for "hoi4", and no longer describes itself as being for "Heart of Iron IV". Issue #203.
+- The extension is smaller to download and the previews are quicker to draw. The world map stops re-measuring its tooltip and rebuilding its supply overlays on every frame you move the mouse, exporting the map no longer copies the image three times on its way to disk, searching a focus tree only touches the nodes whose highlight changed, and the event and decision graphs lay their arrow labels out in one pass. Issue #200.
 
 v1.1.38
 

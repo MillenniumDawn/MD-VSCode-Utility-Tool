@@ -220,6 +220,39 @@ describe("webview/worldmap/FEWorldMapClass reverse maps", function () {
 		});
 	});
 
+	describe("visible-province lookups", function () {
+		it("lists only the railways touching the given provinces, in file order", function () {
+			// The supply overlay used to walk every railway in the mod once per visible copy of the
+			// world just to reject the ones off screen.
+			const map = buildMap();
+			const touching = (ids: number[]) => {
+				const found: number[] = [];
+				map.forEachRailwayTouching(
+					ids.map((id) => ({ id }) as any),
+					(railway) => found.push(railway.level),
+				);
+				return found;
+			};
+
+			// Province 11 is on both railways, and each is listed once, lowest index first.
+			assert.deepStrictEqual(touching([11]), [2, 5]);
+			assert.deepStrictEqual(touching([10]), [2]);
+			assert.deepStrictEqual(touching([20]), []);
+			assert.deepStrictEqual(touching([]), []);
+		});
+
+		it("hands back the same supply-area province list every time", function () {
+			// The hover pass skips the highlight when the hovered and selected areas are the same
+			// object, so a freshly built list would make it redraw the whole area every frame.
+			const map = buildMap();
+			const first = map.getSupplyAreaProvinces(1);
+			assert.deepStrictEqual(first, { provinces: [10, 11, 20] });
+			assert.strictEqual(first, map.getSupplyAreaProvinces(1));
+			assert.strictEqual(map.getSupplyAreaProvinces(undefined), undefined);
+			assert.strictEqual(map.getSupplyAreaProvinces(99), undefined);
+		});
+	});
+
 	describe("memoization", function () {
 		it("returns the same map instance on repeated calls", function () {
 			const map = buildMap();

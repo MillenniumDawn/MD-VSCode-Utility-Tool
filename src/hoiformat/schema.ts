@@ -175,8 +175,10 @@ export const positionSchema: SchemaDef<Position> = {
 };
 //#endregion
 
+// Groups: 1 prefix, 2 scope, 3 var, 4 target, 5 default. Numbered rather than named because
+// this runs on nearly every bare symbol a schema converts; see the tokenizer in hoiparser.ts.
 export const variableRegex =
-	/^(?:(?<prefix>\w+):)?(?<scope>(?:\w+\.)*)?(?<var>\w+)(?:@(?<target>(?:\w+\.)*\w+))?(?:\?(?<default>\d+))?$/;
+	/^(?:(\w+):)?((?:\w+\.)*)?(\w+)(?:@((?:\w+\.)*\w+))?(?:\?(\d+))?$/;
 // `^` indexes an array, as in `var:influence_array^0`. Without it in the character class the
 // whole scope fails to match and the block is read as a leaf effect instead of a scope switch,
 // so anything nested inside it -- including a country_event call -- is never visited.
@@ -505,12 +507,12 @@ function tryParseVariable(
 	}
 
 	if (isNumber) {
-		if (match.groups?.default) {
-			return parseFloat(match.groups.default);
+		if (match[5]) {
+			return parseFloat(match[5]);
 		}
 		return 0;
 	} else {
-		if (match.groups?.prefix) {
+		if (match[1]) {
 			return str;
 		}
 		return undefined;
@@ -600,9 +602,10 @@ export function toNumberLike(value: number): NumberLike {
 	};
 }
 
+const numberLikeRegex = /^(-?(?:\d+(?:\.\d*)?|\.\d+))(%%?)$/;
+
 export function parseNumberLike(value: string): NumberLike | undefined {
-	const regex = /^(-?(?:\d+(?:\.\d*)?|\.\d+))(%%?)$/;
-	const result = regex.exec(value);
+	const result = numberLikeRegex.exec(value);
 	if (!result) {
 		return undefined;
 	}

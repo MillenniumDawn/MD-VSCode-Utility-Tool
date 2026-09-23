@@ -25,7 +25,7 @@ import {
 	LoaderSession,
 } from "../../../util/loader/loader";
 import { mapLimit } from "../../../util/common";
-import { flatMap } from "lodash";
+import flatMap from "lodash/flatMap";
 import { Tag, countryTagsFolder, loadCountryTagsFile } from "../../../util/countrytags";
 
 interface CountryFile {

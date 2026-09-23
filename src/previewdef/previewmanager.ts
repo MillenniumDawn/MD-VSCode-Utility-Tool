@@ -5,14 +5,14 @@ import { gfxPreviewDef } from './gfx';
 import { Commands, WebviewType, ContextName } from '../constants';
 import { technologyPreviewDef } from './technology';
 import { matchPathEnd } from '../util/nodecommon';
-import { arrayToMap, debounceByInput } from '../util/common';
+import { debounceByInput } from '../util/common';
 import { debug, error } from '../util/debug';
 import { PreviewBase } from './previewbase';
 import { contextContainer, setVscodeContext } from '../context';
 import { basename, getDocumentByUri, previewWebviewOptions } from '../util/vsccommon';
 import { worldMapPreviewDef } from './worldmap';
 import { eventPreviewDef } from './event';
-import { chain } from 'lodash';
+import minBy from 'lodash/minBy';
 import { sendEvent } from '../util/telemetry';
 import { guiPreviewDef } from './gui';
 import { mioPreviewDef } from './mio';
@@ -22,15 +22,29 @@ import { characterPreviewDef } from './character';
 
 export type PreviewProviderDef = PreviewProviderDefNormal | PreviewProviderDefAlternative;
 
-interface PreviewProviderDefNormal {
+interface PreviewProviderDefCommon {
     type: string;
+    /**
+     * What the "can't preview this file" message calls this preview, naming the paths it
+     * recognises -- that is the half of the answer the reader can act on.
+     *
+     * A function rather than a string: these defs are module-level constants, and a localize()
+     * call at module load would freeze the English text in before extension.ts runs loadI18n().
+     */
+    displayName(): string;
+    /**
+     * False when the preview's feature-flag setting is off, so the message does not offer a type
+     * that would refuse the file anyway. Omitted by the previews that are always on.
+     */
+    isEnabled?(): boolean;
     canPreview(document: vscode.TextDocument): number | undefined;
+}
+
+interface PreviewProviderDefNormal extends PreviewProviderDefCommon {
     previewConstructor: new (uri: vscode.Uri, panel: vscode.WebviewPanel) => PreviewBase;
 }
 
-interface PreviewProviderDefAlternative {
-    type: string;
-    canPreview(document: vscode.TextDocument): number | undefined;
+interface PreviewProviderDefAlternative extends PreviewProviderDefCommon {
     onPreview(document: vscode.TextDocument): Promise<void>;
 }
 
@@ -49,7 +63,6 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         decisionPreviewDef,
         characterPreviewDef,
     ];
-    private _previewProvidersMap: Record<string, PreviewProviderDef> = arrayToMap(this._previewProviders, 'type');
 
     // Keyed by the joined path so previews sharing a dependency share one entry; a Map keyed by
     // the segment arrays themselves could never hit, and every document change then matched the
@@ -136,6 +149,17 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             document = vscode.window.activeTextEditor?.document;
         } else {
             document = getDocumentByUri(requestUri);
+            if (document === undefined) {
+                // The explorer context menu hands us a file that need not be open in an editor, and
+                // getDocumentByUri only scans the already-open ones. Loading it here costs no editor
+                // tab -- openTextDocument does not show one -- and lets the menu reach the same path
+                // the title-bar button does.
+                try {
+                    document = await vscode.workspace.openTextDocument(requestUri);
+                } catch (e) {
+                    error(e);
+                }
+            }
         }
 
         if (document === undefined) {
@@ -161,8 +185,12 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         const previewProvider = this.findPreviewProvider(document);
         if (!previewProvider) {
+            const types = this._previewProviders
+                .filter(p => p.isEnabled?.() !== false)
+                .map(p => p.displayName())
+                .join(', ');
             void vscode.window.showInformationMessage(
-                localize('preview.cantpreviewfile', "Can't preview this file.\nValid types: {0}.", Object.keys(this._previewProvidersMap).join(', ')));
+                localize('preview.cantpreviewfile', "Can't preview this file.\nValid types: {0}.", types));
             panel?.dispose();
             debug(`dispose panel ${uri} because no preview provider`);
             this.updateHoi4PreviewContextValue(undefined);
@@ -215,11 +243,11 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
     }
 
     private findPreviewProvider(document: vscode.TextDocument): PreviewProviderDef | undefined {
-        return chain(this._previewProviders)
-            .map(p => ({ provider: p, priority: p.canPreview(document) }))
-            .filter((value): value is ({ provider: PreviewProviderDef; priority: number }) => value.priority !== undefined)
-            .minBy(value => value.priority)
-            .value()?.provider;
+        return minBy(
+            this._previewProviders
+                .map(p => ({ provider: p, priority: p.canPreview(document) }))
+                .filter((value): value is ({ provider: PreviewProviderDef; priority: number }) => value.priority !== undefined),
+            value => value.priority)?.provider;
     }
 
     private addPreviewToSubscription(previewItem: PreviewBase, dependency: string[]): void {
