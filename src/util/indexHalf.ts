@@ -2,9 +2,9 @@ import * as vscode from "vscode";
 import {
 	computeStaleFiles,
 	IndexTimer,
-	loadCacheData,
 	loadCacheManifest,
-	saveCacheData,
+	loadCacheRecords,
+	saveCacheRecords,
 	saveCacheManifest,
 	captureCacheScope,
 	CacheScope,
@@ -12,6 +12,7 @@ import {
 import { indexParseQueue, IndexProgress } from "./indexBuild";
 import { IndexFile, IndexListing, toIndexFiles } from "./indexListing";
 import { FileSourceOptions, readFileFromModOrHOI4 } from "./fileloader";
+import { createTimeSlicer } from "./common";
 import { localize } from "./i18n";
 import { Logger } from "./logger";
 import {
@@ -55,7 +56,7 @@ async function waitForCacheWrite(key: string | undefined): Promise<void> {
 function queueCacheWrite(
 	key: string | undefined,
 	cacheName: string,
-	data: string,
+	records: readonly unknown[],
 	filePaths: string[],
 	mtimes: Map<string, number>,
 	version: number,
@@ -74,7 +75,7 @@ function queueCacheWrite(
 		) {
 			return;
 		}
-		await saveCacheData(cacheName, data, scope);
+		await saveCacheRecords(cacheName, records, scope);
 		if (
 			generation !== undefined &&
 			!isModDependencyGenerationCurrent(generation)
@@ -104,25 +105,33 @@ function queueCacheWrite(
  * down to the comment text, which is why every fix to the indexing had to be made four times.
  *
  * What genuinely differs between them is the shape of what they cache, so that is what the two
- * callbacks cover: `hydrate` puts a loaded cache back into the live index, and `serialize` hands
- * back whatever should be written. Everything else is here.
+ * callbacks cover: `hydrate` puts one cached record back into the live index, and `serialize` hands
+ * back the records that should be written. Everything else is here.
+ *
+ * A cache is a list of small records -- in practice one per indexed file -- rather than one
+ * document, so that neither the write nor the load ever holds the whole index as a single string,
+ * and both can give the extension host back its event loop as they go.
  */
-export interface IndexHalfSpec<TCache> {
+export interface IndexHalfSpec<TRecord> {
 	/** Names the cache files and the timer's phases, e.g. `"gfxIndex.workspace"`. */
 	cacheName: string;
 	/** Bump to make previously written caches be ignored rather than misread. */
 	version: number;
 	listFiles: (token: vscode.CancellationToken) => Promise<IndexListing>;
 	/**
-	 * Restore everything in `cached` whose file is not in `skipFiles` -- those are the files about
-	 * to be re-parsed or gone. Throwing here is treated as a corrupt cache, exactly as a failed
-	 * JSON.parse is, and the build falls back to parsing everything.
+	 * Restore one cached record unless its file is in `skipFiles` -- those are the files about to be
+	 * re-parsed or gone. Called once per record. Throwing here is treated as a corrupt cache, exactly
+	 * as a record that fails to parse is, and the build falls back to parsing everything.
 	 */
-	hydrate: (cached: TCache, skipFiles: Set<string>) => void;
+	hydrate: (record: TRecord, skipFiles: Set<string>) => void;
 	/** Parses one file into the live index. Reports its own failures and does not throw. */
 	parseFile: (file: IndexFile) => Promise<void>;
-	/** The live index in the form it should be cached. */
-	serialize: () => TCache;
+	/**
+	 * The live index as the records it should be cached as. Captured synchronously, but written over
+	 * later ticks, so anything an edit or a rebuild mutates in place has to be copied here rather
+	 * than referenced.
+	 */
+	serialize: () => TRecord[];
 	/** Rebuild the complete current listing whenever any cached file changed. */
 	fullRebuildOnAnyChange?: boolean;
 	/** Dependency generation and scope captured before the build listed any files. */
@@ -130,8 +139,8 @@ export interface IndexHalfSpec<TCache> {
 	cacheScope?: CacheScope;
 }
 
-export async function buildIndexHalf<TCache>(
-	spec: IndexHalfSpec<TCache>,
+export async function buildIndexHalf<TRecord>(
+	spec: IndexHalfSpec<TRecord>,
 	progress: IndexProgress,
 ): Promise<void> {
 	const timer = new IndexTimer(spec.cacheName);
@@ -143,8 +152,8 @@ export async function buildIndexHalf<TCache>(
 	}
 }
 
-async function buildIndexHalfWithTimer<TCache>(
-	spec: IndexHalfSpec<TCache>,
+async function buildIndexHalfWithTimer<TRecord>(
+	spec: IndexHalfSpec<TRecord>,
 	progress: IndexProgress,
 	timer: IndexTimer,
 ): Promise<void> {
@@ -188,21 +197,23 @@ async function buildIndexHalfWithTimer<TCache>(
 			staleness.stale.length > 0 ||
 			staleness.removed.length > 0 ||
 			staleness.added.length > 0;
-		const cachedData = await loadCacheData(cacheName, cacheScope);
 
 		// Whatever is still fresh gets reused, however much of the listing changed. This used to be
 		// gated on stale + removed + added being fewer than the files listed, so a large pull -- or
 		// a manifest naming files that have since been deleted, which count towards that sum but
 		// not towards the listing -- threw away a cache that was still most of the way good. The
 		// stale files have to be parsed either way, so counting them only ever added work.
-		if (cachedData) {
+		// A half that rebuilds on any change has no use for the data then, so it is not even read.
+		if (!(spec.fullRebuildOnAnyChange && hasChanges)) {
 			try {
-				const cached: TCache = JSON.parse(cachedData);
-				if (spec.fullRebuildOnAnyChange && hasChanges) {
-					filesToParse = filePaths;
-				} else {
+				const records = await loadCacheRecords(cacheName, cacheScope);
+				if (records) {
 					const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
-					spec.hydrate(cached, skipFiles);
+					const slice = createTimeSlicer();
+					for (const record of records) {
+						spec.hydrate(record as TRecord, skipFiles);
+						await slice();
+					}
 					filesToParse = [...staleness.stale, ...staleness.added];
 				}
 			} catch {
@@ -233,7 +244,7 @@ async function buildIndexHalfWithTimer<TCache>(
 	queueCacheWrite(
 		writeKey,
 		cacheName,
-		JSON.stringify(spec.serialize()),
+		spec.serialize(),
 		filePaths,
 		mtimes,
 		version,

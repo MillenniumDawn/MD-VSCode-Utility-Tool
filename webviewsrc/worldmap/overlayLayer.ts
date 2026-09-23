@@ -3,7 +3,7 @@ import { FEWorldMap } from "./loader";
 import { ViewPoint } from "./viewpoint";
 import { TopBar, topBarHeight } from "./topbar";
 import { feLocalize } from "../util/i18n";
-import { chain, max } from "lodash";
+import max from "lodash/max";
 import { toColor, waterWarning } from "./colors";
 import {
 	isMouseHighlightVisible,
@@ -31,14 +31,11 @@ export function renderSupplyRelated(
 	context: CanvasRenderingContext2D,
 	xOffset: number,
 ): void {
-	const { renderedProvincesById, viewPoint } = renderContext;
+	const { renderedProvinces, viewPoint } = renderContext;
+	const visible = renderedProvinces ?? [];
 
 	context.strokeStyle = "rgb(200, 0, 0)";
-	worldMap.forEachRailway((railway) => {
-		if (railway.provinces.every((id) => !renderedProvincesById[id])) {
-			return;
-		}
-
+	worldMap.forEachRailwayTouching(visible, (railway) => {
 		context.beginPath();
 		context.lineWidth = Math.min(10, 2 * railway.level);
 		let hasProvince = false;
@@ -69,14 +66,13 @@ export function renderSupplyRelated(
 
 	context.fillStyle = "rgb(200, 0, 0)";
 	const size = Math.min(30, viewPoint.scale * 10);
-	worldMap.forEachSupplyNode((supplyNode) => {
-		const province = renderedProvincesById[supplyNode.province];
-		if (province) {
+	for (const province of visible) {
+		if (worldMap.getSupplyNodeByProvinceId(province.id) !== undefined) {
 			const x = viewPoint.convertX(province.centerOfMass.x + xOffset);
 			const y = viewPoint.convertY(province.centerOfMass.y);
 			context.fillRect(x - size / 2, y - size / 2, size, size);
 		}
-	});
+	}
 }
 
 export function renderRivers(
@@ -396,26 +392,12 @@ function renderSupplyAreaHoverSelection(
 	const hover = worldMap.getSupplyAreaById(
 		session.topBar.hoverSupplyAreaId$.value,
 	);
-	const selected = worldMap.getSupplyAreaById(
-		session.topBar.selectedSupplyAreaId$.value,
-	);
-	const toProvinces = (supplyArea: SupplyArea | undefined) => {
-		return supplyArea
-			? {
-					provinces: chain(supplyArea.states)
-						.map((stateId) => worldMap.getStateById(stateId)?.provinces)
-						.filter((v): v is number[] => !!v)
-						.flatten()
-						.value(),
-				}
-			: undefined;
-	};
 
 	renderHoverSelection(
 		session,
 		worldMap,
-		toProvinces(hover),
-		toProvinces(selected),
+		worldMap.getSupplyAreaProvinces(session.topBar.hoverSupplyAreaId$.value),
+		worldMap.getSupplyAreaProvinces(session.topBar.selectedSupplyAreaId$.value),
 	);
 	hover &&
 		isTooltipVisible(session.topBar) &&
@@ -534,32 +516,12 @@ ${worldMap
 	);
 }
 
-function renderTooltip(
-	session: OverlaySession,
-	tooltip: string,
-	sizeCallback?: (
-		width: number,
-		height: number,
-	) => { width: number; height: number },
-	renderCallback?: (x: number, y: number) => void,
-) {
-	const backCanvasContext = session.backCanvasContext;
-	const cursorX = session.cursorX;
-	const cursorY = session.cursorY;
-
-	let mapX = session.viewPoint.convertBackX(cursorX);
-	if (session.worldMap.width > 0 && mapX >= session.worldMap.width) {
-		mapX -= session.worldMap.width;
-	}
-	const mapY = session.viewPoint.convertBackY(cursorY);
-
-	tooltip =
-		`(${mapX}, ${mapY})\nX=${mapX}, Z=${session.worldMap.height - 1 - mapY}\n` +
-		tooltip;
-
+// Splits a tooltip into rendered lines, carrying a |r| colour prefix onto every wrapped piece of
+// the line that opened it.
+function wrapTooltip(tooltip: string): string[] {
 	const colorPrefix = /^\|r\|/;
 	const regex = /(\n)|((?:\|r\|)?(?:.{40,59}[, ]|.{60}))/g;
-	const text = tooltip
+	return tooltip
 		.trim()
 		.split(regex)
 		.map((v, i, a) => {
@@ -579,6 +541,49 @@ function renderTooltip(
 			return v;
 		})
 		.filter((v): v is string => v !== undefined && v.trim() !== "");
+}
+
+// One entry is enough: the tooltip body only changes when the pointer moves onto something else,
+// and the font is the same on every call, so a cached measurement stays valid.
+let tooltipBodyLayout:
+	| { body: string; lines: string[]; width: number }
+	| undefined = undefined;
+
+function layoutTooltipBody(
+	context: CanvasRenderingContext2D,
+	body: string,
+): { body: string; lines: string[]; width: number } {
+	if (tooltipBodyLayout?.body === body) {
+		return tooltipBodyLayout;
+	}
+
+	const lines = wrapTooltip(body);
+	tooltipBodyLayout = {
+		body,
+		lines,
+		width: max(lines.map((t) => context.measureText(t).width)) ?? 0,
+	};
+	return tooltipBodyLayout;
+}
+
+function renderTooltip(
+	session: OverlaySession,
+	tooltip: string,
+	sizeCallback?: (
+		width: number,
+		height: number,
+	) => { width: number; height: number },
+	renderCallback?: (x: number, y: number) => void,
+) {
+	const backCanvasContext = session.backCanvasContext;
+	const cursorX = session.cursorX;
+	const cursorY = session.cursorY;
+
+	let mapX = session.viewPoint.convertBackX(cursorX);
+	if (session.worldMap.width > 0 && mapX >= session.worldMap.width) {
+		mapX -= session.worldMap.width;
+	}
+	const mapY = session.viewPoint.convertBackY(cursorY);
 
 	const fontSize = 14;
 	let toolTipOffsetX = 10;
@@ -589,7 +594,20 @@ function renderTooltip(
 
 	backCanvasContext.font = `${fontSize}px sans-serif`;
 	backCanvasContext.textAlign = "start";
-	let width = max(text.map((t) => backCanvasContext.measureText(t).width)) ?? 0;
+
+	// Only the first two lines carry the cursor, so only they have to be laid out again on a
+	// mousemove. The body -- the long part, and the part a big state or supply area makes longer
+	// still -- is wrapped and measured once and reused until the hovered thing changes.
+	const headerLines = wrapTooltip(
+		`(${mapX}, ${mapY})\nX=${mapX}, Z=${session.worldMap.height - 1 - mapY}`,
+	);
+	const body = layoutTooltipBody(backCanvasContext, tooltip);
+	const text = headerLines.concat(body.lines);
+
+	let width = Math.max(
+		body.width,
+		max(headerLines.map((t) => backCanvasContext.measureText(t).width)) ?? 0,
+	);
 	let height = fontSize * text.length + linePadding * (text.length - 1);
 
 	if (cursorX + toolTipOffsetX + width + 2 * marginX > session.canvasWidth) {

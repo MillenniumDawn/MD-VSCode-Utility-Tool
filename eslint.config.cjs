@@ -21,6 +21,21 @@ module.exports = [
 			"no-throw-literal": "error",
 			semi: "error",
 			"no-duplicate-imports": "error",
+			// The bare specifier drags lodash's whole CommonJS monolith into every bundle for the
+			// handful of helpers we actually use. A deep path bundles only that helper.
+			"no-restricted-imports": [
+				"error",
+				{
+					paths: [
+						{
+							name: "lodash",
+							message:
+								"Import the single method instead, e.g. `import uniq from \"lodash/uniq\"`, so the whole library does not end up in the bundle.",
+							allowTypeImports: true,
+						},
+					],
+				},
+			],
 			"@typescript-eslint/no-unused-vars": [
 				"error",
 				{ argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" },

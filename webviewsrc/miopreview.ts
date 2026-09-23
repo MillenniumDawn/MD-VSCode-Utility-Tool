@@ -1,7 +1,8 @@
 import { getState, setState, arrayToMap, subscribeNavigators, scrollToState, tryRun, enableZoom, initCommon, previewOption, setPreviewOption } from "./util/common";
 import { toggleBinder } from "./util/toolbar";
 import { DivDropdown } from "./util/dropdown";
-import { minBy, maxBy } from "lodash";
+import minBy from "lodash/minBy";
+import maxBy from "lodash/maxBy";
 import { renderGridBoxCommon, GridBoxItem, GridBoxConnection } from "../src/util/hoi4gui/gridboxcommon";
 import { StyleTable } from "../src/util/styletable";
 import { escapeAttr } from "../src/util/escape";
@@ -110,7 +111,7 @@ function buildGridGuide(
         const isLimit = k === limitColumn;
         const cls = isLimit
             ? styleTable.style('mio-grid-limit', () => `position:absolute; top:0; width:2px; background:#e06c3b; opacity:0.85; pointer-events:none;`)
-            : styleTable.style('mio-grid-line', () => `position:absolute; top:0; width:1px; background:#ffffff; opacity:0.12; pointer-events:none;`);
+            : styleTable.style('mio-grid-line', () => `position:absolute; top:0; width:1px; background:var(--vscode-foreground); opacity:0.12; pointer-events:none;`);
         lines += `<div class="${cls} ${styleTable.oneTimeStyle('mio-grid-x-' + k, () => `left:${k * xGridSize}px; height:${height}px;`)}"></div>`;
     }
 
