@@ -77,6 +77,35 @@ describe("previewdef/worldmap/WorldMap", () => {
 		}
 	});
 
+	it("writes the bytes the webview posted, and nothing at all when it posted none", async () => {
+		// The PNG used to travel as a base64 data URI, which made three copies of an image that can
+		// run to tens of megabytes. It now arrives as bytes, and an export that produced none (a
+		// canvas the browser would not encode) has to fail rather than write an empty file.
+		const writes: { uri: string; bytes: number[] }[] = [];
+		stubVscode({
+			writeFile: async (uri: vscode.Uri, content: Uint8Array) => {
+				writes.push({ uri: uri.toString(), bytes: [...content] });
+			},
+		});
+		const worldMap = new WorldMap(panel([]) as any);
+		const uri = vscode.Uri.file("/tmp/world-map.png");
+		const state = worldMap as any;
+		state.lastRequestedExportUri = uri;
+		state.lastRequestedExportRequestId = 1;
+
+		await (worldMap as any).onMessage({ command: "exportmap" });
+		assert.deepStrictEqual(writes, []);
+		assert.strictEqual(state.lastRequestedExportUri, uri);
+
+		await (worldMap as any).onMessage({
+			command: "exportmap",
+			data: new Uint8Array([137, 80, 78, 71]),
+		});
+		assert.deepStrictEqual(writes, [
+			{ uri: uri.toString(), bytes: [137, 80, 78, 71] },
+		]);
+	});
+
 	it("writes a successful export only once when the webview replays it", async () => {
 		const writes: string[] = [];
 		stubVscode({
@@ -92,11 +121,11 @@ describe("previewdef/worldmap/WorldMap", () => {
 
 		await (worldMap as any).onMessage({
 			command: "exportmap",
-			dataUrl: "data:image/png;base64,AA==",
+			data: new Uint8Array([0, 1, 2]),
 		});
 		await (worldMap as any).onMessage({
 			command: "exportmap",
-			dataUrl: "data:image/png;base64,AA==",
+			data: new Uint8Array([0, 1, 2]),
 		});
 
 		assert.deepStrictEqual(writes, [uri.toString()]);
@@ -126,7 +155,7 @@ describe("previewdef/worldmap/WorldMap", () => {
 		state.lastRequestedExportRequestId = 1;
 		const message = {
 			command: "exportmap",
-			dataUrl: "data:image/png;base64,AA==",
+			data: new Uint8Array([0, 1, 2]),
 		};
 
 		const firstExport = (worldMap as any).onMessage(message);
@@ -154,12 +183,12 @@ describe("previewdef/worldmap/WorldMap", () => {
 
 		await (worldMap as any).onMessage({
 			command: "exportmap",
-			dataUrl: "data:image/png;base64,AA==",
+			data: new Uint8Array([0, 1, 2]),
 		});
 		assert.ok(state.lastRequestedExportUri);
 		await (worldMap as any).onMessage({
 			command: "exportmap",
-			dataUrl: "data:image/png;base64,AA==",
+			data: new Uint8Array([0, 1, 2]),
 		});
 
 		assert.strictEqual(attempts, 2);
@@ -192,7 +221,7 @@ describe("previewdef/worldmap/WorldMap", () => {
 
 		const oldExport = (worldMap as any).onMessage({
 			command: "exportmap",
-			dataUrl: "data:image/png;base64,AA==",
+			data: new Uint8Array([0, 1, 2]),
 		});
 		await started;
 		state.lastRequestedExportUri = newUri;
@@ -203,7 +232,7 @@ describe("previewdef/worldmap/WorldMap", () => {
 		assert.strictEqual(state.lastRequestedExportUri, newUri);
 		await (worldMap as any).onMessage({
 			command: "exportmap",
-			dataUrl: "data:image/png;base64,AA==",
+			data: new Uint8Array([0, 1, 2]),
 		});
 
 		assert.deepStrictEqual(writes, [oldUri.toString(), newUri.toString()]);

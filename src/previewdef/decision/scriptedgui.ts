@@ -3,7 +3,7 @@ import { readNodeAsString } from "../../hoiformat/schema";
 import { error } from "../../util/debug";
 import { parseHoi4FileCached } from "../../util/fileloader";
 import { FileLoader, FolderLoader, LoadResult, LoadResultOD } from "../../util/loader/loader";
-import { flatten } from "lodash";
+import flatten from "lodash/flatten";
 
 // A decision category that sets `scripted_gui = X` is drawn by a custom window instead of the usual
 // list of buttons. X is defined in common/scripted_guis as
