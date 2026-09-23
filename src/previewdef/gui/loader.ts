@@ -1,4 +1,4 @@
-import { chain, flatMap } from "lodash";
+import uniq from "lodash/uniq";
 import { GuiFile, guiFileSchema } from "../../hoiformat/gui";
 import { parseHoi4File, resolveScriptVariables } from "../../hoiformat/hoiparser";
 import { convertNodeToJson, HOIPartial } from "../../hoiformat/schema";
@@ -25,10 +25,10 @@ export class GuiFileLoader extends ContentLoader<GuiFileLoaderResult> {
 
         return {
             result: {
-                gfxFiles: chain(gfxDependencies).concat(flatMap(guiDepFiles, r => r.result.gfxFiles)).uniq().value(),
-                guiFiles: chain(guiDepFiles).flatMap(r => r.result.guiFiles).concat({ file: this.file, data: guiFile }).uniq().value(),
+                gfxFiles: uniq([...gfxDependencies, ...guiDepFiles.flatMap(r => r.result.gfxFiles)]),
+                guiFiles: uniq([...guiDepFiles.flatMap(r => r.result.guiFiles), { file: this.file, data: guiFile }]),
             },
-            dependencies: chain([this.file]).concat(gfxDependencies, mergeInLoadResult(guiDepFiles, 'dependencies')).uniq().value(),
+            dependencies: uniq([this.file, ...gfxDependencies, ...mergeInLoadResult(guiDepFiles, 'dependencies')]),
         };
     }
 
