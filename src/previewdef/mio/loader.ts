@@ -1,7 +1,9 @@
 import { ContentLoader, LoadResultOD, Dependency, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
-import { uniq, flatten, chain, flatMap } from "lodash";
+import uniq from "lodash/uniq";
+import flatten from "lodash/flatten";
+import flatMap from "lodash/flatMap";
 import { Mio, getMiosFromFile } from "./schema";
 import { getGfxContainerFiles } from "../../util/gfxindex";
 import { listFilesFromModOrHOI4 } from "../../util/fileloader";
@@ -40,7 +42,7 @@ export class MioLoader extends ContentLoader<MioLoaderResult> {
         const gfxDependencies = [
             ...dependencies.filter(d => d.type === 'gfx').map(d => d.path),
             ...flatten(mioDepFiles.map(f => f.result.gfxFiles)),
-            ...await getGfxContainerFiles(chain(mios).flatMap(m => Object.values(m.traits)).flatMap(t => t.icon).value()),
+            ...await getGfxContainerFiles(mios.flatMap(m => Object.values(m.traits)).flatMap(t => t.icon)),
         ];
 
         return {
