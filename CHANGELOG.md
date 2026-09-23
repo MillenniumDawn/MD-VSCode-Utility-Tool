@@ -19,6 +19,7 @@ v1.1.39
 - Selecting a mod file or an install path now reports it when the setting cannot be saved, instead of showing the new one in the status bar as though it had been. Issue #203.
 - Seven settings showed English text whatever the display language, and the two world map settings did not mention that the preview has to be reopened before they take effect. Issue #203.
 - [ CI ] Webview state is now replaced instead of merged during testing. Issue #246.
+- [ Testing ] Replace the assertion-free world map loader tests. Issue #243.
 
   Functionality:
 
