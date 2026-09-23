@@ -53,8 +53,6 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // generation it belongs to so a cache from a superseded load is never re-pushed.
     private lastPushedIconCss: string | undefined = undefined;
     private lastPushedIconGeneration = -1;
-    // Serializes updates so two loads can never run concurrently against the same loader.
-    private updateQueue: Promise<void> = Promise.resolve();
     // Generation token: each full (re)load bumps it so a slow background icon push from an earlier
     // load is dropped instead of overwriting a newer render.
     private iconRenderGeneration = 0;
@@ -143,14 +141,6 @@ class FocusTreePreview extends UpdateablePreviewBase {
         return fingerprints;
     }
 
-    public onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
-        // Chain onto the previous update so renders are serialized. By the time a queued
-        // render runs it reads the live document text, coalescing intermediate edits.
-        const run = this.updateQueue.then(() => super.onDocumentChange(document, dependencyChanged));
-        this.updateQueue = run.catch(() => undefined);
-        return run;
-    }
-
     protected getLoadingShellHtml(): string {
         return loadingShellHtml(localize('focustree.loading.start', 'Preparing focus tree...'));
     }
@@ -177,7 +167,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         }
         if (sideChanged) {
             // The structure was patched in place (or was unchanged) but the icon set moved. Awaited,
-            // not backgrounded, so it stays on the update queue and never runs a second concurrent
+            // not backgrounded, so it stays on the render queue and never runs a second concurrent
             // load against the loader.
             await this.repushResolvedIconStyles();
         }
