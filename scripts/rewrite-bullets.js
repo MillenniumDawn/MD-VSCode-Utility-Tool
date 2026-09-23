@@ -117,9 +117,11 @@ function maxTokens(count) {
 	return baseTokens + tokensPerBullet * count;
 }
 
-// `remaining` is the rewrite's time budget in milliseconds; a request never gets longer than what
-// is left of it.
-async function post(path, body, key, remaining) {
+// `budget` is the rewrite's time budget: `remaining()` in milliseconds, and `signal`, which aborts
+// when it runs out. A request is cut by that signal rather than by a timer of its own, so the loop
+// in `rewrite` sees the budget spent the moment it cut a request -- a second timer read against
+// `Date.now()` can fire a millisecond early and let one more request out.
+async function post(path, body, key, budget) {
 	const response = await fetch(`${endpoint}${path}`, {
 		method: 'POST',
 		headers: {
@@ -130,7 +132,7 @@ async function post(path, body, key, remaining) {
 			'X-Title': 'MD VSCode Utility Tool release',
 		},
 		body: JSON.stringify(body),
-		signal: AbortSignal.timeout(Math.max(1, Math.min(timeoutMs, remaining()))),
+		signal: AbortSignal.any([AbortSignal.timeout(timeoutMs), budget.signal]),
 	});
 
 	if (!response.ok) {
@@ -164,11 +166,11 @@ const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 // One retry, because a free model is rate limited and a release lands several bullets at once --
 // unless the wait alone would use up what is left of the budget, in which case the 429 stands.
-async function withRateLimitRetry(call, remaining) {
+async function withRateLimitRetry(call, budget) {
 	try {
 		return await call();
 	} catch (error) {
-		if (error?.status !== 429 || remaining() <= rateLimitWaitMs) {
+		if (error?.status !== 429 || budget.remaining() <= rateLimitWaitMs) {
 			throw error;
 		}
 		await wait(rateLimitWaitMs);
@@ -195,7 +197,7 @@ function describe(entry) {
 }
 
 // Tier one: every bullet in one request, held to a schema.
-async function rewriteTogether(entries, key, remaining) {
+async function rewriteTogether(entries, key, budget) {
 	const payload = await withRateLimitRetry(() => post('/chat/completions', request(
 		[
 			{ role: 'system', content: style },
@@ -233,7 +235,7 @@ async function rewriteTogether(entries, key, remaining) {
 					},
 				},
 			},
-		}), key, remaining), remaining);
+		}), key, budget), budget);
 
 	const content = messageContent(payload);
 	const fenced = /```(?:json)?\s*\n([\s\S]*?)\n?```/.exec(content);
@@ -261,11 +263,11 @@ async function rewriteTogether(entries, key, remaining) {
 }
 
 // Tier two: whatever tier one did not produce, one request at a time.
-async function rewriteOne(entry, key, remaining) {
+async function rewriteOne(entry, key, budget) {
 	const payload = await withRateLimitRetry(() => post('/chat/completions', request([
 		{ role: 'system', content: style },
 		{ role: 'user', content: `Rewrite this entry as one changelog sentence. Reply with the sentence and nothing else. ${untrustedNote}\n\n${describe(entry)}` },
-	], 1), key, remaining), remaining);
+	], 1), key, budget), budget);
 
 	const text = cleanReply(messageContent(payload));
 	return acceptable(text) ? text : undefined;
@@ -280,10 +282,10 @@ async function rewrite(entries, key, options = {}) {
 
 	const budgetMs = options.budgetMs ?? rewriteBudgetMs;
 	const deadline = Date.now() + budgetMs;
-	const remaining = () => deadline - Date.now();
+	const budget = { signal: AbortSignal.timeout(budgetMs), remaining: () => deadline - Date.now() };
 
 	try {
-		for (const [number, text] of await rewriteTogether(entries, key, remaining)) {
+		for (const [number, text] of await rewriteTogether(entries, key, budget)) {
 			written.set(number, text);
 		}
 	} catch (error) {
@@ -294,13 +296,13 @@ async function rewrite(entries, key, options = {}) {
 		if (written.has(entry.number)) {
 			continue;
 		}
-		if (remaining() <= 0) {
+		if (budget.signal.aborted || budget.remaining() <= 0) {
 			const left = entries.slice(index).filter((other) => !written.has(other.number)).map((other) => `#${other.number}`);
 			warn(`The changelog model used up its ${Math.round(budgetMs / 1000)} second budget; pull request(s) ${left.join(', ')} keep their titles.`);
 			break;
 		}
 		try {
-			const text = await rewriteOne(entry, key, remaining);
+			const text = await rewriteOne(entry, key, budget);
 			if (text) {
 				written.set(entry.number, text);
 			} else {
