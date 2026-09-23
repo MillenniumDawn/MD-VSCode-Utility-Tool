@@ -1,4 +1,4 @@
-import "./setup";
+import { canvasCalls } from "./setup";
 import * as assert from "assert";
 import { vscode } from "../../../webviewsrc/util/vscode";
 
@@ -593,29 +593,8 @@ describe("webview entrypoints", () => {
 	it("starts the world-map loader and hides supply-area controls when disabled", () => {
 		installWorldMapShell();
 		(window as any).__enableSupplyArea = false;
-		const paints: string[] = [];
-		const context = {
-			fillStyle: "",
-			strokeStyle: "",
-			font: "",
-			textAlign: "",
-			textBaseline: "",
-			lineWidth: 0,
-			fillRect: () => paints.push("fillRect"),
-			drawImage: () => paints.push("drawImage"),
-			measureText: () => ({ width: 0 }),
-			fillText: () => undefined,
-			beginPath: () => undefined,
-			moveTo: () => undefined,
-			lineTo: () => undefined,
-			stroke: () => undefined,
-			strokeRect: () => undefined,
-		};
-		const canvasPrototype = (window as any).HTMLCanvasElement.prototype;
-		const originalGetContext = canvasPrototype.getContext;
 		const originalRequestAnimationFrame = (globalThis as any)
 			.requestAnimationFrame;
-		canvasPrototype.getContext = () => context;
 		(globalThis as any).requestAnimationFrame = (
 			callback: (time: number) => void,
 		) => {
@@ -636,10 +615,13 @@ describe("webview entrypoints", () => {
 				document.querySelectorAll('[enablesupplyarea="true"]').length,
 				0,
 			);
-			assert.ok(paints.includes("fillRect"));
-			assert.ok(paints.includes("drawImage"));
+			const mainCanvas = document.getElementById(
+				"main-canvas",
+			) as HTMLCanvasElement;
+			assert.ok(
+				canvasCalls(mainCanvas).some((call) => call.method === "drawImage"),
+			);
 		} finally {
-			canvasPrototype.getContext = originalGetContext;
 			(globalThis as any).requestAnimationFrame = originalRequestAnimationFrame;
 		}
 	});
