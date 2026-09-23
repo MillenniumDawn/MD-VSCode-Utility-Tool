@@ -224,9 +224,6 @@ export class Renderer extends Subscriber {
 			renderMapBackground(worldMap, xOffset, renderContext),
 		);
 
-		renderContext.renderedProvinces = Object.values(
-			renderContext.renderedProvincesById,
-		);
 		renderAllOffsets(viewPoint, mapZone, worldMap.width, (xOffset) =>
 			renderMapForeground(worldMap, xOffset, renderContext),
 		);
