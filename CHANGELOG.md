@@ -15,6 +15,7 @@ Unreleased
 - A preview no longer assembles its whole page for an edit that changes nothing on screen (a comment, whitespace) or that is applied in place; the page is only built when the panel needs to reload it, which matters most for a `.gfx` file whose textures are inlined. Issue #224.
 - After an edit, the technology, event, decision, idea, character, MIO and GFX previews decide whether anything changed without first serialising the whole preview a second time, so a large file responds sooner after each pause in typing. Issue #225.
 - On a mod the size of Millennium Dawn, VS Code no longer freezes for seconds while the focus, localisation, sprite and idea swap indexes save their cache or load it at the start of a session. The localisation cache is also much smaller on disk, and the first session after updating rebuilds each index once. Issue #226.
+- The extension is smaller to download and the previews are quicker to draw. The world map stops re-measuring its tooltip and rebuilding its supply overlays on every frame you move the mouse, exporting the map no longer copies the image three times on its way to disk, searching a focus tree only touches the nodes whose highlight changed, and the event and decision graphs lay their arrow labels out in one pass. Issue #200.
 
 v1.1.38
 

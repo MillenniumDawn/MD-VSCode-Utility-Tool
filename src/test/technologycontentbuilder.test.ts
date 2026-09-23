@@ -126,6 +126,28 @@ describe("previewdef/technology renderTechnologyFile in-place update", () => {
 		);
 	});
 
+	it("puts exactly the swapped contentHtml inside #techtreecontent", async () => {
+		// The folder markup is collapsed once, in the content builder, and spliced into the page
+		// rather than collapsed a second time by html(). What the baseline page renders inside
+		// #techtreecontent therefore has to be the very string an in-place update swaps in; if the
+		// two ever drift, a reload and an edit draw different trees.
+		const rendered = (await renderTechnologyFile(
+			loaderFor(["artillery", "infantry"]),
+			uri,
+			webview,
+		)) as LoaderRenderResult;
+		const contentHtml = (rendered.update!.data as { contentHtml: string })
+			.contentHtml;
+		const page = renderedHtml(rendered);
+		const opening = /<div id="techtreecontent"[^>]*>/.exec(page);
+		assert.ok(opening, "expected #techtreecontent in the page");
+		const inner = page.slice(
+			opening!.index + opening![0].length,
+			page.indexOf("</div></body>"),
+		);
+		assert.strictEqual(inner, contentHtml);
+	});
+
 	it("gives the shell elements suffix-free stable class names carried by the pushed styleCss", async () => {
 		// The shell (folder toolbar, #dragger, #techtreecontent wrapper) lives outside the swapped
 		// content, so its classes must be suffix-free style() names, not per-render oneTimeStyle ids,

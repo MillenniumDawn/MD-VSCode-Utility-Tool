@@ -1,4 +1,5 @@
-import { debounce, DebounceSettings } from "lodash";
+import debounce from "lodash/debounce";
+import type { DebounceSettings } from "lodash";
 
 export interface NumberSize {
 	width: number;
