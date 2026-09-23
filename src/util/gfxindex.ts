@@ -4,7 +4,7 @@ import { getSpriteTypes } from "../hoiformat/spritetype";
 import { gfxIndex } from "./featureflags";
 import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
-import { uniq } from "lodash";
+import uniq from "lodash/uniq";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions, ListFilesOptions } from "./fileloader";

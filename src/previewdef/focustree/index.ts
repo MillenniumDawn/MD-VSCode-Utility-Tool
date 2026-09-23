@@ -67,6 +67,22 @@ class FocusTreePreview extends UpdateablePreviewBase {
     private webviewReady: Promise<void> = Promise.resolve();
     private signalWebviewReady: () => void = () => {};
 
+    // useConditionInFocus changes what the schema reads and what the tree draws; sharedFocusIndex
+    // changes whether shared focuses resolve; inlayWindowGfxRoots changes which .gfx files the inlay
+    // windows scan; gfxIndex changes which icons resolve; localisationIndex and previewLocalisation
+    // change every label. inlayWindowGfxRoots had no listener at all, so fixing a missing inlay
+    // sprite did nothing until the file was edited or the preview reopened.
+    protected get reloadOnConfigurationChange(): readonly string[] {
+        return [
+            'useConditionInFocus',
+            'sharedFocusIndex',
+            'inlayWindowGfxRoots',
+            'gfxIndex',
+            'localisationIndex',
+            'previewLocalisation',
+        ];
+    }
+
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
         super(uri, panel);
         // Read from the live document so a parallel update clearing `this.content` can never
@@ -381,6 +397,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
 
 export const focusTreePreviewDef: PreviewProviderDef = {
     type: 'focustree',
+    displayName: () => localize('preview.type.focustree', 'Focus tree (common/national_focus/*.txt)'),
     canPreview: canPreviewFocusTree,
     previewConstructor: FocusTreePreview,
 };

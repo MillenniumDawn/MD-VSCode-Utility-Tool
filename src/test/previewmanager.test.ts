@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { PreviewManager } from "../previewdef/previewmanager";
 import { contextContainer } from "../context";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
+import { refreshFeatureFlags } from "../util/featureflags";
 
 // PreviewManager wires itself up through vscode.window.registerWebviewPanelSerializer and drives
 // panel disposal from vscode.workspace.WebviewPanelSerializer#deserializeWebviewPanel. Both were
@@ -250,6 +251,66 @@ describe("previewdef/previewmanager PreviewManager", function () {
 			await manager.showPreview(otherUri);
 
 			assert.strictEqual(shouldShow(), true);
+		});
+	});
+
+	// The message used to interpolate the provider ids, so the reader was told the valid types
+	// were "focustree, gfx, technology, ...". Issue #203.
+	describe("the message for a file nothing can preview", function () {
+		async function messageFor(text: string, configuration?: Record<string, unknown>) {
+			let shown: string | undefined;
+			const uri = vscode.Uri.file("/ws/notes.txt");
+			const document = {
+				uri,
+				isClosed: false,
+				getText: () => text,
+			} as unknown as vscode.TextDocument;
+			stubVscode({
+				textDocuments: [document],
+				showInformationMessage: async (message: string) => {
+					shown = message;
+					return undefined;
+				},
+				...(configuration ? { configuration } : {}),
+			});
+			if (configuration) {
+				refreshFeatureFlags();
+			}
+
+			const manager = new PreviewManager() as any;
+			await manager.showPreviewImpl(uri);
+			return shown;
+		}
+
+		afterEach(function () {
+			restoreVscodeStubs();
+			refreshFeatureFlags();
+		});
+
+		it("names the paths each preview recognises, not the internal ids", async function () {
+			const shown = await messageFor("nothing here matches a preview");
+
+			assert.ok(shown, "no message was shown");
+			assert.ok(
+				shown!.includes("common/national_focus"),
+				`the message does not name the focus tree path: ${shown}`,
+			);
+			assert.ok(
+				!/\bfocustree\b/.test(shown!),
+				`the message still shows the raw provider id: ${shown}`,
+			);
+		});
+
+		it("leaves out a preview whose feature flag is off", async function () {
+			const shown = await messageFor("nothing here matches a preview", {
+				ideaPreview: false,
+			});
+
+			assert.ok(shown, "no message was shown");
+			assert.ok(
+				!shown!.includes("common/ideas"),
+				`the message offers the ideas preview while it is off: ${shown}`,
+			);
 		});
 	});
 });

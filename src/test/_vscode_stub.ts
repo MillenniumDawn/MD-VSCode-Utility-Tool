@@ -282,9 +282,13 @@ const pristine = {
     openTextDocument: stub.workspace.openTextDocument,
     textDocuments: stub.workspace.textDocuments as unknown,
     showErrorMessage: stub.window.showErrorMessage,
+    showInformationMessage: stub.window.showInformationMessage,
     showWorkspaceFolderPick: stub.window.showWorkspaceFolderPick,
     createWebviewPanel: stub.window.createWebviewPanel,
     registerWebviewPanelSerializer: stub.window.registerWebviewPanelSerializer,
+    showOpenDialog: stub.window.showOpenDialog,
+    showQuickPick: stub.window.showQuickPick,
+    registerCommand: stub.commands.registerCommand,
     withProgress: stub.window.withProgress,
     now: Date.now,
 };
@@ -316,10 +320,20 @@ export interface VscodeStubOverrides {
     /** Replaces `workspace.textDocuments`, for suites driving `getDocumentByUri` lookups. */
     textDocuments?: readonly any[];
     showErrorMessage?: (...args: any[]) => Promise<any>;
+    showInformationMessage?: (...args: any[]) => Promise<any>;
     showWorkspaceFolderPick?: () => Promise<any>;
     createWebviewPanel?: (viewType: string, title: string, showOptions: any, options: any) => any;
     /** Captures the serializer a suite's `register()` call installs, e.g. to drive it directly. */
     registerWebviewPanelSerializer?: (viewType: string, serializer: any) => { dispose(): void };
+    /** Answers the folder or file picker, for suites driving a command that opens one. */
+    showOpenDialog?: (options?: any) => Promise<any>;
+    /** Answers a quick pick, for suites driving a command that asks one. */
+    showQuickPick?: (items: any, options?: any) => Promise<any>;
+    /**
+     * Captures the handler a suite's `register()` call installs, so a command that is otherwise
+     * only reachable through the palette can be invoked directly.
+     */
+    registerCommand?: (command: string, handler: (...args: any[]) => any) => { dispose(): void };
     /**
      * Drives an index build's progress notification: hand the task an already-cancelled token to
      * exercise cancellation, or capture what it reports.
@@ -393,6 +407,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.showErrorMessage !== undefined) {
         window.showErrorMessage = overrides.showErrorMessage;
     }
+    if (overrides.showInformationMessage !== undefined) {
+        window.showInformationMessage = overrides.showInformationMessage;
+    }
     if (overrides.showWorkspaceFolderPick !== undefined) {
         window.showWorkspaceFolderPick = overrides.showWorkspaceFolderPick;
     }
@@ -401,6 +418,15 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     }
     if (overrides.registerWebviewPanelSerializer !== undefined) {
         window.registerWebviewPanelSerializer = overrides.registerWebviewPanelSerializer;
+    }
+    if (overrides.showOpenDialog !== undefined) {
+        window.showOpenDialog = overrides.showOpenDialog;
+    }
+    if (overrides.showQuickPick !== undefined) {
+        window.showQuickPick = overrides.showQuickPick;
+    }
+    if (overrides.registerCommand !== undefined) {
+        (stub.commands as any).registerCommand = overrides.registerCommand;
     }
     if (overrides.withProgress !== undefined) {
         window.withProgress = overrides.withProgress;
@@ -431,9 +457,13 @@ export function restoreVscodeStubs(): void {
     workspace.openTextDocument = pristine.openTextDocument;
     workspace.textDocuments = pristine.textDocuments;
     window.showErrorMessage = pristine.showErrorMessage;
+    window.showInformationMessage = pristine.showInformationMessage;
     window.showWorkspaceFolderPick = pristine.showWorkspaceFolderPick;
     window.createWebviewPanel = pristine.createWebviewPanel;
     window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
+    window.showOpenDialog = pristine.showOpenDialog;
+    window.showQuickPick = pristine.showQuickPick;
+    (stub.commands as any).registerCommand = pristine.registerCommand;
     window.withProgress = pristine.withProgress;
     Date.now = pristine.now;
 }

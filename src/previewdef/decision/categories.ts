@@ -10,7 +10,7 @@ import {
 	LoadResult,
 	LoadResultOD,
 } from "../../util/loader/loader";
-import { flatten } from "lodash";
+import flatten from "lodash/flatten";
 
 // A decisions file names the categories its decisions belong to but never defines them: the tab's
 // icon, its sort order and whether the game draws it with a custom GUI all live in
