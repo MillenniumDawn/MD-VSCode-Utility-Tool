@@ -20,6 +20,7 @@ Unreleased
 - A preview no longer assembles its whole page for an edit that changes nothing on screen (a comment, whitespace) or that is applied in place; the page is only built when the panel needs to reload it, which matters most for a `.gfx` file whose textures are inlined. Issue #224.
 - After an edit, the technology, event, decision, idea, character, MIO and GFX previews decide whether anything changed without first serialising the whole preview a second time, so a large file responds sooner after each pause in typing. Issue #225.
 - Reading mod files is slightly faster: the parser no longer rebuilds its patterns or sets aside extra memory for every value it reads. Issue #227.
+- [ World Map Previewer ] The world map loads faster and with less memory churn: tracing province borders no longer creates millions of short-lived objects and text keys along the way. Issue #228.
 - You can now right-click a file in the explorer or the editor and choose **Preview HOI4 file**, or press `Ctrl+Shift+Alt+V`. Issue #203.
 - **Scan References** now shows how far it has got and can be cancelled, and says so when it fails instead of finishing silently. Issue #203.
 - A preview that fails to render now offers a Retry button, so a passing problem no longer leaves a dead page until you edit the file or reopen the preview. Issue #203.

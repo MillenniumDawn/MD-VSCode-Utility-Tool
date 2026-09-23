@@ -140,7 +140,7 @@ describe("util/localisationIndex duplicate cache invalidation", function () {
 			const paths = [...cacheStore.keys()];
 			if (
 				paths.some((path) =>
-					path.endsWith("localisationIndex.workspace.data.json"),
+					path.endsWith("localisationIndex.workspace.data.jsonl"),
 				) &&
 				paths.some((path) =>
 					path.endsWith("localisationIndex.workspace.manifest.json"),

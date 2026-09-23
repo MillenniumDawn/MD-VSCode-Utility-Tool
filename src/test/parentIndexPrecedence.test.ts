@@ -379,7 +379,7 @@ describe("ordered parent index precedence", function () {
 		);
 		assert.deepStrictEqual(
 			parentWrites.map((path) =>
-				path.endsWith(".data.json") ? "data" : "manifest",
+				path.endsWith(".data.jsonl") ? "data" : "manifest",
 			),
 			["data", "data", "manifest"],
 		);
