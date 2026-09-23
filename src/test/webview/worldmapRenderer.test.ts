@@ -247,7 +247,7 @@ function paintEdges(
 			provinceToStrategicRegion,
 			stateToSupplyArea,
 			renderedProvincesByOffset: { 0: [a, b] },
-			renderedProvinces: [a, b],
+			renderedProvincesById: { 1: a, 2: b },
 			preciseEdge: true,
 		}),
 		worldMap,
@@ -805,7 +805,7 @@ describe("webview/worldmap/provinceLayer edges", function () {
 			context({
 				viewPoint: identityViewPoint(),
 				renderedProvincesByOffset: { 0: [a, b] },
-				renderedProvinces: [a, b],
+				renderedProvincesById: { 1: a, 2: b },
 				preciseEdge: false,
 			}),
 			emptyMap({ provinces: [undefined, a, b], provincesCount: 3 }),
@@ -837,7 +837,7 @@ describe("webview/worldmap/provinceLayer edges", function () {
 			context({
 				viewPoint: identityViewPoint(),
 				renderedProvincesByOffset: { 0: [a, b] },
-				renderedProvinces: [a, b],
+				renderedProvincesById: { 1: a, 2: b },
 				preciseEdge: false,
 			}),
 			emptyMap({ provinces: [undefined, a, b], provincesCount: 3 }),
@@ -875,7 +875,7 @@ describe("webview/worldmap/provinceLayer edges", function () {
 			context({
 				viewPoint: identityViewPoint(),
 				renderedProvincesByOffset: { 0: [a, b] },
-				renderedProvinces: [a, b],
+				renderedProvincesById: { 1: a, 2: b },
 				preciseEdge: true,
 			}),
 			emptyMap({ provinces: [undefined, a, b], provincesCount: 3 }),
@@ -883,6 +883,32 @@ describe("webview/worldmap/provinceLayer edges", function () {
 			0,
 		);
 		assert.ok(drewStroke(calls, "red", 0, 1, 4, 1));
+	});
+
+	it("aims an adjacency with no stop at the nearest border of its target province", function () {
+		const a = province({
+			id: 1,
+			edges: [{ to: 3, type: "", path: [[{ x: 6, y: 1 }]] } as any],
+		});
+		const b = province({
+			id: 2,
+			edges: [
+				{ to: 1, type: "", path: [], start: { x: 0, y: 1 } } as any,
+			],
+		});
+		const { canvasContext, calls } = recordingContext();
+		renderAllEdges(
+			context({
+				viewPoint: identityViewPoint(),
+				renderedProvincesByOffset: { 0: [b] },
+				renderedProvincesById: { 1: a, 2: b },
+				preciseEdge: true,
+			}),
+			emptyMap({ provinces: [undefined, a, b], provincesCount: 3 }),
+			canvasContext,
+			0,
+		);
+		assert.ok(drewStroke(calls, "red", 0, 1, 6, 1));
 	});
 });
 
