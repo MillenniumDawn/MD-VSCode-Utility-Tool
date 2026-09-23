@@ -1,10 +1,16 @@
-import { Province, State, StrategicRegion, SupplyArea } from "./definitions";
+import {
+	Province,
+	River,
+	State,
+	StrategicRegion,
+	SupplyArea,
+} from "./definitions";
 import { FEWorldMap } from "./loader";
 import { ViewPoint } from "./viewpoint";
 import { TopBar, topBarHeight } from "./topbar";
 import { feLocalize } from "../util/i18n";
-import { chain, max } from "lodash";
-import { toColor, waterWarning } from "./colors";
+import max from "lodash/max";
+import { waterWarning } from "./colors";
 import {
 	isMouseHighlightVisible,
 	isTooltipVisible,
@@ -32,13 +38,10 @@ export function renderSupplyRelated(
 	xOffset: number,
 ): void {
 	const { renderedProvincesById, viewPoint } = renderContext;
+	const visible = Object.values(renderedProvincesById);
 
 	context.strokeStyle = "rgb(200, 0, 0)";
-	worldMap.forEachRailway((railway) => {
-		if (railway.provinces.every((id) => !renderedProvincesById[id])) {
-			return;
-		}
-
+	worldMap.forEachRailwayTouching(visible, (railway) => {
 		context.beginPath();
 		context.lineWidth = Math.min(10, 2 * railway.level);
 		let hasProvince = false;
@@ -69,14 +72,13 @@ export function renderSupplyRelated(
 
 	context.fillStyle = "rgb(200, 0, 0)";
 	const size = Math.min(30, viewPoint.scale * 10);
-	worldMap.forEachSupplyNode((supplyNode) => {
-		const province = renderedProvincesById[supplyNode.province];
-		if (province) {
+	for (const province of visible) {
+		if (worldMap.getSupplyNodeByProvinceId(province.id) !== undefined) {
 			const x = viewPoint.convertX(province.centerOfMass.x + xOffset);
 			const y = viewPoint.convertY(province.centerOfMass.y);
 			context.fillRect(x - size / 2, y - size / 2, size, size);
 		}
-	});
+	}
 }
 
 export function renderRivers(
@@ -90,23 +92,10 @@ export function renderRivers(
 		topBar.colorSet$.value === "warnings" &&
 		topBar.warningFilter.selectedValues$.value.includes("river");
 
-	const riverColors: string[] = [
-		"rgb(0, 255, 0)",
-		"rgb(255, 0, 0)",
-		"rgb(255, 252, 0)",
-		"rgb(0, 225, 255)",
-		"rgb(0, 200, 255)",
-		"rgb(0, 150, 255)",
-		"rgb(0, 100, 255)",
-		"rgb(0, 0, 255)",
-		"rgb(0, 0, 255)",
-		"rgb(0, 0, 200)",
-		"rgb(0, 0, 150)",
-		"rgb(0, 0, 100)",
-	];
-
-	const warningColor = toColor(waterWarning);
-
+	// Nearest-neighbour when magnifying keeps each river pixel a crisp square; smoothing when
+	// shrinking blends thin rivers in rather than dropping pixels.
+	const imageSmoothingEnabled = context.imageSmoothingEnabled;
+	context.imageSmoothingEnabled = viewPoint.scale < 1;
 	for (let i = 0; i < worldMap.rivers.length; i++) {
 		const river = worldMap.rivers[i];
 		if (
@@ -116,24 +105,99 @@ export function renderRivers(
 			continue;
 		}
 
-		const hasWarning = showRiverWarning && worldMap.hasRiverWarnings(i);
-		for (const key in river.colors) {
-			const index = parseInt(key, 10);
-			const x = (index % river.boundingBox.w) + river.boundingBox.x;
-			const y = Math.floor(index / river.boundingBox.w) + river.boundingBox.y;
-			const color = river.colors[key] ?? 0;
-			context.fillStyle =
-				hasWarning && color >= 3
-					? warningColor
-					: (riverColors[color] ?? riverColors[0] ?? warningColor);
-			context.fillRect(
-				viewPoint.convertX(x + xOffset),
-				viewPoint.convertY(y),
-				viewPoint.scale,
-				viewPoint.scale,
-			);
+		const image = getRiverImage(
+			river,
+			showRiverWarning && worldMap.hasRiverWarnings(i),
+		);
+		if (!image) {
+			continue;
 		}
+
+		const { x, y, w, h } = river.boundingBox;
+		context.drawImage(
+			image,
+			viewPoint.convertX(x + xOffset),
+			viewPoint.convertY(y),
+			w * viewPoint.scale,
+			h * viewPoint.scale,
+		);
 	}
+	context.imageSmoothingEnabled = imageSmoothingEnabled;
+}
+
+const riverColors = [
+	0x00ff00, 0xff0000, 0xfffc00, 0x00e1ff, 0x00c8ff, 0x0096ff, 0x0064ff,
+	0x0000ff, 0x0000ff, 0x0000c8, 0x000096, 0x000064,
+];
+
+const riverImages = new WeakMap<
+	River,
+	{ plain?: HTMLCanvasElement | null; warned?: HTMLCanvasElement | null }
+>();
+
+/**
+ * The river's pixels as RGBA over its bounding box. `River.colors` is keyed by the bounding-box
+ * row-major index, which is the pixel index of the image as it stands.
+ */
+export function riverPixels(river: River, warned: boolean): Uint8ClampedArray {
+	const { w, h } = river.boundingBox;
+	const pixels = new Uint8ClampedArray(w * h * 4);
+	for (const key in river.colors) {
+		const index = parseInt(key, 10);
+		if (!(index >= 0 && index < w * h)) {
+			continue;
+		}
+		const color = river.colors[key] ?? 0;
+		const rgb =
+			warned && color >= 3
+				? waterWarning
+				: (riverColors[color] ?? riverColors[0] ?? waterWarning);
+		const offset = index * 4;
+		pixels[offset] = (rgb >> 16) & 0xff;
+		pixels[offset + 1] = (rgb >> 8) & 0xff;
+		pixels[offset + 2] = rgb & 0xff;
+		pixels[offset + 3] = 255;
+	}
+	return pixels;
+}
+
+function getRiverImage(
+	river: River,
+	warned: boolean,
+): HTMLCanvasElement | null {
+	let images = riverImages.get(river);
+	if (!images) {
+		images = {};
+		riverImages.set(river, images);
+	}
+	const variant = warned ? "warned" : "plain";
+	let image = images[variant];
+	if (image === undefined) {
+		image = createRiverImage(river, warned);
+		images[variant] = image;
+	}
+	return image;
+}
+
+function createRiverImage(
+	river: River,
+	warned: boolean,
+): HTMLCanvasElement | null {
+	const { w, h } = river.boundingBox;
+	if (w <= 0 || h <= 0) {
+		return null;
+	}
+	const canvas = document.createElement("canvas");
+	canvas.width = w;
+	canvas.height = h;
+	const context = canvas.getContext("2d");
+	if (!context) {
+		return null;
+	}
+	const imageData = context.createImageData(w, h);
+	imageData.data.set(riverPixels(river, warned));
+	context.putImageData(imageData, 0, 0);
+	return canvas;
 }
 
 export function renderHoverSelectionByViewMode(session: OverlaySession) {
@@ -396,26 +460,12 @@ function renderSupplyAreaHoverSelection(
 	const hover = worldMap.getSupplyAreaById(
 		session.topBar.hoverSupplyAreaId$.value,
 	);
-	const selected = worldMap.getSupplyAreaById(
-		session.topBar.selectedSupplyAreaId$.value,
-	);
-	const toProvinces = (supplyArea: SupplyArea | undefined) => {
-		return supplyArea
-			? {
-					provinces: chain(supplyArea.states)
-						.map((stateId) => worldMap.getStateById(stateId)?.provinces)
-						.filter((v): v is number[] => !!v)
-						.flatten()
-						.value(),
-				}
-			: undefined;
-	};
 
 	renderHoverSelection(
 		session,
 		worldMap,
-		toProvinces(hover),
-		toProvinces(selected),
+		worldMap.getSupplyAreaProvinces(session.topBar.hoverSupplyAreaId$.value),
+		worldMap.getSupplyAreaProvinces(session.topBar.selectedSupplyAreaId$.value),
 	);
 	hover &&
 		isTooltipVisible(session.topBar) &&
@@ -534,32 +584,12 @@ ${worldMap
 	);
 }
 
-function renderTooltip(
-	session: OverlaySession,
-	tooltip: string,
-	sizeCallback?: (
-		width: number,
-		height: number,
-	) => { width: number; height: number },
-	renderCallback?: (x: number, y: number) => void,
-) {
-	const backCanvasContext = session.backCanvasContext;
-	const cursorX = session.cursorX;
-	const cursorY = session.cursorY;
-
-	let mapX = session.viewPoint.convertBackX(cursorX);
-	if (session.worldMap.width > 0 && mapX >= session.worldMap.width) {
-		mapX -= session.worldMap.width;
-	}
-	const mapY = session.viewPoint.convertBackY(cursorY);
-
-	tooltip =
-		`(${mapX}, ${mapY})\nX=${mapX}, Z=${session.worldMap.height - 1 - mapY}\n` +
-		tooltip;
-
+// Splits a tooltip into rendered lines, carrying a |r| colour prefix onto every wrapped piece of
+// the line that opened it.
+function wrapTooltip(tooltip: string): string[] {
 	const colorPrefix = /^\|r\|/;
 	const regex = /(\n)|((?:\|r\|)?(?:.{40,59}[, ]|.{60}))/g;
-	const text = tooltip
+	return tooltip
 		.trim()
 		.split(regex)
 		.map((v, i, a) => {
@@ -579,6 +609,49 @@ function renderTooltip(
 			return v;
 		})
 		.filter((v): v is string => v !== undefined && v.trim() !== "");
+}
+
+// One entry is enough: the tooltip body only changes when the pointer moves onto something else,
+// and the font is the same on every call, so a cached measurement stays valid.
+let tooltipBodyLayout:
+	| { body: string; lines: string[]; width: number }
+	| undefined = undefined;
+
+function layoutTooltipBody(
+	context: CanvasRenderingContext2D,
+	body: string,
+): { body: string; lines: string[]; width: number } {
+	if (tooltipBodyLayout?.body === body) {
+		return tooltipBodyLayout;
+	}
+
+	const lines = wrapTooltip(body);
+	tooltipBodyLayout = {
+		body,
+		lines,
+		width: max(lines.map((t) => context.measureText(t).width)) ?? 0,
+	};
+	return tooltipBodyLayout;
+}
+
+function renderTooltip(
+	session: OverlaySession,
+	tooltip: string,
+	sizeCallback?: (
+		width: number,
+		height: number,
+	) => { width: number; height: number },
+	renderCallback?: (x: number, y: number) => void,
+) {
+	const backCanvasContext = session.backCanvasContext;
+	const cursorX = session.cursorX;
+	const cursorY = session.cursorY;
+
+	let mapX = session.viewPoint.convertBackX(cursorX);
+	if (session.worldMap.width > 0 && mapX >= session.worldMap.width) {
+		mapX -= session.worldMap.width;
+	}
+	const mapY = session.viewPoint.convertBackY(cursorY);
 
 	const fontSize = 14;
 	let toolTipOffsetX = 10;
@@ -589,7 +662,20 @@ function renderTooltip(
 
 	backCanvasContext.font = `${fontSize}px sans-serif`;
 	backCanvasContext.textAlign = "start";
-	let width = max(text.map((t) => backCanvasContext.measureText(t).width)) ?? 0;
+
+	// Only the first two lines carry the cursor, so only they have to be laid out again on a
+	// mousemove. The body -- the long part, and the part a big state or supply area makes longer
+	// still -- is wrapped and measured once and reused until the hovered thing changes.
+	const headerLines = wrapTooltip(
+		`(${mapX}, ${mapY})\nX=${mapX}, Z=${session.worldMap.height - 1 - mapY}`,
+	);
+	const body = layoutTooltipBody(backCanvasContext, tooltip);
+	const text = headerLines.concat(body.lines);
+
+	let width = Math.max(
+		body.width,
+		max(headerLines.map((t) => backCanvasContext.measureText(t).width)) ?? 0,
+	);
 	let height = fontSize * text.length + linePadding * (text.length - 1);
 
 	if (cursorX + toolTipOffsetX + width + 2 * marginX > session.canvasWidth) {

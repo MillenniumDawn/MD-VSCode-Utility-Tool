@@ -1,17 +1,10 @@
-import { canvasCalls } from "./setup";
+import { canvasCalls, resetWebviewState } from "./setup";
 import * as assert from "assert";
 import { vscode } from "../../../webviewsrc/util/vscode";
 
 type Listener = (event: Event) => unknown;
 type CapturedListeners = Record<string, Listener[]>;
 type Entrypoint = "gfx" | "techtree" | "guipreview" | "worldmap";
-
-function clearState(): void {
-	const state = vscode.getState() as Record<string, unknown>;
-	for (const key of Object.keys(state)) {
-		delete state[key];
-	}
-}
 
 function captureEntrypoint(name: Entrypoint): CapturedListeners {
 	const captured: CapturedListeners = {};
@@ -307,7 +300,7 @@ function reloadCardEntrypoint(name: CardEntrypoint): void {
 	});
 }
 
-clearState();
+resetWebviewState();
 const gfx = captureEntrypoint("gfx");
 const techtree = captureEntrypoint("techtree");
 const guipreview = captureEntrypoint("guipreview");
@@ -315,7 +308,7 @@ const worldmap = captureEntrypoint("worldmap");
 
 describe("webview entrypoints", () => {
 	beforeEach(() => {
-		clearState();
+		resetWebviewState();
 		document.body.replaceChildren();
 	});
 
@@ -629,7 +622,7 @@ describe("webview entrypoints", () => {
 
 describe("webview card entrypoints", () => {
 	beforeEach(() => {
-		clearState();
+		resetWebviewState();
 		document.body.replaceChildren();
 	});
 

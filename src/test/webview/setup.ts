@@ -18,15 +18,27 @@ export function takePostedMessages(): any[] {
     return postedMessages.splice(0, postedMessages.length);
 }
 
-// Mock acquireVsCodeApi for webview tests
+// Mock acquireVsCodeApi for webview tests. The real `setState` replaces the persisted state
+// wholesale, so this one does too. The object lives for the whole mocha run, so a test that needs
+// a clean slate calls `resetWebviewState()` rather than relying on an earlier file to clear it.
 const state: Record<string, any> = {};
+
+export function resetWebviewState(): void {
+    for (const key of Object.keys(state)) {
+        delete state[key];
+    }
+}
+
 (global as any).acquireVsCodeApi = () => ({
     postMessage: (message: any) => {
         postedMessages.push(message);
     },
     getState: () => state,
     setState: (s: Record<string, any>) => {
-        Object.assign(state, s);
+        // Copied first: the webview's own setState hands back the object getState returned.
+        const next = { ...s };
+        resetWebviewState();
+        Object.assign(state, next);
     },
     // end of acquireVsCodeApi mock (no ts-expect-error)
 });
@@ -50,6 +62,7 @@ export interface CanvasCall {
     strokeStyle: string;
     lineWidth: number;
     font: string;
+    imageSmoothingEnabled: boolean;
 }
 
 const recordedCanvasMethods = [
@@ -67,6 +80,7 @@ export function recordingCanvasContext(): { canvasContext: any; calls: CanvasCal
         textBaseline: '',
         lineWidth: 0,
         globalAlpha: 1,
+        imageSmoothingEnabled: true,
         measureText: () => ({ width: 0 }),
         createImageData: (width: number, height: number) => ({
             width,
@@ -83,6 +97,7 @@ export function recordingCanvasContext(): { canvasContext: any; calls: CanvasCal
                 strokeStyle: canvasContext.strokeStyle,
                 lineWidth: canvasContext.lineWidth,
                 font: canvasContext.font,
+                imageSmoothingEnabled: canvasContext.imageSmoothingEnabled,
             });
         };
     }

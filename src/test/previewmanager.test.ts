@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { PreviewManager } from "../previewdef/previewmanager";
 import { contextContainer } from "../context";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
+import { refreshFeatureFlags } from "../util/featureflags";
 
 // PreviewManager wires itself up through vscode.window.registerWebviewPanelSerializer and drives
 // panel disposal from vscode.workspace.WebviewPanelSerializer#deserializeWebviewPanel. Both were
@@ -162,6 +163,154 @@ describe("previewdef/previewmanager PreviewManager", function () {
 
 			manager.removePreviewFromSubscription(second);
 			assert.strictEqual(subscriptions.size, 0);
+		});
+	});
+
+	// Event, technology, idea and decision previews are chosen from what the file says, not where it
+	// lives, so the Preview button has to follow edits as well as editor switches.
+	describe("preview context keys", function () {
+		const activeUri = vscode.Uri.parse("file:///mod/common/scratch.txt");
+		const otherUri = vscode.Uri.parse("file:///mod/common/other.txt");
+
+		function textDocument(uri: vscode.Uri, text: string) {
+			const document = { uri, text, getText: () => document.text };
+			return document;
+		}
+
+		function contentProvider() {
+			return {
+				type: "event",
+				canPreview: (document: { getText(): string }) => document.getText().includes("country_event") ? 0 : undefined,
+				previewConstructor: fakeProvider().previewConstructor,
+			};
+		}
+
+		function shouldShow(): unknown {
+			return contextContainer.contextValue.shouldShowMdHoi4Preview;
+		}
+
+		let active: ReturnType<typeof textDocument>;
+		let other: ReturnType<typeof textDocument>;
+		let onChange: ((e: unknown) => void) | undefined;
+		let manager: any;
+		let subscription: vscode.Disposable;
+
+		beforeEach(function () {
+			active = textDocument(activeUri, "");
+			other = textDocument(otherUri, "");
+			onChange = undefined;
+			stubVscode({
+				activeTextEditor: { document: active },
+				textDocuments: [active, other],
+				onDidChangeTextDocument: (handler: any, thisArg?: any) => {
+					onChange = (e) => handler.call(thisArg, e);
+					return { dispose() {} };
+				},
+			});
+			manager = new PreviewManager();
+			manager._previewProviders = [contentProvider()];
+			subscription = manager.register();
+		});
+
+		afterEach(function () {
+			subscription.dispose();
+		});
+
+		function edit(document: ReturnType<typeof textDocument>, text: string): void {
+			document.text = text;
+			onChange?.({ document, contentChanges: [{ text }] });
+			manager.refreshActiveEditorContext.flush();
+		}
+
+		it("shows the button once previewable content is typed into the active editor", function () {
+			assert.strictEqual(shouldShow(), false);
+
+			edit(active, "country_event = { id = x.1 }");
+
+			assert.strictEqual(shouldShow(), true);
+			assert.strictEqual(contextContainer.contextValue.mdHoi4PreviewType, "event");
+		});
+
+		it("hides the button again once that content is deleted", function () {
+			edit(active, "country_event = { id = x.1 }");
+			edit(active, "");
+
+			assert.strictEqual(shouldShow(), false);
+			assert.strictEqual(contextContainer.contextValue.mdHoi4PreviewType, "");
+		});
+
+		it("ignores edits to a document that is not in the active editor", function () {
+			edit(other, "country_event = { id = x.1 }");
+
+			assert.strictEqual(shouldShow(), false);
+		});
+
+		it("keeps the active editor's button when a preview is refused for another file", async function () {
+			edit(active, "country_event = { id = x.1 }");
+
+			await manager.showPreview(otherUri);
+
+			assert.strictEqual(shouldShow(), true);
+		});
+	});
+
+	// The message used to interpolate the provider ids, so the reader was told the valid types
+	// were "focustree, gfx, technology, ...". Issue #203.
+	describe("the message for a file nothing can preview", function () {
+		async function messageFor(text: string, configuration?: Record<string, unknown>) {
+			let shown: string | undefined;
+			const uri = vscode.Uri.file("/ws/notes.txt");
+			const document = {
+				uri,
+				isClosed: false,
+				getText: () => text,
+			} as unknown as vscode.TextDocument;
+			stubVscode({
+				textDocuments: [document],
+				showInformationMessage: async (message: string) => {
+					shown = message;
+					return undefined;
+				},
+				...(configuration ? { configuration } : {}),
+			});
+			if (configuration) {
+				refreshFeatureFlags();
+			}
+
+			const manager = new PreviewManager() as any;
+			await manager.showPreviewImpl(uri);
+			return shown;
+		}
+
+		afterEach(function () {
+			restoreVscodeStubs();
+			refreshFeatureFlags();
+		});
+
+		it("names the paths each preview recognises, not the internal ids", async function () {
+			const shown = await messageFor("nothing here matches a preview");
+
+			assert.ok(shown, "no message was shown");
+			assert.ok(
+				shown!.includes("common/national_focus"),
+				`the message does not name the focus tree path: ${shown}`,
+			);
+			assert.ok(
+				!/\bfocustree\b/.test(shown!),
+				`the message still shows the raw provider id: ${shown}`,
+			);
+		});
+
+		it("leaves out a preview whose feature flag is off", async function () {
+			const shown = await messageFor("nothing here matches a preview", {
+				ideaPreview: false,
+			});
+
+			assert.ok(shown, "no message was shown");
+			assert.ok(
+				!shown!.includes("common/ideas"),
+				`the message offers the ideas preview while it is off: ${shown}`,
+			);
 		});
 	});
 });

@@ -8,7 +8,8 @@ import {
 } from "../../util/loader/loader";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
-import { uniq, flatten } from "lodash";
+import uniq from "lodash/uniq";
+import flatten from "lodash/flatten";
 import { getGfxContainerFiles } from "../../util/gfxindex";
 import { getLanguageIdInYml } from "../../util/vsccommon";
 import {
