@@ -1,4 +1,4 @@
-import "./setup";
+import { canvasCalls, recordingCanvasContext, takeCanvasCalls } from "./setup";
 import * as assert from "assert";
 import { Province, State } from "../../previewdef/worldmap/definitions";
 import { FEWorldMapClass } from "../../../webviewsrc/worldmap/loader";
@@ -31,7 +31,13 @@ import {
 	renderSupplyRelated,
 	riverPixels,
 } from "../../../webviewsrc/worldmap/overlayLayer";
-import { Renderer } from "../../../webviewsrc/worldmap/renderer";
+import {
+	mapRenderOptions,
+	mapRenderState,
+	Renderer,
+	sameMapState,
+} from "../../../webviewsrc/worldmap/renderer";
+import { BehaviorSubject } from "rxjs";
 import { TopBar, topBarHeight, warningsText } from "../../../webviewsrc/worldmap/topbar";
 import { ViewPoint } from "../../../webviewsrc/worldmap/viewpoint";
 
@@ -107,64 +113,6 @@ function displayBar(selected: string[], viewMode = "province") {
 	} as unknown as TopBar;
 }
 
-function recordingContext() {
-	const calls: {
-		method: string;
-		fillStyle: string;
-		strokeStyle: string;
-		lineWidth: number;
-		imageSmoothingEnabled: boolean;
-		args: unknown[];
-	}[] = [];
-	const canvasContext: any = {
-		fillStyle: "",
-		strokeStyle: "",
-		font: "",
-		textAlign: "",
-		textBaseline: "",
-		lineWidth: 0,
-		fillRect(...args: unknown[]) {
-			calls.push(record("fillRect", args));
-		},
-		beginPath() {
-			calls.push(record("beginPath", []));
-		},
-		moveTo(...args: unknown[]) {
-			calls.push(record("moveTo", args));
-		},
-		lineTo(...args: unknown[]) {
-			calls.push(record("lineTo", args));
-		},
-		stroke() {
-			calls.push(record("stroke", []));
-		},
-		fillText(...args: unknown[]) {
-			calls.push(record("fillText", args));
-		},
-		strokeRect(...args: unknown[]) {
-			calls.push(record("strokeRect", args));
-		},
-		measureText() {
-			return { width: 0 };
-		},
-		imageSmoothingEnabled: true,
-		drawImage(...args: unknown[]) {
-			calls.push(record("drawImage", args));
-		},
-	};
-	function record(method: string, args: unknown[]) {
-		return {
-			method,
-			fillStyle: canvasContext.fillStyle,
-			strokeStyle: canvasContext.strokeStyle,
-			lineWidth: canvasContext.lineWidth,
-			imageSmoothingEnabled: canvasContext.imageSmoothingEnabled as boolean,
-			args,
-		};
-	}
-	return { canvasContext, calls };
-}
-
 function identityViewPoint(): ViewPoint {
 	return {
 		scale: 1,
@@ -236,7 +184,7 @@ function paintEdges(
 	path?: { x: number; y: number }[][],
 ) {
 	const { a, b } = sharedEdge(edgeType, path);
-	const { canvasContext, calls } = recordingContext();
+	const { canvasContext, calls } = recordingCanvasContext();
 	const worldMap = emptyMap({
 		provinces: [undefined, a, b],
 		provincesCount: 3,
@@ -478,7 +426,7 @@ describe("webview/worldmap/stateLayer", function () {
 
 	it("writes each province id in province view", function () {
 		const p = province({ id: 1, centerOfMass: { x: 1, y: 1 } });
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderMapLabels(
 			context({
 				viewPoint: identityViewPoint(),
@@ -502,7 +450,7 @@ describe("webview/worldmap/stateLayer", function () {
 	it("writes a state id once for every province in that state", function () {
 		const p1 = province({ id: 1 });
 		const p2 = province({ id: 2 });
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderMapLabels(
 			context({
 				viewPoint: identityViewPoint(),
@@ -641,11 +589,6 @@ describe("webview/worldmap/ViewPoint", function () {
 
 describe("webview/worldmap/Renderer.renderMapImpl", function () {
 	it("fills each in-view province with its colour", function () {
-		const { canvasContext, calls } = recordingContext();
-		const canvasPrototype = (window as any).HTMLCanvasElement.prototype;
-		const originalGetContext = canvasPrototype.getContext;
-		canvasPrototype.getContext = () => canvasContext;
-
 		const canvas = document.createElement("canvas");
 		canvas.width = 8;
 		canvas.height = 8;
@@ -667,23 +610,17 @@ describe("webview/worldmap/Renderer.renderMapImpl", function () {
 			warningFilter: { selectedValues$: { value: [] } },
 			display: { selectedValues$: { value: [] } },
 		} as unknown as TopBar;
-		const viewPoint = {
-			scale: 1,
-			bboxInView: (_box: unknown, xOffset: number) => xOffset === 0,
-			lineInView: () => false,
-			convertX: (x: number) => x,
-			convertY: (y: number) => y,
-		} as unknown as ViewPoint;
 
-		try {
-			Renderer.renderMapImpl(canvas, topBar, viewPoint, worldMap, {
-				preciseEdge: true,
-				overwriteRenderPrecision: 1,
-			});
-		} finally {
-			canvasPrototype.getContext = originalGetContext;
-		}
+		Renderer.renderMapImpl(canvas, topBar, identityViewPoint(), worldMap, {
+			preciseEdge: true,
+			overwriteRenderPrecision: 1,
+		});
 
+		const calls = canvasCalls(canvas);
+		assert.deepStrictEqual(
+			{ method: calls[0]?.method, fillStyle: calls[0]?.fillStyle, args: calls[0]?.args },
+			{ method: "fillRect", fillStyle: "black", args: [0, 0, 8, 8] },
+		);
 		const provinceFill = calls.find(
 			(call) =>
 				call.method === "fillRect" &&
@@ -698,33 +635,305 @@ describe("webview/worldmap/Renderer.renderMapImpl", function () {
 
 	it("strokes edges when the display list includes edge", function () {
 		const { a, b } = sharedEdge();
-		const { canvasContext, calls } = recordingContext();
-		const canvasPrototype = (window as any).HTMLCanvasElement.prototype;
-		const originalGetContext = canvasPrototype.getContext;
-		canvasPrototype.getContext = () => canvasContext;
 		const canvas = document.createElement("canvas");
 		canvas.width = 8;
 		canvas.height = 8;
-		try {
-			Renderer.renderMapImpl(
-				canvas,
-				{
-					viewMode$: { value: "province" },
-					colorSet$: { value: "provinceid" },
-					warningFilter: { selectedValues$: { value: [] } },
-					display: { selectedValues$: { value: ["edge"] } },
-				} as unknown as TopBar,
-				identityViewPoint(),
-				emptyMap({
-					provinces: [undefined, a, b],
-					provincesCount: 3,
-				}),
-				{ preciseEdge: true, overwriteRenderPrecision: 1 },
-			);
-		} finally {
-			canvasPrototype.getContext = originalGetContext;
+		Renderer.renderMapImpl(
+			canvas,
+			{
+				viewMode$: { value: "province" },
+				colorSet$: { value: "provinceid" },
+				warningFilter: { selectedValues$: { value: [] } },
+				display: { selectedValues$: { value: ["edge"] } },
+			} as unknown as TopBar,
+			identityViewPoint(),
+			emptyMap({
+				provinces: [undefined, a, b],
+				provincesCount: 3,
+			}),
+			{ preciseEdge: true, overwriteRenderPrecision: 1 },
+		);
+		assert.ok(drewStroke(canvasCalls(canvas), "black", 2, 0, 2, 2));
+	});
+});
+
+function subjectTopBar() {
+	const subject = <T>(value: T) => new BehaviorSubject<T>(value);
+	return {
+		viewMode$: subject("province"),
+		colorSet$: subject("provinceid"),
+		hoverProvinceId$: subject<number | undefined>(undefined),
+		selectedProvinceId$: subject<number | undefined>(undefined),
+		hoverStateId$: subject<number | undefined>(undefined),
+		selectedStateId$: subject<number | undefined>(undefined),
+		hoverStrategicRegionId$: subject<number | undefined>(undefined),
+		selectedStrategicRegionId$: subject<number | undefined>(undefined),
+		hoverSupplyAreaId$: subject<number | undefined>(undefined),
+		selectedSupplyAreaId$: subject<number | undefined>(undefined),
+		warningFilter: { selectedValues$: subject<string[]>([]) },
+		display: { selectedValues$: subject<string[]>([]) },
+	};
+}
+
+function jsonViewPoint(json = { x: 0, y: 0, scale: 1 }): ViewPoint {
+	return {
+		...identityViewPoint(),
+		...json,
+		observable$: new BehaviorSubject(json),
+		toJson: () => json,
+	} as unknown as ViewPoint;
+}
+
+describe("webview/worldmap/renderer map state", function () {
+	const base = () =>
+		mapRenderState(
+			emptyMap(),
+			100,
+			50,
+			subjectTopBar() as unknown as TopBar,
+			jsonViewPoint(),
+		);
+
+	it("reads the display list into one flag per layer", function () {
+		const topBar = subjectTopBar();
+		topBar.display.selectedValues$.next(["edge", "river", "fastrending"]);
+		const state = mapRenderState(
+			emptyMap(),
+			100,
+			50,
+			topBar as unknown as TopBar,
+			jsonViewPoint({ x: 3, y: 4, scale: 2 }),
+		);
+		assert.deepStrictEqual(
+			{ ...state, worldMap: undefined, warningFilter: undefined },
+			{
+				worldMap: undefined,
+				canvasWidth: 100,
+				canvasHeight: 50,
+				viewMode: "province",
+				colorSet: "provinceid",
+				warningFilter: undefined,
+				edgeVisible: true,
+				labelVisible: false,
+				adaptZooming: false,
+				fastRendering: true,
+				supplyVisible: false,
+				riverVisible: true,
+				x: 3,
+				y: 4,
+				scale: 2,
+			},
+		);
+	});
+
+	it("always draws the first frame", function () {
+		assert.strictEqual(sameMapState(undefined, base()), false);
+	});
+
+	it("skips a redraw when nothing the map depends on changed", function () {
+		const state = base();
+		assert.strictEqual(sameMapState(state, { ...state }), true);
+	});
+
+	const changes: [string, Record<string, unknown>][] = [
+		["world map", { worldMap: emptyMap() }],
+		["canvas width", { canvasWidth: 101 }],
+		["canvas height", { canvasHeight: 51 }],
+		["view mode", { viewMode: "state" }],
+		["colour set", { colorSet: "terrain" }],
+		["warning filter", { warningFilter: ["province"] }],
+		["edge flag", { edgeVisible: true }],
+		["label flag", { labelVisible: true }],
+		["adapt-zooming flag", { adaptZooming: true }],
+		["fast-rendering flag", { fastRendering: true }],
+		["supply flag", { supplyVisible: true }],
+		["river flag", { riverVisible: true }],
+		["x", { x: 1 }],
+		["y", { y: 1 }],
+		["scale", { scale: 2 }],
+	];
+	for (const [name, change] of changes) {
+		it(`redraws when the ${name} changes`, function () {
+			const state = base();
+			assert.strictEqual(sameMapState(state, { ...state, ...change }), false);
+		});
+	}
+
+	it("draws edges precisely unless fast rendering is on", function () {
+		assert.deepStrictEqual(mapRenderOptions(true), {});
+		assert.deepStrictEqual(mapRenderOptions(false), {
+			preciseEdge: true,
+			overwriteRenderPrecision: 1,
+		});
+	});
+});
+
+describe("webview/worldmap/Renderer", function () {
+	let frames: (() => void)[] = [];
+	let originalRequestAnimationFrame: unknown;
+	let renderer: Renderer | undefined;
+
+	beforeEach(function () {
+		frames = [];
+		originalRequestAnimationFrame = (globalThis as any).requestAnimationFrame;
+		(globalThis as any).requestAnimationFrame = (callback: () => void) => {
+			frames.push(callback);
+			return frames.length;
+		};
+	});
+
+	afterEach(function () {
+		renderer?.dispose();
+		renderer = undefined;
+		(globalThis as any).requestAnimationFrame = originalRequestAnimationFrame;
+	});
+
+	function flushFrames() {
+		const pending = frames;
+		frames = [];
+		pending.forEach((callback) => callback());
+	}
+
+	function setup() {
+		const worldMap = emptyMap();
+		const loader = {
+			worldMap,
+			worldMap$: new BehaviorSubject(worldMap),
+			progress$: new BehaviorSubject(0),
+			loading$: new BehaviorSubject(false),
+			progress: 0,
+			progressText: "",
+		};
+		const topBar = subjectTopBar();
+		const mainCanvas = document.createElement("canvas");
+		renderer = new Renderer(
+			mainCanvas,
+			jsonViewPoint(),
+			loader as any,
+			topBar as any,
+		);
+		flushFrames();
+		const backCanvas: HTMLCanvasElement = (renderer as any).backCanvas;
+		const mapCanvas: HTMLCanvasElement = (renderer as any).mapCanvas;
+		for (const canvas of [mainCanvas, backCanvas, mapCanvas]) {
+			takeCanvasCalls(canvas);
 		}
-		assert.ok(drewStroke(calls, "black", 2, 0, 2, 2));
+		return { renderer, loader, topBar, mainCanvas, backCanvas, mapCanvas };
+	}
+
+	it("clears the back buffer, lays the map on it, then copies it to the screen", function () {
+		const { renderer, mainCanvas, backCanvas, mapCanvas } = setup();
+		renderer.renderCanvas();
+
+		const back = canvasCalls(backCanvas);
+		assert.deepStrictEqual(
+			{ method: back[0]?.method, fillStyle: back[0]?.fillStyle, args: back[0]?.args },
+			{
+				method: "fillRect",
+				fillStyle: "black",
+				args: [0, 0, window.innerWidth, window.innerHeight],
+			},
+		);
+		assert.strictEqual(back[1]?.method, "drawImage");
+		assert.strictEqual(back[1]?.args[0], mapCanvas);
+		assert.deepStrictEqual(
+			canvasCalls(mainCanvas).map((call) => [call.method, call.args[0]]),
+			[["drawImage", backCanvas]],
+		);
+	});
+
+	it("draws nothing while the window has no size", function () {
+		const width = Object.getOwnPropertyDescriptor(window, "innerWidth");
+		const height = Object.getOwnPropertyDescriptor(window, "innerHeight");
+		Object.defineProperty(window, "innerWidth", { value: 0, configurable: true });
+		Object.defineProperty(window, "innerHeight", { value: 0, configurable: true });
+		try {
+			const { mainCanvas, backCanvas } = setup();
+			window.dispatchEvent(new Event("resize"));
+			assert.deepStrictEqual(canvasCalls(backCanvas), []);
+			assert.deepStrictEqual(canvasCalls(mainCanvas), []);
+		} finally {
+			for (const [name, descriptor] of [
+				["innerWidth", width],
+				["innerHeight", height],
+			] as const) {
+				if (descriptor) {
+					Object.defineProperty(window, name, descriptor);
+				} else {
+					delete (window as any)[name];
+				}
+			}
+		}
+	});
+
+	it("repaints the map only when something it depends on changed", function () {
+		const { renderer, topBar, mainCanvas, mapCanvas } = setup();
+		renderer.renderCanvas();
+		assert.deepStrictEqual(canvasCalls(mapCanvas), []);
+		assert.strictEqual(takeCanvasCalls(mainCanvas).length, 1);
+
+		topBar.colorSet$.next("terrain");
+		flushFrames();
+		assert.ok(canvasCalls(mapCanvas).length > 0);
+	});
+
+	it("paints the loader's progress text over the map", function () {
+		const { renderer, loader, backCanvas } = setup();
+		loader.progressText = "Loading provinces";
+		renderer.renderCanvas();
+		assert.ok(
+			canvasCalls(backCanvas).some(
+				(call) => call.method === "fillText" && call.args[0] === "Loading provinces",
+			),
+		);
+	});
+
+	it("shows how far visualising has got while still loading", function () {
+		const { renderer, loader, backCanvas } = setup();
+		loader.loading$.next(true);
+		loader.progress = 0.5;
+		renderer.renderCanvas();
+		assert.ok(
+			canvasCalls(backCanvas).some(
+				(call) =>
+					call.method === "fillText" &&
+					call.args[0] === "Visualizing map data: 50%",
+			),
+		);
+	});
+
+	it("paints no loading text once loading is done", function () {
+		const { renderer, backCanvas } = setup();
+		renderer.renderCanvas();
+		assert.ok(!canvasCalls(backCanvas).some((call) => call.method === "fillText"));
+	});
+
+	it("folds several changes in one frame into one render", function () {
+		const { topBar, mainCanvas } = setup();
+		topBar.hoverProvinceId$.next(1);
+		topBar.hoverProvinceId$.next(2);
+		topBar.viewMode$.next("state");
+		assert.strictEqual(frames.length, 1);
+		assert.deepStrictEqual(canvasCalls(mainCanvas), []);
+		flushFrames();
+		assert.strictEqual(canvasCalls(mainCanvas).length, 1);
+	});
+
+	it("renders again when the mouse moves over the map", function () {
+		const { mainCanvas } = setup();
+		mainCanvas.dispatchEvent(new MouseEvent("mousemove"));
+		assert.strictEqual(frames.length, 1);
+		flushFrames();
+		assert.strictEqual(canvasCalls(mainCanvas).length, 1);
+	});
+
+	it("stops repainting on resize once disposed", function () {
+		const { renderer, mainCanvas } = setup();
+		window.dispatchEvent(new Event("resize"));
+		assert.strictEqual(takeCanvasCalls(mainCanvas).length, 1);
+		renderer.dispose();
+		window.dispatchEvent(new Event("resize"));
+		assert.deepStrictEqual(canvasCalls(mainCanvas), []);
 	});
 });
 
@@ -806,7 +1015,7 @@ describe("webview/worldmap/provinceLayer edges", function () {
 			points.push({ x: 2, y });
 		}
 		const { a, b } = sharedEdge("", [points]);
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderAllEdges(
 			context({
 				viewPoint: identityViewPoint(),
@@ -838,7 +1047,7 @@ describe("webview/worldmap/provinceLayer edges", function () {
 				{ x: 2, y: 10 },
 			],
 		]);
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderAllEdges(
 			context({
 				viewPoint: identityViewPoint(),
@@ -876,7 +1085,7 @@ describe("webview/worldmap/provinceLayer edges", function () {
 				} as any,
 			],
 		});
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderAllEdges(
 			context({
 				viewPoint: identityViewPoint(),
@@ -902,7 +1111,7 @@ describe("webview/worldmap/provinceLayer edges", function () {
 				{ to: 1, type: "", path: [], start: { x: 0, y: 1 } } as any,
 			],
 		});
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderAllEdges(
 			context({
 				viewPoint: identityViewPoint(),
@@ -922,7 +1131,7 @@ describe("webview/worldmap/overlayLayer", function () {
 	it("draws a railway through rendered provinces at twice the level, capped at 10", function () {
 		const a = province({ id: 1, centerOfMass: { x: 1, y: 1 } });
 		const b = province({ id: 2, centerOfMass: { x: 5, y: 1 } });
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderSupplyRelated(
 			context({
 				viewPoint: identityViewPoint(),
@@ -945,7 +1154,7 @@ describe("webview/worldmap/overlayLayer", function () {
 
 	it("skips a railway whose provinces are all off-screen", function () {
 		const a = province({ id: 1, centerOfMass: { x: 1, y: 1 } });
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderSupplyRelated(
 			context({
 				viewPoint: identityViewPoint(),
@@ -965,7 +1174,7 @@ describe("webview/worldmap/overlayLayer", function () {
 
 	it("paints a supply node as a square on a rendered province", function () {
 		const a = province({ id: 1, centerOfMass: { x: 4, y: 6 } });
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderSupplyRelated(
 			context({
 				viewPoint: identityViewPoint(),
@@ -1072,7 +1281,7 @@ describe("webview/worldmap/overlayLayer", function () {
 		});
 
 		it("draws each river in view once, scaled over its bounding box", function () {
-			const { canvasContext, calls } = recordingContext();
+			const { canvasContext, calls } = recordingCanvasContext();
 			renderRivers(
 				context({ viewPoint: identityViewPoint() }),
 				emptyMap({
@@ -1101,7 +1310,7 @@ describe("webview/worldmap/overlayLayer", function () {
 		});
 
 		it("does not draw or rasterise a river out of view", function () {
-			const { canvasContext, calls } = recordingContext();
+			const { canvasContext, calls } = recordingCanvasContext();
 			renderRivers(
 				context({ viewPoint: identityViewPoint() }),
 				emptyMap({
@@ -1127,7 +1336,7 @@ describe("webview/worldmap/overlayLayer", function () {
 				ends: [],
 			};
 			const worldMap = emptyMap({ rivers: [river], warnings: [riverWarning] });
-			const { canvasContext, calls } = recordingContext();
+			const { canvasContext, calls } = recordingCanvasContext();
 			const plain = context({ viewPoint: identityViewPoint() });
 			const warned = context({
 				viewPoint: identityViewPoint(),
@@ -1153,7 +1362,7 @@ describe("webview/worldmap/overlayLayer", function () {
 		});
 
 		it("smooths rivers when zoomed out", function () {
-			const { canvasContext, calls } = recordingContext();
+			const { canvasContext, calls } = recordingCanvasContext();
 			renderRivers(
 				context({
 					viewPoint: { ...identityViewPoint(), scale: 0.5 } as ViewPoint,
@@ -1177,7 +1386,7 @@ describe("webview/worldmap/overlayLayer", function () {
 
 		it("skips drawing when the canvas has no 2D context", function () {
 			hasContext = false;
-			const { canvasContext, calls } = recordingContext();
+			const { canvasContext, calls } = recordingCanvasContext();
 			renderRivers(
 				context({ viewPoint: identityViewPoint() }),
 				emptyMap({
@@ -1208,7 +1417,7 @@ describe("webview/worldmap/overlayLayer", function () {
 			boundingBox: { x: 4, y: 0, w: 2, h: 2 },
 			edges: [],
 		});
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderHoverSelectionByViewMode({
 			backCanvasContext: canvasContext,
 			viewPoint: identityViewPoint(),
@@ -1251,7 +1460,7 @@ describe("webview/worldmap/overlayLayer", function () {
 			id: 1,
 			coverZones: [{ x: 0, y: 0, w: 2, h: 2 }],
 		});
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderHoverSelectionByViewMode({
 			backCanvasContext: canvasContext,
 			viewPoint: identityViewPoint(),
@@ -1281,7 +1490,7 @@ describe("webview/worldmap/overlayLayer", function () {
 			id: 2,
 			coverZones: [{ x: 3, y: 0, w: 2, h: 2 }],
 		});
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderHoverSelectionByViewMode({
 			backCanvasContext: canvasContext,
 			viewPoint: identityViewPoint(),
@@ -1306,7 +1515,7 @@ describe("webview/worldmap/overlayLayer", function () {
 
 	it("writes the hovered province id on the tooltip", function () {
 		const hovered = province({ id: 2, type: "land", terrain: "plains" });
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderHoverSelectionByViewMode({
 			backCanvasContext: canvasContext,
 			viewPoint: identityViewPoint(),
@@ -1347,7 +1556,7 @@ describe("webview/worldmap/overlayLayer", function () {
 			coverZones: [{ x: 4, y: 0, w: 2, h: 2 }],
 			boundingBox: { x: 4, y: 0, w: 2, h: 2 },
 		});
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderHoverSelectionByViewMode({
 			backCanvasContext: canvasContext,
 			viewPoint: identityViewPoint(),
@@ -1388,7 +1597,7 @@ describe("webview/worldmap/overlayLayer", function () {
 			boundingBox: { x: 4, y: 0, w: 2, h: 2 },
 			edges: [{ to: 1, type: "", path: [] } as any],
 		});
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderHoverSelectionByViewMode({
 			backCanvasContext: canvasContext,
 			viewPoint: identityViewPoint(),
@@ -1418,7 +1627,7 @@ describe("webview/worldmap/overlayLayer", function () {
 	});
 
 	it("paints loading text below the top bar", function () {
-		const { canvasContext, calls } = recordingContext();
+		const { canvasContext, calls } = recordingCanvasContext();
 		renderLoadingText(canvasContext, "Loading");
 		assert.ok(
 			calls.some(
