@@ -4,7 +4,7 @@ import { Logger } from './logger';
 import { fnv1a64Hex } from './hash';
 import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration, uriToFilePathWhenPossible } from './vsccommon';
 import { getParentModUris } from './parentmods';
-import { mapLimit } from './common';
+import { createTimeSlicer, mapLimit } from './common';
 
 interface CacheManifest {
     version: number;
@@ -130,6 +130,7 @@ export function ensureCacheDir(scope: CacheScope = captureCacheScope()): Promise
             // One line per namespace, so a bug report about the wrong cache says which one it used.
             Logger.info(`[Index] cache directory: ${dir.fsPath}`);
             void removeUnnamespacedCaches();
+            void removeSingleDocumentCaches(dir);
             return dir;
         })();
         cacheDirPromises.set(key, pending);
@@ -177,6 +178,27 @@ async function removeUnnamespacedCaches(): Promise<void> {
     }
 }
 
+/**
+ * The data files written before the line-per-record format, as `<index>.data.json`. Nothing reads
+ * them any more, and the localisation one alone could run to hundreds of megabytes, so they go the
+ * first time a session touches their namespace. Best-effort, like the tidy-up above.
+ */
+async function removeSingleDocumentCaches(dir: vscode.Uri): Promise<void> {
+    try {
+        const entries = await vscode.workspace.fs.readDirectory(dir);
+        for (const [name, type] of entries) {
+            if (type !== vscode.FileType.File || !name.endsWith('.data.json')) {
+                continue;
+            }
+            try {
+                await vscode.workspace.fs.delete(vscode.Uri.joinPath(dir, name));
+            } catch {}
+        }
+    } catch {
+        // Nothing listed, nothing to remove.
+    }
+}
+
 export async function saveCacheManifest(indexName: string, filePaths: string[], mtimes: Map<string, number>, version: number, scope?: CacheScope): Promise<void> {
     const dir = await ensureCacheDir(scope);
     if (!dir) { return; }
@@ -207,27 +229,89 @@ export async function loadCacheManifest(indexName: string, expectedVersion: numb
     }
 }
 
-export async function saveCacheData(indexName: string, data: string, scope?: CacheScope): Promise<void> {
+/*
+ * The data file is one JSON record per line, then a last line holding the record count.
+ *
+ * It used to be the whole index as a single JSON document, stringified and parsed in one
+ * synchronous call each way. On a mod the size of Millennium Dawn that was one string of hundreds
+ * of megabytes, which held the extension host for seconds and at the top end ran past V8's maximum
+ * string length. Line by line, no string is larger than one record, and both directions hand the
+ * event loop back between slices.
+ *
+ * The count is what makes a write cut short detectable: a file truncated exactly at a line
+ * boundary still parses line for line, and without it the build would trust a cache that silently
+ * lost the files at its end.
+ */
+const CACHE_DATA_EXTENSION = '.data.jsonl';
+const CACHE_WRITE_CHUNK = 1024 * 1024;
+const NEWLINE = 0x0a;
+
+export async function saveCacheRecords(indexName: string, records: readonly unknown[], scope?: CacheScope): Promise<void> {
     const dir = await ensureCacheDir(scope);
     if (!dir) { return; }
     try {
-        const uri = vscode.Uri.joinPath(dir, `${indexName}.data.json`);
-        await writeFile(uri, Buffer.from(data));
+        const slice = createTimeSlicer();
+        const chunks: Buffer[] = [];
+        let lines: string[] = [];
+        let pendingLength = 0;
+        for (const record of records) {
+            const line = JSON.stringify(record);
+            lines.push(line);
+            pendingLength += line.length + 1;
+            if (pendingLength >= CACHE_WRITE_CHUNK) {
+                chunks.push(Buffer.from(lines.join('\n') + '\n'));
+                lines = [];
+                pendingLength = 0;
+            }
+            await slice();
+        }
+        lines.push(String(records.length));
+        chunks.push(Buffer.from(lines.join('\n') + '\n'));
+
+        const uri = vscode.Uri.joinPath(dir, `${indexName}${CACHE_DATA_EXTENSION}`);
+        await writeFile(uri, Buffer.concat(chunks));
     } catch (e) {
         Logger.error(`Failed to save cache data for ${indexName}: ${e}`);
         throw e;
     }
 }
 
-export async function loadCacheData(indexName: string, scope?: CacheScope): Promise<string | null> {
+/**
+ * The cached records, or null when there is no data file to read. Throws when the file is there but
+ * is not a complete cache -- a line that does not parse, or a count that is missing or wrong.
+ */
+export async function loadCacheRecords(indexName: string, scope?: CacheScope): Promise<unknown[] | null> {
     const dir = scope === undefined ? captureCacheScope() : scope;
     if (!dir) { return null; }
+    let data: Buffer;
     try {
-        const uri = vscode.Uri.joinPath(dir, `${indexName}.data.json`);
-        return (await readFile(uri)).toString();
+        data = await readFile(vscode.Uri.joinPath(dir, `${indexName}${CACHE_DATA_EXTENSION}`));
     } catch {
         return null;
     }
+
+    // Splitting on the newline byte is safe: JSON escapes newlines inside strings, and no byte of a
+    // multi-byte UTF-8 sequence is 0x0A.
+    const slice = createTimeSlicer();
+    const lines: unknown[] = [];
+    let start = 0;
+    while (start < data.length) {
+        let end = data.indexOf(NEWLINE, start);
+        if (end < 0) {
+            end = data.length;
+        }
+        if (end > start) {
+            lines.push(JSON.parse(data.toString('utf8', start, end)));
+        }
+        start = end + 1;
+        await slice();
+    }
+
+    const count = lines.pop();
+    if (typeof count !== 'number' || count !== lines.length) {
+        throw new Error(`${indexName}: cache data is incomplete`);
+    }
+    return lines;
 }
 
 export async function getFileMtimes(relativePaths: string[], resolveUri: (relativePath: string) => Promise<vscode.Uri | undefined>): Promise<Map<string, number>> {

@@ -190,7 +190,7 @@ export class WorldMap {
 					await this.requestExportMap();
 					break;
 				case "exportmap":
-					await this.exportMap(msg.dataUrl);
+					await this.exportMap(msg.data);
 					break;
 			}
 		} catch (e) {
@@ -365,15 +365,15 @@ export class WorldMap {
 		await this.postMessageToWebview({ command: "requestexportmap" });
 	}
 
-	private async exportMap(dataUrl?: string) {
+	private async exportMap(data?: Uint8Array | ArrayBuffer) {
 		const uri = this.lastRequestedExportUri;
 		const requestId = this.lastRequestedExportRequestId;
 		if (!uri || this.exportInProgressRequestId !== undefined) {
 			return;
 		}
 
-		const prefix = "data:image/png;base64,";
-		if (!dataUrl || !dataUrl.startsWith(prefix)) {
+		const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+		if (!bytes || bytes.byteLength === 0) {
 			void vscode.window.showErrorMessage(
 				localize(
 					"worldmap.export.error.imgformat",
@@ -385,10 +385,10 @@ export class WorldMap {
 
 		this.exportInProgressRequestId = requestId;
 		try {
-			const base64 = dataUrl.slice(prefix.length);
-			const buffer = Buffer.from(base64, "base64");
-
-			await writeFile(uri, buffer);
+			await writeFile(
+				uri,
+				Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+			);
 
 			if (this.lastRequestedExportRequestId === requestId) {
 				this.lastRequestedExportUri = undefined;

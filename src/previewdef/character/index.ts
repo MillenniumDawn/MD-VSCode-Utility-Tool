@@ -1,3 +1,4 @@
+import { localize } from "../../util/i18n";
 import * as vscode from "vscode";
 import { renderCharacterFile } from "./contentbuilder";
 import { matchPathEnd } from "../../util/nodecommon";
@@ -5,7 +6,6 @@ import { PreviewProviderDef } from "../previewmanager";
 import { LoaderPreview } from "../loaderpreview";
 import { CharactersLoader } from "./loader";
 import { characterPreview } from "../../util/featureflags";
-import { ConfigurationKey } from "../../constants";
 
 function canPreviewCharacter(document: vscode.TextDocument) {
 	if (!characterPreview) {
@@ -28,8 +28,6 @@ function canPreviewCharacter(document: vscode.TextDocument) {
 }
 
 class CharacterPreview extends LoaderPreview<CharactersLoader> {
-	private configurationHandler: vscode.Disposable;
-
 	constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
 		super(
 			uri,
@@ -37,28 +35,20 @@ class CharacterPreview extends LoaderPreview<CharactersLoader> {
 			(file, contentProvider) => new CharactersLoader(file, contentProvider),
 			renderCharacterFile,
 		);
-		this.configurationHandler = vscode.workspace.onDidChangeConfiguration((e) => {
-			// previewLocalisation changes the text in the payload; localisationIndex changes whether
-			// there is any text to show, and so whether the localisation toggle is offered at all;
-			// gfxIndex changes which of the GFX_-named portraits resolve.
-			if (
-				e.affectsConfiguration(`${ConfigurationKey}.previewLocalisation`) ||
-				e.affectsConfiguration(`${ConfigurationKey}.localisationIndex`) ||
-				e.affectsConfiguration(`${ConfigurationKey}.gfxIndex`)
-			) {
-				this.reload();
-			}
-		});
 	}
 
-	public dispose(): void {
-		super.dispose();
-		this.configurationHandler.dispose();
+	// previewLocalisation changes the text in the payload; localisationIndex changes whether
+	// there is any text to show, and so whether the localisation toggle is offered at all;
+	// gfxIndex changes which of the GFX_-named portraits resolve.
+	protected get reloadOnConfigurationChange(): readonly string[] {
+		return ["previewLocalisation", "localisationIndex", "gfxIndex"];
 	}
 }
 
 export const characterPreviewDef: PreviewProviderDef = {
 	type: "character",
+	displayName: () => localize("preview.type.character", "Characters (common/characters/*.txt)"),
+	isEnabled: () => characterPreview,
 	canPreview: canPreviewCharacter,
 	previewConstructor: CharacterPreview,
 };

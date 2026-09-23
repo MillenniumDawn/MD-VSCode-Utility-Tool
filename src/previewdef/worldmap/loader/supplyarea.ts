@@ -24,7 +24,7 @@ import { error } from "../../../util/debug";
 import { DefaultMapLoader } from "./provincemap";
 import { StatesLoader } from "./states";
 import { LoaderSession } from "../../../util/loader/loader";
-import { flatMap } from "lodash";
+import flatMap from "lodash/flatMap";
 import { UserError } from "../../../util/common";
 
 interface SupplyAreaFile {

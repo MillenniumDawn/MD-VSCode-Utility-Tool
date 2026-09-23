@@ -9,7 +9,9 @@ import {
 	isSymbolNode,
 } from "../../hoiformat/schema";
 import { normalizeNumberLike } from "../../util/hoi4gui/common";
-import { flatten, chain, groupBy } from "lodash";
+import flatten from "lodash/flatten";
+import groupBy from "lodash/groupBy";
+import uniq from "lodash/uniq";
 import {
 	ConditionItem,
 	ConditionComplexExpr,
@@ -595,10 +597,9 @@ function getFocus(
 	const y = hoiFocus.y ?? 0;
 	const relativePositionId = hoiFocus.relative_position_id;
 
-	const exclusive = chain(hoiFocus.mutually_exclusive)
+	const exclusive = hoiFocus.mutually_exclusive
 		.flatMap((f) => f.focus.concat(extractOrListIds(f.or)))
-		.filter((s): s is string => s !== undefined)
-		.value();
+		.filter((s): s is string => s !== undefined);
 	const prerequisite = hoiFocus.prerequisite.map((p) =>
 		p.focus
 			.concat(extractOrListIds(p.or))
@@ -793,11 +794,11 @@ function updateConditionExprsByFocus(
 }
 
 function getAllowBranchOptions(focuses: Record<string, Focus>): string[] {
-	return chain(focuses)
-		.filter((f) => f.hasAllowBranch && f.allowBranch !== true)
-		.map((f) => f.id)
-		.uniq()
-		.value();
+	return uniq(
+		Object.values(focuses)
+			.filter((f) => f.hasAllowBranch && f.allowBranch !== true)
+			.map((f) => f.id),
+	);
 }
 
 function resolveFocusPosition(

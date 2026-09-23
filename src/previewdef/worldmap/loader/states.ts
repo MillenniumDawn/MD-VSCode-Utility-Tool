@@ -30,7 +30,7 @@ import { arrayToMap, UserError } from "../../../util/common";
 import { DefaultMapLoader } from "./provincemap";
 import { localize } from "../../../util/i18n";
 import { LoaderSession } from "../../../util/loader/loader";
-import { flatMap } from "lodash";
+import flatMap from "lodash/flatMap";
 import { ResourceDefinitionLoader } from "./resource";
 
 interface StateFile {

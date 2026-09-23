@@ -18,7 +18,7 @@ import {
 	LoadResultOD as CommonLoadResultOD,
 } from "../../../util/loader/loader";
 import { localize } from "../../../util/i18n";
-import { maxBy } from "lodash";
+import maxBy from "lodash/maxBy";
 
 export abstract class Loader<T> extends CommonLoader<T, MapLoaderExtra> {}
 export abstract class FileLoader<T> extends CommonFileLoader<
