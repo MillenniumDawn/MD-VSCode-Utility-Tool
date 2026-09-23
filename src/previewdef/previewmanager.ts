@@ -13,6 +13,7 @@ import { basename, getDocumentByUri, previewWebviewOptions } from '../util/vscco
 import { worldMapPreviewDef } from './worldmap';
 import { eventPreviewDef } from './event';
 import minBy from 'lodash/minBy';
+import debounce from 'lodash/debounce';
 import { sendEvent } from '../util/telemetry';
 import { guiPreviewDef } from './gui';
 import { mioPreviewDef } from './mio';
@@ -76,6 +77,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         disposables.push(vscode.workspace.onDidChangeTextDocument(this.onChangeTextDocument, this));
         disposables.push(vscode.window.onDidChangeActiveTextEditor(this.updateHoi4PreviewContextValue, this));
         disposables.push(vscode.window.registerWebviewPanelSerializer(WebviewType.Preview, this));
+        disposables.push(new vscode.Disposable(() => this.refreshActiveEditorContext.cancel()));
 
         // Trigger context value setting
         this.updateHoi4PreviewContextValue(vscode.window.activeTextEditor);
@@ -125,7 +127,18 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         }
 
         this.updatePreviewItemsInSubscription(document.uri);
+
+        // Several providers decide from the text, not the path, so an edit can make the active
+        // file previewable or stop it being so without any change of editor.
+        if (e.contentChanges.length > 0 && key === vscode.window.activeTextEditor?.document.uri.toString()) {
+            this.refreshActiveEditorContext();
+        }
     }
+
+    private refreshActiveEditorContext = debounce(
+        () => this.updateHoi4PreviewContextValue(vscode.window.activeTextEditor),
+        500,
+        { trailing: true });
 
     private updateHoi4PreviewContextValue(textEditor: vscode.TextEditor | undefined): void {
         let shouldShowPreviewButton = false;
@@ -193,7 +206,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
                 localize('preview.cantpreviewfile', "Can't preview this file.\nValid types: {0}.", types));
             panel?.dispose();
             debug(`dispose panel ${uri} because no preview provider`);
-            this.updateHoi4PreviewContextValue(undefined);
+            this.updateHoi4PreviewContextValue(vscode.window.activeTextEditor);
             return;
         }
 

@@ -271,6 +271,8 @@ const pristine = {
     workspaceFolders: stub.workspace.workspaceFolders as unknown,
     onDidChangeConfiguration: stub.workspace.onDidChangeConfiguration,
     onDidChangeWorkspaceFolders: stub.workspace.onDidChangeWorkspaceFolders,
+    onDidChangeTextDocument: stub.workspace.onDidChangeTextDocument,
+    activeTextEditor: stub.window.activeTextEditor as unknown,
     stat: stub.workspace.fs.stat,
     readDirectory: stub.workspace.fs.readDirectory,
     readFile: stub.workspace.fs.readFile,
@@ -304,6 +306,10 @@ export interface VscodeStubOverrides {
     onDidChangeConfiguration?: (handler: any) => { dispose(): void };
     /** Captures the folder-change handler a suite's `register()` call installs, to drive it directly. */
     onDidChangeWorkspaceFolders?: (handler: any) => { dispose(): void };
+    /** Captures the document-change handler a suite's `register()` call installs, to drive it directly. */
+    onDidChangeTextDocument?: (handler: any, thisArg?: any) => { dispose(): void };
+    /** Replaces `window.activeTextEditor`; pass `undefined` explicitly for "no editor". */
+    activeTextEditor?: unknown;
     stat?: (uri: any) => Promise<any>;
     readDirectory?: (uri: any) => Promise<[string, number][]>;
     readFile?: (uri: any) => Promise<Uint8Array>;
@@ -367,6 +373,12 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     }
     if (overrides.onDidChangeWorkspaceFolders !== undefined) {
         workspace.onDidChangeWorkspaceFolders = overrides.onDidChangeWorkspaceFolders;
+    }
+    if (overrides.onDidChangeTextDocument !== undefined) {
+        workspace.onDidChangeTextDocument = overrides.onDidChangeTextDocument;
+    }
+    if ('activeTextEditor' in overrides) {
+        window.activeTextEditor = overrides.activeTextEditor;
     }
     if (overrides.stat !== undefined) {
         fs.stat = overrides.stat;
@@ -434,6 +446,8 @@ export function restoreVscodeStubs(): void {
     workspace.workspaceFolders = pristine.workspaceFolders;
     workspace.onDidChangeConfiguration = pristine.onDidChangeConfiguration;
     workspace.onDidChangeWorkspaceFolders = pristine.onDidChangeWorkspaceFolders;
+    workspace.onDidChangeTextDocument = pristine.onDidChangeTextDocument;
+    window.activeTextEditor = pristine.activeTextEditor;
     fs.stat = pristine.stat;
     fs.readDirectory = pristine.readDirectory;
     fs.readFile = pristine.readFile;
