@@ -220,6 +220,39 @@ describe("webview/worldmap/FEWorldMapClass reverse maps", function () {
 		});
 	});
 
+	describe("visible-province lookups", function () {
+		it("lists only the railways touching the given provinces, in file order", function () {
+			// The supply overlay used to walk every railway in the mod once per visible copy of the
+			// world just to reject the ones off screen.
+			const map = buildMap();
+			const touching = (ids: number[]) => {
+				const found: number[] = [];
+				map.forEachRailwayTouching(
+					ids.map((id) => ({ id }) as any),
+					(railway) => found.push(railway.level),
+				);
+				return found;
+			};
+
+			// Province 11 is on both railways, and each is listed once, lowest index first.
+			assert.deepStrictEqual(touching([11]), [2, 5]);
+			assert.deepStrictEqual(touching([10]), [2]);
+			assert.deepStrictEqual(touching([20]), []);
+			assert.deepStrictEqual(touching([]), []);
+		});
+
+		it("hands back the same supply-area province list every time", function () {
+			// The hover pass skips the highlight when the hovered and selected areas are the same
+			// object, so a freshly built list would make it redraw the whole area every frame.
+			const map = buildMap();
+			const first = map.getSupplyAreaProvinces(1);
+			assert.deepStrictEqual(first, { provinces: [10, 11, 20] });
+			assert.strictEqual(first, map.getSupplyAreaProvinces(1));
+			assert.strictEqual(map.getSupplyAreaProvinces(undefined), undefined);
+			assert.strictEqual(map.getSupplyAreaProvinces(99), undefined);
+		});
+	});
+
 	describe("memoization", function () {
 		it("returns the same map instance on repeated calls", function () {
 			const map = buildMap();
@@ -452,11 +485,6 @@ describe("webview/worldmap/Loader protocol", function () {
 	it("applies requested chunks and later deltas after a map summary", function () {
 		const posted: unknown[] = [];
 		const originalPostMessage = vscode.postMessage;
-		const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-		globalThis.requestAnimationFrame = (callback): number => {
-			callback(0);
-			return 0;
-		};
 		vscode.postMessage = <T>(message: T): void => {
 			posted.push(message);
 		};
@@ -532,7 +560,185 @@ describe("webview/worldmap/Loader protocol", function () {
 		} finally {
 			loader.dispose();
 			vscode.postMessage = originalPostMessage;
-			globalThis.requestAnimationFrame = originalRequestAnimationFrame;
 		}
+	});
+});
+
+describe("webview/worldmap/Loader mid-load emit throttle", function () {
+	type RequestMessage = { command: string; start: number; end: number };
+	type Harness = {
+		loader: Loader;
+		posted: RequestMessage[];
+		emits: unknown[];
+		timers: Map<number, { callback: () => void; delay: number }>;
+		clock: { now: number };
+		send(data: unknown): void;
+		reply(request: RequestMessage): void;
+		flushTimers(): void;
+	};
+
+	function summary(): WorldMapData {
+		return {
+			width: 1,
+			height: 1,
+			provinces: [],
+			states: [],
+			countries: [],
+			strategicRegions: [],
+			supplyAreas: [],
+			railways: [],
+			supplyNodes: [],
+			provincesCount: 1,
+			statesCount: 1,
+			countriesCount: 1,
+			strategicRegionsCount: 0,
+			supplyAreasCount: 0,
+			railwaysCount: 1,
+			supplyNodesCount: 1,
+			badProvincesCount: 0,
+			badStatesCount: 0,
+			badStrategicRegionsCount: 0,
+			badSupplyAreasCount: 0,
+			continents: [],
+			terrains: [],
+			resources: [],
+			rivers: [],
+			warnings: [],
+		};
+	}
+
+	function withHarness(run: (harness: Harness) => void): void {
+		const originalPostMessage = vscode.postMessage;
+		const originalSetTimeout = globalThis.setTimeout;
+		const originalClearTimeout = globalThis.clearTimeout;
+		const originalNow = Object.getOwnPropertyDescriptor(performance, "now");
+
+		const posted: RequestMessage[] = [];
+		const timers: Harness["timers"] = new Map();
+		const clock = { now: 1000 };
+		let nextTimerId = 1;
+		vscode.postMessage = <T>(message: T): void => {
+			posted.push(message as unknown as RequestMessage);
+		};
+		(globalThis as any).setTimeout = (callback: () => void, delay = 0) => {
+			const id = nextTimerId++;
+			timers.set(id, { callback, delay });
+			return id;
+		};
+		(globalThis as any).clearTimeout = (id: number) => {
+			timers.delete(id);
+		};
+		Object.defineProperty(performance, "now", {
+			value: () => clock.now,
+			configurable: true,
+			writable: true,
+		});
+
+		const loader = new Loader();
+		const emits: unknown[] = [];
+		const subscription = loader.worldMap$.subscribe((map) => emits.push(map));
+		posted.length = 0;
+		const send = (data: unknown): void => {
+			window.dispatchEvent(new window.MessageEvent("message", { data }));
+		};
+
+		try {
+			run({
+				loader,
+				posted,
+				emits,
+				timers,
+				clock,
+				send,
+				reply: (request) =>
+					send({
+						command: request.command.replace(/^request/, ""),
+						data: "[]",
+						start: request.start,
+						end: request.end,
+					}),
+				flushTimers: () => {
+					const due = [...timers.values()];
+					timers.clear();
+					due.forEach((timer) => timer.callback());
+				},
+			});
+		} finally {
+			subscription.unsubscribe();
+			loader.dispose();
+			vscode.postMessage = originalPostMessage;
+			globalThis.setTimeout = originalSetTimeout;
+			globalThis.clearTimeout = originalClearTimeout;
+			if (originalNow) {
+				Object.defineProperty(performance, "now", originalNow);
+			} else {
+				delete (performance as any).now;
+			}
+		}
+	}
+
+	it("coalesces mid-load emits into one per interval", function () {
+		withHarness(({ posted, emits, timers, clock, send, reply, flushTimers }) => {
+			send({ command: "provincemapsummary", data: summary() });
+			assert.strictEqual(posted.length, 1);
+			assert.strictEqual(timers.size, 1);
+			assert.strictEqual([...timers.values()][0].delay, 0);
+
+			reply(posted[0]);
+			assert.strictEqual(posted.length, 2);
+			assert.strictEqual(timers.size, 1);
+			assert.strictEqual(emits.length, 0);
+
+			flushTimers();
+			assert.strictEqual(emits.length, 1);
+
+			clock.now = 1100;
+			reply(posted[1]);
+			reply(posted[2]);
+			assert.strictEqual(posted.length, 4);
+			assert.strictEqual(timers.size, 1);
+			assert.strictEqual([...timers.values()][0].delay, 150);
+			assert.strictEqual(emits.length, 1);
+
+			flushTimers();
+			assert.strictEqual(emits.length, 2);
+		});
+	});
+
+	it("emits the completed map synchronously and drops the pending mid-load emit", function () {
+		withHarness(({ loader, posted, emits, timers, send, reply, flushTimers }) => {
+			send({ command: "provincemapsummary", data: summary() });
+			flushTimers();
+			for (let i = 0; i < 4; i++) {
+				reply(posted[i]);
+			}
+			assert.strictEqual(timers.size, 1);
+			assert.strictEqual(emits.length, 1);
+
+			reply(posted[4]);
+			assert.strictEqual(posted.length, 5);
+			assert.strictEqual(emits.length, 2);
+			assert.strictEqual(emits[1], loader.worldMap);
+			assert.strictEqual(timers.size, 0);
+			assert.strictEqual(loader.loading$.getValue(), false);
+			assert.strictEqual(loader.progress, 1);
+		});
+	});
+
+	it("cancels a pending emit on refresh and on dispose", function () {
+		withHarness(({ loader, emits, timers, send }) => {
+			send({ command: "provincemapsummary", data: summary() });
+			assert.strictEqual(timers.size, 1);
+
+			loader.refresh();
+			assert.strictEqual(timers.size, 0);
+			assert.strictEqual(emits.length, 1);
+			assert.strictEqual(emits[0], loader.worldMap);
+
+			send({ command: "provincemapsummary", data: summary() });
+			assert.strictEqual(timers.size, 1);
+			loader.dispose();
+			assert.strictEqual(timers.size, 0);
+		});
 	});
 });

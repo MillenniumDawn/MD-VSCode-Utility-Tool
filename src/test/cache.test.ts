@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { Cache, PromiseCache } from '../util/cache';
+import { Cache, PromiseCache, sweepingCacheCount } from '../util/cache';
 
 // All caches register a cleanup interval; track them so we can dispose after each test and not
 // leave timers keeping the process alive.
@@ -138,16 +138,31 @@ describe('Cache', () => {
         assert.deepStrictEqual(keys(cache), []);
     });
 
-    it('does not schedule a cleanup interval when life is 0', () => {
-        // life: 0 opts out of the cleanup interval, so no timer is scheduled.
+    it('does not join the shared sweeper when life is 0', () => {
+        // life: 0 opts out of the cleanup sweep, so the cache is never registered.
+        const before = sweepingCacheCount();
         const cache = track(new Cache<string>({ factory: key => key, life: 0 }));
-        assert.strictEqual((cache as any)._intervalToken, null);
+        assert.strictEqual((cache as any)._sweepEntry, null);
+        assert.strictEqual(sweepingCacheCount(), before);
+    });
+
+    it('registers with the one shared sweeper and leaves it on dispose', () => {
+        // One timer serves every cache: a second cache joins the same sweep rather than
+        // scheduling its own, and disposing takes it back off.
+        const before = sweepingCacheCount();
+        const first = new Cache<number>({ factory: () => 1, life: 60_000 });
+        const second = new Cache<number>({ factory: () => 2, life: 60_000 });
+        assert.strictEqual(sweepingCacheCount(), before + 2);
+
+        first.dispose();
+        second.dispose();
+        assert.strictEqual(sweepingCacheCount(), before);
     });
 
     it('dispose() empties the cache and is safe to call twice', () => {
         const cache = new Cache<number>({ factory: () => 1, life: 60_000 });
         cache.get('a');
-        assert.ok((cache as any)._intervalToken, 'expected an interval to be scheduled');
+        assert.ok((cache as any)._sweepEntry, 'expected the cache to join the sweeper');
 
         cache.dispose();
         assert.deepStrictEqual(keys(cache), []);

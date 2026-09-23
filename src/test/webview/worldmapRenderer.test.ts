@@ -921,6 +921,7 @@ describe("webview/worldmap/overlayLayer", function () {
 			context({
 				viewPoint: identityViewPoint(),
 				renderedProvincesById: { 1: a, 2: b },
+				renderedProvinces: [a, b],
 			}),
 			emptyMap({
 				provinces: [undefined, a, b],
@@ -944,6 +945,7 @@ describe("webview/worldmap/overlayLayer", function () {
 			context({
 				viewPoint: identityViewPoint(),
 				renderedProvincesById: {},
+				renderedProvinces: [],
 			}),
 			emptyMap({
 				provinces: [undefined, a],
@@ -964,6 +966,7 @@ describe("webview/worldmap/overlayLayer", function () {
 			context({
 				viewPoint: identityViewPoint(),
 				renderedProvincesById: { 1: a },
+				renderedProvinces: [a],
 			}),
 			emptyMap({
 				provinces: [undefined, a],

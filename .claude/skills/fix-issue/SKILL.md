@@ -25,6 +25,27 @@ Requested arguments: $ARGUMENTS
 
 ## Steps
 
+### 0. Start a fresh branch from main
+
+**Always start a new branch from `origin/main` before anything else, unless the user explicitly
+says to work on another branch.** Do it before reading or editing any code, not after the fix
+is written: the branch checked out when the skill starts usually belongs to other work, and a
+fix made there has to be carried across afterwards.
+
+```
+git fetch origin
+git checkout -b fix/issue-<number> origin/main
+```
+
+For a codebase-scanned bug with no issue, create the branch once you know what the fix is,
+named after it (`fix/<short-description>`), still from `origin/main`. If the fix branch
+already exists (a rerun on the same issue), check it out and continue on it. If the working
+tree carries uncommitted changes from another branch, stash them first and leave them stashed
+— do not carry them over.
+
+Never commit a fix on `main` or on a branch that belongs to other work. Every issue gets its
+own branch and its own pull request.
+
 ### 1. Find an issue to fix
 
 If an issue number is given, fetch it directly:
@@ -139,24 +160,10 @@ npm test
 If types changed, also run `npm run compile-ts`. If a check fails, fix the cause before
 continuing — do not commit failing code.
 
-### 7. Branch and commit
+### 7. Commit
 
-**Every issue gets its own branch, cut from `origin/main`, and its own pull request.** Never
-commit a fix on `main` or on a branch that belongs to other work, even if that is the branch
-checked out when the skill starts.
-
-```
-git fetch origin
-git checkout -b fix/issue-<number> origin/main
-```
-
-For a codebase-scanned bug with no issue, name it after the fix instead
-(`fix/<short-description>`). If the fix branch already exists (a rerun on the same issue),
-check it out and continue on it. If the working tree carries uncommitted changes from another
-branch that are not this fix, stash them first and leave them stashed — do not carry them
-over.
-
-Then stage only the files changed for this fix and commit. **Do not add a `Co-Authored-By`
+You are on the fix branch created in step 0; confirm with `git branch --show-current` before
+committing. Stage only the files changed for this fix and commit. **Do not add a `Co-Authored-By`
 trailer, a "Generated with Claude Code" footer, or any other reference to Claude Code,
 Claude, or Anthropic** in the commit message.
 

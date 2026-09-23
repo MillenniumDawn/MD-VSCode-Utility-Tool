@@ -1,3 +1,4 @@
+import { localize } from "../../util/i18n";
 import * as vscode from "vscode";
 import { renderIdeaFile } from "./contentbuilder";
 import { matchPathEnd } from "../../util/nodecommon";
@@ -5,7 +6,6 @@ import { PreviewProviderDef } from "../previewmanager";
 import { LoaderPreview } from "../loaderpreview";
 import { IdeasLoader } from "./loader";
 import { ideaPreview } from "../../util/featureflags";
-import { ConfigurationKey } from "../../constants";
 
 function canPreviewIdea(document: vscode.TextDocument) {
 	if (!ideaPreview) {
@@ -28,8 +28,6 @@ function canPreviewIdea(document: vscode.TextDocument) {
 }
 
 class IdeaPreview extends LoaderPreview<IdeasLoader> {
-	private configurationHandler: vscode.Disposable;
-
 	constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
 		super(
 			uri,
@@ -37,29 +35,25 @@ class IdeaPreview extends LoaderPreview<IdeasLoader> {
 			(file, contentProvider) => new IdeasLoader(file, contentProvider),
 			renderIdeaFile,
 		);
-		this.configurationHandler = vscode.workspace.onDidChangeConfiguration((e) => {
-			// previewLocalisation changes the text in the payload; localisationIndex changes whether
-			// there is any text to show, and so whether the localisation toggle is offered at all;
-			// gfxIndex changes which icons resolve; ideaSwapIndex changes whether chains are found.
-			if (
-				e.affectsConfiguration(`${ConfigurationKey}.previewLocalisation`) ||
-				e.affectsConfiguration(`${ConfigurationKey}.localisationIndex`) ||
-				e.affectsConfiguration(`${ConfigurationKey}.gfxIndex`) ||
-				e.affectsConfiguration(`${ConfigurationKey}.ideaSwapIndex`)
-			) {
-				this.reload();
-			}
-		});
 	}
 
-	public dispose(): void {
-		super.dispose();
-		this.configurationHandler.dispose();
+	// previewLocalisation changes the text in the payload; localisationIndex changes whether
+	// there is any text to show, and so whether the localisation toggle is offered at all;
+	// gfxIndex changes which icons resolve; ideaSwapIndex changes whether chains are found.
+	protected get reloadOnConfigurationChange(): readonly string[] {
+		return [
+			"previewLocalisation",
+			"localisationIndex",
+			"gfxIndex",
+			"ideaSwapIndex",
+		];
 	}
 }
 
 export const ideaPreviewDef: PreviewProviderDef = {
 	type: "idea",
+	displayName: () => localize("preview.type.idea", "Ideas (common/ideas/*.txt)"),
+	isEnabled: () => ideaPreview,
 	canPreview: canPreviewIdea,
 	previewConstructor: IdeaPreview,
 };

@@ -1,11 +1,11 @@
-import { takePostedMessages } from './setup';
+import { resetWebviewState, takePostedMessages } from './setup';
 import * as assert from 'assert';
 import { copyArray, tryRun, getState, setState, enableZoom, scrollToState, subscribeNavigators, subscribeRefreshButton, initCommon } from '../../../webviewsrc/util/common';
 
 describe('webview/util/common', function () {
     beforeEach(function () {
         document.body.innerHTML = '';
-        setState({});
+        resetWebviewState();
         takePostedMessages();
     });
 
@@ -74,6 +74,17 @@ describe('webview/util/common', function () {
             const s = getState();
             assert.strictEqual(s.a, 1);
             assert.strictEqual(s.b, 2);
+        });
+
+        it('starts each test from an empty state', function () {
+            assert.deepStrictEqual(getState(), {});
+        });
+
+        it('the vscode api replaces state rather than merging it', function () {
+            const api = (global as any).acquireVsCodeApi();
+            api.setState({ a: 1 });
+            api.setState({ b: 2 });
+            assert.deepStrictEqual(api.getState(), { b: 2 });
         });
     });
 
