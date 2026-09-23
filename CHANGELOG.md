@@ -17,6 +17,7 @@ v1.1.39
 - [ Technology Previewer ] The technology tree no longer paints a black backdrop on light themes, and [ MIO Previewer ] the MIO grid lines are no longer invisible there. Issue #203.
 - Selecting a mod file or an install path now reports it when the setting cannot be saved, instead of showing the new one in the status bar as though it had been. Issue #203.
 - Seven settings showed English text whatever the display language, and the two world map settings did not mention that the preview has to be reopened before they take effect. Issue #203.
+- [ CI ] Webview state is now replaced instead of merged during testing. Issue #246.
 
   Functionality:
 
