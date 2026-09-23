@@ -14,6 +14,7 @@ Unreleased
 - [ CI ] A changelog model that stalls can no longer hold up the release pull request for hours: bullets it has not reworded within a few minutes keep their pull request titles, and a large release now asks for a reply long enough to hold every bullet instead of falling back to one call per bullet. Issue #223.
 - A preview no longer assembles its whole page for an edit that changes nothing on screen (a comment, whitespace) or that is applied in place; the page is only built when the panel needs to reload it, which matters most for a `.gfx` file whose textures are inlined. Issue #224.
 - After an edit, the technology, event, decision, idea, character, MIO and GFX previews decide whether anything changed without first serialising the whole preview a second time, so a large file responds sooner after each pause in typing. Issue #225.
+- [ World Map Previewer ] Rivers are drawn much faster: each river is prepared once and painted in one step instead of pixel by pixel on every redraw, so panning and zooming with rivers shown stays smooth. Issue #229.
 
 v1.1.38
 

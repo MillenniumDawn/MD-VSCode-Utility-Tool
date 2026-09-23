@@ -29,6 +29,7 @@ import {
 	renderLoadingText,
 	renderRivers,
 	renderSupplyRelated,
+	riverPixels,
 } from "../../../webviewsrc/worldmap/overlayLayer";
 import { Renderer } from "../../../webviewsrc/worldmap/renderer";
 import { TopBar, topBarHeight, warningsText } from "../../../webviewsrc/worldmap/topbar";
@@ -112,6 +113,7 @@ function recordingContext() {
 		fillStyle: string;
 		strokeStyle: string;
 		lineWidth: number;
+		imageSmoothingEnabled: boolean;
 		args: unknown[];
 	}[] = [];
 	const canvasContext: any = {
@@ -145,7 +147,10 @@ function recordingContext() {
 		measureText() {
 			return { width: 0 };
 		},
-		drawImage() {},
+		imageSmoothingEnabled: true,
+		drawImage(...args: unknown[]) {
+			calls.push(record("drawImage", args));
+		},
 	};
 	function record(method: string, args: unknown[]) {
 		return {
@@ -153,6 +158,7 @@ function recordingContext() {
 			fillStyle: canvasContext.fillStyle,
 			strokeStyle: canvasContext.strokeStyle,
 			lineWidth: canvasContext.lineWidth,
+			imageSmoothingEnabled: canvasContext.imageSmoothingEnabled as boolean,
 			args,
 		};
 	}
@@ -961,68 +967,208 @@ describe("webview/worldmap/overlayLayer", function () {
 		);
 	});
 
-	it("paints a river pixel in the palette colour", function () {
-		const { canvasContext, calls } = recordingContext();
-		renderRivers(
-			context({ viewPoint: identityViewPoint() }),
-			emptyMap({
-				rivers: [
-					{
-						boundingBox: { x: 3, y: 4, w: 2, h: 1 },
-						colors: { "0": 0 },
-					},
-				],
-			}),
-			canvasContext,
-			0,
-		);
-		assert.ok(
-			calls.some(
-				(call) =>
-					call.method === "fillRect" &&
-					call.fillStyle === "rgb(0, 255, 0)" &&
-					call.args[0] === 3 &&
-					call.args[1] === 4 &&
-					call.args[2] === 1 &&
-					call.args[3] === 1,
-			),
-		);
-	});
+	describe("rivers", function () {
+		const canvasPrototype = (window as any).HTMLCanvasElement.prototype;
+		const originalGetContext = canvasPrototype.getContext;
+		let rasterised: { width: number; height: number; data: Uint8ClampedArray }[];
+		let hasContext: boolean;
 
-	it("paints a warned deep river pixel in the water warning colour", function () {
-		const { canvasContext, calls } = recordingContext();
-		renderRivers(
-			context({
+		beforeEach(function () {
+			rasterised = [];
+			hasContext = true;
+			canvasPrototype.getContext = function () {
+				if (!hasContext) {
+					return null;
+				}
+				return {
+					createImageData: (width: number, height: number) => ({
+						width,
+						height,
+						data: new Uint8ClampedArray(width * height * 4),
+					}),
+					putImageData: (imageData: any) => {
+						rasterised.push(imageData);
+					},
+				};
+			};
+		});
+
+		afterEach(function () {
+			canvasPrototype.getContext = originalGetContext;
+		});
+
+		const warningsTopBar = {
+			colorSet$: { value: "warnings" },
+			warningFilter: { selectedValues$: { value: ["river"] } },
+		} as unknown as TopBar;
+		const riverWarning = {
+			text: "river",
+			source: [{ type: "river", index: 0, name: "r" }],
+		};
+
+		it("lays the river's colours out as RGBA over its bounding box", function () {
+			const pixels = riverPixels(
+				{
+					boundingBox: { x: 3, y: 4, w: 3, h: 1 },
+					colors: { "0": 0, "2": 1 },
+					ends: [],
+				},
+				false,
+			);
+			assert.deepStrictEqual(
+				Array.from(pixels),
+				[0, 255, 0, 255, 0, 0, 0, 0, 255, 0, 0, 255],
+			);
+		});
+
+		it("colours a warned river's deep pixels as a warning and keeps its marks", function () {
+			const pixels = riverPixels(
+				{
+					boundingBox: { x: 0, y: 0, w: 2, h: 1 },
+					colors: { "0": 3, "1": 2 },
+					ends: [],
+				},
+				true,
+			);
+			assert.deepStrictEqual(
+				Array.from(pixels),
+				[
+					(waterWarning >> 16) & 0xff,
+					(waterWarning >> 8) & 0xff,
+					waterWarning & 0xff,
+					255,
+					255,
+					252,
+					0,
+					255,
+				],
+			);
+		});
+
+		it("draws each river in view once, scaled over its bounding box", function () {
+			const { canvasContext, calls } = recordingContext();
+			renderRivers(
+				context({ viewPoint: identityViewPoint() }),
+				emptyMap({
+					rivers: [
+						{
+							boundingBox: { x: 3, y: 4, w: 2, h: 1 },
+							colors: { "0": 0 },
+							ends: [],
+						},
+					],
+				}),
+				canvasContext,
+				0,
+			);
+			const draws = calls.filter((call) => call.method === "drawImage");
+			assert.strictEqual(draws.length, 1);
+			assert.deepStrictEqual(draws[0]!.args.slice(1), [3, 4, 2, 1]);
+			assert.strictEqual(draws[0]!.imageSmoothingEnabled, false);
+			assert.strictEqual(canvasContext.imageSmoothingEnabled, true);
+			assert.ok(!calls.some((call) => call.method === "fillRect"));
+			assert.strictEqual(rasterised.length, 1);
+			assert.deepStrictEqual(
+				Array.from(rasterised[0]!.data),
+				[0, 255, 0, 255, 0, 0, 0, 0],
+			);
+		});
+
+		it("does not draw or rasterise a river out of view", function () {
+			const { canvasContext, calls } = recordingContext();
+			renderRivers(
+				context({ viewPoint: identityViewPoint() }),
+				emptyMap({
+					rivers: [
+						{
+							boundingBox: { x: 0, y: 0, w: 1, h: 1 },
+							colors: { "0": 0 },
+							ends: [],
+						},
+					],
+				}),
+				canvasContext,
+				8,
+			);
+			assert.ok(!calls.some((call) => call.method === "drawImage"));
+			assert.strictEqual(rasterised.length, 0);
+		});
+
+		it("rasterises a river once per variant and reuses it", function () {
+			const river = {
+				boundingBox: { x: 0, y: 0, w: 1, h: 1 },
+				colors: { "0": 3 },
+				ends: [],
+			};
+			const worldMap = emptyMap({ rivers: [river], warnings: [riverWarning] });
+			const { canvasContext, calls } = recordingContext();
+			const plain = context({ viewPoint: identityViewPoint() });
+			const warned = context({
 				viewPoint: identityViewPoint(),
-				topBar: {
-					colorSet$: { value: "warnings" },
-					warningFilter: { selectedValues$: { value: ["river"] } },
-				} as unknown as TopBar,
-			}),
-			emptyMap({
-				rivers: [
-					{
-						boundingBox: { x: 0, y: 0, w: 1, h: 1 },
-						colors: { "0": 3 },
-					},
-				],
-				warnings: [
-					{
-						text: "river",
-						source: [{ type: "river", index: 0, name: "r" }],
-					},
-				],
-			}),
-			canvasContext,
-			0,
-		);
-		assert.ok(
-			calls.some(
-				(call) =>
-					call.method === "fillRect" &&
-					call.fillStyle === toColor(waterWarning),
-			),
-		);
+				topBar: warningsTopBar,
+			});
+			renderRivers(plain, worldMap, canvasContext, 0);
+			renderRivers(warned, worldMap, canvasContext, 0);
+			renderRivers(plain, worldMap, canvasContext, 0);
+			renderRivers(warned, worldMap, canvasContext, 0);
+
+			const images = calls
+				.filter((call) => call.method === "drawImage")
+				.map((call) => call.args[0]);
+			assert.strictEqual(images.length, 4);
+			assert.strictEqual(images[0], images[2]);
+			assert.strictEqual(images[1], images[3]);
+			assert.notStrictEqual(images[0], images[1]);
+			assert.strictEqual(rasterised.length, 2);
+			assert.deepStrictEqual(
+				Array.from(rasterised[1]!.data),
+				[0xc0, 0, 0, 255],
+			);
+		});
+
+		it("smooths rivers when zoomed out", function () {
+			const { canvasContext, calls } = recordingContext();
+			renderRivers(
+				context({
+					viewPoint: { ...identityViewPoint(), scale: 0.5 } as ViewPoint,
+				}),
+				emptyMap({
+					rivers: [
+						{
+							boundingBox: { x: 0, y: 0, w: 4, h: 2 },
+							colors: { "0": 0 },
+							ends: [],
+						},
+					],
+				}),
+				canvasContext,
+				0,
+			);
+			const draw = calls.find((call) => call.method === "drawImage");
+			assert.strictEqual(draw?.imageSmoothingEnabled, true);
+			assert.deepStrictEqual(draw?.args.slice(3), [2, 1]);
+		});
+
+		it("skips drawing when the canvas has no 2D context", function () {
+			hasContext = false;
+			const { canvasContext, calls } = recordingContext();
+			renderRivers(
+				context({ viewPoint: identityViewPoint() }),
+				emptyMap({
+					rivers: [
+						{
+							boundingBox: { x: 0, y: 0, w: 1, h: 1 },
+							colors: { "0": 0 },
+							ends: [],
+						},
+					],
+				}),
+				canvasContext,
+				0,
+			);
+			assert.ok(!calls.some((call) => call.method === "drawImage"));
+			assert.strictEqual(canvasContext.imageSmoothingEnabled, true);
+		});
 	});
 
 	it("fills the selected province in green and the hovered one in white", function () {
