@@ -460,7 +460,7 @@ const table: Partial<typeof __table> = {
     "worldmap.warnings.statenoprovinces": "State {0} in \"{1}\" doesn't have provinces.",
     "worldmap.warnings.statenosupplyarea": "State {0} is not in any supply area.",
     "worldmap.warnings.statenotexist": "State with id {0} doesn't exist.",
-    "worldmap.warnings.statenovalidprovinces": "State {0} in doesn't have valid provinces.",
+    "worldmap.warnings.statenovalidprovinces": "State {0} doesn't have valid provinces.",
     "worldmap.warnings.stateprovincenotexist": "Province {0} used in state {1} doesn't exist.",
     "worldmap.warnings.statesnotcontiguous": "States in supply area {0} are not contiguous: {1}, {2}.",
     "worldmap.warnings.statetoolarge": "State {0} is too large: {1}x{2}.",
