@@ -166,6 +166,7 @@ export class Loader extends Subscriber {
 	constructor() {
 		super();
 		this.worldMap = new FEWorldMapClass();
+		this.addSubscription({ dispose: () => this.cancelPendingEmit() });
 		this.load();
 		this.worldMap$.subscribe((wm) => {
 			(window as Window & { worldMap?: FEWorldMap }).worldMap = wm;
@@ -173,6 +174,7 @@ export class Loader extends Subscriber {
 	}
 
 	public refresh() {
+		this.cancelPendingEmit();
 		this.worldMap = new FEWorldMapClass();
 		this.writableWorldMap$.next(this.worldMap);
 		vscode.postMessage({ command: "loaded", force: true } as WorldMapMessage);
@@ -366,11 +368,11 @@ export class Loader extends Subscriber {
 
 		if (this.loadingQueue.length === 0) {
 			// Final emit is synchronous against the now-complete arrays: guarantees the last frame is
-			// never a partial one and covers hidden panels, where the rAF path never fires.
+			// never a partial one, and the finished map does not wait out the throttle.
 			this.emitWorldMap();
 			this.loading$.next(false);
 		} else {
-			// Keep the request pump immediate; only the map emit is rAF-coalesced.
+			// Keep the request pump immediate; only the map emit is throttled.
 			vscode.postMessage(this.loadingQueue.shift());
 			this.scheduleWorldMapEmit();
 		}
@@ -381,21 +383,32 @@ export class Loader extends Subscriber {
 		});
 	}
 
-	private pendingEmit = false;
+	// Every emit is a new FEWorldMapClass, so the renderer rebuilds its reverse maps and redraws the
+	// whole map; mid-load that is paid a few times a second rather than once per frame.
+	private static readonly midLoadEmitIntervalMs = 250;
+	private lastEmitTime = 0;
+	private pendingEmitTimer: ReturnType<typeof setTimeout> | undefined;
 	private scheduleWorldMapEmit(): void {
-		if (this.pendingEmit) {
+		if (this.pendingEmitTimer !== undefined) {
 			return;
 		}
-		this.pendingEmit = true;
-		requestAnimationFrame(() => {
-			if (this.pendingEmit) {
-				this.emitWorldMap();
-			}
-		});
+		const delay = Math.max(
+			0,
+			this.lastEmitTime + Loader.midLoadEmitIntervalMs - performance.now(),
+		);
+		this.pendingEmitTimer = setTimeout(() => this.emitWorldMap(), delay);
+	}
+
+	private cancelPendingEmit(): void {
+		if (this.pendingEmitTimer !== undefined) {
+			clearTimeout(this.pendingEmitTimer);
+			this.pendingEmitTimer = undefined;
+		}
 	}
 
 	private emitWorldMap(): void {
-		this.pendingEmit = false;
+		this.cancelPendingEmit();
+		this.lastEmitTime = performance.now();
 		if (!this.loadingProvinceMap) {
 			return;
 		}
