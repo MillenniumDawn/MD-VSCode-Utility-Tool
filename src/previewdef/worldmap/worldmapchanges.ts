@@ -1,4 +1,4 @@
-import { isEqual } from "lodash";
+import isEqual from "lodash/isEqual";
 import { slice } from "../../util/common";
 import { MapItemMessage, WorldMapData, WorldMapMessage } from "./definitions";
 import { defaultHashItem, diffItemList } from "./worldmapdiff";

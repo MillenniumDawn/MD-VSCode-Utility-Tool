@@ -16,6 +16,7 @@ v1.1.39
 - [ CI ] A changelog model that stalls can no longer hold up the release pull request for hours: bullets it has not reworded within a few minutes keep their pull request titles, and a large release now asks for a reply long enough to hold every bullet instead of falling back to one call per bullet. Issue #223.
 - A preview no longer assembles its whole page for an edit that changes nothing on screen (a comment, whitespace) or that is applied in place; the page is only built when the panel needs to reload it, which matters most for a `.gfx` file whose textures are inlined. Issue #224.
 - After an edit, the technology, event, decision, idea, character, MIO and GFX previews decide whether anything changed without first serialising the whole preview a second time, so a large file responds sooner after each pause in typing. Issue #225.
+- The extension is smaller to download and the previews are quicker to draw. The world map stops re-measuring its tooltip and rebuilding its supply overlays on every frame you move the mouse, exporting the map no longer copies the image three times on its way to disk, searching a focus tree only touches the nodes whose highlight changed, and the event and decision graphs lay their arrow labels out in one pass. Issue #200.
 
 v1.1.38
 

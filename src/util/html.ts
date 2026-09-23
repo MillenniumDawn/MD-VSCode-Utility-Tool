@@ -33,7 +33,16 @@ function previewWheelScript(): DynamicScript {
     return { content: `window.previewWheel = ${jsonForScript(previewWheel ?? 'scroll')};` };
 }
 
-export function html(webview: vscode.Webview, body: string, scripts: (string | DynamicScript)[], styles?: (string | StyleTable | DynamicScript | NonceOnly)[]): string {
+export interface HtmlOptions {
+    /**
+     * Whether the body's whitespace is collapsed on the way out. On by default. A caller that has
+     * already collapsed the expensive part of its markup turns it off rather than paying for a
+     * second scan of the same string.
+     */
+    collapseWhitespace?: boolean;
+}
+
+export function html(webview: vscode.Webview, body: string, scripts: (string | DynamicScript)[], styles?: (string | StyleTable | DynamicScript | NonceOnly)[], options?: HtmlOptions): string {
     const preparedScripts = [previewWheelScript(), ...scripts].map<[string, string]>(script => {
         if (typeof script === 'string') {
             const uri = contextContainer.current ?
@@ -91,7 +100,7 @@ export function html(webview: vscode.Webview, body: string, scripts: (string | D
         ${preparedScripts.map(v => v[0]).join('')}
         ${preparedStyles.join('')}
     </head>
-    <body>${body.replace(/\s\s+/g, ' ')}</body>
+    <body>${options?.collapseWhitespace === false ? body : body.replace(/\s\s+/g, ' ')}</body>
 </html>
 `;
 }
