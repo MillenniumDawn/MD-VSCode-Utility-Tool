@@ -41,9 +41,11 @@ The two settings behind that are the `OPENROUTER_API_KEY` secret and the
 Everything the automation publishes is published by **MD Utilities Release Bot**, a GitHub
 App owned by the `MillenniumDawn` organisation and installed on this repository: it opens
 and pushes the release pull request, and it authors the GitHub release and every
-pre-release. Its two secrets are **required** — `RELEASE_PR_APP_ID` and
-`RELEASE_PR_APP_PRIVATE_KEY` — and without them the release pull request and publish jobs
-fail at their first step. The App needs four repository
+pre-release. Its two secrets are **required** — `RELEASE_PR_APP_CLIENT_ID` (the Client ID
+from the App's settings page) and `RELEASE_PR_APP_PRIVATE_KEY` — and without them the
+release pull request and publish jobs fail at their first step. The older
+`RELEASE_PR_APP_ID` still works in place of the client id, as a fallback; the token action
+deprecated passing the App ID as `app-id`, so the workflow hands either one over as `client-id`. The App needs four repository
 permissions: Metadata read, Contents read & write, Pull requests read & write, and
 Workflows read & write. The last one is not optional: the release branch merges `main`,
 so its push carries any change to `.github/workflows/**`, and GitHub rejects such a push
