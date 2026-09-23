@@ -18,8 +18,8 @@ Unreleased
 - [ CI ] A changelog model that stalls can no longer hold up the release pull request for hours: bullets it has not reworded within a few minutes keep their pull request titles, and a large release now asks for a reply long enough to hold every bullet instead of falling back to one call per bullet. Issue #223.
 - A preview no longer assembles its whole page for an edit that changes nothing on screen (a comment, whitespace) or that is applied in place; the page is only built when the panel needs to reload it, which matters most for a `.gfx` file whose textures are inlined. Issue #224.
 - After an edit, the technology, event, decision, idea, character, MIO and GFX previews decide whether anything changed without first serialising the whole preview a second time, so a large file responds sooner after each pause in typing. Issue #225.
-- Reading mod files is slightly faster: the parser no longer rebuilds its patterns or sets aside extra memory for every value it reads. Issue #227.
 - [ World Map Previewer ] The world map loads faster and with less memory churn: tracing province borders no longer creates millions of short-lived objects and text keys along the way. Issue #228.
+- [ Testing ] Texture decoding is now tested on DXT1, DXT3 and DXT5 files, on textures with mipmaps and on sizes that are not a multiple of four, the formats nearly every mod sprite uses. Issue #245.
 - You can now right-click a file in the explorer or the editor and choose **Preview HOI4 file**, or press `Ctrl+Shift+Alt+V`. Issue #203.
 - **Scan References** now shows how far it has got and can be cancelled, and says so when it fails instead of finishing silently. Issue #203.
 - A preview that fails to render now offers a Retry button, so a passing problem no longer leaves a dead page until you edit the file or reopen the preview. Issue #203.
