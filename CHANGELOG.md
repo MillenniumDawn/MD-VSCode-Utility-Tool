@@ -10,6 +10,7 @@ v1.1.39
 - Jumping to a vanilla file no longer asks which folder to copy it into when only one workspace folder is open. Issue #240.
 - [ World Map Previewer ] A workspace setting whose value is not what the extension expects can no longer break out of a preview's page script; the world map and focus tree previews and the mouse-wheel setting now embed settings values safely. Issue #220.
 - [ CI ] A merge landing after a release whose publish failed no longer opens a second release pull request for the same version, one that could never publish once the fix was merged and left the version stuck. Issue #222.
+- [ World Map Previewer ] The warning for a state whose provinces all fail to resolve now reads "State 12 doesn't have valid provinces." instead of the garbled "State 12 in doesn't have valid provinces.". Issue #244.
 - Changing a setting now repaints every preview that depends on it. The focus tree, MIO and GUI previews ignored settings changes entirely, and in the event, idea, decision and character previews the preview localisation and index settings redrew the page from a cache, so they appeared to do nothing. Issue #203.
 - [ Technology Previewer ] The technology tree no longer paints a black backdrop on light themes, and [ MIO Previewer ] the MIO grid lines are no longer invisible there. Issue #203.
 - Selecting a mod file or an install path now reports it when the setting cannot be saved, instead of showing the new one in the status bar as though it had been. Issue #203.

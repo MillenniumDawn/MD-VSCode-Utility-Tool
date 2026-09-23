@@ -531,7 +531,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"worldmap.warnings.statenosupplyarea": "State {0} is not in any supply area.",
 	"worldmap.warnings.statenotexist": "State with id {0} doesn't exist.",
 	"worldmap.warnings.statenovalidprovinces":
-		"State {0} in doesn't have valid provinces.",
+		"State {0} doesn't have valid provinces.",
 	"worldmap.warnings.stateprovincenotexist":
 		"Province {0} used in state {1} doesn't exist.",
 	"worldmap.warnings.statesnotcontiguous":
