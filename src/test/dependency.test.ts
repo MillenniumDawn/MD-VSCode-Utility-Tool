@@ -6,6 +6,7 @@ import {
     localisationKeysOf,
     scanReferencesForEvents,
 } from '../util/dependency';
+import { ProgressReport } from '../util/progress';
 import * as vscode from 'vscode';
 import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 import { clearDlcZipCache } from '../util/fileloader';
@@ -341,6 +342,33 @@ describe('util/dependency', () => {
             return inserted;
         }
 
+        function scanWith(documentText: string, progress: ProgressReport) {
+            const inserted: string[] = [];
+            const editor = {
+                document: {
+                    uri: vscode.Uri.file('/ws/events/main.txt'),
+                    isClosed: false,
+                    getText: () => documentText,
+                },
+                edit: async (cb: any) => {
+                    cb({ insert: (_pos: unknown, text: string) => inserted.push(text) });
+                    return true;
+                },
+            } as unknown as vscode.TextEditor;
+
+            return scanReferencesForEvents(editor, progress).then((result) => ({
+                inserted,
+                result,
+            }));
+        }
+
+        function token(cancelled: boolean): vscode.CancellationToken {
+            return {
+                isCancellationRequested: cancelled,
+                onCancellationRequested: () => ({ dispose: () => undefined }),
+            } as unknown as vscode.CancellationToken;
+        }
+
         it('inserts the linked event files and the localisation files that carry their keys', async () => {
             const inserted = await scan(eventSource);
 
@@ -370,6 +398,34 @@ describe('util/dependency', () => {
             // before the listing; english.yml is new but its section holds none of the keys the
             // reached events show, so the only new marker is the english file.
             assert.deepStrictEqual(inserted, ['#!localisation:localisation/english.yml\n']);
+        });
+
+        it('writes nothing when the scan was cancelled before it started', async () => {
+            const { inserted, result } = await scanWith(eventSource, {
+                token: token(true),
+                report: () => undefined,
+            });
+
+            // The whole point of Cancel is that the file is left alone.
+            assert.strictEqual(result, 'cancelled');
+            assert.deepStrictEqual(inserted, []);
+        });
+
+        it('reports rising progress against a total that never shrinks', async () => {
+            const reports: [number, number][] = [];
+            const { result } = await scanWith(eventSource, {
+                token: token(false),
+                report: (done, total) => reports.push([done, total]),
+            });
+
+            assert.strictEqual(result, 'done');
+            assert.ok(reports.length > 0, 'the scan reported no progress at all');
+            for (let i = 1; i < reports.length; i++) {
+                assert.ok(reports[i]![0] > reports[i - 1]![0], `progress went backwards at ${i}`);
+                assert.ok(reports[i]![1] >= reports[i - 1]![1], `the total shrank at ${i}`);
+            }
+            const last = reports[reports.length - 1]!;
+            assert.ok(last[0] <= last[1], 'more files done than known');
         });
     });
 });

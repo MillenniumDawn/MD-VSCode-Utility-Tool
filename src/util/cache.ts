@@ -37,12 +37,66 @@ interface CacheEntry<V> {
 	weigh?: () => number;
 }
 
+// One timer for every cache, rather than one per cache. Each instance keeps its own life; the
+// shared tick runs at the shortest of them, so nothing sweeps less often than it did, and a host
+// holding dozens of caches wakes up once instead of dozens of times.
+interface SweepEntry {
+	sweepInterval: number;
+	tryClean(): void;
+}
+
+const sweptCaches = new Set<SweepEntry>();
+let sweeperToken: NodeJS.Timeout | null = null;
+let sweeperInterval = 0;
+
+/** How many caches the shared sweeper is currently ticking. Used by the tests. */
+export function sweepingCacheCount(): number {
+	return sweptCaches.size;
+}
+
+function rescheduleSweeper(): void {
+	let shortest = Infinity;
+	for (const cache of sweptCaches) {
+		shortest = Math.min(shortest, cache.sweepInterval);
+	}
+
+	if (shortest === Infinity) {
+		if (sweeperToken !== null) {
+			clearInterval(sweeperToken);
+			sweeperToken = null;
+		}
+		sweeperInterval = 0;
+		return;
+	}
+
+	if (sweeperToken !== null && sweeperInterval === shortest) {
+		return;
+	}
+
+	if (sweeperToken !== null) {
+		clearInterval(sweeperToken);
+	}
+	sweeperInterval = shortest;
+	sweeperToken = setInterval(() => {
+		for (const cache of sweptCaches) {
+			cache.tryClean();
+		}
+	}, shortest);
+	// A cache sweep is never a reason to keep the process alive.
+	if (
+		typeof (sweeperToken as unknown as { unref?: () => void }).unref ===
+		"function"
+	) {
+		(sweeperToken as unknown as { unref: () => void }).unref();
+	}
+}
+
 export class Cache<V> {
 	protected _cache: Record<string, CacheEntry<V>> = {};
 	// Kept alongside the record so a count-only limit check does not have to materialise every
 	// key on every miss. Every write to _cache goes through setEntry/deleteEntry to keep it right.
 	private _size = 0;
-	private _intervalToken: NodeJS.Timeout | null = null;
+	private readonly _sweepEntry: SweepEntry | null;
 	private _accessCounter = 0;
 
 	protected nextAccessSeq(): number {
@@ -65,17 +119,14 @@ export class Cache<V> {
 
 	constructor(protected readonly options: CacheOptions<V>) {
 		if (options.life > 0) {
-			this._intervalToken = setInterval(
-				() => this.tryClean(),
-				options.life / 5,
-			);
-			if (
-				this._intervalToken &&
-				typeof (this._intervalToken as unknown as { unref?: () => void })
-					.unref === "function"
-			) {
-				(this._intervalToken as unknown as { unref: () => void }).unref();
-			}
+			this._sweepEntry = {
+				sweepInterval: options.life / 5,
+				tryClean: () => this.tryClean(),
+			};
+			sweptCaches.add(this._sweepEntry);
+			rescheduleSweeper();
+		} else {
+			this._sweepEntry = null;
 		}
 		if (!options.expireWhenChange) {
 			options.expireWhenChange = () => undefined;
@@ -131,8 +182,8 @@ export class Cache<V> {
 
 	public dispose(): void {
 		this.clear();
-		if (this._intervalToken) {
-			clearInterval(this._intervalToken);
+		if (this._sweepEntry !== null && sweptCaches.delete(this._sweepEntry)) {
+			rescheduleSweeper();
 		}
 	}
 

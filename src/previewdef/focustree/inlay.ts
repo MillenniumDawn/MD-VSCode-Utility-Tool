@@ -12,7 +12,7 @@ import { getConfiguration } from "../../util/vsccommon";
 import { getGfxContainerFile } from "../../util/gfxindex";
 import { getGfxSpriteMap } from "../../util/image/imagecache";
 import { scanCandidatesUntilResolved } from "../../util/candidateScan";
-import { uniq } from "lodash";
+import uniq from "lodash/uniq";
 
 interface ParsedInlayFile {
     inlays: FocusTreeInlay[];

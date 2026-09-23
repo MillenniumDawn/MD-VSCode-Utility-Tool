@@ -62,7 +62,10 @@ function ensureIndexBuilt(): Promise<[void, void, void]> {
 	return builder.ensureBuilt();
 }
 
-const FOCUS_CACHE_VERSION = 1;
+const FOCUS_CACHE_VERSION = 2;
+
+/** One file's focus ids, as one line of the cache. */
+type FocusCacheRecord = [file: string, keys: string[]];
 
 const focusRoot = "common/national_focus";
 
@@ -143,7 +146,7 @@ async function buildFocusIndexHalf(
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
-	await buildIndexHalf<FocusIndex>(
+	await buildIndexHalf<FocusCacheRecord>(
 		{
 			cacheName,
 			version: FOCUS_CACHE_VERSION,
@@ -151,23 +154,18 @@ async function buildFocusIndexHalf(
 			dependencyGeneration: context.dependencyGeneration,
 			listFiles: (token) =>
 				listIndexFiles({ roots: [focusRoot], options: { ...options, token } }),
-			hydrate: (cached, skipFiles) => {
-				for (const file in cached) {
-					if (!skipFiles.has(file)) {
-						const keys = cached[file];
-						if (keys === undefined) {
-							continue;
-						}
-						focusIndex[file] = keys;
-						for (const key of keys) {
-							reverseMap.set(key, file);
-						}
-					}
+			hydrate: ([file, keys], skipFiles) => {
+				if (skipFiles.has(file)) {
+					return;
+				}
+				focusIndex[file] = keys;
+				for (const key of keys) {
+					reverseMap.set(key, file);
 				}
 			},
 			parseFile: (file) =>
 				fillFocusItems(file, focusIndex, reverseMap, options, estimatedSize),
-			serialize: () => focusIndex,
+			serialize: () => Object.entries(focusIndex),
 		},
 		progress,
 	);

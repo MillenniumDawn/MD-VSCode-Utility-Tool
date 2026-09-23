@@ -26,7 +26,7 @@ import { StatesLoader } from "./states";
 import { arrayToMap, UserError } from "../../../util/common";
 import { Token } from "../../../hoiformat/hoiparser";
 import { LoaderSession } from "../../../util/loader/loader";
-import { flatMap } from "lodash";
+import flatMap from "lodash/flatMap";
 
 interface StrategicRegionFile {
 	strategic_region: StrategicRegionDefinition[];
