@@ -8,6 +8,7 @@ import { isOffset, isOptionalOffset, isOptionalString, isRecord } from '../util/
 import { loadingShellHtml } from '../util/html';
 import { openOrCopyHoiFile } from '../util/previewfileopener';
 import { setPreviewOption } from '../util/previewoptions';
+import { ConfigurationKey } from '../constants';
 
 export abstract class PreviewBase {
     private cachedDependencies: string[] | undefined = undefined;
@@ -91,6 +92,25 @@ export abstract class PreviewBase {
         return loadingShellHtml(localize('preview.loading', 'Loading preview...'));
     }
 
+    /**
+     * Settings whose change makes this preview's rendered page stale, without the `mdHoi4Utilities.`
+     * prefix. A getter rather than a field: registerEvents runs from the constructor, before a
+     * subclass's field initializers have, and a field would still be undefined there.
+     */
+    protected get reloadOnConfigurationChange(): readonly string[] {
+        return [];
+    }
+
+    /**
+     * Whether a configuration-driven reload has to force the loader session. Almost always yes: a
+     * setting change does not move the document's hash, so without it the loader answers from its
+     * cache and the page repaints exactly what it had. A preview that reads its settings while
+     * rendering, rather than through a loader, can leave this false.
+     */
+    protected get configurationChangeForcesReload(): boolean {
+        return true;
+    }
+
     protected registerEvents(panel: vscode.WebviewPanel): void {
         // The page is the extension's own, but its messages are still input: the shape is
         // checked here, once, so nothing below reads a field it did not verify.
@@ -137,6 +157,18 @@ export abstract class PreviewBase {
         this.subscriptions.push(panel.onDidDispose(() => {
             this.dispose();
         }));
+
+        // registerFeatureFlags subscribes to this same event during activation, long before any
+        // preview exists, and VS Code fires listeners in subscription order -- so the module flags
+        // a render reads are already refreshed by the time this runs.
+        const keys = this.reloadOnConfigurationChange;
+        if (keys.length > 0) {
+            this.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+                if (keys.some(key => e.affectsConfiguration(`${ConfigurationKey}.${key}`))) {
+                    this.reload(this.configurationChangeForcesReload);
+                }
+            }));
+        }
     }
     
     /**

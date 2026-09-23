@@ -2,7 +2,9 @@ import trimStart from "lodash/trimStart";
 import * as vscode from "vscode";
 import { Commands, ConfigurationKey, Hoi4FsSchema } from "../constants";
 import { forceError } from "./common";
+import { error } from "./debug";
 import { clearDlcZipCache } from "./fileloader";
+import { localize } from "./i18n";
 import {
 	checkInstallPath,
 	clearInstallPathCache,
@@ -78,13 +80,32 @@ async function selectHoiFolder(): Promise<void> {
 	if (uri === undefined) {
 		return;
 	}
-	setInstallPathUri(uri);
-	void clearDlcZipCache();
-
 	if (!IS_WEB_EXT && isFileScheme(uri)) {
 		const conf = getConfiguration();
-		await conf.update("installPath", uri.fsPath, vscode.ConfigurationTarget.Global);
+		try {
+			await conf.update(
+				"installPath",
+				uri.fsPath,
+				vscode.ConfigurationTarget.Global,
+			);
+		} catch (e) {
+			error(e);
+			void vscode.window.showErrorMessage(
+				localize(
+					"installpath.savefailed",
+					"Couldn't save the Hearts of Iron IV install path: {0}",
+					`${e}`,
+				),
+			);
+			return;
+		}
 	}
+
+	// After the write, not before it: a rejected write used to leave the in-memory path pointing
+	// at a folder the settings did not name. It also settles a race -- the configuration change
+	// this write raises clears the cache, and doing so after an earlier set would have undone it.
+	setInstallPathUri(uri);
+	void clearDlcZipCache();
 }
 
 function onChangeWorkspaceConfiguration(
