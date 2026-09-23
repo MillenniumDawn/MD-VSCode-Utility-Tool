@@ -139,29 +139,46 @@ export function renderProvince(
 					? Math.pow(2, renderPrecisionBase + 1 - Math.round(scale))
 					: 1));
 	const renderPrecisionMask = renderPrecision - 1;
-	const renderPrecisionOffset = (renderPrecision - 1) / 2;
 	for (const zone of province.coverZones) {
 		if (zone.w < renderPrecision) {
+			// A grid-aligned small zone stands in for the whole block starting at its corner.
 			if (
 				(zone.x & renderPrecisionMask) === 0 &&
 				(zone.y & renderPrecisionMask) === 0
 			) {
-				context.fillRect(
-					viewPoint.convertX(zone.x + xOffset - renderPrecisionOffset),
-					viewPoint.convertY(zone.y - renderPrecisionOffset),
-					renderPrecision * scale,
-					renderPrecision * scale,
+				fillMapRect(
+					viewPoint,
+					context,
+					zone.x + xOffset,
+					zone.y,
+					renderPrecision,
+					renderPrecision,
 				);
 			}
 		} else {
-			context.fillRect(
-				viewPoint.convertX(zone.x + xOffset - renderPrecisionOffset),
-				viewPoint.convertY(zone.y - renderPrecisionOffset),
-				zone.w * scale,
-				zone.h * scale,
-			);
+			fillMapRect(viewPoint, context, zone.x + xOffset, zone.y, zone.w, zone.h);
 		}
 	}
+}
+
+// Both corners go through the view point so a fill edge rounds to the same
+// canvas pixel as the border drawn along it.
+function fillMapRect(
+	viewPoint: ViewPoint,
+	context: CanvasRenderingContext2D,
+	x: number,
+	y: number,
+	w: number,
+	h: number,
+): void {
+	const left = viewPoint.convertX(x);
+	const top = viewPoint.convertY(y);
+	context.fillRect(
+		left,
+		top,
+		viewPoint.convertX(x + w) - left,
+		viewPoint.convertY(y + h) - top,
+	);
 }
 
 function renderEdges(

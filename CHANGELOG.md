@@ -2,6 +2,7 @@ Unreleased
 
   Bugfixes:
 
+- [ World Map Previewer ] Province colours and the hover and selection highlights now line up with the border lines drawn around them, instead of sitting up to a couple of pixels up and to the left, most visibly with fast rendering on or when zoomed out. Issue #277.
 - [ World Map Previewer ] A failed map data request now shows its error instead of leaving the preview stuck on the loading message. Issue #241.
 - Index updates now wait for an overdue build to finish instead of changing the index while it is still being built. Issue #233.
 - Editing or deleting localisation files now removes old entries from every language they contain, even when the filename does not name the language. Issue #235.
