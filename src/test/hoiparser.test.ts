@@ -103,6 +103,12 @@ describe('parseHoi4File', () => {
         assert.strictEqual(child(root, 'name').value, 'he said "hi"');
     });
 
+    it('un-escapes a backslash next to an escaped quote', () => {
+        const root = parseHoi4File('name = "a\\\\\\"b" path = "c:\\\\dir"');
+        assert.strictEqual(child(root, 'name').value, 'a\\"b');
+        assert.strictEqual(child(root, 'path').value, 'c:\\dir');
+    });
+
     it('parses symbol values (bare identifiers)', () => {
         const root = parseHoi4File('color = red');
         const color = child(root, 'color');
