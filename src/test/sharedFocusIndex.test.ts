@@ -696,7 +696,7 @@ describe("util/sharedFocusIndex disk cache", function () {
 	);
 
 	const MANIFEST = JSON.stringify({
-		version: 1,
+		version: 2,
 		entries: [
 			{ filePath: FRESH, mtime: 1 },
 			{ filePath: STALE, mtime: 1 },
@@ -704,10 +704,26 @@ describe("util/sharedFocusIndex disk cache", function () {
 		],
 	});
 
-	const CACHED_INDEX = JSON.stringify({
-		[FRESH]: ["cached_fresh"],
-		[STALE]: ["cached_stale"],
-	});
+	// One record per line, then the record count.
+	const CACHED_RECORDS = [
+		JSON.stringify([FRESH, ["cached_fresh"]]),
+		JSON.stringify([STALE, ["cached_stale"]]),
+	];
+	const CACHED_INDEX = [...CACHED_RECORDS, "2", ""].join("\n");
+
+	function stubCacheData(data: string): void {
+		stubVscode({
+			readFile: async (uri: vscode.Uri) => {
+				if (uri.path.endsWith("sharedFocusIndex.workspace.manifest.json")) {
+					return Buffer.from(MANIFEST);
+				}
+				if (uri.path.endsWith("sharedFocusIndex.workspace.data.jsonl")) {
+					return Buffer.from(data);
+				}
+				throw new Error(`no such cache file: ${uri.path}`);
+			},
+		});
+	}
 
 	let originalListFiles: FileloaderModule["listFileEntriesFromModOrHOI4"];
 	let originalReadFile: FileloaderModule["readFileFromModOrHOI4"];
@@ -732,7 +748,7 @@ describe("util/sharedFocusIndex disk cache", function () {
 				if (uri.path.endsWith("sharedFocusIndex.workspace.manifest.json")) {
 					return Buffer.from(MANIFEST);
 				}
-				if (uri.path.endsWith("sharedFocusIndex.workspace.data.json")) {
+				if (uri.path.endsWith("sharedFocusIndex.workspace.data.jsonl")) {
 					return Buffer.from(CACHED_INDEX);
 				}
 				throw new Error(`no such cache file: ${uri.path}`);
@@ -801,20 +817,20 @@ describe("util/sharedFocusIndex disk cache", function () {
 	});
 
 	it("falls back to a full rebuild when the cached data is corrupted", async function () {
-		stubVscode({
-			readFile: async (uri: vscode.Uri) => {
-				if (uri.path.endsWith("sharedFocusIndex.workspace.manifest.json")) {
-					return Buffer.from(MANIFEST);
-				}
-				if (uri.path.endsWith("sharedFocusIndex.workspace.data.json")) {
-					return Buffer.from("{ this is not json");
-				}
-				throw new Error(`no such cache file: ${uri.path}`);
-			},
-		});
+		stubCacheData("{ this is not json");
 
 		assert.strictEqual(await findFileByFocusKey("parsed_fresh"), FRESH);
 		assert.strictEqual(await findFileByFocusKey("parsed_stale"), STALE);
+		assert.deepStrictEqual(parsedFiles.sort(), [FRESH, STALE]);
+	});
+
+	it("falls back to a full rebuild when the cached data was cut short", async function () {
+		// Every line parses, but the count never made it to disk: the fresh file's record could just
+		// as well have been the one lost, so none of it is trusted.
+		stubCacheData(CACHED_RECORDS.join("\n") + "\n");
+
+		assert.strictEqual(await findFileByFocusKey("parsed_fresh"), FRESH);
+		assert.strictEqual(await findFileByFocusKey("cached_fresh"), undefined);
 		assert.deepStrictEqual(parsedFiles.sort(), [FRESH, STALE]);
 	});
 });

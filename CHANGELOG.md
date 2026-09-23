@@ -18,12 +18,14 @@ Unreleased
 - [ CI ] A changelog model that stalls can no longer hold up the release pull request for hours: bullets it has not reworded within a few minutes keep their pull request titles, and a large release now asks for a reply long enough to hold every bullet instead of falling back to one call per bullet. Issue #223.
 - A preview no longer assembles its whole page for an edit that changes nothing on screen (a comment, whitespace) or that is applied in place; the page is only built when the panel needs to reload it, which matters most for a `.gfx` file whose textures are inlined. Issue #224.
 - After an edit, the technology, event, decision, idea, character, MIO and GFX previews decide whether anything changed without first serialising the whole preview a second time, so a large file responds sooner after each pause in typing. Issue #225.
+- On a mod the size of Millennium Dawn, VS Code no longer freezes for seconds while the focus, localisation, sprite and idea swap indexes save their cache or load it at the start of a session. The localisation cache is also much smaller on disk, and the first session after updating rebuilds each index once. Issue #226.
 - Reading mod files is slightly faster: the parser no longer rebuilds its patterns or sets aside extra memory for every value it reads. Issue #227.
 - You can now right-click a file in the explorer or the editor and choose **Preview HOI4 file**, or press `Ctrl+Shift+Alt+V`. Issue #203.
 - **Scan References** now shows how far it has got and can be cancelled, and says so when it fails instead of finishing silently. Issue #203.
 - A preview that fails to render now offers a Retry button, so a passing problem no longer leaves a dead page until you edit the file or reopen the preview. Issue #203.
 - "Can't preview this file" now names the folders each preview reads, such as `common/national_focus/*.txt`, instead of listing internal names. Issue #203.
 - The extension is easier to find on the Marketplace: it is listed under Visualization, searchable for "hoi4", and no longer describes itself as being for "Heart of Iron IV". Issue #203.
+
 - The extension is smaller to download and the previews are quicker to draw. The world map stops re-measuring its tooltip and rebuilding its supply overlays on every frame you move the mouse, exporting the map no longer copies the image three times on its way to disk, searching a focus tree only touches the nodes whose highlight changed, and the event and decision graphs lay their arrow labels out in one pass. Issue #200.
 
 v1.1.38
