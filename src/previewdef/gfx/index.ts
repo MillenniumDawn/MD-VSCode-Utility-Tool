@@ -1,3 +1,4 @@
+import { localize } from "../../util/i18n";
 import * as vscode from "vscode";
 import { renderGfxFile } from "./contentbuilder";
 import { PreviewProviderDef } from "../previewmanager";
@@ -24,6 +25,7 @@ export class GfxPreview extends UpdateablePreviewBase {
 
 export const gfxPreviewDef: PreviewProviderDef = {
 	type: "gfx",
+	displayName: () => localize("preview.type.gfx", "Sprites (*.gfx)"),
 	canPreview: canPreviewGfx,
 	previewConstructor: GfxPreview,
 };
