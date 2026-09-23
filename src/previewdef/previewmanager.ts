@@ -12,7 +12,7 @@ import { contextContainer, setVscodeContext } from '../context';
 import { basename, getDocumentByUri, previewWebviewOptions } from '../util/vsccommon';
 import { worldMapPreviewDef } from './worldmap';
 import { eventPreviewDef } from './event';
-import { chain } from 'lodash';
+import minBy from 'lodash/minBy';
 import { sendEvent } from '../util/telemetry';
 import { guiPreviewDef } from './gui';
 import { mioPreviewDef } from './mio';
@@ -243,11 +243,11 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
     }
 
     private findPreviewProvider(document: vscode.TextDocument): PreviewProviderDef | undefined {
-        return chain(this._previewProviders)
-            .map(p => ({ provider: p, priority: p.canPreview(document) }))
-            .filter((value): value is ({ provider: PreviewProviderDef; priority: number }) => value.priority !== undefined)
-            .minBy(value => value.priority)
-            .value()?.provider;
+        return minBy(
+            this._previewProviders
+                .map(p => ({ provider: p, priority: p.canPreview(document) }))
+                .filter((value): value is ({ provider: PreviewProviderDef; priority: number }) => value.priority !== undefined),
+            value => value.priority)?.provider;
     }
 
     private addPreviewToSubscription(previewItem: PreviewBase, dependency: string[]): void {

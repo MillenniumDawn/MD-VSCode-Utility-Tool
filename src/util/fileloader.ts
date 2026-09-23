@@ -40,7 +40,7 @@ import { getParentModUris } from "./parentmods";
 import { appendEntriesWithErrorLogging } from "./promiseUtils";
 import type { ZipIndex } from "./nativezip";
 import { Hoi4FsSchema } from "../constants";
-import { trimStart } from "lodash";
+import trimStart from "lodash/trimStart";
 
 const dlcRootFolders = ["dlc", "integrated_dlc"];
 

@@ -15,7 +15,11 @@ import { TechnologyTreeLoader, TechnologyTreeLoaderResult } from './loader';
 import { EquipmentArchetype } from './equipmentschema';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug } from '../../util/debug';
-import { flatMap, sumBy, min, flatten, chain, uniq } from 'lodash';
+import flatMap from 'lodash/flatMap';
+import sumBy from 'lodash/sumBy';
+import min from 'lodash/min';
+import flatten from 'lodash/flatten';
+import uniq from 'lodash/uniq';
 import { StyleTable } from '../../util/styletable';
 import { RenderNodeCommonOptions } from '../../util/hoi4gui/nodecommon';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
@@ -82,6 +86,8 @@ export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vs
                 // reload. Tech injects no client-side <style>, so no extra style nonce is reserved.
                 { content: styleTable.toRawCss(), id: 'tech-server-styles' },
             ],
+            // baseContent arrives already collapsed, folder markup and all.
+            { collapseWhitespace: false },
         );
 
         // Parts for the in-place update. The tree is rendered on the host, so unlike MIO the payload
@@ -137,13 +143,18 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
     const gfxFiles = loadResult.gfxFiles;
     const equipmentArchetypes = loadResult.equipmentArchetypes;
     const techFolders = (await Promise.all(folders.map(folder => renderTechnologyFolder(technologyTrees, folder, techTreeViews, containerWindowTypes, styleTable, guiFiles, gfxFiles, equipmentArchetypes, country)))).join('');
-    // Collapse whitespace exactly as html() does to the whole body, so the innerHTML the update swaps
-    // in is byte-identical to what the baseline reload renders inside #techtreecontent.
+    // The one collapse the folder markup gets. It is what the in-place update swaps into
+    // #techtreecontent, and what the baseline page puts there too, so the two stay identical.
     const contentHtml = techFolders.replace(/\s\s+/g, ' ');
     const folderOptionsHtml = await renderFolderOptions(folders);
     const countries = await renderCountryOptions(loadResult.countryTagsByFolder ?? {});
 
-    const baseContent = `
+    // The folder markup is by far the biggest part of the page, and html() would otherwise run this
+    // same collapse over it a second time. Collapsing the wrapper here and splicing contentHtml in
+    // untouched scans it once, and leaves #techtreecontent holding exactly the string the in-place
+    // update swaps into it.
+    const collapse = (markup: string) => markup.replace(/\s\s+/g, ' ');
+    const baseContent = collapse(`
     ${await renderFolderSelector(folderOptionsHtml, styleTable)}
     <div
     id="dragger"
@@ -163,9 +174,7 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
         top: 0;
         pointer-events: none;
         margin-top: 40px;
-    `)}">
-        ${techFolders}
-    </div>`;
+    `)}">`) + contentHtml + `</div>`;
 
     return { baseContent, contentHtml, folderOptionsHtml, countries };
 }
@@ -748,8 +757,8 @@ async function renderLineItem(
     const centerName: string | undefined = centerNameTable[centerNameCode];
 
     const directionalItems = [ item.up, item.down, item.right, item.left ];
-    const inSet = chain(directionalItems).compact().flatMap(c => Object.keys(c.in)).uniq().value();
-    const outSet = chain(directionalItems).compact().flatMap(c => Object.keys(c.out)).uniq().value();
+    const inSet = uniq(directionalItems.filter(c => !!c).flatMap(c => Object.keys(c.in)));
+    const outSet = uniq(directionalItems.filter(c => !!c).flatMap(c => Object.keys(c.out)));
     let sameInOut = false;
 
     if (inSet.length === outSet.length) {

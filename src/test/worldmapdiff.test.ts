@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { isEqual } from 'lodash';
+import isEqual from 'lodash/isEqual';
 import { createItemHasher, diffItemList, defaultHashItem } from '../previewdef/worldmap/worldmapdiff';
 
 function buildProvince(id: number, pathPoints: number): any {

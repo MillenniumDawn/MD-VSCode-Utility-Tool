@@ -54,6 +54,17 @@ describe('util/html', () => {
             assert.ok(page.includes('.st-x { color: red; }'));
         });
 
+        it('collapses the body by default and leaves it alone when told not to', () => {
+            // The technology preview collapses its own folder markup so the in-place update and the
+            // baseline page agree byte for byte; it then opts out here rather than paying for a
+            // second scan of the same string.
+            const body = '<div>  a\n\n  b</div>';
+            assert.ok(html(webview, body, []).includes('<body><div> a b</div></body>'));
+            assert.ok(
+                html(webview, body, [], [], { collapseWhitespace: false })
+                    .includes('<body>' + body + '</body>'));
+        });
+
         it('embeds the previewWheel setting so a hostile value cannot end the inline script', () => {
             // Issue #220: the setting is a workspace value, and the HTML parser ends a script at the
             // first `</script` whatever the JavaScript around it means.

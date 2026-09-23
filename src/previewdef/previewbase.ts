@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { localize } from '../util/i18n';
 import { error, debug } from '../util/debug';
 import { getDocumentByUri } from '../util/vsccommon';
-import { isEqual } from 'lodash';
+import isEqual from 'lodash/isEqual';
 import { sendByMessage, isTelemetryMessage } from '../util/telemetry';
 import { isOffset, isOptionalOffset, isOptionalString, isRecord } from '../util/messageguards';
 import { loadingShellHtml } from '../util/html';

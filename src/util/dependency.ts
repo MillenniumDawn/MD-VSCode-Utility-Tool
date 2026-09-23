@@ -16,7 +16,8 @@ import {
 	getRelativePathInWorkspace,
 	isSameUri,
 } from "./vsccommon";
-import { flatMap, flatten } from "lodash";
+import flatMap from "lodash/flatMap";
+import flatten from "lodash/flatten";
 import { parseYaml } from "./yaml";
 import { indexParseQueue } from "./indexBuild";
 import {

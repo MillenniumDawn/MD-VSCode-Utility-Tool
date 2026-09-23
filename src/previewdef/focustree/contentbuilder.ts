@@ -11,7 +11,7 @@ import { LoaderSession } from '../../util/loader/loader';
 import { debug, error } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { useConditionInFocus, localisationIndex } from '../../util/featureflags';
-import { flatMap } from 'lodash';
+import flatMap from 'lodash/flatMap';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { getFocusTitlebarImage, getFocusOverlayImage, loadFocusTitlebarStyles } from "./titlebar";
 import { renderContainerWindow, RenderChildTypeMap } from "../../util/hoi4gui/containerwindow";
@@ -236,6 +236,14 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
     // Same reason as registerWarningStyles below: the shell stylesheet is the only one the webview
     // can still attach classes against after a render. See tracestyles.ts.
     registerTraceStyles(styleTable);
+
+    // The search highlight. Same id-prefixed `raw` trick as the trace styles: the webview attaches
+    // this class after a render, so the rule has to exist in the shell stylesheet, and the id keeps
+    // it ahead of the node's own classes without reaching for !important.
+    styleTable.raw(`#focustreeplaceholder .focus-search-hit`, `
+        outline: 1px solid #E33;
+        background: rgba(255, 0, 0, 0.5);
+    `);
 
     // CSP-nonced <style> element the webview later fills with the resolved focus-icon background CSS.
     const progressiveIconStyles = `<style id="ft-progressive-icons" nonce="${styleNonce}"></style>`;

@@ -18,3 +18,17 @@ export function isOptionalOffset(value: unknown): value is number | undefined {
 export function isOptionalString(value: unknown): value is string | undefined {
 	return value === undefined || typeof value === "string";
 }
+
+/**
+ * Raw bytes posted by a webview. VS Code structured-clones ArrayBuffers and typed arrays across
+ * the boundary, so an image comes over as bytes rather than as a base64 data URI.
+ */
+export function isOptionalBytes(
+	value: unknown,
+): value is Uint8Array | ArrayBuffer | undefined {
+	return (
+		value === undefined ||
+		value instanceof Uint8Array ||
+		value instanceof ArrayBuffer
+	);
+}

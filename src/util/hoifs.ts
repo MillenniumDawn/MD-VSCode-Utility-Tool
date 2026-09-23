@@ -1,4 +1,4 @@
-import { trimStart } from "lodash";
+import trimStart from "lodash/trimStart";
 import * as vscode from "vscode";
 import { Commands, ConfigurationKey, Hoi4FsSchema } from "../constants";
 import { forceError } from "./common";

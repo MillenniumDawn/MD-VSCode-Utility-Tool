@@ -1,7 +1,8 @@
 import { getState, setState, arrayToMap, subscribeNavigators, scrollToState, tryRun, enableZoom, initCommon, previewOption, setPreviewOption } from "./util/common";
 import { toggleBinder } from "./util/toolbar";
 import { DivDropdown } from "./util/dropdown";
-import { minBy, maxBy } from "lodash";
+import minBy from "lodash/minBy";
+import maxBy from "lodash/maxBy";
 import { renderGridBoxCommon, GridBoxItem, GridBoxConnection } from "../src/util/hoi4gui/gridboxcommon";
 import { StyleTable } from "../src/util/styletable";
 import { escapeAttr } from "../src/util/escape";

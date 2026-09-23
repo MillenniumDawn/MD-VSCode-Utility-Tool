@@ -1,4 +1,3 @@
-import { chain } from 'lodash';
 import * as vscode from 'vscode';
 import { ContainerWindowType } from '../../hoiformat/gui';
 import { HOIPartial } from '../../hoiformat/schema';
@@ -20,7 +19,7 @@ export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webv
         debug('Loader session gui', loadedLoaders);
 
         const guiFiles = loadResult.result.guiFiles;
-        const containerWindows = chain(guiFiles).flatMap(g => g.data.guitypes).flatMap(gt => [...gt.containerwindowtype, ...gt.windowtype]).value();
+        const containerWindows = guiFiles.flatMap(g => g.data.guitypes).flatMap(gt => [...gt.containerwindowtype, ...gt.windowtype]);
         
         if (containerWindows.length === 0) {
             const baseContent = localize('guipreview.nocontainerwindows', 'No containerwindowtype in gui file.');
