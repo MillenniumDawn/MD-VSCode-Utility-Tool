@@ -1,7 +1,6 @@
-import "./setup";
+import { recordedPosts } from "./setup";
 import * as assert from "assert";
 import { wireUpdateBody } from "../../../webviewsrc/util/updatebody";
-import { vscode } from "../../../webviewsrc/util/vscode";
 
 interface TestPayload {
 	name: string;
@@ -16,18 +15,13 @@ const shellHtml = `
 
 describe("webview/util/updatebody", () => {
 	let previousBody = "";
-	let posted: unknown[] = [];
 	let applied: TestPayload[] = [];
 	let rebuilds = 0;
-	const originalPost = vscode.postMessage;
 
 	before(() => {
 		previousBody = document.body.innerHTML;
 		// The handler is bound to window for the life of the run, so it is wired once and the
 		// counters are what each test reads.
-		(vscode as { postMessage: (message: unknown) => void }).postMessage = (message) => {
-			posted.push(message);
-		};
 		wireUpdateBody<TestPayload>({
 			contentId: "testcontent",
 			styleId: "test-server-styles",
@@ -43,21 +37,19 @@ describe("webview/util/updatebody", () => {
 
 	after(() => {
 		document.body.innerHTML = previousBody;
-		(vscode as { postMessage: typeof originalPost }).postMessage = originalPost;
 	});
 
 	beforeEach(() => {
 		document.body.innerHTML = shellHtml;
-		posted = [];
 		applied = [];
 		rebuilds = 0;
 	});
 
 	// How many messages the given dispatch put on the shared post log.
 	function countPosts(dispatch: () => void): number {
-		const before = posted.length;
+		const before = recordedPosts().length;
 		dispatch();
-		return posted.length - before;
+		return recordedPosts().length - before;
 	}
 
 	function push(data: unknown, styleCss?: string): void {
@@ -91,6 +83,7 @@ describe("webview/util/updatebody", () => {
 		const withoutCanvas = countPosts(() => push({ testPreview: { name: "fresh" } }));
 
 		assert.strictEqual(withoutCanvas, withCanvas + 1);
+		const posted = recordedPosts();
 		assert.deepStrictEqual(posted[posted.length - 1], { command: "reload" });
 		// The reload replaces the re-render; it does not come on top of one.
 		assert.strictEqual(rebuilds, 1);

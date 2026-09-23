@@ -1,4 +1,4 @@
-import "./setup";
+import { postedMessages, takePostedMessages } from "./setup";
 import * as assert from "assert";
 import { vscode } from "../../../webviewsrc/util/vscode";
 
@@ -67,15 +67,11 @@ function withQuietScrolling<T>(fn: () => T): T {
 	}
 }
 
+// The shared post log, emptied first and handed over live, so an assertion inside `fn` sees
+// everything posted up to that point.
 function withPosts<T>(fn: (posts: unknown[]) => T): T {
-	const originalPostMessage = vscode.postMessage;
-	const posts: unknown[] = [];
-	(vscode as any).postMessage = (message: unknown) => posts.push(message);
-	try {
-		return fn(posts);
-	} finally {
-		(vscode as any).postMessage = originalPostMessage;
-	}
+	takePostedMessages();
+	return fn(postedMessages);
 }
 
 function withoutWindowListeners<T>(fn: () => T): T {

@@ -1,11 +1,10 @@
-import "./setup";
+import { recordedPosts, takePostedMessages } from "./setup";
 import * as assert from "assert";
 import { WorldMapData } from "../../previewdef/worldmap/definitions";
 import { buildWorldMapChangeMessages } from "../../previewdef/worldmap/worldmapchanges";
 import { Loader, FEWorldMapClass } from "../../../webviewsrc/worldmap/loader";
 import { inBBox } from "../../../webviewsrc/worldmap/graphutils";
 import { Zone } from "../../../webviewsrc/worldmap/definitions";
-import { vscode } from "../../../webviewsrc/util/vscode";
 
 function buildMap() {
 	const state1 = { id: 1, provinces: [10, 11] };
@@ -450,18 +449,13 @@ describe("webview/worldmap/FEWorldMapClass warning lookups", function () {
 
 describe("webview/worldmap/Loader protocol", function () {
 	it("applies requested chunks and later deltas after a map summary", function () {
-		const posted: unknown[] = [];
-		const originalPostMessage = vscode.postMessage;
 		const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
 		globalThis.requestAnimationFrame = (callback): number => {
 			callback(0);
 			return 0;
 		};
-		vscode.postMessage = <T>(message: T): void => {
-			posted.push(message);
-		};
 		const loader = new Loader();
-		posted.length = 0;
+		takePostedMessages();
 
 		const summary: WorldMapData = {
 			width: 1,
@@ -496,7 +490,7 @@ describe("webview/worldmap/Loader protocol", function () {
 
 		try {
 			send({ command: "provincemapsummary", data: summary });
-			assert.deepStrictEqual(posted, [
+			assert.deepStrictEqual(recordedPosts(), [
 				{ command: "requestcountries", start: 0, end: 1 },
 			]);
 
@@ -531,7 +525,6 @@ describe("webview/worldmap/Loader protocol", function () {
 			assert.strictEqual(loader.worldMap.countries[0].tag, "BBB");
 		} finally {
 			loader.dispose();
-			vscode.postMessage = originalPostMessage;
 			globalThis.requestAnimationFrame = originalRequestAnimationFrame;
 		}
 	});
