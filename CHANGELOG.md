@@ -24,6 +24,7 @@ v1.1.39
 - [ CI ] Webview state is now replaced instead of merged during testing. Issue #246.
 - [ Testing ] Replace the assertion-free world map loader tests. Issue #243.
 - Show the texture in the DDS/TGA viewer instead of a broken image icon.
+- [ Testing ] Give the previewmanager context-keys fake the required displayName.
 
   Functionality:
 
