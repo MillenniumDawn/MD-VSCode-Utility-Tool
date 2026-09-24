@@ -1,6 +1,7 @@
 import { loadEntrypoint } from './setup';
 import * as assert from 'assert';
-import { GridBoxItem, renderLineConnections } from '../../util/hoi4gui/gridboxcommon';
+import { GridBoxConnectionTiles, GridBoxItem, renderLineConnections } from '../../util/hoi4gui/gridboxcommon';
+import { focusLinkClass } from '../../util/hoi4gui/focuslink';
 import { StyleTable } from '../../util/styletable';
 import { traceDimClass, traceLineClass } from '../../previewdef/focustree/tracestyles';
 
@@ -26,7 +27,7 @@ function item(id: string, gridX: number, gridY: number, connections: GridBoxItem
  * makes each of those a two-div elbow. `child` is also mutually exclusive with `sibling` on its own
  * row, and `grandchild` below it takes `child` as its prerequisite.
  */
-function renderTree(): HTMLElement {
+function renderTree(tiles?: GridBoxConnectionTiles): HTMLElement {
     const items: Record<string, GridBoxItem> = {
         parentA: item('parentA', 0, 0, []),
         parentB: item('parentB', 4, 0, []),
@@ -49,6 +50,8 @@ function renderTree(): HTMLElement {
         { width: 0, height: 0 },
         new StyleTable(),
         0.5,
+        undefined,
+        tiles,
     );
     document.body.appendChild(root);
     return root;
@@ -126,6 +129,21 @@ describe('webview/focustree applyPrerequisiteTrace', () => {
             assert.deepStrictEqual(classes, [traceLineClass]);
         }
         for (const classes of classesOf(root, 'child', 'parentA')) {
+            assert.deepStrictEqual(classes, [traceDimClass]);
+        }
+    });
+
+    it('lights every tile of a prerequisite line drawn from the link sprites', () => {
+        const root = renderTree({ size: 16, className: focusLinkClass });
+        applyPrerequisiteTrace(root, 'child');
+
+        // An elbow is three runs and two corners, and each has to light up.
+        const edge = classesOf(root, 'child', 'parentA');
+        assert.strictEqual(edge.length, 5);
+        for (const classes of edge) {
+            assert.deepStrictEqual(classes, [traceLineClass]);
+        }
+        for (const classes of classesOf(root, 'grandchild', 'child')) {
             assert.deepStrictEqual(classes, [traceDimClass]);
         }
     });

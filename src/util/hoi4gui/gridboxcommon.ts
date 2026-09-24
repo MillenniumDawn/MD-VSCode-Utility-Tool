@@ -14,6 +14,8 @@ export interface GridBoxConnection {
     targetType: GridBoxConnectionType;
     style?: string;
     classNames?: string;
+    // Picks the dashed tiles when the connection is drawn with `connectionTiles`.
+    dashed?: boolean;
 }
 
 export interface GridBoxItem {
@@ -49,11 +51,25 @@ export interface RenderGridBoxCommonOptions extends RenderCommonOptions {
     // Moves the end of a 'parent' connection away from the slot centres: `child` at the item that
     // declares the connection, `parent` at its target. Line render mode only.
     connectionOffsets?: GridBoxConnectionOffsets;
+    // Draws 'parent' connections as square tiles along the same path instead of borders, the way
+    // the game lays out its link sprites. Line render mode only.
+    connectionTiles?: GridBoxConnectionTiles;
 }
 
 export interface GridBoxConnectionOffsets {
     parent: NumberPosition;
     child: NumberPosition;
+}
+
+// A straight run along one axis, or a corner named by the two directions it connects.
+export type GridBoxTileShape = 'up_down' | 'left_right' | 'up_left' | 'up_right' | 'down_left' | 'down_right';
+
+export interface GridBoxConnectionTiles {
+    // Edge of one square tile, centred on the line.
+    size: number;
+    // Moves every tile, for a gui that places them off the line.
+    offset?: NumberPosition;
+    className(shape: GridBoxTileShape, dashed: boolean): string;
 }
 
 const offsetMap: Record<Format['_name'], { x: number, y: number }> = {
@@ -125,7 +141,7 @@ export async function renderGridBoxCommon(
     }));
 
     const renderedConnections = options.lineRenderMode !== 'control' ?
-        renderLineConnections(options.items, format, slotSize, size, options.styleTable, cornerPosition, options.connectionOffsets) :
+        renderLineConnections(options.items, format, slotSize, size, options.styleTable, cornerPosition, options.connectionOffsets, options.connectionTiles) :
         await renderControlConnections(options.items, format, slotSize, size, options.onRenderLineBox, options.styleTable, childrenParentInfo);
 
     return `<div
@@ -149,7 +165,7 @@ export async function renderGridBoxCommon(
     </div>`;
 }
 
-export function renderLineConnections(items: Record<string, GridBoxItem>, format: Format['_name'], slotSize: NumberSize, size: NumberSize, styleTable: StyleTable, cornerPosition: number, connectionOffsets?: GridBoxConnectionOffsets): string {
+export function renderLineConnections(items: Record<string, GridBoxItem>, format: Format['_name'], slotSize: NumberSize, size: NumberSize, styleTable: StyleTable, cornerPosition: number, connectionOffsets?: GridBoxConnectionOffsets, connectionTiles?: GridBoxConnectionTiles): string {
     return Object.values(items).map(item =>
         item.connections.map(conn => {
             const target = items[conn.target];
@@ -164,6 +180,12 @@ export function renderLineConnections(items: Record<string, GridBoxItem>, format
                 itemPosition.y += connectionOffsets.child.y;
                 targetPosition.x += connectionOffsets.parent.x;
                 targetPosition.y += connectionOffsets.parent.y;
+            }
+            if (connectionTiles && conn.targetType === 'parent') {
+                return renderTiledConnection(
+                    connectionPath(itemPosition, targetPosition, conn.targetType, format, slotSize, cornerPosition),
+                    connectionTiles, conn.dashed ?? false, conn.style ?? '', conn.targetType, conn.classNames, styleTable, item.id, conn.target,
+                );
             }
             return renderGridBoxConnection(itemPosition, targetPosition, conn.style ?? '', conn.targetType, format, slotSize, conn.classNames, styleTable, cornerPosition, item.id, conn.target);
         }).join('')
@@ -265,6 +287,148 @@ export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, st
             );
         }
     }
+}
+
+/**
+ * The points the border drawing of `renderGridBoxConnection` passes through, from `a` to `b` with
+ * the ends of a 'parent' connection swapped the same way, so a tiled line takes the same path.
+ */
+export function connectionPath(a: NumberPosition, b: NumberPosition, type: GridBoxConnectionType, format: Format['_name'], gridSize: NumberSize, cornerPosition: number = 1.5): NumberPosition[] {
+    if (a.y === b.y || a.x === b.x) {
+        return [a, b];
+    }
+
+    if (type === 'parent') {
+        const c = a;
+        a = b;
+        b = c;
+    }
+
+    const bx = b.x - a.x;
+    const by = b.y - a.y;
+    if (format === 'left' || format === 'right') {
+        const cornerWidth = gridSize.width * cornerPosition;
+        if (Math.abs(bx) < cornerWidth) {
+            return [a, { x: b.x, y: a.y }, b];
+        }
+        const x = a.x + cornerWidth * Math.sign(bx);
+        return [a, { x, y: a.y }, { x, y: b.y }, b];
+    }
+
+    const cornerHeight = gridSize.height * cornerPosition;
+    if (Math.abs(by) < cornerHeight) {
+        return [a, { x: a.x, y: b.y }, b];
+    }
+    const y = a.y + cornerHeight * Math.sign(by);
+    return [a, { x: a.x, y }, { x: b.x, y }, b];
+}
+
+// Drops repeated points and the middle of three points on one line, so every inner point left is a turn.
+function turningPoints(points: NumberPosition[]): NumberPosition[] {
+    const result: NumberPosition[] = [];
+    for (const point of points) {
+        const last = result[result.length - 1];
+        if (last && last.x === point.x && last.y === point.y) {
+            continue;
+        }
+        const beforeLast = result[result.length - 2];
+        if (last && beforeLast && ((beforeLast.x === last.x && last.x === point.x) || (beforeLast.y === last.y && last.y === point.y))) {
+            result.pop();
+        }
+        result.push(point);
+    }
+    return result;
+}
+
+// Every pair of neighbouring points, and every point with both of its neighbours.
+function segmentsOf(points: NumberPosition[]): [NumberPosition, NumberPosition][] {
+    return points.slice(1).map((q, i) => [points[i] as NumberPosition, q]);
+}
+
+function turnsOf(points: NumberPosition[]): [NumberPosition, NumberPosition, NumberPosition][] {
+    return points.slice(1, -1).map((p, i) => [points[i] as NumberPosition, p, points[i + 2] as NumberPosition]);
+}
+
+function directionTo(from: NumberPosition, to: NumberPosition): 'up' | 'down' | 'left' | 'right' {
+    if (to.x === from.x) {
+        return to.y < from.y ? 'up' : 'down';
+    }
+    return to.x < from.x ? 'left' : 'right';
+}
+
+function cornerShape(prev: NumberPosition, point: NumberPosition, next: NumberPosition): GridBoxTileShape {
+    const directions = [directionTo(point, prev), directionTo(point, next)];
+    const vertical = directions.find(d => d === 'up' || d === 'down');
+    const horizontal = directions.find(d => d === 'left' || d === 'right');
+    return `${vertical}_${horizontal}` as GridBoxTileShape;
+}
+
+function renderTileBox(diag: string, classNames: string | undefined, styleTable: StyleTable, left: number, top: number, width: number, height: number, tileClass: string): string {
+    return `<div${diag}
+        class="
+            ${classNames ? classNames : ''}
+            ${tileClass}
+            ${styleTable.style('positionAbsolute', () => `position: absolute;`)}
+            ${styleTable.style('pointerEventsNone', () => `pointer-events: none;`)}
+        "
+        style="${boxStyle(left, top, width, height)}"></div>`;
+}
+
+/**
+ * One tile at every turn of the path and one run of tiles along every straight stretch between
+ * them, each run stopping half a tile short of a turn so the corner tile is not drawn over.
+ */
+function renderTiledConnection(
+    path: NumberPosition[],
+    tiles: GridBoxConnectionTiles,
+    dashed: boolean,
+    style: string,
+    type: GridBoxConnectionType,
+    classNames: string | undefined,
+    styleTable: StyleTable,
+    fromId: string,
+    toId: string,
+): string {
+    const diag = ` data-conn-from="${escapeAttr(fromId)}" data-conn-to="${escapeAttr(toId)}" data-conn-type="${type}" data-conn-style="${style.replace(/"/g, '&quot;')}"`;
+    const points = turningPoints(path);
+    const size = tiles.size;
+    const half = size / 2;
+    const offsetX = tiles.offset?.x ?? 0;
+    const offsetY = tiles.offset?.y ?? 0;
+    let result = '';
+
+    const segments = segmentsOf(points);
+    segments.forEach(([p, q], i) => {
+        const startTrim = i > 0 ? half : 0;
+        const endTrim = i < segments.length - 1 ? half : 0;
+        if (p.y === q.y) {
+            const sign = Math.sign(q.x - p.x);
+            const from = p.x + sign * startTrim;
+            const to = q.x - sign * endTrim;
+            if ((to - from) * sign > 0) {
+                result += renderTileBox(diag, classNames, styleTable,
+                    Math.min(from, to) + offsetX, p.y - half + offsetY, Math.abs(to - from), size,
+                    tiles.className('left_right', dashed));
+            }
+        } else {
+            const sign = Math.sign(q.y - p.y);
+            const from = p.y + sign * startTrim;
+            const to = q.y - sign * endTrim;
+            if ((to - from) * sign > 0) {
+                result += renderTileBox(diag, classNames, styleTable,
+                    p.x - half + offsetX, Math.min(from, to) + offsetY, size, Math.abs(to - from),
+                    tiles.className('up_down', dashed));
+            }
+        }
+    });
+
+    for (const [prev, point, next] of turnsOf(points)) {
+        result += renderTileBox(diag, classNames, styleTable,
+            point.x - half + offsetX, point.y - half + offsetY, size, size,
+            tiles.className(cornerShape(prev, point, next), dashed));
+    }
+
+    return result;
 }
 
 type ControlMatrix = Record<number, Record<number, GridBoxConnectionItem>>;

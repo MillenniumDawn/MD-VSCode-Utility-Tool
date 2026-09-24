@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
+
 v1.1.39
 
   Bugfixes:

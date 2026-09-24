@@ -27,6 +27,15 @@ export function registerTraceStyles(styleTable: StyleTable): void {
         z-index: 5;
     `);
 
+    // A prerequisite line is drawn as tiles: a texture, which no border colour reaches, or a plain
+    // line on their pseudo elements, which the rule above does not select.
+    styleTable.raw(`#focustreeplaceholder .${traceLineClass}::before, #focustreeplaceholder .${traceLineClass}::after`, `
+        border-color: #ffcc44;
+    `);
+    styleTable.raw(`#focustreeplaceholder .${traceLineClass}[class*="st-focus-link-"]`, `
+        filter: drop-shadow(0 0 2px #ffcc44) brightness(1.4);
+    `);
+
     styleTable.raw(`#focustreeplaceholder .${traceDimClass}`, `
         opacity: 0.1;
     `);

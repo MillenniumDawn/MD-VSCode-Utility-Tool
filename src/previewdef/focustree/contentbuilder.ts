@@ -22,6 +22,8 @@ import { registerWarningStyles, warningListClass } from "./warningstyles";
 import { registerTraceStyles } from "./tracestyles";
 import { registerExclusiveLinkStyles } from "../../util/hoi4gui/exclusivelink";
 import { loadExclusiveLinkImages, nationalFocusViewGfxFile } from "../../util/hoi4gui/exclusivelinkimages";
+import { registerFocusLinkStyles } from "../../util/hoi4gui/focuslink";
+import { loadFocusLinkImages } from "../../util/hoi4gui/focuslinkimages";
 import { FocusItemLayout, FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "./layout";
 import { describeParseFailure } from "../../util/indexHalf";
 import { Logger } from "../../util/logger";
@@ -81,6 +83,12 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             ? await loadExclusiveLinkImages(layout.exclusive.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
             : await loadExclusiveLinkImages();
         registerExclusiveLinkStyles(styleTable, exclusiveLinkImages, layout.spacing.x, layout.exclusive.offsetY);
+
+        // The same two passes for the prerequisite lines: the webview draws the same tiles either way.
+        const focusLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
+            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
+            : await loadFocusLinkImages();
+        registerFocusLinkStyles(styleTable, focusLinkImages);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
@@ -185,6 +193,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
     if (payload.layout.links) {
         jsCodes.push('window.focusLinkOffsets = ' + jsonForScript(payload.layout.links));
     }
+    jsCodes.push('window.focusLinkTiles = ' + jsonForScript(payload.layout.prerequisiteLink));
     jsCodes.push(i18nTableAsScript());
 
     const baseContent = renderFocusTreeShell(payload.focusTrees, payload.styleTable, payload.toolbarFlags, payload.styleNonce);
