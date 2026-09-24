@@ -177,7 +177,7 @@ function renderEdges(
 		provinceToState,
 		provinceToStrategicRegion,
 		stateToSupplyArea,
-		renderedProvinces,
+		renderedProvincesById,
 		topBar,
 		viewPoint,
 	} = renderContext;
@@ -278,9 +278,7 @@ function renderEdges(
 		}
 
 		if (paths.length === 0 && provinceEdge.type !== "impassable") {
-			const toProvince = renderedProvinces?.find(
-				(p) => p.id === provinceEdge.to,
-			);
+			const toProvince = renderedProvincesById[provinceEdge.to];
 			const [startPoint, endPoint] = findNearestPoints(
 				provinceEdge.start,
 				provinceEdge.stop,

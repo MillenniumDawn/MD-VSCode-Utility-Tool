@@ -91,7 +91,10 @@ function ensureIndexBuilt(): Promise<[void, void, void]> {
 	return builder.ensureBuilt();
 }
 
-const SWAP_CACHE_VERSION = 1;
+const SWAP_CACHE_VERSION = 2;
+
+/** One file's swaps, as one line of the cache. */
+type SwapCacheRecord = [file: string, swaps: SwapRecord[]];
 
 function listSwapFiles(
 	options: FileSourceOptions,
@@ -176,27 +179,22 @@ async function buildSwapIndexHalf(
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
-	await buildIndexHalf<SwapIndex>(
+	await buildIndexHalf<SwapCacheRecord>(
 		{
 			cacheName,
 			version: SWAP_CACHE_VERSION,
 			cacheScope: context.cacheScope,
 			dependencyGeneration: context.dependencyGeneration,
 			listFiles: (token) => listSwapFiles(options, token),
-			hydrate: (cached, skipFiles) => {
-				for (const file in cached) {
-					if (!skipFiles.has(file)) {
-						const swaps = cached[file];
-						if (swaps === undefined) {
-							continue;
-						}
-						swapIndex[file] = swaps;
-					}
+			hydrate: ([file, swaps], skipFiles) => {
+				if (skipFiles.has(file)) {
+					return;
 				}
+				swapIndex[file] = swaps;
 				markSwapIndexChanged();
 			},
 			parseFile: (file) => fillSwaps(file, swapIndex, options, estimatedSize),
-			serialize: () => swapIndex,
+			serialize: () => Object.entries(swapIndex),
 		},
 		progress,
 	);

@@ -367,10 +367,25 @@ export class TopBar extends Subscriber {
 						preciseEdge: true,
 						overwriteRenderPrecision: 1,
 					});
-					vscode.postMessage({
-						command: "exportmap",
-						dataUrl: canvas.toDataURL(),
-					});
+					// toBlob, not toDataURL: the map can run to tens of megabytes, and base64 made a
+					// copy a third larger again before the host decoded it back to bytes.
+					canvas.toBlob((blob) => {
+						if (!blob) {
+							vscode.postMessage({ command: "exportmap" });
+							return;
+						}
+						void blob.arrayBuffer().then(
+							(buffer) => {
+								vscode.postMessage({
+									command: "exportmap",
+									data: new Uint8Array(buffer),
+								});
+							},
+							() => {
+								vscode.postMessage({ command: "exportmap" });
+							},
+						);
+					}, "image/png");
 				} finally {
 					viewPoint.dispose();
 				}
