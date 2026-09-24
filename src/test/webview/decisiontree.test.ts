@@ -282,6 +282,7 @@ describe("webview/decisiontree filteredGraph", () => {
 		// Two missions call the same removed step, which calls a removed step of its own before
 		// reaching two kept missions. The walk from the removed step runs once for both callers;
 		// what each arrow reports must not change for it, and the arrows must not share an array.
+		// POL_end_2 is called by the first step itself, so its arrow skips that step and no other.
 		const category = "c:POL_state_controlled_economy_category";
 		const chain: DecisionGraphPayload = {
 			...integrationPayload,
@@ -314,15 +315,54 @@ describe("webview/decisiontree filteredGraph", () => {
 		const first = from("d:POL_sre_main_countdown_mission");
 		const second = from("d:POL_other_mission");
 		assert.deepStrictEqual(first.map((e) => [e.to, e.skipped]), [
-			["d:POL_end_2", ["d:POL_step_x", "d:POL_step_y"]],
+			["d:POL_end_2", ["d:POL_step_x"]],
 			["d:POL_end_1", ["d:POL_step_x", "d:POL_step_y"]],
 		]);
 		assert.deepStrictEqual(second.map((e) => [e.to, e.kind, e.skipped]), [
-			["d:POL_end_2", "unlock", ["d:POL_step_x", "d:POL_step_y"]],
+			["d:POL_end_2", "unlock", ["d:POL_step_x"]],
 			["d:POL_end_1", "unlock", ["d:POL_step_x", "d:POL_step_y"]],
 		]);
 		assert.notStrictEqual(first[0]!.skipped, second[0]!.skipped);
 		assert.notStrictEqual(first[0]!.skipped, first[1]!.skipped);
+	});
+
+	it("names only the removed decisions on each arrow's own path when the chain splits", () => {
+		// A removed step splits into two removed branches, each leading to its own kept mission.
+		// Neither arrow may count the other branch's step.
+		const category = "c:POL_state_controlled_economy_category";
+		const chain: DecisionGraphPayload = {
+			...integrationPayload,
+			nodes: [
+				...integrationPayload.nodes,
+				decision("POL_split"),
+				decision("POL_branch_a"),
+				decision("POL_branch_b"),
+				decision("POL_end_a", { isMission: true, daysMissionTimeout: 10 }),
+				decision("POL_end_b", { isMission: true, daysMissionTimeout: 10 }),
+			],
+			edges: [
+				...integrationPayload.edges,
+				structural(category, "d:POL_split"),
+				structural(category, "d:POL_branch_a"),
+				structural(category, "d:POL_branch_b"),
+				structural(category, "d:POL_end_a"),
+				structural(category, "d:POL_end_b"),
+				call("d:POL_sre_main_countdown_mission", "d:POL_split", "activate"),
+				call("d:POL_split", "d:POL_branch_a", "activate"),
+				call("d:POL_split", "d:POL_branch_b", "activate"),
+				call("d:POL_branch_a", "d:POL_end_a", "activate"),
+				call("d:POL_branch_b", "d:POL_end_b", "activate"),
+			],
+		};
+
+		const graph = decisiontree.filteredGraph(chain, ["missions"]);
+		const bridged = graph.edges.filter(
+			(e) => e.from === "d:POL_sre_main_countdown_mission" && e.skipped !== undefined,
+		);
+		assert.deepStrictEqual(bridged.map((e) => [e.to, e.skipped]), [
+			["d:POL_end_a", ["d:POL_split", "d:POL_branch_a"]],
+			["d:POL_end_b", ["d:POL_split", "d:POL_branch_b"]],
+		]);
 	});
 });
 

@@ -367,10 +367,11 @@ function bridgeEdges(
 		if (cached !== undefined) {
 			return cached;
 		}
-		// Breadth first from the removed decision, collecting what it reaches that survived.
+		// Breadth first from the removed decision, collecting what it reaches that survived. Each
+		// survivor is reached over the shortest run of removed decisions, and its arrow names only
+		// those, not everything else the walk passed through on other branches.
 		const bridges: { to: string; skipped: string[] }[] = [];
-		const seen = new Set<string>([start]);
-		const skipped: string[] = [start];
+		const parent = new Map<string, string | undefined>([[start, undefined]]);
 		const queue = [start];
 		while (queue.length > 0) {
 			const current = queue.shift();
@@ -378,14 +379,17 @@ function bridgeEdges(
 				continue;
 			}
 			for (const next of outgoing.get(current) ?? []) {
-				if (seen.has(next.to)) {
+				if (parent.has(next.to)) {
 					continue;
 				}
-				seen.add(next.to);
+				parent.set(next.to, current);
 				if (!removed.has(next.to)) {
-					bridges.push({ to: next.to, skipped: [...skipped] });
+					const skipped: string[] = [];
+					for (let at: string | undefined = current; at !== undefined; at = parent.get(at)) {
+						skipped.unshift(at);
+					}
+					bridges.push({ to: next.to, skipped });
 				} else {
-					skipped.push(next.to);
 					queue.push(next.to);
 				}
 			}

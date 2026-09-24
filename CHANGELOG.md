@@ -2,6 +2,7 @@ Unreleased
 
   Bugfixes:
 
+- [ Decision Previewer ] The "filtered out" count and tooltip on a bridged arrow now name only the decisions on that arrow's own path, instead of every decision the filter removed along other branches of the chain. Issue #362.
 - [ World Map Previewer ] Province colours and the hover and selection highlights now line up with the border lines drawn around them, instead of sitting up to a couple of pixels up and to the left, most visibly with fast rendering on or when zoomed out. Issue #277.
 - [ MIO Preview ] An `override_trait` in an organisation that uses `include` no longer changes that trait in the included organisation's own tree as well. Issue #248.
 - [ DDS ] Opening a .dds or .tga file shows the texture again instead of a broken image icon.
