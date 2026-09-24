@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { GridBoxConnection, GridBoxItem } from '../util/hoi4gui/gridboxcommon';
-import { applyExclusiveLinkStyle, exclusiveLinkClass } from '../util/hoi4gui/exclusivelink';
+import { applyExclusiveLinkStyle, exclusiveLinkClass, exclusiveLinkVerticalClass } from '../util/hoi4gui/exclusivelink';
 
 function item(id: string, gridX: number, gridY: number, connections: GridBoxConnection[] = []): GridBoxItem {
     return { id, gridX, gridY, connections };
@@ -67,5 +67,22 @@ describe('applyExclusiveLinkStyle', () => {
         const conn = a.connections[0]!;
         assert.strictEqual(conn.style, 'none');
         assert.strictEqual(conn.classNames?.trim(), exclusiveLinkClass);
+    });
+
+    // A LEFT or RIGHT grid turns a row into a screen column, so the pair's link runs vertically.
+    it('gives a sideways tree the vertical link', () => {
+        for (const format of ['left', 'right'] as const) {
+            const a = item('a', 0, 3, [exclusiveTo('b', 'inbranch_x')]);
+            applyExclusiveLinkStyle([a, item('b', 2, 3)], format);
+
+            const conn = a.connections[0]!;
+            assert.strictEqual(conn.style, 'none');
+            assert.ok(conn.classNames?.includes(exclusiveLinkVerticalClass));
+            assert.ok(!conn.classNames?.split(' ').includes(exclusiveLinkClass));
+        }
+
+        const down = item('a', 0, 3, [exclusiveTo('b')]);
+        applyExclusiveLinkStyle([down, item('b', 2, 3)], 'down');
+        assert.strictEqual(down.connections[0]!.classNames?.trim(), exclusiveLinkClass);
     });
 });

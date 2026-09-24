@@ -10,9 +10,9 @@ import {
 } from "./util/common";
 import { DivDropdown } from "./util/dropdown";
 import difference from "lodash/difference";
-import minBy from "lodash/minBy";
 import {
 	renderGridBoxCommon,
+	gridBoxContentOffset,
 	GridBoxItem,
 	GridBoxConnection,
 } from "../src/util/hoi4gui/gridboxcommon";
@@ -359,16 +359,27 @@ async function buildContent() {
 		)
 		.filter((v): v is GridBoxItem => !!v);
 
-	applyExclusiveLinkStyle(focusGrixBoxItems);
+	const format = gridbox.format?._name ?? "up";
+	applyExclusiveLinkStyle(focusGrixBoxItems, format);
 
-	const minX = minBy(Object.values(focusPosition), "x")?.x ?? 0;
-	const leftPadding =
-		gridbox.position.x._value - Math.min(minX * (window as any).xGridSize, 0);
+	// A tree that grows down, left or right lays out towards negative coordinates, so the grid is
+	// moved by however far its focuses reach past its corner. The grid box itself is one slot wide
+	// and of no height, which is what renderGridBoxCommon measures it as.
+	const xGridSize: number = (window as any).xGridSize;
+	const contentOffset = gridBoxContentOffset(
+		Object.values(focusPosition).map((p) => ({ gridX: p.x, gridY: p.y })),
+		format,
+		{ width: xGridSize, height: gridbox.slotsize?.height?._value ?? xGridSize },
+		{ width: xGridSize, height: 0 },
+	);
 
 	const focusTreeContent = await renderGridBoxCommon(
 		{
 			...gridbox,
-			position: { ...gridbox.position, x: toNumberLike(leftPadding) },
+			position: {
+				x: toNumberLike(gridbox.position.x._value - contentOffset.x),
+				y: toNumberLike(gridbox.position.y._value - contentOffset.y),
+			},
 		},
 		{
 			size: { width: 0, height: 0 },

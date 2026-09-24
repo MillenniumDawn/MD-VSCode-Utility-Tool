@@ -80,7 +80,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         const exclusiveLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
             ? await loadExclusiveLinkImages(layout.exclusive.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
             : await loadExclusiveLinkImages();
-        registerExclusiveLinkStyles(styleTable, exclusiveLinkImages, layout.spacing.x, layout.exclusive.offsetY);
+        registerExclusiveLinkStyles(styleTable, exclusiveLinkImages, layout.spacing.x, layout.exclusive.offsetY, layout.spacing.y);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');

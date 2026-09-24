@@ -119,6 +119,15 @@ guiTypes = {
         assert.strictEqual(gridBox.position?.x?._value, 70);
     });
 
+    it('takes the way the tree grows from the grid format', () => {
+        for (const [written, format] of [['"DOWN"', 'down'], ['left', 'left'], ['RIGHT', 'right'], ['center', 'up']] as const) {
+            const layout = buildFocusTreeLayout([parseGui(mdGui.replace('format = "UP"', `format = ${written}`))]);
+            assert.strictEqual(layout.format, format);
+            assert.strictEqual(focusTreeGridBoxFor(layout).format?._name, format);
+        }
+        assert.strictEqual(focusTreeGridBoxFor(standardFocusTreeLayout).format?._name, 'up');
+    });
+
     it('moves the focus layers by how far the file moves them from the game layout', () => {
         const moved = mdGui
             .replace('position = { x = 5 y = -44 }', 'position = { x = 5 y = -34 }')

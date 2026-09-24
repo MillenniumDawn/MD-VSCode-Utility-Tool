@@ -1,5 +1,6 @@
 import { StyleTable } from '../styletable';
 import type { Image } from '../image/imagecache';
+import type { Format } from '../../hoiformat/gui';
 import { GridBoxConnection, GridBoxItem } from './gridboxcommon';
 
 /**
@@ -21,6 +22,7 @@ import { GridBoxConnection, GridBoxItem } from './gridboxcommon';
  * sprite resolving and hands the result in.
  */
 export const exclusiveLinkClass = 'st-focus-exclusive-link';
+export const exclusiveLinkVerticalClass = 'st-focus-exclusive-link-vertical';
 
 /** The sprites and 0 based frames the mutually exclusive link is drawn from. */
 export interface ExclusiveLinkSpriteSpec {
@@ -84,20 +86,49 @@ export function exclusiveLinkInsets(slotWidth: number, iconWidth: number): { ico
  * the textures it was replaced by.
  *
  * `offsetY` moves the link down from the line between the node centres, for a focus tree whose gui
- * layout places it elsewhere.
+ * layout places it elsewhere. It moves only the horizontal link: a vertical one it would slide
+ * along its own length.
+ *
+ * `exclusiveLinkVerticalClass` is the same link for a tree grown sideways (`LEFT` or `RIGHT`), whose
+ * pairs share a column. It draws the same horizontal strips, rotated a quarter turn onto the 1px
+ * wide connection; the element is a size container so the strips can take its height as their length.
  */
 export function registerExclusiveLinkStyles(
     styleTable: StyleTable,
     images: ExclusiveLinkImages | undefined,
     slotWidth: number,
     offsetY: number = 0,
+    slotHeight: number = slotWidth,
 ): void {
     // Both layers are taller than the 1px connection element they hang off, on purpose.
     styleTable.style('focus-exclusive-link', () => `
         overflow: visible;
     `);
+    styleTable.raw(`.${exclusiveLinkVerticalClass}`, `
+        container-type: size;
+        overflow: visible;
+    `);
 
     if (images === undefined) {
+        styleTable.raw(`.${exclusiveLinkVerticalClass}::before`, `
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 0;
+            height: 100%;
+            border-left: 1px solid red;
+            transform-origin: 0 0;
+            transform: none;
+            background-image: none;
+            background-repeat: no-repeat;
+            background-position: 0 0;
+            background-size: auto;
+        `);
+        styleTable.raw(`.${exclusiveLinkVerticalClass}::after`, `
+            content: none;
+            background-image: none;
+        `);
         styleTable.raw(`.${exclusiveLinkClass}::before`, `
             content: '';
             position: absolute;
@@ -146,6 +177,39 @@ export function registerExclusiveLinkStyles(
         background-position: left center, center center, right center;
         background-size: ${left.width}px ${left.height}px, ${mid.width}px ${mid.height}px, ${right.width}px ${right.height}px;
     `);
+
+    // A strip laid out along x from the element's top left corner, turned clockwise about that
+    // corner so it runs down the column, then moved half its thickness right to centre it on the line.
+    const vertical = exclusiveLinkInsets(slotHeight, left.width);
+    styleTable.raw(`.${exclusiveLinkVerticalClass}::before`, `
+        content: '';
+        position: absolute;
+        left: 0;
+        top: ${vertical.lineInset}px;
+        width: calc(100cqh - ${vertical.lineInset * 2}px);
+        height: ${line.height}px;
+        border-left: none;
+        transform-origin: 0 0;
+        transform: translateX(${line.height / 2}px) rotate(90deg);
+        background-image: url(${line.uri});
+        background-repeat: repeat-x;
+        background-position: left center;
+        background-size: ${line.width}px ${line.height}px;
+    `);
+    styleTable.raw(`.${exclusiveLinkVerticalClass}::after`, `
+        content: '';
+        position: absolute;
+        left: 0;
+        top: ${vertical.iconInset}px;
+        width: calc(100cqh - ${vertical.iconInset * 2}px);
+        height: ${left.height}px;
+        transform-origin: 0 0;
+        transform: translateX(${left.height / 2}px) rotate(90deg);
+        background-image: url(${left.uri}), url(${mid.uri}), url(${right.uri});
+        background-repeat: no-repeat, no-repeat, no-repeat;
+        background-position: left center, center center, right center;
+        background-size: ${left.width}px ${left.height}px, ${mid.width}px ${mid.height}px, ${right.width}px ${right.height}px;
+    `);
 }
 
 /**
@@ -156,9 +220,11 @@ export function registerExclusiveLinkStyles(
  * items are built is what makes the target's row known: resolving it there would mean positioning
  * nodes the branch filter has dropped, which would shift the tree's left padding.
  *
- * Runs in the webview, on the items about to go into `renderGridBoxCommon`.
+ * Runs in the webview, on the items about to go into `renderGridBoxCommon`. `format` is the grid
+ * box's: a `LEFT` or `RIGHT` grid puts a row in one screen column, which takes the vertical link.
  */
-export function applyExclusiveLinkStyle(items: GridBoxItem[]): void {
+export function applyExclusiveLinkStyle(items: GridBoxItem[], format: Format['_name'] = 'up'): void {
+    const linkClass = format === 'left' || format === 'right' ? exclusiveLinkVerticalClass : exclusiveLinkClass;
     const rowById: Record<string, number> = {};
     for (const item of items) {
         rowById[item.id] = item.gridY;
@@ -186,7 +252,7 @@ export function applyExclusiveLinkStyle(items: GridBoxItem[]): void {
             drawn[key] = true;
 
             conn.style = 'none';
-            conn.classNames = (conn.classNames ?? '') + ' ' + exclusiveLinkClass;
+            conn.classNames = (conn.classNames ?? '') + ' ' + linkClass;
             kept.push(conn);
         }
         item.connections = kept;

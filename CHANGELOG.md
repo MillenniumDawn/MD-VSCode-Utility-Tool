@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- [ Focus Tree Previewer ] With the gui focus tree layout, a focus grid whose `format` is `DOWN`, `LEFT` or `RIGHT` now previews the tree growing that way, prerequisite lines and mutually exclusive links included, instead of always top-down. Issue #399.
+
 v1.1.39
 
   Bugfixes:
