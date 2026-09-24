@@ -1,5 +1,7 @@
 Unreleased
 
+v1.1.39
+
   Bugfixes:
 
 - [ Decision Previewer ] The "filtered out" count and tooltip on a bridged arrow now name only the decisions on that arrow's own path, instead of every decision the filter removed along other branches of the chain. Issue #362.
@@ -23,6 +25,12 @@ Unreleased
 - [ Technology Previewer ] The technology tree no longer paints a black backdrop on light themes, and [ MIO Previewer ] the MIO grid lines are no longer invisible there. Issue #203.
 - Selecting a mod file or an install path now reports it when the setting cannot be saved, instead of showing the new one in the status bar as though it had been. Issue #203.
 - Seven settings showed English text whatever the display language, and the two world map settings did not mention that the preview has to be reopened before they take effect. Issue #203.
+- [ CI ] Webview state is now replaced instead of merged during testing. Issue #246.
+- [ Testing ] Replace the assertion-free world map loader tests. Issue #243.
+- Show the texture in the DDS/TGA viewer instead of a broken image icon.
+- [ Testing ] Give the previewmanager context-keys fake the required displayName.
+- [ Testing ] Isolate webview test listeners and fail on unexpected runtime errors. Issue #351.
+- [ CI ] No changelog bullet: CI-only, nothing changes for users.
 
   Functionality:
 
@@ -39,6 +47,9 @@ Unreleased
 - "Can't preview this file" now names the folders each preview reads, such as `common/national_focus/*.txt`, instead of listing internal names. Issue #203.
 - The extension is easier to find on the Marketplace: it is listed under Visualization, searchable for "hoi4", and no longer describes itself as being for "Heart of Iron IV". Issue #203.
 - The extension is smaller to download and the previews are quicker to draw. The world map stops re-measuring its tooltip and rebuilding its supply overlays on every frame you move the mouse, exporting the map no longer copies the image three times on its way to disk, searching a focus tree only touches the nodes whose highlight changed, and the event and decision graphs lay their arrow labels out in one pass. Issue #200.
+- [ World Map ] No user-facing changes; this is test-only work. Issue #242.
+- [ CI ] Pass the release bot's client id instead of the deprecated app id. Issue #273.
+- [ Testing ] Let webview tests assert what the page posts to the host. Issue #247.
 - [ Focus Tree Previewer ] A new "Focus tree: layout" setting can take the focus tree's layout from the mod's `interface/nationalfocusview.gui` (falling back to parent mods and the game): focus spacing, the grid offset, where the icon, title bar, name and overlay sit in a focus, the ends of prerequisite lines, and the mutually exclusive link. The default "standard" layout is unchanged. Issue #276.
 
 v1.1.38
