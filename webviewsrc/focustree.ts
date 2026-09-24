@@ -328,8 +328,9 @@ export function initialShowPoint(
 	};
 }
 
-function scrollToInitialShowPosition(): boolean {
-	const focusTree = focusTrees[selectedFocusTreeIndex];
+export function scrollToInitialShowPosition(
+	focusTree: FocusTree | undefined = focusTrees[selectedFocusTreeIndex],
+): boolean {
 	const gridbox: GridBoxType | undefined = (window as any).gridBox;
 	if (!focusTree || !gridbox) {
 		return false;

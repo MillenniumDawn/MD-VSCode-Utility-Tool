@@ -1,12 +1,13 @@
-import { loadEntrypoint } from './setup';
+import { loadEntrypoint, resetWebviewState } from './setup';
 import * as assert from 'assert';
 import { FocusTree } from '../../previewdef/focustree/schema';
+import { setState } from '../../../webviewsrc/util/common';
 
 // focustree.ts reads window.focusTrees at module scope and binds its handlers to window load and
 // message. Only the exported helpers are under test, so it is loaded with those listeners held back.
 (global as any).window.focusTrees = [];
 
-const { initialShowPoint } = loadEntrypoint(
+const { initialShowPoint, scrollToInitialShowPosition } = loadEntrypoint(
     () => require('../../../webviewsrc/focustree') as typeof import('../../../webviewsrc/focustree'),
 ).module;
 
@@ -54,5 +55,61 @@ describe('webview/focustree initial show position', () => {
     it('gives nothing without a centre or without an initial_show_position', () => {
         assert.strictEqual(initialShowPoint(tree({ x: 1, y: 1 }), {}, origin, spacing, undefined), undefined);
         assert.strictEqual(initialShowPoint(tree(undefined), {}, origin, spacing, center), undefined);
+    });
+});
+
+describe('webview/focustree scrollToInitialShowPosition', () => {
+    const win = window as any;
+    const originalScroll = win.scroll;
+    let scrolls: [number, number][];
+
+    beforeEach(() => {
+        resetWebviewState();
+        document.body.innerHTML = '<div id="focustreeplaceholder"></div>';
+        win.gridBox = { slotsize: { height: { _value: 130 } } };
+        win.xGridSize = 96;
+        win.focusTreeCenter = { x: 130, y: 32 };
+        scrolls = [];
+        win.scroll = (x: number, y: number) => scrolls.push([x, y]);
+    });
+
+    afterEach(() => {
+        win.scroll = originalScroll;
+        delete win.gridBox;
+        delete win.xGridSize;
+        delete win.focusTreeCenter;
+        document.body.innerHTML = '';
+        resetWebviewState();
+    });
+
+    // No render has run in this suite, so grid slot (0, 0) sits at the placeholder's top left.
+    function expectedScroll(x: number, y: number, scale: number): [number, number] {
+        return [Math.max(0, x * scale - window.innerWidth / 2), Math.max(0, y * scale - window.innerHeight / 2)];
+    }
+
+    it('scrolls the initial_show_position slot to the middle of the viewport', () => {
+        assert.strictEqual(scrollToInitialShowPosition(tree({ x: 80, y: 6 })), true);
+        assert.deepStrictEqual(scrolls, [expectedScroll(80 * 96 + 130, 6 * 130 + 32, 1)]);
+    });
+
+    it('scales the point by the saved zoom', () => {
+        setState({ scale: 0.5 });
+        assert.strictEqual(scrollToInitialShowPosition(tree({ x: 80, y: 6 })), true);
+        assert.deepStrictEqual(scrolls, [expectedScroll(80 * 96 + 130, 6 * 130 + 32, 0.5)]);
+    });
+
+    it('does not scroll when the gui layout declares no centre', () => {
+        delete win.focusTreeCenter;
+        assert.strictEqual(scrollToInitialShowPosition(tree({ x: 80, y: 6 })), false);
+        assert.deepStrictEqual(scrolls, []);
+    });
+
+    it('does not scroll without a tree, a grid box or the placeholder', () => {
+        assert.strictEqual(scrollToInitialShowPosition(undefined), false);
+        document.body.innerHTML = '';
+        assert.strictEqual(scrollToInitialShowPosition(tree({ x: 80, y: 6 })), false);
+        delete win.gridBox;
+        assert.strictEqual(scrollToInitialShowPosition(tree({ x: 80, y: 6 })), false);
+        assert.deepStrictEqual(scrolls, []);
     });
 });
