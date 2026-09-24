@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- Icons and buttons that share a sprite but are drawn at different scales now each show their background at the right size, instead of all taking the size of the first one drawn. Issue #366.
+
 v1.1.39
 
   Bugfixes:
