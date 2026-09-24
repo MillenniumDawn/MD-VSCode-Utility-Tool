@@ -4,6 +4,7 @@ v1.1.39
 
   Bugfixes:
 
+- [ DDS ] A DX10 .dds texture whose pixel format carries extra flags besides FourCC now opens instead of failing with a "dxt10Header should be provided" error. Issue #364.
 - [ Decision Previewer ] The "filtered out" count and tooltip on a bridged arrow now name only the decisions on that arrow's own path, instead of every decision the filter removed along other branches of the chain. Issue #362.
 - [ Idea Previewer ] An idea whose chain continues into another category is no longer drawn a second time as a loose card in that category, so it is counted and found by search only once. Issue #361.
 - Dates written without quotes, such as `date > 1936.1.1` or a `1939.1.1 = { ... }` history block, are now read whole instead of losing their day to a stray `.1` entry. Issue #360.
