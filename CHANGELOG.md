@@ -45,6 +45,7 @@ v1.1.39
 - [ World Map ] No user-facing changes; this is test-only work. Issue #242.
 - [ CI ] Pass the release bot's client id instead of the deprecated app id. Issue #273.
 - [ Testing ] Let webview tests assert what the page posts to the host. Issue #247.
+- [ Focus Tree Previewer ] A new "Focus tree: layout" setting can take the focus tree's layout from the mod's `interface/nationalfocusview.gui` (falling back to parent mods and the game): focus spacing, the grid offset, where the icon, title bar, name and overlay sit in a focus, the ends of prerequisite lines, and the mutually exclusive link. The default "standard" layout is unchanged. Issue #276.
 
 v1.1.38
 
