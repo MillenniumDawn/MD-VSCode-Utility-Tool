@@ -35,6 +35,15 @@ export interface Background {
 export interface GuiTypes {
     containerwindowtype: ContainerWindowType[];
     windowtype: ContainerWindowType[];
+    positiontype: PositionType[];
+}
+
+/** A named point, like `focus_spacing` in nationalfocusview.gui, that the game reads by name. */
+export interface PositionType {
+    name: string;
+    position: Position;
+    _index: number;
+    _token: Token;
 }
 
 export interface ContainerWindowType {
@@ -144,6 +153,11 @@ const backgroundSchema: SchemaDef<Background> = {
     position: positionSchema,
 };
 
+const positionTypeSchema: SchemaDef<PositionType> = {
+    name: "string",
+    position: positionSchema,
+};
+
 const gridBoxTypeSchema: SchemaDef<GridBoxType> = {
     name: "string",
     orientation: "stringignorecase",
@@ -249,6 +263,10 @@ const guiTypesSchema: SchemaDef<GuiTypes> = {
     },
     windowtype: {
         _innerType: containerWindowTypeSchema,
+        _type: "array",
+    },
+    positiontype: {
+        _innerType: positionTypeSchema,
         _type: "array",
     },
 };

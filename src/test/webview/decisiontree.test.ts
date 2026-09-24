@@ -1,4 +1,4 @@
-import { takePostedMessages } from "./setup";
+import { takePostedMessages, loadEntrypoint, useEntrypoint } from "./setup";
 import * as assert from "assert";
 import {
 	DecisionGraphDecisionNode,
@@ -165,8 +165,9 @@ const shellHtml = `
     <div id="dragger"></div>
     <div id="decisiontreecontent"></div>`;
 
-const decisiontree =
-	require("../../../webviewsrc/decisiontree") as typeof import("../../../webviewsrc/decisiontree");
+const { module: decisiontree, listeners } = loadEntrypoint(
+	() => require("../../../webviewsrc/decisiontree") as typeof import("../../../webviewsrc/decisiontree"),
+);
 
 describe("webview/decisiontree readFilters", () => {
 	it("keeps only known filters, in the canonical order", () => {
@@ -536,6 +537,8 @@ describe("webview/decisiontree collapseCategories", () => {
 });
 
 describe("webview/decisiontree rendering", () => {
+	useEntrypoint(listeners);
+
 	let previousBody = "";
 
 	before(() => {

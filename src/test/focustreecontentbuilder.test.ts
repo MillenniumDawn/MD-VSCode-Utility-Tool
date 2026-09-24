@@ -7,7 +7,6 @@ import {
 	buildNoFocusTreeHtml,
 	buildFocusTreeErrorHtml,
 	loadFocusTreesOnly,
-	focusTreeGridBox,
 } from "../previewdef/focustree/contentbuilder";
 import { StyleTable } from "../util/styletable";
 import {
@@ -33,6 +32,7 @@ import {
 	_terminateImageWorkerForTest,
 	_resetImageWorkerPathForTest,
 } from "../util/image/imagedecoder";
+import { FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "../previewdef/focustree/layout";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
@@ -59,6 +59,15 @@ function loaderWithTrees(trees: any[]): any {
 		file: "common/national_focus/test.txt",
 		load: async () => ({
 			result: { focusTrees: trees, gfxFiles: [] },
+		}),
+	};
+}
+
+function loaderWithLayout(trees: any[], layout: FocusTreeLayout): any {
+	return {
+		file: "common/national_focus/test.txt",
+		load: async () => ({
+			result: { focusTrees: trees, gfxFiles: [], layout },
 		}),
 	};
 }
@@ -171,7 +180,8 @@ describe("previewdef/focustree contentbuilder", () => {
 		const tree = minimalFocusTree();
 		const trees = await loadFocusTreesOnly(loaderWithTrees([tree]));
 		assert.ok(trees);
-		assert.strictEqual(trees!.length, 1);
+		assert.strictEqual(trees!.focusTrees.length, 1);
+		assert.strictEqual(trees!.layout.mode, 'standard');
 		const empty = await loadFocusTreesOnly(loaderWithTrees([]));
 		assert.strictEqual(empty, null);
 	});
@@ -441,10 +451,77 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(html.includes("memory"));
 	});
 
-	it("focusTreeGridBox is stable", () => {
-		assert.strictEqual(focusTreeGridBox.position?.x?._value, 50);
-		assert.strictEqual(focusTreeGridBox.size?.width?._value, 96);
-		assert.strictEqual(focusTreeGridBox.slotsize?.width?._value, 96);
+	it("renders the standard layout exactly as before when the loader gives no layout", async () => {
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([minimalFocusTree()]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		assert.strictEqual(payload!.layout, standardFocusTreeLayout);
+		assert.strictEqual(payload!.xGridSize, 96);
+		assert.strictEqual(payload!.gridBox.slotsize?.height?._value, 130);
+		const css = payload!.styleTable.toRawCss();
+		assert.ok(css.includes("background-position-x: center;"));
+		assert.ok(css.includes("background-position-y: calc(50% - 18px);"));
+		assert.ok(css.includes("left: 50%;"));
+		assert.ok(css.includes("top: 70px;"));
+		assert.ok(css.includes("transform: translate(-50%, calc(-50% - 3px));"));
+		assert.ok(css.includes("margin-top: 85px;"));
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		assert.ok(!html.includes("focusLinkOffsets"));
+	});
+
+	it("takes the grid, the focus layers and the link ends from a gui layout", async () => {
+		const layout: FocusTreeLayout = {
+			...standardFocusTreeLayout,
+			mode: "gui",
+			grid: { x: 70, y: 40 },
+			spacing: { x: 120, y: 150 },
+			item: { ...standardFocusTreeLayout.item, iconOffsetY: -8, titlebarOffsetX: 6, textOffsetX: 4 },
+			links: { parent: { x: 0, y: 10 }, child: { x: 0, y: -5 } },
+		};
+		const payload = await buildFocusTreePayload(
+			loaderWithLayout([minimalFocusTree()], layout),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		assert.strictEqual(payload!.xGridSize, 120);
+		assert.strictEqual(payload!.gridBox.position?.x?._value, 70);
+		assert.strictEqual(payload!.gridBox.position?.y?._value, 40);
+		assert.strictEqual(payload!.gridBox.slotsize?.width?._value, 120);
+		assert.strictEqual(payload!.gridBox.slotsize?.height?._value, 150);
+		const css = payload!.styleTable.toRawCss();
+		assert.ok(css.includes("background-position-y: calc(50% - 8px);"));
+		assert.ok(css.includes("left: calc(50% + 6px);"));
+		assert.ok(css.includes("left: 4px;"));
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		assert.ok(html.includes('window.focusLinkOffsets = {"parent":{"x":0,"y":10},"child":{"x":0,"y":-5}}'));
+	});
+
+	it("registerExclusiveLinkStyles moves the link by the layout's offset", () => {
+		const plain = new StyleTable();
+		registerExclusiveLinkStyles(plain, undefined, 96, 5);
+		assert.ok(plain.toRawCss().includes("top: 5px"));
+
+		const image = (name: string) =>
+			({ uri: `data:image/png;base64,${name}`, width: 16, height: 16 }) as any;
+		const textured = new StyleTable();
+		registerExclusiveLinkStyles(
+			textured,
+			{ line: image("line"), left: image("left"), mid: image("mid"), right: image("right") },
+			96,
+			5,
+		);
+		assert.ok(textured.toRawCss().includes("top: -3px"));
+	});
+
+	it("the standard layout's grid box is stable", () => {
+		const gridBox = focusTreeGridBoxFor(standardFocusTreeLayout);
+		assert.strictEqual(gridBox.position?.x?._value, 50);
+		assert.strictEqual(gridBox.size?.width?._value, 96);
+		assert.strictEqual(gridBox.slotsize?.width?._value, 96);
 	});
 
 	it("renders multiple focuses", async () => {

@@ -142,6 +142,7 @@ type HOITokenType =
 	| "symbol"
 	| "operator"
 	| "string"
+	| "date"
 	| "number"
 	| "unitnumber"
 	| "eof";
@@ -155,11 +156,15 @@ const tokenRegexStrings: Record<HOITokenType, [string, number]> = {
 	// with the single-character class in front, `>=` only ever matched the `>` and left the `=` to
 	// be read as the start of a value. `a >= 5` then failed to parse at all.
 	operator: [">=|<=|!=|[={}<>;,]", 10],
+	// A date, `1936.1.1` or `2030.1.1.1` with its hour. Tried ahead of `number`, which stops at the
+	// second dot: `date > 1936.1.1` read as `1936.1` plus a stray `.1` node, and a
+	// `1939.1.1 = { ... }` history block hung off a node named `.1`.
+	date: ["\\d+(?:\\.\\d+){2,}", 45],
 	string: ['"(?:\\\\"|\\\\\\\\|[^"])*"', 10],
 	// The trailing dot is the game's own tolerance, not a nicety: Millennium Dawn writes
 	// `nationalist_drift = 0.` in common/country_leader/00_traits.txt, and without it the whole file
 	// -- every politician trait in the mod -- fails to tokenise. The full-fraction branch is still
-	// first, so `2030.1` in a date is unaffected.
+	// first, so `2030.1` keeps its fraction.
 	number: ["-?\\d*\\.\\d+|-?\\d+\\.?|0x\\d+", 50],
 	unitnumber: ["(?:-?\\d*\\.\\d+|-?\\d+)(?:%%?)", 49],
 	eof: ["$", 1000],
@@ -272,7 +277,8 @@ function parseNode(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node {
 	if (
 		name.type !== "string" &&
 		name.type !== "symbol" &&
-		name.type !== "number"
+		name.type !== "number" &&
+		name.type !== "date"
 	) {
 		tokens.throw("Expect name to be symbol, string or number", true);
 	}
@@ -370,6 +376,7 @@ function parseNodeValue(
 			];
 		case "symbol":
 		case "unitnumber":
+		case "date":
 			return [{ name: nextToken.value }, nextToken, nextToken];
 		case "operator":
 			if (nextToken.value === "{") {
