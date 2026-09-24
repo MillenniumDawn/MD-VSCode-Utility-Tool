@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- [ GFX ] Sprites whose texture width does not divide evenly by `noofframes` no longer lose pixels at the edge of each frame, and a `noofframes` of 0 or larger than the texture width no longer breaks the preview. Issue #371.
+
 v1.1.39
 
   Bugfixes:
