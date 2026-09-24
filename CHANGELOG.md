@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the continuous focus box now takes its size from `continuous_focus_window` in `nationalfocusview.gui` instead of always being 770 by 380. Issue #398.
+
 v1.1.39
 
   Bugfixes:

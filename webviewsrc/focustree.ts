@@ -571,15 +571,13 @@ function calculateFocusAllowed(
 	}
 }
 
-function updateSelectedFocusTree(clearCondition: boolean) {
-	const focusTree = focusTrees[selectedFocusTreeIndex];
-	if (!focusTree) {
-		return;
-	}
-	const continuousFocuses = document.getElementById(
-		"continuousFocuses",
-	) as HTMLDivElement;
-
+// The size is the layout's: continuous_focus_window's in gui mode. The shell is not rebuilt on an
+// in-place update, so it is set here rather than in the shell's stylesheet.
+export function placeContinuousFocuses(
+	continuousFocuses: HTMLElement,
+	focusTree: FocusTree,
+	size: { width: number; height: number } | undefined,
+) {
 	if (
 		focusTree.continuousFocusPositionX !== undefined &&
 		focusTree.continuousFocusPositionY !== undefined
@@ -587,10 +585,24 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 		continuousFocuses.style.left =
 			focusTree.continuousFocusPositionX - 59 + "px";
 		continuousFocuses.style.top = focusTree.continuousFocusPositionY + 7 + "px";
+		continuousFocuses.style.width = (size?.width ?? 770) + "px";
+		continuousFocuses.style.height = (size?.height ?? 380) + "px";
 		continuousFocuses.style.display = "block";
 	} else {
 		continuousFocuses.style.display = "none";
 	}
+}
+
+function updateSelectedFocusTree(clearCondition: boolean) {
+	const focusTree = focusTrees[selectedFocusTreeIndex];
+	if (!focusTree) {
+		return;
+	}
+	placeContinuousFocuses(
+		document.getElementById("continuousFocuses") as HTMLDivElement,
+		focusTree,
+		(window as any).continuousFocusSize,
+	);
 
 	if (useConditionInFocus) {
 		const conditionExprs = dedupeConditionExprs(
@@ -1092,6 +1104,7 @@ window.addEventListener("message", tryRun(async (event) => {
 	(window as any).useConditionInFocus = data.useConditionInFocus;
 	(window as any).xGridSize = data.xGridSize;
 	(window as any).focusLinkOffsets = data.layout?.links;
+	(window as any).continuousFocusSize = data.layout?.continuous;
 
 	if (selectedFocusTreeIndex >= focusTrees.length) {
 		selectedFocusTreeIndex = Math.max(0, focusTrees.length - 1);

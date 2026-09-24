@@ -470,6 +470,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(css.includes("margin-top: 85px;"));
 		const html = buildFocusTreeHtml(payload!, webview, uri);
 		assert.ok(!html.includes("focusLinkOffsets"));
+		assert.ok(html.includes('window.continuousFocusSize = {"width":770,"height":380}'));
 	});
 
 	it("takes the grid, the focus layers and the link ends from a gui layout", async () => {
@@ -480,6 +481,7 @@ describe("previewdef/focustree contentbuilder", () => {
 			spacing: { x: 120, y: 150 },
 			item: { ...standardFocusTreeLayout.item, iconOffsetY: -8, titlebarOffsetX: 6, textOffsetX: 4 },
 			links: { parent: { x: 0, y: 10 }, child: { x: 0, y: -5 } },
+			continuous: { width: 600, height: 300 },
 		};
 		const payload = await buildFocusTreePayload(
 			loaderWithLayout([minimalFocusTree()], layout),
@@ -498,6 +500,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(css.includes("left: 4px;"));
 		const html = buildFocusTreeHtml(payload!, webview, uri);
 		assert.ok(html.includes('window.focusLinkOffsets = {"parent":{"x":0,"y":10},"child":{"x":0,"y":-5}}'));
+		assert.ok(html.includes('window.continuousFocusSize = {"width":600,"height":300}'));
 	});
 
 	it("registerExclusiveLinkStyles moves the link by the layout's offset", () => {

@@ -32,6 +32,9 @@ export interface FocusTreeLayout {
     // nothing extra.
     links?: { parent: NumberPosition; child: NumberPosition };
     exclusive: { offsetY: number; sprites: ExclusiveLinkSpriteSpec };
+    // The continuous focus box. Only its size comes from the file: the tree's
+    // continuous_focus_position replaces the window's own position in the game.
+    continuous: { width: number; height: number };
 }
 
 export const standardFocusTreeLayout: FocusTreeLayout = {
@@ -49,6 +52,7 @@ export const standardFocusTreeLayout: FocusTreeLayout = {
         textTop: 85,
     },
     exclusive: { offsetY: 0, sprites: defaultExclusiveLinkSprites },
+    continuous: { width: 770, height: 380 },
 };
 
 // What the game's own nationalfocusview.gui declares, which the standard layout was drawn to match.
@@ -94,6 +98,12 @@ function childWindow(window: Window | undefined, name: string): Window | undefin
     return window ? [...window.containerwindowtype, ...window.windowtype].find(w => w.name === name) : undefined;
 }
 
+// A percentage size has nothing to be a percentage of here, so it keeps the standard value too.
+function length(value: NumberLike | undefined): number | undefined {
+    const result = num(value);
+    return result !== undefined && result > 0 ? result : undefined;
+}
+
 function byName<T extends { name?: string }>(elements: T[] | undefined, name: string): T | undefined {
     return elements?.find(e => e.name === name);
 }
@@ -129,10 +139,12 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
     // The focus grid is `grid` inside `tree > grid_window`; the game's file has a second gridbox of
     // that name elsewhere, so the path is walked rather than the name looked up.
     const view = findWindow(windows, 'nationalfocusview');
-    const gridBox = byName(childWindow(childWindow(view, 'tree'), 'grid_window')?.gridboxtype, 'grid');
+    const gridWindow = childWindow(childWindow(view, 'tree'), 'grid_window');
+    const gridBox = byName(gridWindow?.gridboxtype, 'grid');
     const gridPosition = point(gridBox?.position);
 
     const spacing = positions['focus_spacing'] ?? {};
+    const continuousSize = childWindow(gridWindow, 'continuous_focus_window')?.size;
 
     const item = findWindow(windows, 'national_focus_item');
     const symbol = point(byName(item?.buttontype, 'symbol')?.position);
@@ -192,6 +204,10 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
                 rightGfx: right?.spritetype ?? right?.quadtexturesprite ?? defaults.rightGfx,
                 rightFrame: frameOf(right, defaults.rightFrame),
             },
+        },
+        continuous: {
+            width: length(continuousSize?.width) ?? standard.continuous.width,
+            height: length(continuousSize?.height) ?? standard.continuous.height,
         },
     };
 }
