@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- Errors from previews and file loading now appear in the HOI4 Modding output channel, not only in the developer console. Issue #370.
+
 v1.1.39
 
   Bugfixes:
