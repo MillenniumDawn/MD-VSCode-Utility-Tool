@@ -68,7 +68,7 @@ export class CountriesLoader extends Loader<Country[]> {
 		this.colorsLoader.onProgress((e) => this.onProgressEmitter.fire(e));
 	}
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		if (
 			(await this.countryTagsLoader.shouldReload(session)) ||
 			(await this.colorsLoader.shouldReload(session))
@@ -147,14 +147,14 @@ export class CountriesLoader extends Loader<Country[]> {
 		};
 	}
 
-	protected extraMeasurements(result: LoadResult<Country[]>) {
+	protected override extraMeasurements(result: LoadResult<Country[]>) {
 		return {
 			...super.extraMeasurements(result),
 			fileCount: Object.keys(this.countryLoaders).length,
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return "[CountriesLoader]";
 	}
 }
@@ -171,7 +171,7 @@ class CountryLoader extends FileLoader<Country | undefined> {
 		return { result: await loadCountry(this.tag, this.file), warnings: [] };
 	}
 
-	public toString() {
+	public override toString() {
 		return `[CountryLoader: ${this.file}]`;
 	}
 }
@@ -191,7 +191,7 @@ class CountryTagsLoader extends FolderLoader<Tag[], Tag[]> {
 		});
 	}
 
-	public toString() {
+	public override toString() {
 		return `[CountryTagsLoader]`;
 	}
 }
@@ -201,7 +201,7 @@ class CountryTagLoader extends FileLoader<Tag[]> {
 		return { result: await loadCountryTagsFile(this.file), warnings: [] };
 	}
 
-	public toString() {
+	public override toString() {
 		return `[CountryTagLoader: ${this.file}]`;
 	}
 }
@@ -231,7 +231,7 @@ class ColorsLoader extends FileLoader<HOIPartial<ColorsFile>> {
 		}
 	}
 
-	public toString() {
+	public override toString() {
 		return `[Colors]`;
 	}
 }

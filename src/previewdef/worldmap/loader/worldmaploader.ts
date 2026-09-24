@@ -60,7 +60,7 @@ export class WorldMapLoader extends Loader<WorldMapData> {
 		this.supplyNodeLoader.onProgress((e) => this.onProgressEmitter.fire(e));
 	}
 
-	public async shouldReloadImpl(): Promise<boolean> {
+	public override async shouldReloadImpl(): Promise<boolean> {
 		return this.shouldReloadValue;
 	}
 
@@ -159,7 +159,7 @@ export class WorldMapLoader extends Loader<WorldMapData> {
 		this.shouldReloadValue = true;
 	}
 
-	protected extraMeasurements(result: LoadResult<WorldMapData>) {
+	protected override extraMeasurements(result: LoadResult<WorldMapData>) {
 		return {
 			...super.extraMeasurements(result),
 			width: result.result.width,
@@ -172,7 +172,7 @@ export class WorldMapLoader extends Loader<WorldMapData> {
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[WorldMapLoader]`;
 	}
 }

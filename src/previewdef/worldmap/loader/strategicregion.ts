@@ -67,7 +67,7 @@ export class StrategicRegionsLoader extends FolderLoader<
 		super("map/strategicregions", StrategicRegionLoader);
 	}
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		return (
 			(await super.shouldReloadImpl(session)) ||
 			(await shouldReloadDependencies(session, [
@@ -77,7 +77,7 @@ export class StrategicRegionsLoader extends FolderLoader<
 		);
 	}
 
-	protected async loadImpl(
+	protected override async loadImpl(
 		session: LoaderSession,
 	): Promise<LoadResult<StrategicRegionsLoaderResult>> {
 		await this.fireOnProgressEvent(
@@ -168,7 +168,7 @@ export class StrategicRegionsLoader extends FolderLoader<
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[StrategicRegionsLoader]`;
 	}
 }
@@ -184,7 +184,7 @@ class StrategicRegionLoader extends FileLoader<StrategicRegionNoRegion[]> {
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[StrategicRegionLoader: ${this.file}]`;
 	}
 }

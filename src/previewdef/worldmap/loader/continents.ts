@@ -12,7 +12,7 @@ export class ContinentsLoader extends FileLoader<string[]> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[ContinentsLoader: ${this.file}]`;
     }
 }

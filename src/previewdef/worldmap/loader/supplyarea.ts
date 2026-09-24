@@ -66,7 +66,7 @@ export class SupplyAreasLoader extends FolderLoader<
 		super("map/supplyareas", SupplyAreaLoader);
 	}
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		return (
 			(await super.shouldReloadImpl(session)) ||
 			(await shouldReloadDependencies(session, [
@@ -76,7 +76,7 @@ export class SupplyAreasLoader extends FolderLoader<
 		);
 	}
 
-	protected async loadImpl(
+	protected override async loadImpl(
 		session: LoaderSession,
 	): Promise<LoadResult<SupplyAreasLoaderResult>> {
 		await this.fireOnProgressEvent(
@@ -161,7 +161,7 @@ export class SupplyAreasLoader extends FolderLoader<
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[SupplyAreasLoader]`;
 	}
 }
@@ -175,7 +175,7 @@ class SupplyAreaLoader extends FileLoader<SupplyAreaNoRegion[]> {
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[SupplyAreaLoader: ${this.file}]`;
 	}
 }

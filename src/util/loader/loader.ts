@@ -199,11 +199,11 @@ export abstract class FileLoader<T, E = {}> extends Loader<T, E> {
 		super();
 	}
 
-	public async shouldReloadImpl(_session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(_session: LoaderSession): Promise<boolean> {
 		return (await hoiFileExpiryToken(this.file)) !== this.expiryToken;
 	}
 
-	protected beforeLoadImpl(session: LoaderSession): void {
+	protected override beforeLoadImpl(session: LoaderSession): void {
 		checkLoaderSessionLoadingFile(session, this.file);
 	}
 
@@ -252,7 +252,7 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 		super();
 	}
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		const files = await listFilesFromModOrHOI4(this.folder);
 		if (
 			this.fileCount !== files.length ||
@@ -317,7 +317,7 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 		return this.mergeFiles(fileResults, session, failures);
 	}
 
-	protected extraMeasurements(result: LoadResult<T, E>) {
+	protected override extraMeasurements(result: LoadResult<T, E>) {
 		return { ...super.extraMeasurements(result), fileCount: this.fileCount };
 	}
 
@@ -344,7 +344,7 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 		super();
 	}
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		if (this.contentProvider === undefined) {
 			return (
 				(await hoiFileExpiryToken(this.file)) !== this.expiryToken ||
@@ -362,7 +362,7 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 		return true;
 	}
 
-	protected beforeLoadImpl(session: LoaderSession): void {
+	protected override beforeLoadImpl(session: LoaderSession): void {
 		checkLoaderSessionLoadingFile(session, this.file);
 	}
 

@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- [ Build ] The build now rejects a method that no longer overrides anything and a parameter that is never read, so renaming a shared loader or preview method can no longer leave a stale copy behind unnoticed. Issue #376.
+
 v1.1.39
 
   Bugfixes:

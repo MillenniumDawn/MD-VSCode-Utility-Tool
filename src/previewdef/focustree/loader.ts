@@ -29,7 +29,7 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
     // without this a flip would be answered from the load cached for the unchanged text.
     private loadedLayoutMode: FocusTreeLayoutMode | undefined;
 
-    public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+    public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
         if (this.loadedLayoutMode !== undefined && this.loadedLayoutMode !== focusTreeLayout) {
             return true;
         }
@@ -163,7 +163,7 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[FocusTreeLoader ${this.file}]`;
     }
 }

@@ -124,7 +124,7 @@ export class StatesLoader extends FolderLoader<
 		this.categoriesLoader.onProgress((e) => this.onProgressEmitter.fire(e));
 	}
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		return (
 			(await super.shouldReloadImpl(session)) ||
 			(await this.defaultMapLoader.shouldReload(session)) ||
@@ -133,7 +133,7 @@ export class StatesLoader extends FolderLoader<
 		);
 	}
 
-	protected async loadImpl(
+	protected override async loadImpl(
 		session: LoaderSession,
 	): Promise<LoadResult<StateLoaderResult>> {
 		await this.fireOnProgressEvent(
@@ -204,7 +204,7 @@ export class StatesLoader extends FolderLoader<
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[StatesLoader]`;
 	}
 }
@@ -218,7 +218,7 @@ class StateLoader extends FileLoader<StateNoBoundingBox[]> {
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[StateLoader: ${this.file}]`;
 	}
 }
@@ -231,7 +231,7 @@ class StateCategoriesLoader extends FolderLoader<
 		super("common/state_category", StateCategoryLoader);
 	}
 
-	protected async loadImpl(
+	protected override async loadImpl(
 		session: LoaderSession,
 	): Promise<LoadResult<Record<string, StateCategory>>> {
 		await this.fireOnProgressEvent(
@@ -275,7 +275,7 @@ class StateCategoriesLoader extends FolderLoader<
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[StateCategoriesLoader]`;
 	}
 }
@@ -289,7 +289,7 @@ class StateCategoryLoader extends FileLoader<StateCategory[]> {
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[StateCategoryLoader: ${this.file}]`;
 	}
 }

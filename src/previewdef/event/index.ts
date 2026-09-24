@@ -29,7 +29,7 @@ class EventPreview extends LoaderPreview<EventsLoader> {
     // previewLocalisation changes the text in the payload; localisationIndex changes whether
     // there is any text to show and so whether the localisation toggle is offered at all;
     // gfxIndex changes which pictures resolve, and so whether the picture toggle is.
-    protected get reloadOnConfigurationChange(): readonly string[] {
+    protected override get reloadOnConfigurationChange(): readonly string[] {
         return ['previewLocalisation', 'localisationIndex', 'gfxIndex'];
     }
 }
