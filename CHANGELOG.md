@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- [ Decision Previewer ] A scripted-GUI window placed away from the top-left corner is no longer cut off on its right and bottom edges in its decision card. Issue #365.
+
 v1.1.39
 
   Bugfixes:
