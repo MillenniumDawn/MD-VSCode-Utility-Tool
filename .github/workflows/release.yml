@@ -93,6 +93,9 @@ jobs:
       run: npm ci
     - name: Lint
       run: npm run lint
+    # `test:coverage` has no pre hook of its own, so the tests are compiled first, as in test.yml.
+    - name: Compile tests
+      run: npm run pretest
     - name: Test
       run: npm run test:coverage
 
