@@ -141,6 +141,11 @@ function renderEdges<E extends GraphEdgeLike>(
 	const placements: { gap: number; x: number; y: number; height: number; chip: HTMLDivElement }[] =
 		[];
 	const renderedEdges: RenderedEdge<E>[] = [];
+	// Appending a path dirties layout, so measuring a chip in the same iteration forces a reflow --
+	// a few hundred of them on a dense graph. The curves go in first and the heights are read after,
+	// the way the node pass in renderGraph already does it.
+	const pending: { chip: HTMLDivElement; gap: number; centre: number; y1: number; y2: number; t: number }[] =
+		[];
 
 	for (const { edge, guarded, chip } of built) {
 		const from = layout.positions[edge.from];
@@ -176,17 +181,21 @@ function renderEdges<E extends GraphEdgeLike>(
 			const gap = layout.rank[edge.from] ?? 0;
 			const centre = (layout.gapX[gap] ?? x1) + (layout.gapWidth[gap] ?? 0) / 2;
 			const t = parameterAtX(x1, x1 + dx, x2 - dx, x2, centre);
-			const height = chip.getBoundingClientRect().height / currentScale();
-			placements.push({
-				gap,
-				x: centre,
-				y: cubicAt(y1, y1, y2, y2, t) - height / 2,
-				height,
-				chip,
-			});
+			pending.push({ chip, gap, centre, y1, y2, t });
 		}
 
 		renderedEdges.push({ edge, path, chip });
+	}
+
+	for (const { chip, gap, centre, y1, y2, t } of pending) {
+		const height = chip.getBoundingClientRect().height / currentScale();
+		placements.push({
+			gap,
+			x: centre,
+			y: cubicAt(y1, y1, y2, y2, t) - height / 2,
+			height,
+			chip,
+		});
 	}
 
 	let bottom = 0;

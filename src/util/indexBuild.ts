@@ -5,6 +5,7 @@ import { describeLiveIndexBuilds } from "./indexCache";
 import { localize } from "./i18n";
 import { Logger } from "./logger";
 import { BuildGate, createBuildGate } from "./promiseUtils";
+import { ProgressReport, uncancelledToken } from "./progress";
 
 /**
  * The one pool every index parse runs in. Deliberately small: the work is synchronous parsing on
@@ -22,16 +23,12 @@ export const indexParseQueue = createWorkQueue(4);
  */
 export const indexBuildTimeout = 5 * 60 * 1000;
 
-/** What a build reports into, and watches for a cancel, while it runs. */
-export interface IndexProgress {
-	/** This build's files done out of files known. Aggregated with every other live build's. */
-	report(done: number, total: number): void;
-	/**
-	 * Cancelled when the user presses Cancel. Shared by every build under the same notification,
-	 * because "stop indexing" is one decision rather than one per index.
-	 */
-	readonly token: vscode.CancellationToken;
-}
+/**
+ * What a build reports into, and watches for a cancel, while it runs. The token is shared by every
+ * build under the same notification, because "stop indexing" is one decision rather than one per
+ * index -- unlike a foreground job, which gets its own through withCancellableProgress.
+ */
+export type IndexProgress = ProgressReport;
 
 interface ProgressMember {
 	label: string;
@@ -56,12 +53,6 @@ interface ProgressSession {
  * first and last state of a build are never the ones dropped.
  */
 const progressRenderInterval = 100;
-
-/** A token for the window between asking for a session and `withProgress` handing us the real one. */
-const uncancelledToken: vscode.CancellationToken = {
-	isCancellationRequested: false,
-	onCancellationRequested: () => ({ dispose: () => undefined }),
-};
 
 let sessionPromise: Promise<ProgressSession> | undefined;
 

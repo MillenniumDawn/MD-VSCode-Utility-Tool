@@ -6,7 +6,7 @@ import { html, previewedFileUriScript, errorPage } from "../../util/html";
 import { localize, i18nTableAsScript } from "../../util/i18n";
 import { StyleTable } from "../../util/styletable";
 import { HOIEvent } from "./schema";
-import { flatten } from "lodash";
+import flatten from "lodash/flatten";
 import { arrayToMap, jsonForScript } from "../../util/common";
 import { buildEventGraphPayload, eventsToGraph } from "./graph";
 import { EventGraphPayload } from "./payload";

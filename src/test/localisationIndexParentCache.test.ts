@@ -167,13 +167,13 @@ describe("util/localisationIndex warm parent cache", function () {
 	});
 
 	// The cache writes are fire-and-forget behind the build promise, so the second build must
-	// wait until the parent half's data file has actually landed in the store.
+	// wait until the half's data file and the manifest written after it have landed in the store.
 	async function waitForCacheData(cacheName: string): Promise<void> {
 		for (let i = 0; i < 100; i++) {
+			const paths = [...cacheStore.keys()];
 			if (
-				[...cacheStore.keys()].some((path) =>
-					path.endsWith(`${cacheName}.data.json`),
-				)
+				paths.some((path) => path.endsWith(`${cacheName}.data.jsonl`)) &&
+				paths.some((path) => path.endsWith(`${cacheName}.manifest.json`))
 			) {
 				return;
 			}
@@ -182,18 +182,22 @@ describe("util/localisationIndex warm parent cache", function () {
 		throw new Error(`${cacheName} data cache was never written`);
 	}
 
-	function parentCacheData(): {
-		index: Record<string, Record<string, string>>;
-		fileMap: Record<string, Record<string, string[]>>;
-	} {
+	/** The parent half's cache records: `[langKey, filePath, entries]`, the count line dropped. */
+	function parentCacheRecords(): [string, string, Record<string, string>][] {
 		const dataPath = [...cacheStore.keys()].find((path) =>
-			path.endsWith("localisationIndex.parent.0.data.json"),
+			path.endsWith("localisationIndex.parent.0.data.jsonl"),
 		);
 		assert.ok(
 			dataPath,
 			"localisationIndex.parent.0 data cache was never written",
 		);
-		return JSON.parse(Buffer.from(cacheStore.get(dataPath)!).toString());
+		const lines = Buffer.from(cacheStore.get(dataPath)!)
+			.toString()
+			.split("\n")
+			.filter((line) => line !== "")
+			.map((line) => JSON.parse(line));
+		assert.strictEqual(lines.pop(), lines.length);
+		return lines;
 	}
 
 	it("cold build parses the parent file and saves its key with fileMap data", async function () {
@@ -204,12 +208,13 @@ describe("util/localisationIndex warm parent cache", function () {
 		assert.strictEqual(parentFileReads, 1);
 		await waitForCacheData("localisationIndex.parent.0");
 
-		const cached = parentCacheData();
-		assert.strictEqual(cached.index.l_english.PARENT_ONLY, "parent only");
-		// The listing path carries the localisation root, so match on the keys the file owns
+		// The listing path carries the localisation root, so match on the entries the file owns
 		// rather than on the listing's bare name.
-		const cachedKeys = Object.values(cached.fileMap.l_english ?? {}).flat();
-		assert.deepStrictEqual(cachedKeys, ["PARENT_ONLY"]);
+		const cached = parentCacheRecords();
+		assert.deepStrictEqual(
+			cached.map(([langKey, , entries]) => [langKey, entries]),
+			[["l_english", { PARENT_ONLY: "parent only" }]],
+		);
 	});
 
 	it("warm build serves a global key from the cache without re-reading the global file", async function () {

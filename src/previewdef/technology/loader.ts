@@ -5,7 +5,7 @@ import { GuiFile } from "../../hoiformat/gui";
 import { ContentLoader, Dependency, LoadResultOD, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
-import { flatMap, chain, uniq } from "lodash";
+import uniq from "lodash/uniq";
 import { GuiFileLoader } from "../gui/loader";
 import { hoiFilesExpiryToken, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
 import { getConfiguration } from "../../util/vsccommon";
@@ -59,12 +59,12 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
         return {
             result: {
                 technologyTrees,
-                gfxFiles: chain(gfxDependencies).concat(extraGfxFiles, flatMap(guiDepFiles, r => r.result.gfxFiles)).uniq().value(),
-                guiFiles: chain(guiDepFiles).flatMap(r => r.result.guiFiles).uniq().value(),
+                gfxFiles: uniq([...gfxDependencies, ...extraGfxFiles, ...guiDepFiles.flatMap(r => r.result.gfxFiles)]),
+                guiFiles: uniq(guiDepFiles.flatMap(r => r.result.guiFiles)),
                 equipmentArchetypes,
                 countryTagsByFolder,
             },
-            dependencies: chain([this.file]).concat(gfxDependencies, extraGfxFiles, guiDependencies, equipmentFiles, countryTagFiles, mergeInLoadResult(guiDepFiles, 'dependencies')).uniq().value(),
+            dependencies: uniq([this.file, ...gfxDependencies, ...extraGfxFiles, ...guiDependencies, ...equipmentFiles, ...countryTagFiles, ...mergeInLoadResult(guiDepFiles, 'dependencies')]),
         };
     }
 
@@ -133,11 +133,10 @@ async function loadEquipmentArchetypesUncached(): Promise<EquipmentArchetypesRes
         return { equipmentArchetypes: {}, equipmentFiles: [] };
     }
 
-    const relativeFiles = chain(await listFilesFromModOrHOI4(equipmentFolder, { recursively: true }))
-        .filter(f => f.toLowerCase().endsWith('.txt'))
-        .map(f => `${equipmentFolder}/${f}`.replace(/\/+/g, '/'))
-        .uniq()
-        .value();
+    const relativeFiles = uniq(
+        (await listFilesFromModOrHOI4(equipmentFolder, { recursively: true }))
+            .filter(f => f.toLowerCase().endsWith('.txt'))
+            .map(f => `${equipmentFolder}/${f}`.replace(/\/+/g, '/')));
 
     const fileArchetypes = await Promise.all(relativeFiles.map(async file => {
         try {

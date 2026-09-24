@@ -186,6 +186,8 @@ const tokenRegex = new RegExp(
 	"y",
 );
 
+const stringEscapeRegex = /\\(["\\])/g;
+
 export interface ParseOptions {
 	/**
 	 * When false, position Tokens (nameToken, operatorToken, value*Token) are not stored on the
@@ -353,8 +355,7 @@ function parseNodeValue(
 			return [
 				nextToken.value
 					.substr(1, nextToken.end - nextToken.start - 2)
-					.replace(/\\"/g, '"')
-					.replace(/\\\\/g, "\\"),
+					.replace(stringEscapeRegex, "$1"),
 				nextToken,
 				nextToken,
 			];

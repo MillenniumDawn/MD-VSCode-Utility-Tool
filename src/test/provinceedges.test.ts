@@ -99,6 +99,19 @@ describe('worldmap/provincebmp edge joining', function () {
             ];
             assert.deepStrictEqual(concatEdges(edges), [[pt(0, 0), pt(2, 0)]]);
         });
+
+        it('keeps points apart whose x and y would collide under a too-small key stride', function () {
+            // With a stride of 3, (0, 3) and (1, 0) would share a key and the two segments
+            // would wrongly chain into one path.
+            const edges: [Point, Point][] = [
+                seg(5, 5, 0, 3),
+                seg(1, 0, 2, 0),
+            ];
+            assert.deepStrictEqual(concatEdges(edges), [
+                [pt(5, 5), pt(0, 3)],
+                [pt(1, 0), pt(2, 0)],
+            ]);
+        });
     });
 
     describe('fillEdges', function () {
@@ -151,6 +164,116 @@ describe('worldmap/provincebmp edge joining', function () {
                 { toColor: -1, path: [[pt(4, 4), pt(0, 4)]] },
             ]);
         });
+
+        // Reference matching the pre-optimization implementation: a [color, [Point, Point]]
+        // tuple per boundary side, grouped per neighbour, joined on "x,y" string keys with a
+        // linear scan. The numeric version must produce identical edge sets.
+        function fillEdgesReference(colors: number[][]): { color: number; edges: ProvinceEdgeGraph[] }[] {
+            const grid = buildGrid(colors);
+            const { colorByPosition, width, height } = grid;
+            const offsets = [[[0, 1], [0, 0]], [[0, 0], [1, 0]], [[1, 0], [1, 1]], [[1, 1], [0, 1]]];
+            const provinces = grid.provinces.map(p => ({ ...p, edges: [] as ProvinceEdgeGraph[] }));
+            const accessed = new Uint8Array(colorByPosition.length);
+            const concat = (edges: [Point, Point][]): Point[][] => {
+                const key = (p: Point) => `${p.x},${p.y}`;
+                const used = edges.map(() => false);
+                const result: Point[][] = [];
+                for (let i = 0; i < edges.length; i++) {
+                    if (used[i]) {
+                        continue;
+                    }
+                    used[i] = true;
+                    const points = [...edges[i]];
+                    let found = true;
+                    while (found) {
+                        found = false;
+                        const h = edges.findIndex((e, k) => !used[k] && key(e[1]) === key(points[0]));
+                        if (h !== -1) {
+                            used[h] = found = true;
+                            points.unshift(edges[h][0]);
+                        }
+                        const t = edges.findIndex((e, k) => !used[k] && key(e[0]) === key(points[points.length - 1]));
+                        if (t !== -1) {
+                            used[t] = found = true;
+                            points.push(edges[t][1]);
+                        }
+                    }
+                    const kept: Point[] = [];
+                    let last = points[0];
+                    for (const p of points) {
+                        if (kept.length < 2) {
+                            kept.push(p);
+                        } else if (p.x === last.x || p.y === last.y) {
+                            kept[kept.length - 1] = p;
+                        } else {
+                            last = kept[kept.length - 1];
+                            kept.push(p);
+                        }
+                    }
+                    result.push(kept);
+                }
+                return result;
+            };
+            for (let start = 0; start < colorByPosition.length; start++) {
+                if (accessed[start]) {
+                    continue;
+                }
+                const color = colorByPosition[start];
+                const byNeighbour: Record<number, [Point, Point][]> = {};
+                const stack = [start];
+                while (stack.length > 0) {
+                    const index = stack.pop()!;
+                    if (accessed[index]) {
+                        continue;
+                    }
+                    const x = index % width;
+                    const y = Math.floor(index / width);
+                    const adjacent = [
+                        x === 0 ? index + width - 1 : index - 1,
+                        index - width,
+                        x === width - 1 ? index - width + 1 : index + 1,
+                        y === height - 1 ? -1 : index + width,
+                    ];
+                    adjacent.forEach((a, i) => {
+                        const neighbour = a < 0 ? -1 : colorByPosition[a];
+                        if (neighbour === color) {
+                            stack.push(a);
+                            return;
+                        }
+                        const line = offsets[i].map(([dx, dy]) => pt(x + dx, y + dy)) as [Point, Point];
+                        (byNeighbour[neighbour] ??= []).push(line);
+                    });
+                    accessed[index] = 1;
+                }
+                const province = provinces.find(p => p.color === color)!;
+                for (const [neighbour, lines] of Object.entries(byNeighbour)) {
+                    const toColor = parseInt(neighbour);
+                    let edgeSet = province.edges.find(e => e.toColor === toColor);
+                    if (edgeSet === undefined) {
+                        province.edges.push(edgeSet = { toColor, path: [] });
+                    }
+                    edgeSet.path.push(...concat(lines));
+                }
+            }
+            return provinces;
+        }
+
+        // Irregular blobs: diagonal bands broken up by a second frequency, so borders are ragged,
+        // provinces wrap across the left/right seam, and some touch the top and bottom rows.
+        function raggedColors(width: number, height: number): number[][] {
+            return Array.from({ length: height }, (_, y) =>
+                Array.from({ length: width }, (_, x) =>
+                    1 + ((Math.floor((x + y * 2) / 5) + Math.floor((x * 3 + y) / 7)) % 6)));
+        }
+
+        for (const [width, height] of [[23, 11], [6, 19], [2, 9], [17, 1]]) {
+            it(`matches the reference on a ragged ${width}x${height} grid`, function () {
+                const colors = raggedColors(width, height);
+                const grid = buildGrid(colors);
+                const provinces = fillEdges(grid.provinces, grid.colorByPosition, grid.width, grid.height);
+                assert.deepStrictEqual(provinces, fillEdgesReference(colors));
+            });
+        }
     });
 });
 

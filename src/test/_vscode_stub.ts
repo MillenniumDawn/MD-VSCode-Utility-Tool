@@ -271,6 +271,8 @@ const pristine = {
     workspaceFolders: stub.workspace.workspaceFolders as unknown,
     onDidChangeConfiguration: stub.workspace.onDidChangeConfiguration,
     onDidChangeWorkspaceFolders: stub.workspace.onDidChangeWorkspaceFolders,
+    onDidChangeTextDocument: stub.workspace.onDidChangeTextDocument,
+    activeTextEditor: stub.window.activeTextEditor as unknown,
     stat: stub.workspace.fs.stat,
     readDirectory: stub.workspace.fs.readDirectory,
     readFile: stub.workspace.fs.readFile,
@@ -280,9 +282,13 @@ const pristine = {
     openTextDocument: stub.workspace.openTextDocument,
     textDocuments: stub.workspace.textDocuments as unknown,
     showErrorMessage: stub.window.showErrorMessage,
+    showInformationMessage: stub.window.showInformationMessage,
     showWorkspaceFolderPick: stub.window.showWorkspaceFolderPick,
     createWebviewPanel: stub.window.createWebviewPanel,
     registerWebviewPanelSerializer: stub.window.registerWebviewPanelSerializer,
+    showOpenDialog: stub.window.showOpenDialog,
+    showQuickPick: stub.window.showQuickPick,
+    registerCommand: stub.commands.registerCommand,
     withProgress: stub.window.withProgress,
     now: Date.now,
 };
@@ -300,6 +306,10 @@ export interface VscodeStubOverrides {
     onDidChangeConfiguration?: (handler: any) => { dispose(): void };
     /** Captures the folder-change handler a suite's `register()` call installs, to drive it directly. */
     onDidChangeWorkspaceFolders?: (handler: any) => { dispose(): void };
+    /** Captures the document-change handler a suite's `register()` call installs, to drive it directly. */
+    onDidChangeTextDocument?: (handler: any, thisArg?: any) => { dispose(): void };
+    /** Replaces `window.activeTextEditor`; pass `undefined` explicitly for "no editor". */
+    activeTextEditor?: unknown;
     stat?: (uri: any) => Promise<any>;
     readDirectory?: (uri: any) => Promise<[string, number][]>;
     readFile?: (uri: any) => Promise<Uint8Array>;
@@ -310,10 +320,20 @@ export interface VscodeStubOverrides {
     /** Replaces `workspace.textDocuments`, for suites driving `getDocumentByUri` lookups. */
     textDocuments?: readonly any[];
     showErrorMessage?: (...args: any[]) => Promise<any>;
+    showInformationMessage?: (...args: any[]) => Promise<any>;
     showWorkspaceFolderPick?: () => Promise<any>;
     createWebviewPanel?: (viewType: string, title: string, showOptions: any, options: any) => any;
     /** Captures the serializer a suite's `register()` call installs, e.g. to drive it directly. */
     registerWebviewPanelSerializer?: (viewType: string, serializer: any) => { dispose(): void };
+    /** Answers the folder or file picker, for suites driving a command that opens one. */
+    showOpenDialog?: (options?: any) => Promise<any>;
+    /** Answers a quick pick, for suites driving a command that asks one. */
+    showQuickPick?: (items: any, options?: any) => Promise<any>;
+    /**
+     * Captures the handler a suite's `register()` call installs, so a command that is otherwise
+     * only reachable through the palette can be invoked directly.
+     */
+    registerCommand?: (command: string, handler: (...args: any[]) => any) => { dispose(): void };
     /**
      * Drives an index build's progress notification: hand the task an already-cancelled token to
      * exercise cancellation, or capture what it reports.
@@ -354,6 +374,12 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.onDidChangeWorkspaceFolders !== undefined) {
         workspace.onDidChangeWorkspaceFolders = overrides.onDidChangeWorkspaceFolders;
     }
+    if (overrides.onDidChangeTextDocument !== undefined) {
+        workspace.onDidChangeTextDocument = overrides.onDidChangeTextDocument;
+    }
+    if ('activeTextEditor' in overrides) {
+        window.activeTextEditor = overrides.activeTextEditor;
+    }
     if (overrides.stat !== undefined) {
         fs.stat = overrides.stat;
     }
@@ -381,6 +407,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.showErrorMessage !== undefined) {
         window.showErrorMessage = overrides.showErrorMessage;
     }
+    if (overrides.showInformationMessage !== undefined) {
+        window.showInformationMessage = overrides.showInformationMessage;
+    }
     if (overrides.showWorkspaceFolderPick !== undefined) {
         window.showWorkspaceFolderPick = overrides.showWorkspaceFolderPick;
     }
@@ -389,6 +418,15 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     }
     if (overrides.registerWebviewPanelSerializer !== undefined) {
         window.registerWebviewPanelSerializer = overrides.registerWebviewPanelSerializer;
+    }
+    if (overrides.showOpenDialog !== undefined) {
+        window.showOpenDialog = overrides.showOpenDialog;
+    }
+    if (overrides.showQuickPick !== undefined) {
+        window.showQuickPick = overrides.showQuickPick;
+    }
+    if (overrides.registerCommand !== undefined) {
+        (stub.commands as any).registerCommand = overrides.registerCommand;
     }
     if (overrides.withProgress !== undefined) {
         window.withProgress = overrides.withProgress;
@@ -408,6 +446,8 @@ export function restoreVscodeStubs(): void {
     workspace.workspaceFolders = pristine.workspaceFolders;
     workspace.onDidChangeConfiguration = pristine.onDidChangeConfiguration;
     workspace.onDidChangeWorkspaceFolders = pristine.onDidChangeWorkspaceFolders;
+    workspace.onDidChangeTextDocument = pristine.onDidChangeTextDocument;
+    window.activeTextEditor = pristine.activeTextEditor;
     fs.stat = pristine.stat;
     fs.readDirectory = pristine.readDirectory;
     fs.readFile = pristine.readFile;
@@ -417,9 +457,13 @@ export function restoreVscodeStubs(): void {
     workspace.openTextDocument = pristine.openTextDocument;
     workspace.textDocuments = pristine.textDocuments;
     window.showErrorMessage = pristine.showErrorMessage;
+    window.showInformationMessage = pristine.showInformationMessage;
     window.showWorkspaceFolderPick = pristine.showWorkspaceFolderPick;
     window.createWebviewPanel = pristine.createWebviewPanel;
     window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
+    window.showOpenDialog = pristine.showOpenDialog;
+    window.showQuickPick = pristine.showQuickPick;
+    (stub.commands as any).registerCommand = pristine.registerCommand;
     window.withProgress = pristine.withProgress;
     Date.now = pristine.now;
 }

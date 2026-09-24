@@ -1,17 +1,10 @@
-import { postedMessages, takePostedMessages } from "./setup";
+import { canvasCalls, postedMessages, resetWebviewState, takePostedMessages } from "./setup";
 import * as assert from "assert";
 import { vscode } from "../../../webviewsrc/util/vscode";
 
 type Listener = (event: Event) => unknown;
 type CapturedListeners = Record<string, Listener[]>;
 type Entrypoint = "gfx" | "techtree" | "guipreview" | "worldmap";
-
-function clearState(): void {
-	const state = vscode.getState() as Record<string, unknown>;
-	for (const key of Object.keys(state)) {
-		delete state[key];
-	}
-}
 
 function captureEntrypoint(name: Entrypoint): CapturedListeners {
 	const captured: CapturedListeners = {};
@@ -303,7 +296,7 @@ function reloadCardEntrypoint(name: CardEntrypoint): void {
 	});
 }
 
-clearState();
+resetWebviewState();
 const gfx = captureEntrypoint("gfx");
 const techtree = captureEntrypoint("techtree");
 const guipreview = captureEntrypoint("guipreview");
@@ -311,7 +304,7 @@ const worldmap = captureEntrypoint("worldmap");
 
 describe("webview entrypoints", () => {
 	beforeEach(() => {
-		clearState();
+		resetWebviewState();
 		document.body.replaceChildren();
 	});
 
@@ -589,29 +582,8 @@ describe("webview entrypoints", () => {
 	it("starts the world-map loader and hides supply-area controls when disabled", () => {
 		installWorldMapShell();
 		(window as any).__enableSupplyArea = false;
-		const paints: string[] = [];
-		const context = {
-			fillStyle: "",
-			strokeStyle: "",
-			font: "",
-			textAlign: "",
-			textBaseline: "",
-			lineWidth: 0,
-			fillRect: () => paints.push("fillRect"),
-			drawImage: () => paints.push("drawImage"),
-			measureText: () => ({ width: 0 }),
-			fillText: () => undefined,
-			beginPath: () => undefined,
-			moveTo: () => undefined,
-			lineTo: () => undefined,
-			stroke: () => undefined,
-			strokeRect: () => undefined,
-		};
-		const canvasPrototype = (window as any).HTMLCanvasElement.prototype;
-		const originalGetContext = canvasPrototype.getContext;
 		const originalRequestAnimationFrame = (globalThis as any)
 			.requestAnimationFrame;
-		canvasPrototype.getContext = () => context;
 		(globalThis as any).requestAnimationFrame = (
 			callback: (time: number) => void,
 		) => {
@@ -632,10 +604,13 @@ describe("webview entrypoints", () => {
 				document.querySelectorAll('[enablesupplyarea="true"]').length,
 				0,
 			);
-			assert.ok(paints.includes("fillRect"));
-			assert.ok(paints.includes("drawImage"));
+			const mainCanvas = document.getElementById(
+				"main-canvas",
+			) as HTMLCanvasElement;
+			assert.ok(
+				canvasCalls(mainCanvas).some((call) => call.method === "drawImage"),
+			);
 		} finally {
-			canvasPrototype.getContext = originalGetContext;
 			(globalThis as any).requestAnimationFrame = originalRequestAnimationFrame;
 		}
 	});
@@ -643,7 +618,7 @@ describe("webview entrypoints", () => {
 
 describe("webview card entrypoints", () => {
 	beforeEach(() => {
-		clearState();
+		resetWebviewState();
 		document.body.replaceChildren();
 	});
 

@@ -18,7 +18,7 @@ import {
 	LoadResultOD as CommonLoadResultOD,
 } from "../../../util/loader/loader";
 import { localize } from "../../../util/i18n";
-import { maxBy } from "lodash";
+import maxBy from "lodash/maxBy";
 
 export abstract class Loader<T> extends CommonLoader<T, MapLoaderExtra> {}
 export abstract class FileLoader<T> extends CommonFileLoader<
@@ -196,6 +196,36 @@ export function mergeRegion<K extends string, T extends { [k in K]: number[] }>(
 	}
 
 	return result;
+}
+
+export function mergeRegionWithWarnings<
+	K extends string,
+	T extends { id: number; file: string } & { [k in K]: number[] },
+>(
+	input: T,
+	subRegionIdType: K,
+	subRegions: (Region | undefined | null)[],
+	width: number,
+	sourceType: "state" | "strategicregion" | "supplyarea",
+	warnings: WorldMapWarning[],
+	regionNotExistText: (regionId: number) => string,
+	noRegionText: () => string,
+): T & Region {
+	const pushWarning = (text: string) =>
+		warnings.push({
+			source: [{ type: sourceType, id: input.id }],
+			relatedFiles: [input.file],
+			text,
+		});
+
+	return mergeRegion(
+		input,
+		subRegionIdType,
+		subRegions,
+		width,
+		(regionId) => pushWarning(regionNotExistText(regionId)),
+		() => pushWarning(noRegionText()),
+	);
 }
 
 export function mergeRegions(
