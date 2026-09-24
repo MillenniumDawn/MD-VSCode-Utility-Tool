@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- [ Focus Tree Previewer ] [ MIO Preview ] Changing several options in quick succession no longer leaves an older version of the tree on screen; the latest change always wins. Issue #367.
+
 v1.1.39
 
   Bugfixes:
