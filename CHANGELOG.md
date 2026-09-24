@@ -2,6 +2,7 @@ Unreleased
 
   Bugfixes:
 
+- Dates written without quotes, such as `date > 1936.1.1` or a `1939.1.1 = { ... }` history block, are now read whole instead of losing their day to a stray `.1` entry. Issue #360.
 - [ World Map Previewer ] Province colours and the hover and selection highlights now line up with the border lines drawn around them, instead of sitting up to a couple of pixels up and to the left, most visibly with fast rendering on or when zoomed out. Issue #277.
 - [ MIO Preview ] An `override_trait` in an organisation that uses `include` no longer changes that trait in the included organisation's own tree as well. Issue #248.
 - [ DDS ] Opening a .dds or .tga file shows the texture again instead of a broken image icon.

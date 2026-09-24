@@ -85,11 +85,33 @@ describe('parseHoi4File', () => {
         assert.strictEqual(child(root, 'army_attack_factor').value, 0.15);
     });
 
-    // The full-fraction branch still comes first in the alternation, so a date keeps splitting the
-    // way every reader of one already expects.
-    it('still reads a date as a number and the fragments after it', () => {
+    it('still reads a two-part number as a number', () => {
+        const root = parseHoi4File('year = 2030.1');
+        assert.strictEqual(child(root, 'year').value, 2030.1);
+    });
+
+    // Issue #360: `number` stops at the second dot, so a date used to lose its day to a stray `.1`
+    // sibling node.
+    it('reads a three-part date as one token', () => {
+        const root = parseHoi4File('date > 1936.1.1');
+        const nodes = root.value as Node[];
+        assert.strictEqual(nodes.length, 1);
+        assert.strictEqual(nodes[0].operator, '>');
+        assert.deepStrictEqual(nodes[0].value, { name: '1936.1.1' });
+    });
+
+    it('reads a four-part date as one token', () => {
         const root = parseHoi4File('expire = 2030.1.1.1');
-        assert.strictEqual(child(root, 'expire').value, 2030.1);
+        assert.strictEqual((root.value as Node[]).length, 1);
+        assert.deepStrictEqual(child(root, 'expire').value, { name: '2030.1.1.1' });
+    });
+
+    it('names a history block after its date', () => {
+        const root = parseHoi4File('1939.1.1 = { a = b }');
+        const nodes = root.value as Node[];
+        assert.strictEqual(nodes.length, 1);
+        assert.strictEqual(nodes[0].name, '1939.1.1');
+        assert.deepStrictEqual(child(nodes[0], 'a').value, { name: 'b' });
     });
 
     it('parses unescaped quotes inside a string', () => {
