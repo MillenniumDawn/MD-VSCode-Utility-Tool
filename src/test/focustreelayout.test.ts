@@ -85,9 +85,18 @@ const mdGui = `guiTypes = {
 
 describe('previewdef/focustree/layout', () => {
     it('reads the game layout as the standard one', () => {
-        const layout = buildFocusTreeLayout([parseGui(mdGui)]);
+        const { center, ...layout } = buildFocusTreeLayout([parseGui(mdGui)]);
         assert.deepStrictEqual({ ...layout, mode: 'standard' }, standardFocusTreeLayout);
         assert.strictEqual(layout.mode, 'gui');
+        assert.deepStrictEqual(center, { x: 130, y: 32 });
+    });
+
+    it('has no centre unless the file declares national_focus_center', () => {
+        assert.strictEqual(standardFocusTreeLayout.center, undefined);
+        assert.strictEqual(buildFocusTreeLayout([]).center, undefined);
+        const withoutCenter = mdGui.replace('positionType = { name = "national_focus_center" position = { x = 130 y = 32 } }', '');
+        assert.notStrictEqual(withoutCenter, mdGui);
+        assert.strictEqual(buildFocusTreeLayout([parseGui(withoutCenter)]).center, undefined);
     });
 
     it('keeps every standard value when the file declares none of them', () => {

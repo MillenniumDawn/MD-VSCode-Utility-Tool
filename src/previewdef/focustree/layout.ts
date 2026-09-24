@@ -31,6 +31,9 @@ export interface FocusTreeLayout {
     // Undefined when both ends are where the standard layout puts them, so a standard page carries
     // nothing extra.
     links?: { parent: NumberPosition; child: NumberPosition };
+    // `national_focus_center`: the point of the initial_show_position slot the game centres the view
+    // on. Only set when the gui file declares it, so the preview keeps opening at the top left otherwise.
+    center?: NumberPosition;
     exclusive: { offsetY: number; sprites: ExclusiveLinkSpriteSpec };
 }
 
@@ -155,6 +158,9 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
     };
     const links = parent.x === 0 && parent.y === 0 && child.x === 0 && child.y === 0 ? undefined : { parent, child };
 
+    const declaredCenter = positions['national_focus_center'];
+    const center = declaredCenter ? { x: declaredCenter.x ?? 0, y: declaredCenter.y ?? 0 } : undefined;
+
     const exclusiveItem = findWindow(windows, 'national_focus_exclusive_item');
     const exclusiveOffsetY = shift(0, positions['exclusive_offset']?.y, reference.exclusiveOffsetY) +
         shift(0, num(exclusiveItem?.position?.y), reference.exclusiveItemY);
@@ -180,6 +186,7 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
             textTop: shift(standard.item.textTop, name.y, reference.name.y),
         },
         ...(links ? { links } : {}),
+        ...(center ? { center } : {}),
         exclusive: {
             offsetY: exclusiveOffsetY,
             sprites: {

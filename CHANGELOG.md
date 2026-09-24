@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- [ Focus Tree ] With the focus tree layout set to `gui`, a focus tree preview now opens centred on the tree's `initial_show_position`, the way the game does, using `national_focus_center` from `nationalfocusview.gui`. Issue #400.
+
 v1.1.39
 
   Bugfixes:

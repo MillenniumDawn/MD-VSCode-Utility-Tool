@@ -741,3 +741,30 @@ shared_focus = {
 		assert.ok(host.focuses["SH_b"], "SH_b must be merged in");
 	});
 });
+
+describe("focus tree initial_show_position", () => {
+	it("reads the grid position form", () => {
+		const [tree] = treesOf(`focus_tree = {
+    id = test_tree
+    initial_show_position = { x = 80 y = 0 }
+    ${focusBlock("TST_a", 0, 0)}
+}`);
+		assert.deepStrictEqual(tree.initialShowPosition, { x: 80, y: 0 });
+	});
+
+	it("reads the focus form", () => {
+		const [tree] = treesOf(`focus_tree = {
+    id = test_tree
+    initial_show_position = {
+        focus = TST_a
+    }
+    ${focusBlock("TST_a", 3, 1)}
+}`);
+		assert.deepStrictEqual(tree.initialShowPosition, { focus: "TST_a", x: 0, y: 0 });
+	});
+
+	it("leaves a tree without one undefined", () => {
+		const [tree] = treesOf(treeWithFocuses(focusBlock("TST_a", 0, 0)));
+		assert.strictEqual(tree.initialShowPosition, undefined);
+	});
+});
