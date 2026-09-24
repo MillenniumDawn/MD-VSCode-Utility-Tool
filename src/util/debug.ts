@@ -1,8 +1,10 @@
 import { sendException } from "./telemetry";
 import { forceError, UserError } from "./common";
 
+// The unit tests set MD_UTILITIES_TEST (in their vscode stub), so a passing run is not buried
+// under every debug line the code under test prints.
 export function debug(message: unknown, ...args: unknown[]): void {
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== 'production' && !process.env.MD_UTILITIES_TEST) {
         console.log(message, ...args);
     }
 }
