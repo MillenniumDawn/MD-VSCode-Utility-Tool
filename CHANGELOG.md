@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- Previews no longer re-check unchanged files over and over while one preview loads, which made opening large previews slower than needed. Issue #368.
+
 v1.1.39
 
   Bugfixes:

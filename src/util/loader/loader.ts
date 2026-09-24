@@ -42,16 +42,15 @@ export class LoaderSession {
 		this.shouldLoaderReload.set(loader, "checking");
 	}
 
-	public setShouldReload(loader: Loader<unknown, unknown>) {
-		this.shouldLoaderReload.set(loader, true);
+	public setShouldReload(loader: Loader<unknown, unknown>, value = true) {
+		this.shouldLoaderReload.set(loader, value);
 	}
 
-	public clearShouldReload(loader: Loader<unknown, unknown>) {
-		this.shouldLoaderReload.delete(loader);
-	}
-
-	public shouldReload(loader: Loader<unknown, unknown>): boolean | "checking" {
-		return this.shouldLoaderReload.get(loader) ?? false;
+	/** `undefined` until the loader has been checked in this session. */
+	public shouldReload(
+		loader: Loader<unknown, unknown>,
+	): boolean | "checking" | undefined {
+		return this.shouldLoaderReload.get(loader);
 	}
 
 	public createOrGetCachedLoader<R extends Loader<unknown, unknown>>(
@@ -143,6 +142,10 @@ export abstract class Loader<T, E = {}> {
 					{ timeElapsed, ...this.extraMeasurements(this.cachedValue) },
 				);
 			}
+		} else if (session.shouldReload(this) === false) {
+			// A settled "no" keeps the cached value for the rest of the session. A caller that only
+			// saw "checking" is not marked: that check may still end in a reload.
+			session.setLoaded(this);
 		}
 
 		this.onLoadDoneEmitter.fire(this.cachedValue);
@@ -155,17 +158,13 @@ export abstract class Loader<T, E = {}> {
 		if (cachedShouldReload === "checking") {
 			return false;
 		}
-		if (cachedShouldReload) {
-			return true;
+		if (cachedShouldReload !== undefined) {
+			return cachedShouldReload;
 		}
 
 		session.checkingShouldReload(this);
 		const result = await this.shouldReloadImpl(session);
-		if (result) {
-			session.setShouldReload(this);
-		} else {
-			session.clearShouldReload(this);
-		}
+		session.setShouldReload(this, result);
 
 		return result;
 	}
