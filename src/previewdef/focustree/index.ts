@@ -12,7 +12,6 @@ import { withTimeout, TimeoutError } from '../../util/common';
 import { error } from '../../util/debug';
 import { useConditionInFocus, localisationIndex } from '../../util/featureflags';
 import { FocusTreeLayout, focusTreeGridBoxFor } from './layout';
-import { ConfigurationKey } from '../../constants';
 import { computeStructuralFingerprint, computeIconSourceFingerprint, computeTreeStructuralFingerprint, computeTreeIconFingerprint } from './fingerprint';
 
 // A render taking longer than this is treated as stuck. The underlying load keeps running
@@ -71,10 +70,12 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // changes whether shared focuses resolve; inlayWindowGfxRoots changes which .gfx files the inlay
     // windows scan; gfxIndex changes which icons resolve; localisationIndex and previewLocalisation
     // change every label. inlayWindowGfxRoots had no listener at all, so fixing a missing inlay
-    // sprite did nothing until the file was edited or the preview reopened.
+    // sprite did nothing until the file was edited or the preview reopened. focusTreeLayout decides the
+    // page's grid and the focus markup.
     protected get reloadOnConfigurationChange(): readonly string[] {
         return [
             'useConditionInFocus',
+            'focusTreeLayout',
             'sharedFocusIndex',
             'inlayWindowGfxRoots',
             'gfxIndex',
@@ -102,13 +103,6 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 // (structure, then icons stream in) and both orders would in fact work.
                 this.repostLatestUpdate();
                 this.repushCachedIconStyles();
-            }
-        }));
-        // The layout setting decides the page's grid and the focus markup, so a flip reloads the page.
-        // The loader notices the flip on its own and does not answer from its cache.
-        this.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration(`${ConfigurationKey}.focusTreeLayout`)) {
-                this.reload(true);
             }
         }));
         // Belt-and-suspenders for bug #36: also restore icons when the panel becomes visible again.

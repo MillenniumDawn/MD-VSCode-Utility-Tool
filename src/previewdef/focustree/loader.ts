@@ -137,7 +137,7 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
         if (focusTreeLayout === 'gui') {
             // Loaded through the dependency loaders, so an edit to the gui reloads this tree.
             const layoutGui = await this.loaderDependencies.loadMultiple([nationalFocusViewGuiFile], session, GuiFileLoader);
-            layout = buildFocusTreeLayout(chain(layoutGui).flatMap(r => r.result.guiFiles).map(g => g.data).value());
+            layout = buildFocusTreeLayout(layoutGui.flatMap(r => r.result.guiFiles).map(g => g.data));
             layoutDependencies = [nationalFocusViewGuiFile, ...mergeInLoadResult(layoutGui, 'dependencies')];
         }
 

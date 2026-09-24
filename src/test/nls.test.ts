@@ -38,4 +38,37 @@ describe('package.nls parity', () => {
         const unresolved = [...placeholders].filter(key => !(key in base)).sort();
         assert.deepStrictEqual(unresolved, []);
     });
+
+    // The parity checks above only cover strings that already have a key. A setting or command
+    // written with plain English in package.json has none, so it passes them and shows English in
+    // every language. Every string VS Code displays from `contributes` has to be a placeholder.
+    it('every user-facing string in contributes is a %placeholder%', () => {
+        const displayed = new Set([
+            'title', 'shortTitle', 'description', 'markdownDescription',
+            'enumDescriptions', 'markdownEnumDescriptions',
+            'deprecationMessage', 'markdownDeprecationMessage',
+            'category', 'displayName', 'label',
+        ]);
+        const unlocalised: string[] = [];
+        const walk = (node: unknown, at: string): void => {
+            if (Array.isArray(node)) {
+                node.forEach((item, i) => walk(item, `${at}[${i}]`));
+            } else if (node !== null && typeof node === 'object') {
+                for (const [key, value] of Object.entries(node)) {
+                    const here = `${at}.${key}`;
+                    if (displayed.has(key)) {
+                        const strings = Array.isArray(value) ? value : [value];
+                        strings.forEach((s, i) => {
+                            if (typeof s === 'string' && !/^%[A-Za-z0-9_.]+%$/.test(s)) {
+                                unlocalised.push(`${Array.isArray(value) ? `${here}[${i}]` : here}: ${s}`);
+                            }
+                        });
+                    }
+                    walk(value, here);
+                }
+            }
+        };
+        walk(readJson('package.json').contributes, 'contributes');
+        assert.deepStrictEqual(unlocalised, []);
+    });
 });
