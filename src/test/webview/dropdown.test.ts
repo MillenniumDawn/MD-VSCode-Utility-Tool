@@ -70,10 +70,15 @@ describe('webview/util/dropdown', function () {
         assert.strictEqual(span.textContent, 'x', 'the override is only for the empty selection');
     });
 
-    it('does not throw on mousedown', function () {
+    it('opens on mousedown and closes on the next one', function () {
         const dd = buildDivDropdown(['a', 'b']);
-        dd.select.dispatchEvent(new Event('mousedown'));
-        // Just verifies no exception
+        const opened = new Event('mousedown', { cancelable: true });
+        dd.select.dispatchEvent(opened);
+        assert.strictEqual(opened.defaultPrevented, true);
+        assert.ok(dd.select.classList.contains('dropdown-opened'));
+
+        dd.select.dispatchEvent(new Event('mousedown', { cancelable: true }));
+        assert.ok(!dd.select.classList.contains('dropdown-opened'));
         dd.dispose();
     });
 

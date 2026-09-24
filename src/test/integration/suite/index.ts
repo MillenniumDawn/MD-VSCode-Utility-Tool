@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as path from "path";
 import Mocha from "mocha";
 

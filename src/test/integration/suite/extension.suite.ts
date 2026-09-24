@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -68,6 +67,10 @@ suite("Integration smoke", () => {
 		const registered = await vscode.commands.getCommands(true);
 		for (const id of contributed) {
 			assert.ok(registered.includes(id), `command ${id} is contributed but not registered`);
+		}
+		// Named as well, so dropping either from the manifest fails here too.
+		for (const id of ["mdhoi4utilities.scanreferences", "mdhoi4utilities.showindexstatus"]) {
+			assert.ok(registered.includes(id), `command ${id} is not registered`);
 		}
 	});
 

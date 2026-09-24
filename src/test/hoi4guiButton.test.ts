@@ -47,7 +47,7 @@ describe("util/hoi4gui/button", () => {
 		assert.ok(html.includes('start="1"'));
 		assert.ok(table.toRawCss().includes("left: 10px"));
 		assert.ok(table.toRawCss().includes("width: 40px"));
-		assert.ok(html.includes("Click me") || html.includes("Click"));
+		assert.ok(html.includes("Click&nbsp;me"), html);
 	});
 
 	it("applies centerposition offset", async () => {

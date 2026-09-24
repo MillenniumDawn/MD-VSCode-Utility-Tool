@@ -4,12 +4,13 @@ import { registerHoiFs } from "../util/hoifs";
 import { whenModDependenciesSettled } from "../util/moddependencies";
 import { workspaceModFilesCache } from "../util/modfile";
 import { getParentModUris, resetParentModsForTest } from "../util/parentmods";
-import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
+import { clearInstallPathCache, getInstallPathUri } from "../util/installpath";
+import { fireConfigurationChange, stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
 // With `modFile` unset the selected `.mod` is the first one in the workspace folders, so the
 // folders changing can change which file the dependencies come from. That change reaches the
 // parent list only if hoifs.ts re-resolves on it.
-describe("util/hoifs workspace folder change", function () {
+describe("util/hoifs workspace folder and configuration change", function () {
 	const nodeFs = require("fs/promises") as typeof import("fs/promises");
 	const nodePath = require("path") as typeof import("path");
 	const nodeOs = require("os") as typeof import("os");
@@ -19,6 +20,27 @@ describe("util/hoifs workspace folder change", function () {
 		| ((e: vscode.WorkspaceFoldersChangeEvent) => void)
 		| undefined;
 	let registration: vscode.Disposable;
+	let userDataDir: string;
+	let errors: string[];
+
+	function configure(values: Record<string, unknown>): void {
+		stubVscode({
+			configuration: {
+				modFile: "",
+				installPath: "",
+				parentModPaths: [],
+				userDataPath: userDataDir,
+				...values,
+			},
+		});
+	}
+
+	async function until(condition: () => boolean, what: string): Promise<void> {
+		for (let i = 0; i < 100 && !condition(); i++) {
+			await new Promise((resolve) => setTimeout(resolve, 5));
+		}
+		assert.ok(condition(), what);
+	}
 
 	function realPathOf(uri: unknown): string {
 		return String((uri as { fsPath: string }).fsPath);
@@ -31,7 +53,7 @@ describe("util/hoifs workspace folder change", function () {
 
 	beforeEach(async function () {
 		root = await nodeFs.mkdtemp(nodePath.join(nodeOs.tmpdir(), "hoi4fs-"));
-		const userDataDir = nodePath.join(root, "userdata");
+		userDataDir = nodePath.join(root, "userdata");
 		const parentDir = nodePath.join(root, "parent");
 		await nodeFs.mkdir(parentDir, { recursive: true });
 		await write(nodePath.join(userDataDir, "dlc_load.json"), '{"enabled_mods":[]}');
@@ -45,6 +67,7 @@ describe("util/hoifs workspace folder change", function () {
 		);
 
 		folderChangeHandler = undefined;
+		errors = [];
 		resetParentModsForTest();
 		workspaceModFilesCache.clear();
 		stubVscode({
@@ -79,6 +102,10 @@ describe("util/hoifs workspace folder change", function () {
 				);
 			},
 			readFile: async (uri: unknown) => nodeFs.readFile(realPathOf(uri)),
+			showErrorMessage: async (message: string) => {
+				errors.push(message);
+				return undefined;
+			},
 		});
 		await nodeFs.mkdir(nodePath.join(root, "empty"), { recursive: true });
 		registration = registerHoiFs();
@@ -88,6 +115,7 @@ describe("util/hoifs workspace folder change", function () {
 	afterEach(async function () {
 		registration.dispose();
 		restoreVscodeStubs();
+		clearInstallPathCache();
 		resetParentModsForTest();
 		workspaceModFilesCache.clear();
 		await nodeFs.rm(root, { recursive: true, force: true });
@@ -108,5 +136,52 @@ describe("util/hoifs workspace folder change", function () {
 			getParentModUris().map((uri) => nodePath.resolve(realPathOf(uri))),
 			[nodePath.resolve(root, "parent")],
 		);
+	});
+
+	it("re-reads the parent list when parentModPaths changes", async function () {
+		assert.deepStrictEqual(getParentModUris(), []);
+
+		configure({ parentModPaths: [nodePath.join(root, "parent")] });
+		fireConfigurationChange("mdHoi4Utilities.parentModPaths");
+		await whenModDependenciesSettled();
+
+		assert.deepStrictEqual(
+			getParentModUris().map((uri) => nodePath.resolve(realPathOf(uri))),
+			[nodePath.resolve(root, "parent")],
+		);
+	});
+
+	it("re-resolves the dependencies when modFile changes", async function () {
+		configure({ modFile: nodePath.join(root, "sub", "descriptor.mod") });
+		fireConfigurationChange("mdHoi4Utilities.modFile");
+		await whenModDependenciesSettled();
+
+		assert.deepStrictEqual(
+			getParentModUris().map((uri) => nodePath.resolve(realPathOf(uri))),
+			[nodePath.resolve(root, "parent")],
+		);
+	});
+
+	it("drops the cached install path and checks the new one when installPath changes", async function () {
+		const first = nodePath.join(root, "empty");
+		const missing = nodePath.join(root, "no-such-install");
+		configure({ installPath: first });
+		assert.strictEqual(nodePath.resolve(realPathOf(getInstallPathUri())), nodePath.resolve(first));
+
+		configure({ installPath: missing });
+		fireConfigurationChange("mdHoi4Utilities.installPath");
+
+		assert.strictEqual(nodePath.resolve(realPathOf(getInstallPathUri())), nodePath.resolve(missing));
+		await until(() => errors.length > 0, "an install path that does not exist is reported");
+		assert.ok(errors[0].includes("no-such-install"), errors[0]);
+	});
+
+	it("ignores a change to an unrelated setting", async function () {
+		assert.deepStrictEqual(getParentModUris(), []);
+		configure({ parentModPaths: [nodePath.join(root, "parent")] });
+		fireConfigurationChange("mdHoi4Utilities.featureFlags");
+		await whenModDependenciesSettled();
+
+		assert.deepStrictEqual(getParentModUris(), []);
 	});
 });

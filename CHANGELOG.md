@@ -2,6 +2,7 @@ Unreleased
 
   Bugfixes:
 
+- [ MIO Preview ] An `override_trait` in an organisation that uses `include` no longer changes that trait in the included organisation's own tree as well. Issue #248.
 - [ DDS ] Opening a .dds or .tga file shows the texture again instead of a broken image icon.
 - [ World Map Previewer ] Drawing province borders no longer slows down sharply as more provinces are on screen. Issue #230.
 - The Preview button now appears or disappears as soon as you add or remove previewable content in a file, instead of only after switching tabs. Issue #239.

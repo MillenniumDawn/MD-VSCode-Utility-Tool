@@ -3,10 +3,11 @@ import * as vscode from 'vscode';
 import {
     modFileStatusContainer,
     redrawSelectedModFileStatus,
+    registerModFile,
     updateSelectedModFileStatus,
 } from '../util/modfile';
 import { clearParentModCache, resetParentModsForTest, setResolvedDependencies } from '../util/parentmods';
-import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
+import { fireConfigurationChange, stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 describe('util/modfile status item', () => {
     let config: Record<string, unknown> = {};
@@ -77,5 +78,61 @@ describe('util/modfile status item', () => {
 
         assert.strictEqual(item.text, before);
         assert.ok(item.text.includes('(No mod descriptor)'), item.text);
+    });
+});
+
+describe('util/modfile configuration change', () => {
+    let config: Record<string, unknown> = {};
+    let errors: string[] = [];
+    let registration: vscode.Disposable;
+
+    async function until(condition: () => boolean, what: string): Promise<void> {
+        for (let i = 0; i < 100 && !condition(); i++) {
+            await new Promise(resolve => setTimeout(resolve, 5));
+        }
+        assert.ok(condition(), what);
+    }
+
+    beforeEach(() => {
+        config = { modFile: '', parentModPaths: [] };
+        errors = [];
+        clearParentModCache();
+        stubVscode({
+            getConfiguration: () => config,
+            stat: async () => { throw new Error('ENOENT'); },
+            showErrorMessage: async (message: string) => { errors.push(message); return undefined; },
+        });
+        registration = registerModFile();
+    });
+
+    afterEach(() => {
+        registration.dispose();
+        restoreVscodeStubs();
+        clearParentModCache();
+    });
+
+    function item(): vscode.StatusBarItem {
+        assert.ok(modFileStatusContainer.current, 'registerModFile creates the status bar item');
+        return modFileStatusContainer.current!;
+    }
+
+    it('checks the new mod file when modFile changes', async () => {
+        await until(() => item().text.includes('(No mod descriptor)'), 'the initial status is drawn');
+
+        config = { ...config, modFile: 'D:/mods/missing/missing.mod' };
+        fireConfigurationChange('mdHoi4Utilities.modFile');
+
+        await until(() => item().text.startsWith('$(error) missing'), item().text);
+        assert.ok(errors.some(message => message.includes('missing.mod')), errors.join('\n'));
+    });
+
+    it('redraws the parent count when parentModPaths changes', async () => {
+        await until(() => item().text.includes('(No mod descriptor)'), 'the initial status is drawn');
+        assert.ok(!item().text.endsWith(' +1'), item().text);
+
+        config = { ...config, parentModPaths: ['D:/mods/parent'] };
+        fireConfigurationChange('mdHoi4Utilities.parentModPaths');
+
+        assert.ok(item().text.endsWith(' +1'), item().text);
     });
 });

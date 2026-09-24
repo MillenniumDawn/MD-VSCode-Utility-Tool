@@ -342,14 +342,18 @@ function overrideTrait(traitDef: HOIPartial<MioTraitDef>, traits: Record<string,
         return;
     }
 
-    const trait = traits[id];
-    if (!trait) {
+    const existing = traits[id];
+    if (!existing) {
         warnings.push({
             text: localize('miopreview.warnings.overridetraitidnotexist', "An override_trait referenced a trait that doesn't exist: {0}.", id),
             source: id,
         });
         return;
     }
+
+    // A copy: the map is a shallow copy of the included MIO's, so writing to the trait itself
+    // would change it in that MIO as well.
+    const trait: MioTrait = traits[id] = { ...existing };
 
     trait.name = traitDef.name ?? trait.name;
     trait.icon = traitDef.icon ?? trait.icon;
