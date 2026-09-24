@@ -4,7 +4,7 @@ import { getSpriteTypes } from "../hoiformat/spritetype";
 import { gfxIndex } from "./featureflags";
 import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
-import { uniq } from "lodash";
+import uniq from "lodash/uniq";
 import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions, ListFilesOptions } from "./fileloader";
@@ -120,11 +120,43 @@ export async function getGfxContainerFiles(
 	);
 }
 
-const GFX_CACHE_VERSION = 1;
+const GFX_CACHE_VERSION = 2;
 
-interface GfxCacheData {
-	index: Record<string, GfxIndexItem | undefined>;
-	fileToKeys: Record<string, string[]>;
+/**
+ * One .gfx file, as one line of the cache: the sprites the index resolves to it, and -- in the
+ * workspace half, the only one that keeps them -- every sprite name the file defines, including
+ * ones another file has since taken over.
+ */
+interface GfxCacheRecord {
+	file: string;
+	sprites: string[];
+	keys?: string[];
+}
+
+function toGfxCacheRecords(
+	index: Record<string, GfxIndexItem | undefined>,
+	fileToKeysMap: Map<string, string[]> | null,
+): GfxCacheRecord[] {
+	const records = new Map<string, GfxCacheRecord>();
+	const recordFor = (file: string): GfxCacheRecord => {
+		let record = records.get(file);
+		if (!record) {
+			record = { file, sprites: [] };
+			records.set(file, record);
+		}
+		return record;
+	};
+
+	for (const spriteName in index) {
+		const item = index[spriteName];
+		if (item) {
+			recordFor(item.file).sprites.push(spriteName);
+		}
+	}
+	for (const [file, keys] of fileToKeysMap ?? []) {
+		recordFor(file).keys = [...keys];
+	}
+	return [...records.values()];
 }
 
 const gfxRoot = "interface";
@@ -207,7 +239,7 @@ async function buildGfxIndexHalf(
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
-	await buildIndexHalf<GfxCacheData>(
+	await buildIndexHalf<GfxCacheRecord>(
 		{
 			cacheName,
 			version: GFX_CACHE_VERSION,
@@ -219,22 +251,15 @@ async function buildGfxIndexHalf(
 					filter: isGfxFile,
 					options: { ...options, token },
 				}),
-			hydrate: (cached, skipFiles) => {
-				for (const spriteName in cached.index) {
-					const item = cached.index[spriteName];
-					if (item && !skipFiles.has(item.file)) {
-						targetIndex[spriteName] = item;
-					}
+			hydrate: (record, skipFiles) => {
+				if (skipFiles.has(record.file)) {
+					return;
 				}
-				if (fileToKeysMap && cached.fileToKeys) {
-					for (const file in cached.fileToKeys) {
-						if (!skipFiles.has(file)) {
-							const keys = cached.fileToKeys[file];
-							if (keys !== undefined) {
-								fileToKeysMap.set(file, keys);
-							}
-						}
-					}
+				for (const spriteName of record.sprites) {
+					targetIndex[spriteName] = { file: record.file };
+				}
+				if (fileToKeysMap && record.keys) {
+					fileToKeysMap.set(record.file, record.keys);
 				}
 				bumpGfxIndexVersion();
 			},
@@ -248,10 +273,7 @@ async function buildGfxIndexHalf(
 				);
 				bumpGfxIndexVersion();
 			},
-			serialize: () => ({
-				index: targetIndex,
-				fileToKeys: Object.fromEntries(fileToKeysMap ?? []),
-			}),
+			serialize: () => toGfxCacheRecords(targetIndex, fileToKeysMap),
 		},
 		progress,
 	);

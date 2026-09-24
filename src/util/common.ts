@@ -1,4 +1,5 @@
-import { debounce, DebounceSettings } from "lodash";
+import debounce from "lodash/debounce";
+import type { DebounceSettings } from "lodash";
 
 export interface NumberSize {
 	width: number;
@@ -337,6 +338,21 @@ export function yieldToEventLoop(): Promise<void> {
 	return new Promise((resolve) => {
 		setImmediate(resolve);
 	});
+}
+
+/**
+ * For a synchronous loop too long to run in one go: call the returned function once per item and
+ * it yields the event loop whenever `budgetMs` has passed since the last yield, and otherwise costs
+ * one clock read.
+ */
+export function createTimeSlicer(budgetMs = 8): () => Promise<void> {
+	let sliceStart = Date.now();
+	return async () => {
+		if (Date.now() - sliceStart >= budgetMs) {
+			await yieldToEventLoop();
+			sliceStart = Date.now();
+		}
+	};
 }
 
 export interface WorkQueueOptions {

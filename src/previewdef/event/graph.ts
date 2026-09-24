@@ -1,4 +1,4 @@
-import { repeat } from "lodash";
+import repeat from "lodash/repeat";
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { localisationIndex } from "../../util/featureflags";
 import { localise } from "../localise";

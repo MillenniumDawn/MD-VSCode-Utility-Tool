@@ -4,6 +4,7 @@ import { topBarHeight, TopBar } from "./topbar";
 import { getState, setState } from "../util/common";
 import { Renderer } from "./renderer";
 import { fromEvent } from "rxjs";
+import { auditTime } from "rxjs/operators";
 
 fromEvent(window, "load").subscribe(function () {
 	hideBySupplyAreaFlag((window as any)["__enableSupplyArea"]);
@@ -26,7 +27,12 @@ fromEvent(window, "load").subscribe(function () {
 		event.preventDefault(),
 	);
 
-	viewPoint.observable$.subscribe(setStateForKey("viewPoint"));
+	// Dragging the map emits per mouse pixel, and every emit was a getState/merge/setState round
+	// trip. auditTime, not debounceTime: each window still ends in an emit, so the position a drag
+	// finished on is always the one that gets remembered.
+	viewPoint.observable$
+		.pipe(auditTime(150))
+		.subscribe(setStateForKey("viewPoint"));
 	topBar.viewMode$.subscribe(setStateForKey("viewMode"));
 	topBar.colorSet$.subscribe(setStateForKey("colorSet"));
 	topBar.selectedProvinceId$.subscribe(setStateForKey("selectedProvinceId"));

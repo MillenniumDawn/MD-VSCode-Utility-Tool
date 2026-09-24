@@ -112,7 +112,8 @@ describe('previewdef/worldmap isWorldMapHostMessage', () => {
         assert.ok(isWorldMapHostMessage({ command: 'openfile', type: 'state', file: 'history/states/1.txt', start: 0, end: 5 }));
         assert.ok(isWorldMapHostMessage({ command: 'openfile', type: 'supplyarea', file: 'a.txt', start: undefined, end: undefined }));
         assert.ok(isWorldMapHostMessage({ command: 'requestexportmap' }));
-        assert.ok(isWorldMapHostMessage({ command: 'exportmap', dataUrl: 'data:image/png;base64,AAAA' }));
+        assert.ok(isWorldMapHostMessage({ command: 'exportmap', data: new Uint8Array([0, 1, 2]) }));
+        assert.ok(isWorldMapHostMessage({ command: 'exportmap', data: new ArrayBuffer(3) }));
         assert.ok(isWorldMapHostMessage({ command: 'telemetry', telemetryType: 'event', args: ['open'] }));
     });
 
@@ -123,7 +124,7 @@ describe('previewdef/worldmap isWorldMapHostMessage', () => {
         assert.ok(!isWorldMapHostMessage({ command: 'requeststates', start: 0 }));
         assert.ok(!isWorldMapHostMessage({ command: 'openfile', type: 'state', file: ['a.txt'], start: 0, end: 5 }));
         assert.ok(!isWorldMapHostMessage({ command: 'openfile', type: 'state', file: 'a.txt', start: 'x', end: 5 }));
-        assert.ok(!isWorldMapHostMessage({ command: 'exportmap', dataUrl: 7 }));
+        assert.ok(!isWorldMapHostMessage({ command: 'exportmap', data: 'data:image/png;base64,AAAA' }));
         assert.ok(!isWorldMapHostMessage({ command: 'telemetry', telemetryType: 'other', args: [] }));
         assert.ok(!isWorldMapHostMessage({ command: 'telemetry', telemetryType: 'event', args: 'open' }));
     });
