@@ -180,6 +180,7 @@ describe("previewdef/previewmanager PreviewManager", function () {
 		function contentProvider() {
 			return {
 				type: "event",
+				displayName: () => "Event tree (events/*.txt)",
 				canPreview: (document: { getText(): string }) => document.getText().includes("country_event") ? 0 : undefined,
 				previewConstructor: fakeProvider().previewConstructor,
 			};
