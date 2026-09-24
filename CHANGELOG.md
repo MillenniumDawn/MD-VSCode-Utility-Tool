@@ -22,6 +22,7 @@ v1.1.39
 - Seven settings showed English text whatever the display language, and the two world map settings did not mention that the preview has to be reopened before they take effect. Issue #203.
 - [ CI ] Webview state is now replaced instead of merged during testing. Issue #246.
 - [ Testing ] Replace the assertion-free world map loader tests. Issue #243.
+- Show the texture in the DDS/TGA viewer instead of a broken image icon.
 
   Functionality:
 
