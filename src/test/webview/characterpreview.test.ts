@@ -1,6 +1,6 @@
 // The side effect matters as much as the import: ./setup installs the jsdom globals and the
 // acquireVsCodeApi mock the module under test takes its handle from at import time.
-import { takePostedMessages } from "./setup";
+import { takePostedMessages, loadEntrypoint, useEntrypoint } from "./setup";
 import * as assert from "assert";
 import {
 	CharacterCard,
@@ -188,8 +188,9 @@ const shellHtml = `
     </div></div>
     <div id="characterpreviewcontent"></div>`;
 
-const characterpreview =
-	require("../../../webviewsrc/characterpreview") as typeof import("../../../webviewsrc/characterpreview");
+const { module: characterpreview, listeners } = loadEntrypoint(
+	() => require("../../../webviewsrc/characterpreview") as typeof import("../../../webviewsrc/characterpreview"),
+);
 const { readFilters, matchesFilters, matchesQuery, modifierLineToDom, traitToDom } =
 	characterpreview;
 
@@ -445,6 +446,8 @@ describe("webview/characterpreview traitToDom", () => {
 });
 
 describe("webview/characterpreview rendering", () => {
+	useEntrypoint(listeners);
+
 	function content(): HTMLElement {
 		const element = document.getElementById("characterpreviewcontent");
 		assert.ok(element, "expected the shell content element");

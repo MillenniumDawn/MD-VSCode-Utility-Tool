@@ -323,33 +323,17 @@ function getRole(
 /**
  * A country leader's expiry date, in whichever of the two forms the file wrote it.
  *
- * `expire = "2005.3.8"` is a quoted string and reads straight through. `expire = 2030.1.1.1` does
- * not: a four-part date is not a token the format defines, so the tokenizer takes `2030.1` as a
- * number and leaves `.1` and `.1` behind as two valueless siblings. Gluing those back on is what
- * makes the unquoted form readable, and both forms are common in Millennium Dawn.
+ * `expire = "2005.3.8"` is a quoted string and `expire = 2030.1.1.1` a bare date token; both are
+ * common in Millennium Dawn and both read as the date text.
  */
 function readExpire(node: Node): string | undefined {
-	const children = childNodes(node);
-	const index = children.findIndex((c) => c.name?.toLowerCase() === "expire");
-	if (index < 0) {
+	const expire = childNodes(node).find((c) => c.name?.toLowerCase() === "expire");
+	const value = readScalar(expire?.value ?? null);
+	if (value === undefined || typeof value === "boolean") {
 		return undefined;
 	}
 
-	const head = readScalar(children[index]?.value ?? null);
-	if (head === undefined || typeof head === "boolean") {
-		return undefined;
-	}
-
-	let date = String(head);
-	for (let i = index + 1; i < children.length; i++) {
-		const fragment = children[i];
-		if (!fragment?.name || fragment.value !== null || !/^\.\d+$/.test(fragment.name)) {
-			break;
-		}
-		date += fragment.name;
-	}
-
-	return date;
+	return String(value);
 }
 
 function isDefined<T>(value: T | undefined): value is T {
