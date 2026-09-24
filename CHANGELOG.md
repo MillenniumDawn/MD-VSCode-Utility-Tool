@@ -3,6 +3,7 @@ Unreleased
   Bugfixes:
 
 - [ Idea Previewer ] An idea whose chain continues into another category is no longer drawn a second time as a loose card in that category, so it is counted and found by search only once. Issue #361.
+- Dates written without quotes, such as `date > 1936.1.1` or a `1939.1.1 = { ... }` history block, are now read whole instead of losing their day to a stray `.1` entry. Issue #360.
 - [ World Map Previewer ] Province colours and the hover and selection highlights now line up with the border lines drawn around them, instead of sitting up to a couple of pixels up and to the left, most visibly with fast rendering on or when zoomed out. Issue #277.
 - [ MIO Preview ] An `override_trait` in an organisation that uses `include` no longer changes that trait in the included organisation's own tree as well. Issue #248.
 - [ DDS ] Opening a .dds or .tga file shows the texture again instead of a broken image icon.
@@ -37,6 +38,7 @@ Unreleased
 - "Can't preview this file" now names the folders each preview reads, such as `common/national_focus/*.txt`, instead of listing internal names. Issue #203.
 - The extension is easier to find on the Marketplace: it is listed under Visualization, searchable for "hoi4", and no longer describes itself as being for "Heart of Iron IV". Issue #203.
 - The extension is smaller to download and the previews are quicker to draw. The world map stops re-measuring its tooltip and rebuilding its supply overlays on every frame you move the mouse, exporting the map no longer copies the image three times on its way to disk, searching a focus tree only touches the nodes whose highlight changed, and the event and decision graphs lay their arrow labels out in one pass. Issue #200.
+- [ Focus Tree Previewer ] A new "Focus tree: layout" setting can take the focus tree's layout from the mod's `interface/nationalfocusview.gui` (falling back to parent mods and the game): focus spacing, the grid offset, where the icon, title bar, name and overlay sit in a focus, the ends of prerequisite lines, and the mutually exclusive link. The default "standard" layout is unchanged. Issue #276.
 
 v1.1.38
 

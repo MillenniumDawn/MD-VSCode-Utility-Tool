@@ -22,6 +22,30 @@ import { GridBoxConnection, GridBoxItem } from './gridboxcommon';
  */
 export const exclusiveLinkClass = 'st-focus-exclusive-link';
 
+/** The sprites and 0 based frames the mutually exclusive link is drawn from. */
+export interface ExclusiveLinkSpriteSpec {
+    lineGfx: string;
+    lineFrame: number;
+    leftGfx: string;
+    leftFrame: number;
+    midGfx: string;
+    midFrame: number;
+    rightGfx: string;
+    rightFrame: number;
+}
+
+// A `frame = 1` in the gui is the first frame; the sprite frame array is 0 based.
+export const defaultExclusiveLinkSprites: ExclusiveLinkSpriteSpec = {
+    lineGfx: 'GFX_focus_exclusive_line1',
+    lineFrame: 0,
+    leftGfx: 'GFX_focus_link_exclusive',
+    leftFrame: 1,
+    midGfx: 'GFX_focus_link_exclusive',
+    midFrame: 0,
+    rightGfx: 'GFX_focus_link_exclusive',
+    rightFrame: 2,
+};
+
 export interface ExclusiveLinkImages {
     line: Image;
     left: Image;
@@ -58,11 +82,15 @@ export function exclusiveLinkInsets(slotWidth: number, iconWidth: number): { ico
  * cascade resolves them property by property. A property declared by only one branch is therefore
  * not overridden but blended in -- which is exactly how the red border used to survive underneath
  * the textures it was replaced by.
+ *
+ * `offsetY` moves the link down from the line between the node centres, for a focus tree whose gui
+ * layout places it elsewhere.
  */
 export function registerExclusiveLinkStyles(
     styleTable: StyleTable,
     images: ExclusiveLinkImages | undefined,
     slotWidth: number,
+    offsetY: number = 0,
 ): void {
     // Both layers are taller than the 1px connection element they hang off, on purpose.
     styleTable.style('focus-exclusive-link', () => `
@@ -75,7 +103,7 @@ export function registerExclusiveLinkStyles(
             position: absolute;
             left: 0;
             right: 0;
-            top: 0;
+            top: ${offsetY === 0 ? '0' : offsetY + 'px'};
             height: 0;
             border-top: 1px solid red;
             background-image: none;
@@ -95,7 +123,7 @@ export function registerExclusiveLinkStyles(
         position: absolute;
         left: ${lineInset}px;
         right: ${lineInset}px;
-        top: ${-line.height / 2}px;
+        top: ${offsetY - line.height / 2}px;
         height: ${line.height}px;
         border-top: none;
         background-image: url(${line.uri});
@@ -111,7 +139,7 @@ export function registerExclusiveLinkStyles(
         position: absolute;
         left: ${iconInset}px;
         right: ${iconInset}px;
-        top: ${-left.height / 2}px;
+        top: ${offsetY - left.height / 2}px;
         height: ${left.height}px;
         background-image: url(${left.uri}), url(${mid.uri}), url(${right.uri});
         background-repeat: no-repeat, no-repeat, no-repeat;

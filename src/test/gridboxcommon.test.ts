@@ -224,6 +224,30 @@ describe("util/hoi4gui/gridboxcommon", () => {
 			assert.ok(html.includes('data-conn-to="b"'));
 		});
 
+		it("moves the ends of a parent connection by the connection offsets", () => {
+			const items: any = {
+				child: {
+					id: "child",
+					gridX: 0,
+					gridY: 1,
+					connections: [{ target: "parent", targetType: "parent", style: "1px solid black" }],
+				},
+				parent: { id: "parent", gridX: 0, gridY: 0, connections: [] },
+			};
+			const plain = renderLineConnections(items, "up", { width: 50, height: 50 }, { width: 50, height: 200 }, makeStyleTable(), 1);
+			assert.ok(plain.includes("left: 25px; top: 25px; width: 1px; height: 50px;"));
+			const moved = renderLineConnections(
+				items,
+				"up",
+				{ width: 50, height: 50 },
+				{ width: 50, height: 200 },
+				makeStyleTable(),
+				1,
+				{ parent: { x: 0, y: 10 }, child: { x: 0, y: -5 } },
+			);
+			assert.ok(moved.includes("left: 25px; top: 35px; width: 1px; height: 35px;"));
+		});
+
 		it("returns empty for no items", () => {
 			const st = makeStyleTable();
 			const html = renderLineConnections(

@@ -1,4 +1,4 @@
-import { recordedPosts } from "./setup";
+import { EntrypointListeners, loadEntrypoint, recordedPosts } from "./setup";
 import * as assert from "assert";
 import { wireUpdateBody } from "../../../webviewsrc/util/updatebody";
 
@@ -6,8 +6,6 @@ interface TestPayload {
 	name: string;
 }
 
-// Every preview module loaded in this run has its own updateBody listener on window, and a message
-// reaches all of them -- so the shared post log carries their reloads as well as this handler's.
 // What this handler did is read as the difference one dispatch makes, never as the whole log.
 const shellHtml = `
 	<style id="test-server-styles">.old {}</style>
@@ -17,12 +15,13 @@ describe("webview/util/updatebody", () => {
 	let previousBody = "";
 	let applied: TestPayload[] = [];
 	let rebuilds = 0;
+	let listeners: EntrypointListeners;
 
 	before(() => {
 		previousBody = document.body.innerHTML;
-		// The handler is bound to window for the life of the run, so it is wired once and the
+		// The handler is bound to window for the life of this suite, so it is wired once and the
 		// counters are what each test reads.
-		wireUpdateBody<TestPayload>({
+		listeners = loadEntrypoint(() => wireUpdateBody<TestPayload>({
 			contentId: "testcontent",
 			styleId: "test-server-styles",
 			dataKey: "testPreview",
@@ -32,10 +31,12 @@ describe("webview/util/updatebody", () => {
 			rebuild: () => {
 				rebuilds++;
 			},
-		});
+		})).listeners;
+		listeners.attach();
 	});
 
 	after(() => {
+		listeners.detach();
 		document.body.innerHTML = previousBody;
 	});
 

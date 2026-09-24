@@ -167,6 +167,20 @@
 						"default": true,
 						"description": "%hoi4modutilities.useConditionInFocus.desc%"
 					},
+					"mdHoi4Utilities.focusTreeLayout": {
+						"title": "%hoi4modutilities.focusTreeLayout.title%",
+						"type": "string",
+						"default": "standard",
+						"enum": [
+							"standard",
+							"gui"
+						],
+						"enumDescriptions": [
+							"%hoi4modutilities.focusTreeLayout.enum.standard%",
+							"%hoi4modutilities.focusTreeLayout.enum.gui%"
+						],
+						"description": "%hoi4modutilities.focusTreeLayout.desc%"
+					},
 					"mdHoi4Utilities.inlayWindowGfxRoots": {
 						"title": "%hoi4modutilities.inlayWindowGfxRoots.title%",
 						"type": "array",

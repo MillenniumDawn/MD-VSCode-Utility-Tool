@@ -1,4 +1,4 @@
-import "./setup";
+import { loadEntrypoint, useEntrypoint } from "./setup";
 import * as assert from "assert";
 import {
 	IdeaCard,
@@ -136,8 +136,9 @@ const shellHtml = `
     </div></div>
     <div id="ideapreviewcontent"></div>`;
 
-const ideapreview =
-	require("../../../webviewsrc/ideapreview") as typeof import("../../../webviewsrc/ideapreview");
+const { module: ideapreview, listeners } = loadEntrypoint(
+	() => require("../../../webviewsrc/ideapreview") as typeof import("../../../webviewsrc/ideapreview"),
+);
 const {
 	readFilters,
 	matchesFilters,
@@ -320,6 +321,8 @@ describe("webview/ideapreview conditionToDom", () => {
 });
 
 describe("webview/ideapreview rendering", () => {
+	useEntrypoint(listeners);
+
 	function content(): HTMLElement {
 		const element = document.getElementById("ideapreviewcontent");
 		assert.ok(element, "expected the shell content element");

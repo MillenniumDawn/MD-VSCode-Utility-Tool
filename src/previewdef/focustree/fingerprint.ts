@@ -9,6 +9,7 @@ export interface FocusTreeStructureInput {
     gridBox: unknown;
     useConditionInFocus: boolean;
     xGridSize: number;
+    layout: unknown;
     // Structure-only styleTable records: placeholder focus icons plus the (deterministic per
     // identity) titlebar/overlay/inlay sprite CSS and the structural styles.
     styleRecords: Record<string, string>;
@@ -34,6 +35,7 @@ export function computeStructuralFingerprint(input: FocusTreeStructureInput): st
         input.gridBox,
         input.useConditionInFocus,
         input.xGridSize,
+        input.layout,
         sortedRecordEntries(input.styleRecords),
     ]);
 }
@@ -44,7 +46,7 @@ export function computeIconSourceFingerprint(styleRecords: Record<string, string
     return JSON.stringify(keys);
 }
 
-// Object-level fingerprint input: the parsed focus trees plus the static grid metadata and the config
+// Object-level fingerprint input: the parsed focus trees plus the grid and layout metadata and the config
 // that changes the RENDER without changing the FocusTree objects (useConditionInFocus, and the two
 // localisation knobs). Used by the partial-update early-out to detect a structural change BEFORE any
 // HTML/style rendering, so it is the focusTrees-only subset of computeStructuralFingerprint's hash (no
@@ -56,6 +58,7 @@ export interface FocusTreeObjectStructureInput {
     gridBox: unknown;
     useConditionInFocus: boolean;
     xGridSize: number;
+    layout: unknown;
     localisationIndex: boolean;
     previewLocalisation: string;
 }
@@ -73,6 +76,7 @@ export function computeTreeStructuralFingerprint(input: FocusTreeObjectStructure
         input.gridBox,
         input.useConditionInFocus,
         input.xGridSize,
+        input.layout,
         input.localisationIndex,
         input.previewLocalisation,
     ], (key, value) => key === 'guiWindow' ? undefined : value);

@@ -1,8 +1,21 @@
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
+
+// Every error the page raised that nobody asked for: an exception a listener threw out to jsdom, or
+// one `tryRun` caught and reported as exception telemetry. Both are still printed; a root hook below
+// turns whatever is left here into a failed test.
+const runtimeErrors: unknown[] = [];
+
+const virtualConsole = new VirtualConsole().forwardTo(console);
+virtualConsole.on('jsdomError', (error: any) => {
+    if (error.type === 'unhandled-exception') {
+        runtimeErrors.push(error.cause ?? error);
+    }
+});
 
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
     url: 'https://localhost',
     pretendToBeVisual: true,
+    virtualConsole,
 });
 
 // global window (no ts-expect-error)
@@ -28,6 +41,96 @@ beforeEach(function () {
     postedMessages.length = 0;
 });
 
+// The runtime errors raised since the last call, for a test that triggers one on purpose and asserts
+// on it. Taking them is what keeps the root hooks from failing the test over them.
+export function takeRuntimeErrors(): unknown[] {
+    return runtimeErrors.splice(0, runtimeErrors.length);
+}
+
+function describeRuntimeError(error: unknown): string {
+    if (error instanceof Error || (error && typeof error === 'object' && 'stack' in error)) {
+        return String((error as Error).stack ?? (error as Error).message);
+    }
+    return typeof error === 'string' ? error : JSON.stringify(error);
+}
+
+function failOnRuntimeErrors(where: string): void {
+    const errors = takeRuntimeErrors();
+    if (errors.length > 0) {
+        throw new Error(`Unexpected webview runtime error(s) ${where}:\n${errors.map(describeRuntimeError).join('\n')}`);
+    }
+}
+
+afterEach(function () {
+    failOnRuntimeErrors(`by "${this.currentTest?.fullTitle() ?? 'unknown test'}", its hooks, or anything that ran since the previous test (spec files loading, for the first)`);
+});
+
+after(function () {
+    failOnRuntimeErrors('while loading the spec files or in the last hooks');
+});
+
+// The listeners a webview entrypoint adds to `window` while it loads, held back from the window so
+// that one preview never handles another preview's `load` or `message`: every spec file shares this
+// one window. A suite that drives the preview through window events attaches them for its duration.
+export interface EntrypointListeners {
+    attach(): void;
+    detach(): void;
+}
+
+type RecordedListener = [string, EventListenerOrEventListenerObject, boolean | AddEventListenerOptions | undefined];
+
+export function loadEntrypoint<T>(load: () => T): { module: T; listeners: EntrypointListeners } {
+    const recorded: RecordedListener[] = [];
+    const originalAddEventListener = window.addEventListener;
+    (window as any).addEventListener = (...args: RecordedListener) => {
+        recorded.push(args);
+    };
+    let module: T;
+    try {
+        module = load();
+    } finally {
+        (window as any).addEventListener = originalAddEventListener;
+    }
+
+    // What the module added while attached -- a listener its load handler registers, say -- is
+    // removed with the rest, so nothing it did outlives the suite.
+    let attached: RecordedListener[] | undefined;
+    const listeners: EntrypointListeners = {
+        attach() {
+            if (attached) {
+                return;
+            }
+            const added: RecordedListener[] = [];
+            attached = added;
+            for (const args of recorded) {
+                originalAddEventListener.apply(window, args);
+                added.push(args);
+            }
+            (window as any).addEventListener = (...args: RecordedListener) => {
+                originalAddEventListener.apply(window, args);
+                added.push(args);
+            };
+        },
+        detach() {
+            if (!attached) {
+                return;
+            }
+            (window as any).addEventListener = originalAddEventListener;
+            for (const [type, listener, options] of attached) {
+                window.removeEventListener(type, listener, options);
+            }
+            attached = undefined;
+        },
+    };
+    return { module: module!, listeners };
+}
+
+// Attaches the entrypoint's listeners for the enclosing `describe`.
+export function useEntrypoint(listeners: EntrypointListeners): void {
+    before(() => listeners.attach());
+    after(() => listeners.detach());
+}
+
 // Mock acquireVsCodeApi for webview tests. The real `setState` replaces the persisted state
 // wholesale, so this one does too. The object lives for the whole mocha run, so a test that needs
 // a clean slate calls `resetWebviewState()` rather than relying on an earlier file to clear it.
@@ -42,6 +145,9 @@ export function resetWebviewState(): void {
 (global as any).acquireVsCodeApi = () => ({
     postMessage: (message: any) => {
         postedMessages.push(message);
+        if (message?.command === 'telemetry' && message.telemetryType === 'exception') {
+            runtimeErrors.push(message.args?.[0] ?? message);
+        }
     },
     getState: () => state,
     setState: (s: Record<string, any>) => {
