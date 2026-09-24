@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- When the same mod file appears more than once in the "Select working mod" list, the selected entries now keep a fixed order at the top instead of one that could change between VS Code versions. Issue #374.
+
 v1.1.39
 
   Bugfixes:
