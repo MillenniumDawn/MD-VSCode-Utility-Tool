@@ -1,24 +1,13 @@
-import './setup';
+import { loadEntrypoint } from './setup';
 import * as assert from 'assert';
 
-// Same trick as focustreecheckboxes.test.ts: focustree.ts registers a load handler that walks the
-// real shell DOM and crashes against the empty jsdom document, so load registrations are swallowed
-// for the duration of the require and restored straight afterwards.
-const originalAddEventListener = (global as any).window.addEventListener;
-const windowAddEventListener = originalAddEventListener.bind((global as any).window);
-(global as any).window.addEventListener = (type: string, listener: any) => {
-	if (type !== "load") {
-		windowAddEventListener(type, listener);
-	}
-};
+// focustree.ts reads window.focusTrees at module scope and binds its handlers to window load and
+// message. Only the exported helpers are under test, so it is loaded with those listeners held back.
 (global as any).window.focusTrees = [];
 
-let focustree: typeof import('../../../webviewsrc/focustree');
-try {
-    focustree = require('../../../webviewsrc/focustree') as typeof import('../../../webviewsrc/focustree');
-} finally {
-    (global as any).window.addEventListener = originalAddEventListener;
-}
+const focustree = loadEntrypoint(
+    () => require('../../../webviewsrc/focustree') as typeof import('../../../webviewsrc/focustree'),
+).module;
 
 const { search } = focustree;
 

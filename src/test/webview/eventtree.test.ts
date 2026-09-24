@@ -1,4 +1,4 @@
-import './setup';
+import { loadEntrypoint, useEntrypoint } from './setup';
 import * as assert from 'assert';
 import { waitFor } from '../waitfor';
 import { hoverDelay } from '../../../webviewsrc/util/hovertooltip';
@@ -106,7 +106,9 @@ const shellHtml = `
     <div id="dragger"></div>
     <div id="eventtreecontent"></div>`;
 
-const eventtree = require('../../../webviewsrc/eventtree') as typeof import('../../../webviewsrc/eventtree');
+const { module: eventtree, listeners } = loadEntrypoint(
+    () => require('../../../webviewsrc/eventtree') as typeof import('../../../webviewsrc/eventtree'),
+);
 const {
     chipTextFor, conditionToDom, conditionToLabel, effectsToDom, filteredGraph, readFilters,
     matchesQuery, layoutGraph, separateChips,
@@ -1040,6 +1042,8 @@ describe('webview/eventtree layout over a realistic chain', () => {
 });
 
 describe('webview/eventtree rendering', () => {
+    useEntrypoint(listeners);
+
     const content = () => document.getElementById('eventtreecontent')!;
     const toggle = (id: string) => document.getElementById(id) as HTMLInputElement;
     // The effects panel waits out a hover delay before it appears. A test that expects it polls
