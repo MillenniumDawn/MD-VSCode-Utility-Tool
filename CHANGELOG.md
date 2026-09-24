@@ -4,6 +4,7 @@ v1.1.39
 
   Bugfixes:
 
+- [ World Map Previewer ] Province colours and the hover and selection highlights now line up with the border lines drawn around them, instead of sitting up to a couple of pixels up and to the left, most visibly with fast rendering on or when zoomed out. Issue #277.
 - [ MIO Preview ] An `override_trait` in an organisation that uses `include` no longer changes that trait in the included organisation's own tree as well. Issue #248.
 - [ DDS ] Opening a .dds or .tga file shows the texture again instead of a broken image icon.
 - [ World Map Previewer ] Drawing province borders no longer slows down sharply as more provinces are on screen. Issue #230.
