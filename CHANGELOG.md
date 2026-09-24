@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.
+
 v1.1.39
 
   Bugfixes:
