@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- [ DDS ] BC7-compressed DDS textures are now identified as BC7 instead of BC6H, so the error shown for them names the right format. Issue #373.
+
 v1.1.39
 
   Bugfixes:
