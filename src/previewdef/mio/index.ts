@@ -1,3 +1,4 @@
+import { localize } from '../../util/i18n';
 import * as vscode from 'vscode';
 import { PreviewProviderDef } from '../previewmanager';
 import { LoaderPreview } from '../loaderpreview';
@@ -18,10 +19,17 @@ class MioPreview extends LoaderPreview<MioLoader> {
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
         super(uri, panel, (file, contentProvider) => new MioLoader(file, contentProvider), renderMioFile);
     }
+
+    // localisationIndex and previewLocalisation change every trait and organization name;
+    // gfxIndex changes which trait icons resolve.
+    protected get reloadOnConfigurationChange(): readonly string[] {
+        return ['localisationIndex', 'previewLocalisation', 'gfxIndex'];
+    }
 }
 
 export const mioPreviewDef: PreviewProviderDef = {
     type: 'mio',
+    displayName: () => localize('preview.type.mio', 'Military industrial organization (common/military_industrial_organization/organizations/*.txt)'),
     canPreview: canPreviewMio,
     previewConstructor: MioPreview,
 };

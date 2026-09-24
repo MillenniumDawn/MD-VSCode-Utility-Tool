@@ -1,3 +1,4 @@
+import { localize } from "../../util/i18n";
 import * as vscode from "vscode";
 import { renderDecisionFile } from "./contentbuilder";
 import { matchPathEnd } from "../../util/nodecommon";
@@ -5,7 +6,6 @@ import { PreviewProviderDef } from "../previewmanager";
 import { LoaderPreview } from "../loaderpreview";
 import { DecisionsLoader } from "./loader";
 import { decisionPreview } from "../../util/featureflags";
-import { ConfigurationKey } from "../../constants";
 
 function canPreviewDecision(document: vscode.TextDocument) {
 	if (!decisionPreview) {
@@ -33,8 +33,6 @@ function canPreviewDecision(document: vscode.TextDocument) {
 }
 
 class DecisionPreview extends LoaderPreview<DecisionsLoader> {
-	private configurationHandler: vscode.Disposable;
-
 	constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
 		super(
 			uri,
@@ -42,28 +40,20 @@ class DecisionPreview extends LoaderPreview<DecisionsLoader> {
 			(file, contentProvider) => new DecisionsLoader(file, contentProvider),
 			renderDecisionFile,
 		);
-		this.configurationHandler = vscode.workspace.onDidChangeConfiguration((e) => {
-			// previewLocalisation changes the text in the payload; localisationIndex changes whether
-			// there is any text to show, and so whether the localisation toggle is offered at all;
-			// gfxIndex changes which icons resolve, and which sprites a rendered scripted GUI can draw.
-			if (
-				e.affectsConfiguration(`${ConfigurationKey}.previewLocalisation`) ||
-				e.affectsConfiguration(`${ConfigurationKey}.localisationIndex`) ||
-				e.affectsConfiguration(`${ConfigurationKey}.gfxIndex`)
-			) {
-				this.reload();
-			}
-		});
 	}
 
-	public dispose(): void {
-		super.dispose();
-		this.configurationHandler.dispose();
+	// previewLocalisation changes the text in the payload; localisationIndex changes whether
+	// there is any text to show, and so whether the localisation toggle is offered at all;
+	// gfxIndex changes which icons resolve, and which sprites a rendered scripted GUI can draw.
+	protected get reloadOnConfigurationChange(): readonly string[] {
+		return ["previewLocalisation", "localisationIndex", "gfxIndex"];
 	}
 }
 
 export const decisionPreviewDef: PreviewProviderDef = {
 	type: "decision",
+	displayName: () => localize("preview.type.decision", "Decisions (common/decisions/*.txt)"),
+	isEnabled: () => decisionPreview,
 	canPreview: canPreviewDecision,
 	previewConstructor: DecisionPreview,
 };

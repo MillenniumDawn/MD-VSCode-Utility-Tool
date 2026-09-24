@@ -2,16 +2,16 @@ import * as vscode from 'vscode';
 import { FocusTree, Focus } from './schema';
 import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconResolveStats } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
-import { forceError, randomString, mapLimit, jsonForScript } from '../../util/common';
+import { randomString, mapLimit, jsonForScript } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
+import { errorPage, escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { GridBoxType, IconType, ButtonType } from '../../hoiformat/gui';
 import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug, error } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { useConditionInFocus, localisationIndex } from '../../util/featureflags';
-import { flatMap } from 'lodash';
+import flatMap from 'lodash/flatMap';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { getFocusTitlebarImage, getFocusOverlayImage, loadFocusTitlebarStyles } from "./titlebar";
 import { renderContainerWindow, RenderChildTypeMap } from "../../util/hoi4gui/containerwindow";
@@ -208,22 +208,7 @@ export function buildNoFocusTreeHtml(webview: vscode.Webview, uri: vscode.Uri): 
  * never stuck in a dead loading spinner when a render is too slow or fails.
  */
 export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri, e: unknown): string {
-    const reloadScript = {
-        content: `(function(){
-            var api = acquireVsCodeApi();
-            var btn = document.getElementById('ft-reload');
-            if (btn) { btn.addEventListener('click', function(){ api.postMessage({ command: 'reload' }); }); }
-        })();`,
-    };
-    const message = htmlEscape(forceError(e).toString());
-    const reloadLabel = htmlEscape(localize('focustree.reload', 'Reload'));
-    const title = htmlEscape(localize('focustree.loading.slow_title', 'The focus tree is taking too long to render (large file or low memory).'));
-    const baseContent = `<div style="padding:16px; font:13px var(--vscode-font-family); color:var(--vscode-foreground);">
-        <p>${title}</p>
-        <pre style="white-space:pre-wrap; opacity:0.8;">${message}</pre>
-        <button id="ft-reload">${reloadLabel}</button>
-    </div>`;
-    return html(webview, baseContent, [ previewedFileUriScript(uri), reloadScript ], []);
+    return errorPage(webview, uri, e, localize('focustree.loading.slow_title', 'The focus tree is taking too long to render (large file or low memory).'));
 }
 
 const leftPaddingBase = 50;
@@ -251,6 +236,14 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
     // Same reason as registerWarningStyles below: the shell stylesheet is the only one the webview
     // can still attach classes against after a render. See tracestyles.ts.
     registerTraceStyles(styleTable);
+
+    // The search highlight. Same id-prefixed `raw` trick as the trace styles: the webview attaches
+    // this class after a render, so the rule has to exist in the shell stylesheet, and the id keeps
+    // it ahead of the node's own classes without reaching for !important.
+    styleTable.raw(`#focustreeplaceholder .focus-search-hit`, `
+        outline: 1px solid #E33;
+        background: rgba(255, 0, 0, 0.5);
+    `);
 
     // CSP-nonced <style> element the webview later fills with the resolved focus-icon background CSS.
     const progressiveIconStyles = `<style id="ft-progressive-icons" nonce="${styleNonce}"></style>`;

@@ -73,8 +73,10 @@ for `replace_path` too, as it does in the game.
    extension at your Hearts of Iron IV installation.
 3. Open your mod folder. If it holds more than one `.mod` file, run **Select Mod File** to choose
    the one to work with.
-4. Open a file and press the preview button in the editor's title bar, or run **Preview HOI4
-   file** from the command palette. **Preview World Map** opens the map.
+4. Open a file and press the preview button in the editor's title bar, press
+   `Ctrl+Shift+Alt+V`, or run **Preview HOI4 file** from the command palette. You can also
+   right-click the file, in the editor or in the explorer, and choose **Preview HOI4 file**.
+   **Preview World Map** opens the map.
 
 ## Settings
 
@@ -119,7 +121,8 @@ The Settings editor lists them under the extension in these sections.
 | `mdHoi4Utilities.localisationIndex` | Index localisation so previews show translated text. Uses more memory. |
 | `mdHoi4Utilities.imageDecodeWorkers` | Threads used to decode `.dds` / `.tga` images. More is faster on icon-heavy trees. |
 
-Settings that say so in their description need a window reload to take effect. **Show Index
+Settings that say so in their description need a window reload, or the preview reopened,
+to take effect. **Show Index
 Status** in the command palette tells you what the indexes are doing.
 
 ## Pre-release builds
