@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the mutually exclusive link now also moves sideways with `exclusive_offset`, `exclusive_offset_left` and the x of `national_focus_exclusive_item` in nationalfocusview.gui. Issue #397.
+
 v1.1.39
 
   Bugfixes:
