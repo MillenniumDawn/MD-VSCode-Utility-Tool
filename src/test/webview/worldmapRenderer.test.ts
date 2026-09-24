@@ -23,7 +23,7 @@ import {
 	renderMapLabels,
 	resourceImages,
 } from "../../../webviewsrc/worldmap/stateLayer";
-import { renderAllEdges } from "../../../webviewsrc/worldmap/provinceLayer";
+import { renderAllEdges, renderProvince } from "../../../webviewsrc/worldmap/provinceLayer";
 import {
 	renderHoverSelectionByViewMode,
 	renderLoadingText,
@@ -1124,6 +1124,42 @@ describe("webview/worldmap/provinceLayer edges", function () {
 			0,
 		);
 		assert.ok(drewStroke(calls, "red", 0, 1, 6, 1));
+	});
+});
+
+describe("webview/worldmap/provinceLayer fills", function () {
+	function fills(viewPoint: ViewPoint, coverZones: Province["coverZones"], overwriteRenderPrecision?: number) {
+		const { canvasContext, calls } = recordingCanvasContext();
+		renderProvince(viewPoint, canvasContext, province({ coverZones }), viewPoint.scale, 0, overwriteRenderPrecision);
+		return calls.filter((call) => call.method === "fillRect").map((call) => call.args);
+	}
+
+	function viewPointAt(x: number, y: number, scale: number) {
+		return new ViewPoint(document.createElement("canvas"), { worldMap: undefined }, 0, { x, y, scale }, { interactive: false });
+	}
+
+	it("fills a zone from its own corner, not shifted towards the top left", function () {
+		// Unset precision is what the hover and selection overlays use: 4 at scale 1.
+		assert.deepStrictEqual(fills(viewPointAt(0, 0, 1), [{ x: 4, y: 4, w: 4, h: 4 }]), [[4, 4, 4, 4]]);
+	});
+
+	it("fills a grid-aligned small zone's block from that zone's corner", function () {
+		assert.deepStrictEqual(
+			fills(viewPointAt(0, 0, 1), [
+				{ x: 8, y: 0, w: 1, h: 1 },
+				{ x: 9, y: 0, w: 1, h: 1 },
+			]),
+			[[8, 0, 4, 4]],
+		);
+	});
+
+	it("ends a fill on the canvas pixel its border is drawn on", function () {
+		const viewPoint = viewPointAt(0.3, 0.3, 1.5);
+		const [[left, top, width, height]] = fills(viewPoint, [{ x: 2, y: 2, w: 3, h: 3 }], 1) as number[][];
+		assert.strictEqual(left, viewPoint.convertX(2));
+		assert.strictEqual(top, viewPoint.convertY(2));
+		assert.strictEqual(left + width, viewPoint.convertX(5));
+		assert.strictEqual(top + height, viewPoint.convertY(5));
 	});
 });
 
