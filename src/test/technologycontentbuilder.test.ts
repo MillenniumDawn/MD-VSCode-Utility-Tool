@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import {
 	renderTechnologyFile,
 	getTechnologyIconNames,
+	findXorGroups,
 } from "../previewdef/technology/contentbuilder";
 import {
 	hashUpdate,
@@ -496,10 +497,11 @@ describe("previewdef/technology renderTechnology escaping", () => {
 				name = "techtree_infantry_item"
 				size = { width = 100 height = 100 }
 				containerWindowType = { name = "sub_technology_slot_0" size = { width = 40 height = 40 } }
+				containerWindowType = { name = "sub_technology_slot_1" size = { width = 40 height = 40 } }
 			}
 		}`;
 
-	function technology(id: string, subTechnologies: Technology[] = []): Technology {
+	function technology(id: string, subTechnologies: Technology[] = [], overrides: Partial<Technology> = {}): Technology {
 		return {
 			id,
 			folders: { infantry: { name: "infantry", x: 0, y: 0 } },
@@ -512,6 +514,7 @@ describe("previewdef/technology renderTechnology escaping", () => {
 			isSpecialProject: false,
 			subTechnologies,
 			token: { start: 0, end: 5 } as Technology["token"],
+			...overrides,
 		};
 	}
 
@@ -544,5 +547,103 @@ describe("previewdef/technology renderTechnology escaping", () => {
 		assert.ok(!contentHtml.includes("<b>"), contentHtml);
 		assert.ok(contentHtml.includes('title="start\nx&quot; onmouseover=&quot;alert(1)&quot; y=&quot;&lt;b&gt;'), contentHtml);
 		assert.ok(contentHtml.includes('title="start_sub\nx&quot; onmouseover=&quot;alert(1)&quot; y=&quot;&lt;b&gt;'), contentHtml);
+	});
+
+	async function contentOf(technologies: Technology[]): Promise<string> {
+		const rendered = (await renderTechnologyFile(loaderWithTree(technologies), uri, webview)) as LoaderRenderResult;
+		return (rendered.update!.data as { contentHtml: string }).contentHtml;
+	}
+
+	// The markup of one sub-technology: from its opening div up to the next sub-technology or the end.
+	function subTechnologyHtml(contentHtml: string, id: string): string {
+		const start = contentHtml.indexOf(`data-subtech-id="${id}"`);
+		assert.ok(start >= 0, `no sub-technology ${id} in ${contentHtml}`);
+		const next = contentHtml.indexOf("data-subtech-id=", start + 1);
+		return contentHtml.slice(start, next < 0 ? undefined : next);
+	}
+
+	it("puts each sub-technology in its own slot and leaves a slot without one empty", async () => {
+		stubLocalisation({});
+		const contentHtml = await contentOf([technology("start", [technology("only_sub")])]);
+
+		assert.strictEqual(contentHtml.match(/data-subtech-id=/g)?.length, 1, contentHtml);
+		assert.ok(contentHtml.includes('data-subtech-id="only_sub"'), contentHtml);
+	});
+
+	it("marks a special-project sub-technology and only that one", async () => {
+		stubLocalisation({});
+		const contentHtml = await contentOf([technology("start", [
+			technology("plain_sub"),
+			technology("sp_sub", [], { isSpecialProject: true }),
+		])]);
+
+		assert.ok(subTechnologyHtml(contentHtml, "sp_sub").includes("st-techSpecialProject"), contentHtml);
+		assert.ok(!subTechnologyHtml(contentHtml, "plain_sub").includes("st-techSpecialProject"), contentHtml);
+	});
+});
+
+// The children a technology leads to, split into the ones drawn side by side and the groups that
+// exclude each other, which the tree draws in an xor frame.
+describe("previewdef/technology findXorGroups", () => {
+	function tech(id: string, overrides: Partial<Technology> = {}): Technology {
+		return {
+			id,
+			folders: { infantry: { name: "infantry", x: 0, y: 0 } },
+			leadsToTechs: [],
+			xor: [],
+			startYear: 2000,
+			enableEquipments: true,
+			enableEquipmentNames: [],
+			categories: [],
+			isSpecialProject: false,
+			subTechnologies: [],
+			token: undefined,
+			...overrides,
+		};
+	}
+
+	function tree(...technologies: Technology[]): Record<string, Technology> {
+		return Object.fromEntries(technologies.map(t => [t.id, t]));
+	}
+
+	const ids = (groups: Technology[][] | undefined) => groups?.map(group => group.map(t => t.id).sort());
+
+	it("returns undefined when no child is exclusive with another", () => {
+		const root = tech("root", { leadsToTechs: ["a", "b"] });
+		assert.strictEqual(findXorGroups(tree(root, tech("a"), tech("b")), root, "infantry"), undefined);
+	});
+
+	it("ignores an xor that only one side declares", () => {
+		const root = tech("root", { leadsToTechs: ["a", "b"] });
+		const map = tree(root, tech("a", { xor: ["b"] }), tech("b"));
+		assert.strictEqual(findXorGroups(map, root, "infantry"), undefined);
+	});
+
+	it("groups a mutual pair and lists the other children first", () => {
+		const root = tech("root", { leadsToTechs: ["a", "b", "c"] });
+		const map = tree(root, tech("a", { xor: ["b"] }), tech("b", { xor: ["a"] }), tech("c"));
+		assert.deepStrictEqual(ids(findXorGroups(map, root, "infantry")), [["c"], ["a", "b"]]);
+	});
+
+	it("merges pairs that share a technology into one group", () => {
+		const root = tech("root", { leadsToTechs: ["a", "b", "c"] });
+		const map = tree(
+			root,
+			tech("a", { xor: ["b"] }),
+			tech("b", { xor: ["a", "c"] }),
+			tech("c", { xor: ["b"] }),
+		);
+		assert.deepStrictEqual(ids(findXorGroups(map, root, "infantry")), [[], ["a", "b", "c"]]);
+	});
+
+	it("leaves out children that are not in the folder being drawn", () => {
+		const root = tech("root", { leadsToTechs: ["a", "b", "elsewhere"] });
+		const map = tree(
+			root,
+			tech("a", { xor: ["b", "elsewhere"] }),
+			tech("b", { xor: ["a"] }),
+			tech("elsewhere", { xor: ["a"], folders: { armor: { name: "armor", x: 0, y: 0 } } }),
+		);
+		assert.deepStrictEqual(ids(findXorGroups(map, root, "infantry")), [[], ["a", "b"]]);
 	});
 });

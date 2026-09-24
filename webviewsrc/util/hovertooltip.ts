@@ -27,7 +27,7 @@ export interface EffectTooltipOptions {
 }
 
 // Long enough that panning the pointer across a column does not flash a panel per card.
-const hoverDelay = 150;
+export const hoverDelay = 150;
 
 // Popups are appended to <body>, so they are placed in viewport coordinates by hand rather than by
 // the layout, which is what makes the toolbar a thing they have to be kept clear of.

@@ -404,7 +404,10 @@
 		],
 		"exclude": [
 			"out-test/src/test/**",
-			"out-test-webview/src/test/**"
+			"out-test-webview/src/test/**",
+			"out-test/src/previewdef/decision/payload.js",
+			"out-test/src/previewdef/event/payload.js",
+			"out-test/src/previewdef/idea/payload.js"
 		],
 		"reporter": [
 			"text",

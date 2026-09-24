@@ -491,6 +491,15 @@ describe('.github/workflows', function () {
             assert.match(summary?.run ?? '', /merge publishes \$TAG again/);
             assert.doesNotMatch(summary?.run ?? '', /release pull request after it/);
         });
+
+        it('mints the bot token with a client id, not the deprecated app id', function () {
+            const minting = steps(workflow).filter((step) => step.uses?.startsWith('actions/create-github-app-token@'));
+            assert.ok(minting.length > 0, 'no step mints the release bot token');
+            for (const step of minting) {
+                assert.ok(step.with?.['client-id'], `${step.name} has no client-id`);
+                assert.strictEqual(step.with?.['app-id'], undefined, `${step.name} still passes the deprecated app-id`);
+            }
+        });
     });
 
     describe('test.yml', function () {

@@ -130,7 +130,7 @@ describe("previewdef/gui contentbuilder", () => {
 			},
 		};
 		const html = await renderGuiFile(badLoader, uri, webview);
-		assert.ok(html.includes("gui boom") || html.includes("Error"));
+		assert.ok(html.includes("<pre>Error:&nbsp;gui&nbsp;boom</pre>"), html);
 	});
 
 	it("clamps negative position to 0", async () => {

@@ -6,13 +6,16 @@ import { previewWebviewOptions, readFile } from './util/vsccommon';
 import { decodeImageToPng } from './util/image/imagedecoder';
 
 // Runs in the viewer page: asks the host for the image bytes and shows them through a blob URL.
+// html() puts scripts in <head>, so the <img> does not exist yet when this runs; it is looked up
+// when the bytes arrive, by which time the body has been parsed.
 const textureScript = `
 (function () {
     var vscode = acquireVsCodeApi();
-    var img = document.getElementById('texture');
     window.addEventListener('message', function (event) {
         var message = event.data;
         if (!message || message.type !== 'image') { return; }
+        var img = document.getElementById('texture');
+        if (!img) { return; }
         var url = URL.createObjectURL(new Blob([message.data], { type: 'image/png' }));
         img.onload = function () { URL.revokeObjectURL(url); };
         img.src = url;

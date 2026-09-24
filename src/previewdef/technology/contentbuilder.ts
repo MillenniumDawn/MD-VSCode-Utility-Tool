@@ -457,7 +457,7 @@ async function renderTechnologyTreeGridBox(
     });
 }
 
-function findXorGroups(treeMap: Record<string, Technology>, technology: Technology, folder: string): Technology[][] | undefined {
+export function findXorGroups(treeMap: Record<string, Technology>, technology: Technology, folder: string): Technology[][] | undefined {
     const techChildren = technology.leadsToTechs
         .map(techName => treeMap[techName])
         .filter((tech): tech is Technology => tech !== undefined && folder in tech.folders);
