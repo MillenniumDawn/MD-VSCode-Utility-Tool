@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
+
 v1.1.39
 
   Bugfixes:
