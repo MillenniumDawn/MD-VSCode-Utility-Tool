@@ -154,33 +154,16 @@ export class Renderer extends Subscriber {
 		this.renderCanvas();
 	};
 
-	private oldMapState: any = undefined;
+	private oldMapState: MapRenderState | undefined = undefined;
 	private renderMap() {
-		const worldMap = this.loader.worldMap;
-		const displayOptions = this.topBar.display.selectedValues$.value;
-		const newMapState = {
-			worldMap,
-			canvasWidth: this.canvasWidth,
-			canvasHeight: this.canvasHeight,
-			viewMode: this.topBar.viewMode$.value,
-			colorSet: this.topBar.colorSet$.value,
-			warningFilter: this.topBar.warningFilter.selectedValues$.value,
-			edgeVisible: displayOptions.includes("edge"),
-			labelVisible: displayOptions.includes("label"),
-			adaptZooming: displayOptions.includes("adaptzooming"),
-			fastRendering: displayOptions.includes("fastrending"),
-			supplyVisible: displayOptions.includes("supply"),
-			riverVisible: displayOptions.includes("river"),
-			...this.viewPoint.toJson(),
-		};
-
-		// State not changed
-		if (
-			this.oldMapState !== undefined &&
-			Object.keys(newMapState).every(
-				(k) => this.oldMapState[k] === (newMapState as any)[k],
-			)
-		) {
+		const newMapState = mapRenderState(
+			this.loader.worldMap,
+			this.canvasWidth,
+			this.canvasHeight,
+			this.topBar,
+			this.viewPoint,
+		);
+		if (sameMapState(this.oldMapState, newMapState)) {
 			return;
 		}
 		this.oldMapState = newMapState;
@@ -188,10 +171,8 @@ export class Renderer extends Subscriber {
 			this.mapCanvas,
 			this.topBar,
 			this.viewPoint,
-			worldMap,
-			newMapState.fastRendering
-				? {}
-				: { preciseEdge: true, overwriteRenderPrecision: 1 },
+			newMapState.worldMap,
+			mapRenderOptions(newMapState.fastRendering),
 		);
 	}
 
@@ -224,9 +205,6 @@ export class Renderer extends Subscriber {
 			renderMapBackground(worldMap, xOffset, renderContext),
 		);
 
-		renderContext.renderedProvinces = Object.values(
-			renderContext.renderedProvincesById,
-		);
 		renderAllOffsets(viewPoint, mapZone, worldMap.width, (xOffset) =>
 			renderMapForeground(worldMap, xOffset, renderContext),
 		);
@@ -241,6 +219,52 @@ export class Renderer extends Subscriber {
 			}),
 		);
 	}
+}
+
+export type MapRenderState = ReturnType<typeof mapRenderState>;
+
+// Everything the map canvas depends on; the map is only redrawn when one of these changes.
+export function mapRenderState(
+	worldMap: FEWorldMap,
+	canvasWidth: number,
+	canvasHeight: number,
+	topBar: TopBar,
+	viewPoint: ViewPoint,
+) {
+	const displayOptions = topBar.display.selectedValues$.value;
+	return {
+		worldMap,
+		canvasWidth,
+		canvasHeight,
+		viewMode: topBar.viewMode$.value,
+		colorSet: topBar.colorSet$.value,
+		warningFilter: topBar.warningFilter.selectedValues$.value,
+		edgeVisible: displayOptions.includes("edge"),
+		labelVisible: displayOptions.includes("label"),
+		adaptZooming: displayOptions.includes("adaptzooming"),
+		fastRendering: displayOptions.includes("fastrending"),
+		supplyVisible: displayOptions.includes("supply"),
+		riverVisible: displayOptions.includes("river"),
+		...viewPoint.toJson(),
+	};
+}
+
+export function sameMapState(
+	oldState: MapRenderState | undefined,
+	newState: MapRenderState,
+): boolean {
+	if (oldState === undefined) {
+		return false;
+	}
+	return (Object.keys(newState) as (keyof MapRenderState)[]).every(
+		(k) => oldState[k] === newState[k],
+	);
+}
+
+export function mapRenderOptions(
+	fastRendering: boolean,
+): Partial<RenderContext> {
+	return fastRendering ? {} : { preciseEdge: true, overwriteRenderPrecision: 1 };
 }
 
 function renderMapForeground(

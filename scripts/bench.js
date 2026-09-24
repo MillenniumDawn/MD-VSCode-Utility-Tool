@@ -19,6 +19,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const v8 = require('v8');
 
 const repoRoot = path.resolve(__dirname, '..');
 const outDir = path.join(repoRoot, 'out-test', 'src');
@@ -122,14 +123,29 @@ function generateProvinceGrid(width, height, provinceSize) {
 
 const results = [];
 
-function bench(name, detail, iterations, fn) {
+// With { gc: true } the timed runs are also watched by v8's GC profiler, and the detail gains
+// what the garbage collector had to do per iteration: how often it ran and how much it freed.
+// The freed bytes are the closest thing to an allocation count Node offers without flags.
+function bench(name, detail, iterations, fn, options = {}) {
 	// One untimed pass so the timed ones measure steady state rather than first-call compile.
 	fn();
+	const profiler = options.gc ? new v8.GCProfiler() : undefined;
+	profiler?.start();
 	const started = process.hrtime.bigint();
 	for (let i = 0; i < iterations; i++) {
 		fn();
 	}
 	const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+	const gcStats = profiler?.stop();
+	if (gcStats) {
+		let freedBytes = 0;
+		for (const gc of gcStats.statistics) {
+			freedBytes += gc.beforeGC.heapStatistics.usedHeapSize - gc.afterGC.heapStatistics.usedHeapSize;
+		}
+		const runs = gcStats.statistics.length / iterations;
+		const freedMb = freedBytes / iterations / (1024 * 1024);
+		detail += `; per run: ${runs.toFixed(1)} GCs, ${freedMb.toFixed(1)} MB freed`;
+	}
 	const perIteration = elapsedMs / iterations;
 	results.push({ name, detail, perIteration });
 	console.log(`  ${name.padEnd(28)} ${perIteration.toFixed(2).padStart(9)} ms   (${detail})`);
@@ -185,12 +201,8 @@ function main() {
 	bench('fillEdges', `512x512, ${grid.provinces.length} provinces`, 3, () => {
 		// fillEdges mutates province.edges, so hand it a fresh set each run.
 		const provinces = grid.provinces.map((p) => ({ color: p.color, warnings: [] }));
-		const colorToProvince = {};
-		for (const province of provinces) {
-			colorToProvince[province.color] = province;
-		}
-		fillEdges(provinces, colorToProvince, grid.colorByPosition, grid.width, grid.height);
-	});
+		fillEdges(provinces, grid.colorByPosition, grid.width, grid.height);
+	}, { gc: true });
 
 	console.log('\nMarkdown (paste into the pull request):\n');
 	console.log('| Benchmark | Time | Fixture |');

@@ -6,6 +6,7 @@ import {
     LoaderRenderResult,
     RenderContentOptions,
 } from '../previewdef/updateablepreview';
+import { stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
 // The extension points FocusTreePreview needs from the shared base, driven through a real instance
 // with a stub panel (same pattern as gfxpreview.test.ts): a render that declines to render at all,
@@ -33,6 +34,27 @@ describe('previewdef/updateablepreview extension points', () => {
         // panel during the 1000 ms debounce does.
         public disposeOnRender = false;
 
+        // Render-queue tests: how many renders started, a gate that holds the next one open, and a
+        // render that throws.
+        public started = 0;
+        public failNext = false;
+        private gates: Promise<void>[] = [];
+
+        public gateNext(): () => void {
+            let open!: () => void;
+            this.gates.push(new Promise<void>(resolve => { open = resolve; }));
+            return open;
+        }
+
+        public reloadNow(dependencyChanged = false): void {
+            this.reload(dependencyChanged);
+        }
+
+        // Settles once everything queued so far has rendered.
+        public idle(): Promise<void> {
+            return this.enqueueRender(() => Promise.resolve());
+        }
+
         public run(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
             return this.sendPartialUpdate(document, dependencyChanged);
         }
@@ -52,10 +74,17 @@ describe('previewdef/updateablepreview extension points', () => {
             options: RenderContentOptions,
         ): Promise<LoaderRender | null> {
             this.lastOptions = options;
+            this.started++;
             if (this.disposeOnRender) {
                 this.dispose();
             }
-            return Promise.resolve(this.queue.shift() ?? null);
+            if (this.failNext) {
+                this.failNext = false;
+                return Promise.reject(new Error('render failed'));
+            }
+            const result = this.queue.shift() ?? null;
+            const gate = this.gates.shift();
+            return gate === undefined ? Promise.resolve(result) : gate.then(() => result);
         }
 
         protected beforeRenderAssign(): void {
@@ -291,6 +320,66 @@ describe('previewdef/updateablepreview extension points', () => {
         assert.strictEqual(first, '<full>S1</full>');
         // A full render must not decline; falling back to what is on screen beats blanking it.
         assert.strictEqual(await h.preview.runFull(document), '<full>S1</full>');
+    });
+
+    // Issue #237: an edit arriving while a render is in flight must wait for it. Run side by side,
+    // a slower older render lands last, overwrites the newer content and keeps its stale hash.
+    describe('render serialization', () => {
+        const settle = () => new Promise<void>(resolve => setImmediate(resolve));
+
+        afterEach(() => {
+            restoreVscodeStubs();
+        });
+
+        it('starts the next render only once the one in flight has finished', async () => {
+            const h = makePreview(true);
+            h.preview.queueRender(updateRender('S1'), updateRender('S2'), updateRender('S3'));
+            await h.preview.onDocumentChange(document); // first render -> assign
+
+            const open = h.preview.gateNext();
+            const older = h.preview.onDocumentChange(document);
+            const newer = h.preview.onDocumentChange(document);
+            await settle();
+            assert.strictEqual(h.preview.started, 2);
+
+            open();
+            await Promise.all([older, newer]);
+            assert.strictEqual(h.preview.started, 3);
+            assert.deepStrictEqual(h.posted.map(m => m.data.n), ['S2', 'S3']);
+        });
+
+        it('keeps a reload requested during a full render a full render', async () => {
+            stubVscode({ textDocuments: [document] });
+            const h = makePreview(true);
+            h.preview.queueRender(updateRender('S1'), updateRender('S2'));
+
+            const open = h.preview.gateNext();
+            const initial = h.preview.initializePanelContent(document);
+            h.preview.reloadNow();
+            open();
+            await initial;
+            await h.preview.idle();
+
+            assert.strictEqual(h.preview.started, 2);
+            assert.deepStrictEqual(h.preview.lastOptions, { partial: false, dependencyChanged: false });
+            assert.deepStrictEqual(h.preview.applied.map(a => a.assigned), [true, true]);
+            assert.strictEqual(h.postCount, 0);
+        });
+
+        it('runs the next render after one that threw', async () => {
+            const h = makePreview(true);
+            h.preview.queueRender(updateRender('S1'));
+            h.preview.failNext = true;
+            const consoleError = console.error;
+            console.error = () => undefined;
+            try {
+                await Promise.all([h.preview.onDocumentChange(document), h.preview.onDocumentChange(document)]);
+            } finally {
+                console.error = consoleError;
+            }
+            assert.strictEqual(h.preview.started, 2);
+            assert.strictEqual(h.lastAssignedHtml, '<full>S1</full>');
+        });
     });
 
     // The full page is the expensive half of a render and most renders never assign it, so a

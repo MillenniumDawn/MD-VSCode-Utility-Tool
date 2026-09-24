@@ -87,6 +87,14 @@ interface FEWorldMapClassExtra {
 
 	getSupplyNodeByProvinceId(provinceId: number): SupplyNode | undefined;
 
+	forEachRailwayTouching(
+		provinces: Province[],
+		callback: (railway: Railway) => void,
+	): void;
+	getSupplyAreaProvinces(
+		supplyAreaId: number | undefined,
+	): { provinces: number[] } | undefined;
+
 	getProvinceByPosition(x: number, y: number): Province | undefined;
 
 	getProvinceWarnings(
@@ -158,6 +166,7 @@ export class Loader extends Subscriber {
 	constructor() {
 		super();
 		this.worldMap = new FEWorldMapClass();
+		this.addSubscription({ dispose: () => this.cancelPendingEmit() });
 		this.load();
 		this.worldMap$.subscribe((wm) => {
 			(window as Window & { worldMap?: FEWorldMap }).worldMap = wm;
@@ -165,6 +174,7 @@ export class Loader extends Subscriber {
 	}
 
 	public refresh() {
+		this.cancelPendingEmit();
 		this.worldMap = new FEWorldMapClass();
 		this.writableWorldMap$.next(this.worldMap);
 		vscode.postMessage({ command: "loaded", force: true } as WorldMapMessage);
@@ -358,11 +368,11 @@ export class Loader extends Subscriber {
 
 		if (this.loadingQueue.length === 0) {
 			// Final emit is synchronous against the now-complete arrays: guarantees the last frame is
-			// never a partial one and covers hidden panels, where the rAF path never fires.
+			// never a partial one, and the finished map does not wait out the throttle.
 			this.emitWorldMap();
 			this.loading$.next(false);
 		} else {
-			// Keep the request pump immediate; only the map emit is rAF-coalesced.
+			// Keep the request pump immediate; only the map emit is throttled.
 			vscode.postMessage(this.loadingQueue.shift());
 			this.scheduleWorldMapEmit();
 		}
@@ -373,21 +383,32 @@ export class Loader extends Subscriber {
 		});
 	}
 
-	private pendingEmit = false;
+	// Every emit is a new FEWorldMapClass, so the renderer rebuilds its reverse maps and redraws the
+	// whole map; mid-load that is paid a few times a second rather than once per frame.
+	private static readonly midLoadEmitIntervalMs = 250;
+	private lastEmitTime = 0;
+	private pendingEmitTimer: ReturnType<typeof setTimeout> | undefined;
 	private scheduleWorldMapEmit(): void {
-		if (this.pendingEmit) {
+		if (this.pendingEmitTimer !== undefined) {
 			return;
 		}
-		this.pendingEmit = true;
-		requestAnimationFrame(() => {
-			if (this.pendingEmit) {
-				this.emitWorldMap();
-			}
-		});
+		const delay = Math.max(
+			0,
+			this.lastEmitTime + Loader.midLoadEmitIntervalMs - performance.now(),
+		);
+		this.pendingEmitTimer = setTimeout(() => this.emitWorldMap(), delay);
+	}
+
+	private cancelPendingEmit(): void {
+		if (this.pendingEmitTimer !== undefined) {
+			clearTimeout(this.pendingEmitTimer);
+			this.pendingEmitTimer = undefined;
+		}
 	}
 
 	private emitWorldMap(): void {
-		this.pendingEmit = false;
+		this.cancelPendingEmit();
+		this.lastEmitTime = performance.now();
 		if (!this.loadingProvinceMap) {
 			return;
 		}
@@ -488,6 +509,12 @@ export class FEWorldMapClass implements FEWorldMap {
 		| undefined = undefined;
 	private provinceToSupplyNodeMemo:
 		| Record<number, SupplyNode | undefined>
+		| undefined = undefined;
+	private provinceToRailwayIndicesMemo:
+		| Record<number, number[] | undefined>
+		| undefined = undefined;
+	private supplyAreaToProvincesMemo:
+		| Record<number, { provinces: number[] } | undefined>
 		| undefined = undefined;
 	private provinceGridMemo: ProvinceGrid | undefined = undefined;
 	private warningIndexMemo: WarningIndex | undefined = undefined;
@@ -596,6 +623,80 @@ export class FEWorldMapClass implements FEWorldMap {
 			this.provinceToSupplyNodeMemo = result;
 		}
 		return this.provinceToSupplyNodeMemo[provinceId];
+	}
+
+	/**
+	 * The railways that touch any of the given provinces, in the mod's own order. The render pass
+	 * used to walk every railway in the file once per visible world-wrap copy just to reject the
+	 * ones off screen; this answers the same question from the provinces already drawn.
+	 */
+	public forEachRailwayTouching(
+		provinces: Province[],
+		callback: (railway: Railway) => void,
+	): void {
+		if (this.provinceToRailwayIndicesMemo === undefined) {
+			const result: Record<number, number[] | undefined> = {};
+			const count = this.railwaysCount;
+			for (let i = 0; i < count; i++) {
+				const railway = this.railways[i];
+				if (!railway) {
+					continue;
+				}
+				for (const provinceId of railway.provinces) {
+					(result[provinceId] ??= []).push(i);
+				}
+			}
+			this.provinceToRailwayIndicesMemo = result;
+		}
+
+		const indices = new Set<number>();
+		for (const province of provinces) {
+			const touching = this.provinceToRailwayIndicesMemo[province.id];
+			if (touching !== undefined) {
+				for (const index of touching) {
+					indices.add(index);
+				}
+			}
+		}
+
+		// Sorted, because the draw order has to stay the file's, not the order the visible
+		// provinces happened to be visited in.
+		for (const index of [...indices].sort((a, b) => a - b)) {
+			const railway = this.railways[index];
+			if (railway) {
+				callback(railway);
+			}
+		}
+	}
+
+	/**
+	 * A supply area's provinces, as one object per area that stays the same across renders. The
+	 * identity matters: the hover pass skips the highlight when the hovered and selected objects
+	 * are the same one, and a freshly built list defeated that every frame.
+	 */
+	public getSupplyAreaProvinces(
+		supplyAreaId: number | undefined,
+	): { provinces: number[] } | undefined {
+		const supplyArea = this.getSupplyAreaById(supplyAreaId);
+		if (!supplyArea) {
+			return undefined;
+		}
+
+		if (this.supplyAreaToProvincesMemo === undefined) {
+			this.supplyAreaToProvincesMemo = {};
+		}
+
+		const cached = this.supplyAreaToProvincesMemo[supplyArea.id];
+		if (cached !== undefined) {
+			return cached;
+		}
+
+		const provinces = supplyArea.states.flatMap(
+			(stateId) => this.getStateById(stateId)?.provinces ?? [],
+		);
+		const result = { provinces };
+		this.supplyAreaToProvincesMemo[supplyArea.id] = result;
+		return result;
 	}
 
 	public getProvinceByPosition(x: number, y: number): Province | undefined {

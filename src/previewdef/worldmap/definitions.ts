@@ -4,7 +4,7 @@ import type { TelemetryMessage } from "../../util/telemetry";
 import {
 	isOffset,
 	isOptionalOffset,
-	isOptionalString,
+	isOptionalBytes,
 	isRecord,
 } from "../../util/messageguards";
 
@@ -300,7 +300,9 @@ interface OpenFileMessage {
 
 interface ExportMapMessage {
 	command: "exportmap" | "requestexportmap";
-	dataUrl?: string;
+	// The PNG itself. It used to travel as a base64 data URI, which made three copies of a map that
+	// can run to tens of megabytes; structured-cloned bytes make one.
+	data?: Uint8Array | ArrayBuffer;
 }
 
 const requestMapItemCommands: ReadonlySet<string> = new Set<
@@ -345,7 +347,7 @@ export function isWorldMapHostMessage(
 			);
 		case "exportmap":
 		case "requestexportmap":
-			return isOptionalString(msg.dataUrl);
+			return isOptionalBytes(msg.data);
 		case "telemetry":
 			return (
 				(msg.telemetryType === "event" ||

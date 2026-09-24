@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { ConfigurationKey, Commands } from "../constants";
 import { PromiseCache } from "./cache";
+import { error } from "./debug";
 import { localize } from "./i18n";
 import {
 	clearParentModCache,
@@ -236,10 +237,22 @@ async function selectModFile(): Promise<void> {
 			}
 		}
 
-		if (modPath === modFileInspect?.globalValue) {
-			await conf.update("modFile", undefined, vscode.ConfigurationTarget.Workspace);
-		} else {
-			await conf.update("modFile", modPath, vscode.ConfigurationTarget.Workspace);
+		const stored =
+			modPath === modFileInspect?.globalValue ? undefined : modPath;
+		try {
+			await conf.update("modFile", stored, vscode.ConfigurationTarget.Workspace);
+		} catch (e) {
+			// With no workspace open the write rejects. The status bar used to be updated
+			// regardless, so it showed a mod that had never been stored.
+			error(e);
+			void vscode.window.showErrorMessage(
+				localize(
+					"modfile.savefailed",
+					"Couldn't save the working mod file: {0}",
+					`${e}`,
+				),
+			);
+			return;
 		}
 
 		void checkAndUpdateModFileStatus(

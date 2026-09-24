@@ -102,6 +102,48 @@ function parseDds(buf: Buffer): DDS {
 	return DDS.parse(buf.buffer as ArrayBuffer, buf.byteOffset);
 }
 
+// A block-compressed DDS whose pixel data is `blocks`, in file order, after the 128-byte header.
+function makeBlockDds(
+	code: string,
+	width: number,
+	height: number,
+	blocks: number[][],
+	options: DdsOptions = {},
+): Buffer {
+	const data = Buffer.concat(blocks.map((block) => Buffer.from(block)));
+	const buf = makeDdsHeader(width, height, data.length, {
+		...options,
+		fourCC: code,
+	});
+	data.copy(buf, 128);
+	return buf;
+}
+
+type Rgba = [number, number, number, number];
+
+// The pixels of one 4x4 block in row order, each index naming an entry of `palette`.
+function blockPixels(palette: Rgba[], indices: number[]): Rgba[] {
+	return indices.map((i) => palette[i]!);
+}
+
+// The decoder's flat width*height*4 output for 4x4 blocks laid out left to right, top to bottom.
+function layoutBlocks(width: number, height: number, blocks: Rgba[][]): number[] {
+	const out = new Array<number>(width * height * 4).fill(-1);
+	const blocksPerRow = Math.ceil(width / 4);
+	blocks.forEach((block, k) => {
+		const x0 = (k % blocksPerRow) * 4;
+		const y0 = Math.floor(k / blocksPerRow) * 4;
+		block.forEach((pixel, p) => {
+			const x = x0 + (p % 4);
+			const y = y0 + Math.floor(p / 4);
+			if (x < width && y < height) {
+				out.splice((y * width + x) * 4, 4, ...pixel);
+			}
+		});
+	});
+	return out;
+}
+
 // A copy of the first `length` bytes in its own ArrayBuffer, so the parser sees the
 // shortened length rather than the original allocation behind a subarray.
 function truncate(buf: Buffer, length: number): Buffer {
@@ -381,6 +423,180 @@ describe("DDS malformed input", () => {
 		);
 		assert.strictEqual(dds.images.length, 3);
 		assert.strictEqual(ddsToPng(dds).width, 4);
+	});
+});
+
+describe("DDS block-compressed decode", () => {
+	const red: Rgba = [255, 0, 0, 255];
+	const green: Rgba = [0, 255, 0, 255];
+	const blue: Rgba = [0, 0, 255, 255];
+	const white: Rgba = [255, 255, 255, 255];
+	const black: Rgba = [0, 0, 0, 255];
+
+	// Two-bit colour indices per row, lowest bits first: 0,1,2,3 / 3,2,1,0 / all 0 / all 1.
+	const indexRows = [0xe4, 0x1b, 0x00, 0x55];
+	const indicesOfRows = [0, 1, 2, 3, 3, 2, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1];
+
+	// Three-bit alpha indices, lowest bits first: pixel p takes index p % 8.
+	const alphaIndexBytes = [0x88, 0xc6, 0xfa, 0x88, 0xc6, 0xfa];
+
+	// A DXT1 block of color0 alone: color1 is 0 and every index is 0.
+	function solid(color0: number): number[] {
+		return [color0 & 0xff, color0 >> 8, 0, 0, 0, 0, 0, 0];
+	}
+
+	function withAlpha(pixels: Rgba[], alphas: number[]): Rgba[] {
+		return pixels.map(([r, g, b], p) => [r, g, b, alphas[p]!]);
+	}
+
+	it("decodes DXT1 in four-colour and in three-colour-plus-transparent mode", () => {
+		const png = ddsToPng(
+			parseDds(
+				makeBlockDds("DXT1", 8, 4, [
+					// color0 red > color1 blue: two interpolated colours.
+					[0x00, 0xf8, 0x1f, 0x00, ...indexRows],
+					// color0 blue <= color1 red: one midpoint and transparent black.
+					[0x1f, 0x00, 0x00, 0xf8, ...indexRows],
+				]),
+			),
+		);
+		assert.deepStrictEqual(
+			Array.from(png.data),
+			layoutBlocks(8, 4, [
+				blockPixels(
+					[red, blue, [170, 0, 85, 255], [85, 0, 170, 255]],
+					indicesOfRows,
+				),
+				blockPixels(
+					[blue, red, [127, 0, 127, 255], [0, 0, 0, 0]],
+					indicesOfRows,
+				),
+			]),
+		);
+	});
+
+	it("decodes DXT3 explicit alpha and always uses four colours", () => {
+		const png = ddsToPng(
+			parseDds(
+				makeBlockDds("DXT3", 8, 4, [
+					[
+						// Four-bit alpha, lowest nibble first: pixel p has alpha p * 17.
+						0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe,
+						// color0 black <= color1 green still interpolates, as DXT3 has no
+						// transparent colour.
+						0x00, 0x00, 0xe0, 0x07, 0xe4, 0xe4, 0xe4, 0xe4,
+					],
+					[
+						0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+						0x00, 0xf8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+					],
+				]),
+			),
+		);
+		assert.deepStrictEqual(
+			Array.from(png.data),
+			layoutBlocks(8, 4, [
+				withAlpha(
+					blockPixels(
+						[black, green, [0, 85, 0, 255], [0, 170, 0, 255]],
+						[0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3],
+					),
+					Array.from({ length: 16 }, (_, p) => p * 17),
+				),
+				blockPixels([red], new Array<number>(16).fill(0)),
+			]),
+		);
+	});
+
+	it("decodes DXT5 interpolated alpha in eight-value and six-value mode", () => {
+		const png = ddsToPng(
+			parseDds(
+				makeBlockDds("DXT5", 8, 4, [
+					[255, 0, ...alphaIndexBytes, 0xff, 0xff, 0x00, 0x00, 0, 0, 0, 0],
+					[0, 255, ...alphaIndexBytes, 0x1f, 0x00, 0x00, 0x00, 0, 0, 0, 0],
+				]),
+			),
+		);
+		const eightValue = [255, 0, 218, 182, 145, 109, 72, 36];
+		const sixValue = [0, 255, 36, 72, 109, 145, 0, 255];
+		assert.deepStrictEqual(
+			Array.from(png.data),
+			layoutBlocks(8, 4, [
+				withAlpha(
+					blockPixels([white], new Array<number>(16).fill(0)),
+					Array.from({ length: 16 }, (_, p) => eightValue[p % 8]!),
+				),
+				withAlpha(
+					blockPixels([blue], new Array<number>(16).fill(0)),
+					Array.from({ length: 16 }, (_, p) => sixValue[p % 8]!),
+				),
+			]),
+		);
+	});
+
+	it("clips the edge blocks of a DXT1 texture whose size is not a multiple of four", () => {
+		const png = ddsToPng(
+			parseDds(
+				makeBlockDds("DXT1", 6, 6, [
+					solid(0xf800),
+					solid(0x001f),
+					solid(0x07e0),
+					solid(0xffff),
+				]),
+			),
+		);
+		const fill = (color: Rgba): Rgba[] => new Array<Rgba>(16).fill(color);
+		assert.deepStrictEqual(
+			Array.from(png.data),
+			layoutBlocks(6, 6, [fill(red), fill(blue), fill(green), fill(white)]),
+		);
+	});
+
+	it("reads every level of a mipmapped DXT1 texture from its own offset", () => {
+		const dds = parseDds(
+			makeBlockDds(
+				"DXT1",
+				8,
+				8,
+				[
+					solid(0xf800),
+					solid(0xf800),
+					solid(0xf800),
+					solid(0xf800),
+					solid(0x07e0),
+					// color0 red, color1 blue, each row 0,1,2,3: a 2x2 level keeps only 0,1.
+					[0x00, 0xf8, 0x1f, 0x00, 0xe4, 0xe4, 0xe4, 0xe4],
+					solid(0xffff),
+				],
+				{ mipmapCount: 4, caps: 0x1000 | DDSCAPS_MIPMAP },
+			),
+		);
+
+		assert.strictEqual(dds.mipmapCount, 3);
+		assert.deepStrictEqual(
+			dds.images.map((image) => [image.width, image.height]),
+			[
+				[8, 8],
+				[4, 4],
+				[2, 2],
+				[1, 1],
+			],
+		);
+		assert.deepStrictEqual(
+			Array.from(ddsToPng(dds).data),
+			new Array<Rgba>(64).fill(red).flat(),
+		);
+		assert.deepStrictEqual(
+			Array.from(dds.images[1]!.getFullRgba()),
+			new Array<Rgba>(16).fill(green).flat(),
+		);
+		assert.deepStrictEqual(Array.from(dds.images[2]!.getFullRgba()), [
+			...red,
+			...blue,
+			...red,
+			...blue,
+		]);
+		assert.deepStrictEqual(Array.from(dds.images[3]!.getFullRgba()), white);
 	});
 });
 

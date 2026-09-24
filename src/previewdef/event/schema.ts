@@ -10,7 +10,7 @@ import {
     extractConditionalExprs,
 } from "../../hoiformat/condition";
 import { Scope, ScopeType } from "../../hoiformat/scope";
-import { uniqBy } from "lodash";
+import uniqBy from "lodash/uniqBy";
 
 export interface HOIEvents {
     eventItemsByNamespace: Record<string, HOIEvent[]>;
