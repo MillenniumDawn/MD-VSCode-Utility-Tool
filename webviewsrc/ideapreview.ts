@@ -539,15 +539,13 @@ function buildContent(): void {
 			.map((id) => cardsById.get(id))
 			.filter((c): c is IdeaCard => c !== undefined && visibleIds.has(c.id));
 		const groupChains = chainsByGroup.get(group.category) ?? [];
-		if (groupCards.length === 0 && groupChains.length === 0) {
+
+		// A chained idea is drawn in its chain's row and nowhere else, even when that row is filed
+		// under another category: a visible member always gives its chain an anchor, so the row exists.
+		const loose = groupCards.filter((c) => !chained.has(c.id));
+		if (loose.length === 0 && groupChains.length === 0) {
 			continue;
 		}
-
-		// Ideas the chain rows draw are not drawn again loose below them.
-		const inChain = new Set(
-			groupChains.flatMap((chain) => chain.ideaIds).filter((id) => cardsById.has(id)),
-		);
-		const loose = groupCards.filter((c) => !inChain.has(c.id));
 
 		// The header, the chains and an empty flow first, so the group is on screen before its cards
 		// are; the cards then go in a batch at a time. Millennium Dawn's largest ideas file is a
