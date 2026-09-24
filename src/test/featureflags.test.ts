@@ -18,7 +18,7 @@ describe('util/featureflags', () => {
     });
 
     describe('refreshFeatureFlags', () => {
-        it('copies the new config values onto the live let-bindings', () => {
+        it('replaces the cached flags object with the new config values', () => {
             config = {
                 useConditionInFocus: true,
                 eventTreePreview: true,
@@ -28,30 +28,57 @@ describe('util/featureflags', () => {
             };
             featureflags.refreshFeatureFlags();
 
-            assert.strictEqual(featureflags.useConditionInFocus, true);
-            assert.strictEqual(featureflags.eventTreePreview, true);
-            assert.strictEqual(featureflags.sharedFocusIndex, true);
-            assert.strictEqual(featureflags.gfxIndex, true);
-            assert.strictEqual(featureflags.localisationIndex, true);
+            assert.strictEqual(featureflags.getFlags().useConditionInFocus, true);
+            assert.strictEqual(featureflags.getFlags().eventTreePreview, true);
+            assert.strictEqual(featureflags.getFlags().sharedFocusIndex, true);
+            assert.strictEqual(featureflags.getFlags().gfxIndex, true);
+            assert.strictEqual(featureflags.getFlags().localisationIndex, true);
         });
 
         it('reflects a subsequent change after a second refresh', () => {
             config = { useConditionInFocus: true, sharedFocusIndex: true };
             featureflags.refreshFeatureFlags();
-            assert.strictEqual(featureflags.useConditionInFocus, true);
-            assert.strictEqual(featureflags.sharedFocusIndex, true);
+            assert.strictEqual(featureflags.getFlags().useConditionInFocus, true);
+            assert.strictEqual(featureflags.getFlags().sharedFocusIndex, true);
 
             config = { useConditionInFocus: false, sharedFocusIndex: false };
             featureflags.refreshFeatureFlags();
-            assert.strictEqual(featureflags.useConditionInFocus, false);
-            assert.strictEqual(featureflags.sharedFocusIndex, false);
+            assert.strictEqual(featureflags.getFlags().useConditionInFocus, false);
+            assert.strictEqual(featureflags.getFlags().sharedFocusIndex, false);
+        });
+
+        it('leaves an object read before the refresh at its old values', () => {
+            config = { useConditionInFocus: true };
+            featureflags.refreshFeatureFlags();
+            const before = featureflags.getFlags();
+
+            config = { useConditionInFocus: false };
+            featureflags.refreshFeatureFlags();
+
+            assert.strictEqual(before.useConditionInFocus, true);
+            assert.strictEqual(featureflags.getFlags().useConditionInFocus, false);
+            assert.notStrictEqual(featureflags.getFlags(), before);
+        });
+
+        it('defaults focusTreeLayout to standard when the config does not include it', () => {
+            config = {};
+            featureflags.refreshFeatureFlags();
+            assert.strictEqual(featureflags.getFlags().focusTreeLayout, 'standard');
         });
 
         it('leaves flags undefined when the config does not include them', () => {
             config = {};
             featureflags.refreshFeatureFlags();
-            assert.strictEqual(featureflags.useConditionInFocus, undefined);
-            assert.strictEqual(featureflags.eventTreePreview, undefined);
+            assert.strictEqual(featureflags.getFlags().useConditionInFocus, undefined);
+            assert.strictEqual(featureflags.getFlags().eventTreePreview, undefined);
+        });
+    });
+
+    describe('module surface', () => {
+        it('exposes flags only through getFlags, not as module bindings', () => {
+            assert.strictEqual('useConditionInFocus' in featureflags, false);
+            assert.strictEqual('localisationIndex' in featureflags, false);
+            assert.strictEqual(typeof featureflags.getFlags, 'function');
         });
     });
 
@@ -76,7 +103,7 @@ describe('util/featureflags', () => {
             config = { useConditionInFocus: true };
             firedHandler!({ affectsConfiguration: () => true });
 
-            assert.strictEqual(featureflags.useConditionInFocus, true);
+            assert.strictEqual(featureflags.getFlags().useConditionInFocus, true);
             disp.dispose();
         });
 
@@ -88,7 +115,7 @@ describe('util/featureflags', () => {
             config = { useConditionInFocus: false };
             firedHandler!({ affectsConfiguration: () => false });
 
-            assert.strictEqual(featureflags.useConditionInFocus, true);
+            assert.strictEqual(featureflags.getFlags().useConditionInFocus, true);
         });
 
         it('returns a Disposable', () => {

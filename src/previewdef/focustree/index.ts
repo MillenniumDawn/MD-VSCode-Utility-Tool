@@ -10,7 +10,7 @@ import { localize } from '../../util/i18n';
 import { loadingShellHtml } from '../../util/html';
 import { withTimeout, TimeoutError } from '../../util/common';
 import { error } from '../../util/debug';
-import { useConditionInFocus, localisationIndex } from '../../util/featureflags';
+import { getFlags } from '../../util/featureflags';
 import { FocusTreeLayout, focusTreeGridBoxFor } from './layout';
 import { computeStructuralFingerprint, computeIconSourceFingerprint, computeTreeStructuralFingerprint, computeTreeIconFingerprint } from './fingerprint';
 
@@ -133,10 +133,10 @@ class FocusTreePreview extends UpdateablePreviewBase {
             structural: computeTreeStructuralFingerprint({
                 focusTrees,
                 gridBox: focusTreeGridBoxFor(layout),
-                useConditionInFocus,
+                useConditionInFocus: getFlags().useConditionInFocus,
                 xGridSize: layout.spacing.x,
                 layout,
-                localisationIndex,
+                localisationIndex: getFlags().localisationIndex,
                 previewLocalisation: getConfiguration().previewLocalisation ?? '',
             }),
             icon: computeTreeIconFingerprint(focusTrees),
@@ -262,7 +262,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
             error(e);
             return false;
         }
-        if (trees === null || dependencyChanged || localisationIndex ||
+        if (trees === null || dependencyChanged || getFlags().localisationIndex ||
             this.lastTreeStructural === undefined || this.lastTreeIcon === undefined) {
             // !dependencyChanged is required: a dependency (resolved icon bytes, .gfx sprite swap,
             // .gui window) alters the render without touching the FocusTree objects, so its
