@@ -221,10 +221,6 @@ export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri
     return errorPage(webview, uri, e, localize('focustree.loading.slow_title', 'The focus tree is taking too long to render (large file or low memory).'));
 }
 
-// The standard layout's grid, which every render uses unless the focusTreeLayout setting is `gui`.
-export const focusTreeXGridSize = standardFocusTreeLayout.spacing.x;
-export const focusTreeGridBox: HOIPartial<GridBoxType> = focusTreeGridBoxFor(standardFocusTreeLayout);
-
 /**
  * Renders the static page shell (dragger, content placeholders, warnings container,
  * toolbar). Focuses and inlays themselves are rendered separately into the payload and

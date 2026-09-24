@@ -7,7 +7,6 @@ import {
 	buildNoFocusTreeHtml,
 	buildFocusTreeErrorHtml,
 	loadFocusTreesOnly,
-	focusTreeGridBox,
 } from "../previewdef/focustree/contentbuilder";
 import { StyleTable } from "../util/styletable";
 import {
@@ -33,7 +32,7 @@ import {
 	_terminateImageWorkerForTest,
 	_resetImageWorkerPathForTest,
 } from "../util/image/imagedecoder";
-import { FocusTreeLayout, standardFocusTreeLayout } from "../previewdef/focustree/layout";
+import { FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "../previewdef/focustree/layout";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
@@ -518,10 +517,11 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(textured.toRawCss().includes("top: -3px"));
 	});
 
-	it("focusTreeGridBox is stable", () => {
-		assert.strictEqual(focusTreeGridBox.position?.x?._value, 50);
-		assert.strictEqual(focusTreeGridBox.size?.width?._value, 96);
-		assert.strictEqual(focusTreeGridBox.slotsize?.width?._value, 96);
+	it("the standard layout's grid box is stable", () => {
+		const gridBox = focusTreeGridBoxFor(standardFocusTreeLayout);
+		assert.strictEqual(gridBox.position?.x?._value, 50);
+		assert.strictEqual(gridBox.size?.width?._value, 96);
+		assert.strictEqual(gridBox.slotsize?.width?._value, 96);
 	});
 
 	it("renders multiple focuses", async () => {
