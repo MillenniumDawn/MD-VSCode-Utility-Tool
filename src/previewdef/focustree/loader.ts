@@ -5,14 +5,18 @@ import { localize } from "../../util/i18n";
 import uniq from "lodash/uniq";
 import flatten from "lodash/flatten";
 import { getGfxContainerFiles } from "../../util/gfxindex";
-import { sharedFocusIndex } from "../../util/featureflags";
+import { sharedFocusIndex, focusTreeLayout } from "../../util/featureflags";
 import { findFileByFocusKey } from "../../util/sharedFocusIndex";
 import { focusTitlebarStylesFile, nationalFocusViewGfxFile, goalsOverlaysGfxFile } from "./titlebar";
+import { GuiFileLoader } from "../gui/loader";
+import { buildFocusTreeLayout, FocusTreeLayout, FocusTreeLayoutMode, nationalFocusViewGuiFile } from "./layout";
 import { addInlayGfxWarnings, listGuiGfxFiles, loadFocusInlayWindows, resolveInlayGfxFiles, resolveInlayGuiWindows, resolveInlaysForTree } from "./inlay";
 
 export interface FocusTreeLoaderResult {
     focusTrees: FocusTree[];
     gfxFiles: string[];
+    // Only set when the focusTreeLayout setting is `gui`; the preview uses the standard layout otherwise.
+    layout?: FocusTreeLayout;
 }
 
 export type ProgressCallback = (message: string, current?: number, total?: number) => void;
@@ -21,6 +25,16 @@ const focusesGFX = 'interface/goals.gfx';
 
 export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
     private progressListener: ProgressCallback | undefined;
+    // The layout setting the last load was made with. The setting is not part of the document, so
+    // without this a flip would be answered from the load cached for the unchanged text.
+    private loadedLayoutMode: FocusTreeLayoutMode | undefined;
+
+    public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+        if (this.loadedLayoutMode !== undefined && this.loadedLayoutMode !== focusTreeLayout) {
+            return true;
+        }
+        return super.shouldReloadImpl(session);
+    }
 
     public setProgressListener(cb: ProgressCallback | undefined): void {
         this.progressListener = cb;
@@ -117,10 +131,21 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
             ...inlayResolvedGfxFiles,
         ];
 
+        this.loadedLayoutMode = focusTreeLayout;
+        let layout: FocusTreeLayout | undefined = undefined;
+        let layoutDependencies: string[] = [];
+        if (focusTreeLayout === 'gui') {
+            // Loaded through the dependency loaders, so an edit to the gui reloads this tree.
+            const layoutGui = await this.loaderDependencies.loadMultiple([nationalFocusViewGuiFile], session, GuiFileLoader);
+            layout = buildFocusTreeLayout(layoutGui.flatMap(r => r.result.guiFiles).map(g => g.data));
+            layoutDependencies = [nationalFocusViewGuiFile, ...mergeInLoadResult(layoutGui, 'dependencies')];
+        }
+
         return {
             result: {
                 focusTrees,
                 gfxFiles: uniq([...gfxDependencies, focusesGFX]),
+                layout,
             },
             dependencies: uniq([
                 this.file,
@@ -132,7 +157,8 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
                 ...uniq(focusTrees.flatMap(ft => ft.inlayWindows).map(inlay => inlay.file)),
                 ...inlayGuiFiles,
                 ...focusTreeDependencies,
-                ...mergeInLoadResult(focusTreeDepFiles, 'dependencies')
+                ...mergeInLoadResult(focusTreeDepFiles, 'dependencies'),
+                ...layoutDependencies,
             ]),
         };
     }

@@ -46,6 +46,14 @@ export interface RenderGridBoxCommonOptions extends RenderCommonOptions {
     onRenderLineBox?(item: GridBoxConnectionItem, parentInfo: ParentInfo): Promise<string>;
     lineRenderMode?: 'line' | 'control';
     cornerPosition?: number;
+    // Moves the end of a 'parent' connection away from the slot centres: `child` at the item that
+    // declares the connection, `parent` at its target. Line render mode only.
+    connectionOffsets?: GridBoxConnectionOffsets;
+}
+
+export interface GridBoxConnectionOffsets {
+    parent: NumberPosition;
+    child: NumberPosition;
 }
 
 const offsetMap: Record<Format['_name'], { x: number, y: number }> = {
@@ -117,7 +125,7 @@ export async function renderGridBoxCommon(
     }));
 
     const renderedConnections = options.lineRenderMode !== 'control' ?
-        renderLineConnections(options.items, format, slotSize, size, options.styleTable, cornerPosition) :
+        renderLineConnections(options.items, format, slotSize, size, options.styleTable, cornerPosition, options.connectionOffsets) :
         await renderControlConnections(options.items, format, slotSize, size, options.onRenderLineBox, options.styleTable, childrenParentInfo);
 
     return `<div
@@ -141,7 +149,7 @@ export async function renderGridBoxCommon(
     </div>`;
 }
 
-export function renderLineConnections(items: Record<string, GridBoxItem>, format: Format['_name'], slotSize: NumberSize, size: NumberSize, styleTable: StyleTable, cornerPosition: number): string {
+export function renderLineConnections(items: Record<string, GridBoxItem>, format: Format['_name'], slotSize: NumberSize, size: NumberSize, styleTable: StyleTable, cornerPosition: number, connectionOffsets?: GridBoxConnectionOffsets): string {
     return Object.values(items).map(item =>
         item.connections.map(conn => {
             const target = items[conn.target];
@@ -151,6 +159,12 @@ export function renderLineConnections(items: Record<string, GridBoxItem>, format
 
             const itemPosition = getCenterPosition(item.gridX, item.gridY, format, slotSize, size);
             const targetPosition = getCenterPosition(target.gridX, target.gridY, format, slotSize, size);
+            if (connectionOffsets && conn.targetType === 'parent') {
+                itemPosition.x += connectionOffsets.child.x;
+                itemPosition.y += connectionOffsets.child.y;
+                targetPosition.x += connectionOffsets.parent.x;
+                targetPosition.y += connectionOffsets.parent.y;
+            }
             return renderGridBoxConnection(itemPosition, targetPosition, conn.style ?? '', conn.targetType, format, slotSize, conn.classNames, styleTable, cornerPosition, item.id, conn.target);
         }).join('')
     ).join('');

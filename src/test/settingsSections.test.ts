@@ -19,6 +19,7 @@ const settings = [
 	"mdHoi4Utilities.ideaPreview",
 	"mdHoi4Utilities.characterPreview",
 	"mdHoi4Utilities.useConditionInFocus",
+	"mdHoi4Utilities.focusTreeLayout",
 	"mdHoi4Utilities.inlayWindowGfxRoots",
 	"mdHoi4Utilities.technologyGfxRoots",
 	"mdHoi4Utilities.technologyCountryIcons",

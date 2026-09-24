@@ -8,6 +8,8 @@ import { getConfiguration } from "./vsccommon";
 // flags (sharedFocusIndex/gfxIndex/localisationIndex/ideaSwapIndex) still need a reload to (re)build their index;
 // refreshing here keeps the flag consistent in the meantime.
 export let useConditionInFocus = getConfiguration().useConditionInFocus;
+// Read by the focus tree loader; `?? 'standard'` covers a configuration without the key (the tests' stub).
+export let focusTreeLayout = getConfiguration().focusTreeLayout ?? 'standard';
 export let eventTreePreview = getConfiguration().eventTreePreview;
 export let ideaPreview = getConfiguration().ideaPreview;
 export let decisionPreview = getConfiguration().decisionPreview;
@@ -28,6 +30,7 @@ export let previewWheel = getConfiguration().previewWheel;
 export function refreshFeatureFlags(): void {
     const config = getConfiguration();
     useConditionInFocus = config.useConditionInFocus;
+    focusTreeLayout = config.focusTreeLayout ?? 'standard';
     eventTreePreview = config.eventTreePreview;
     ideaPreview = config.ideaPreview;
     decisionPreview = config.decisionPreview;

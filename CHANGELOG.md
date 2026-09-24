@@ -36,6 +36,7 @@ Unreleased
 - "Can't preview this file" now names the folders each preview reads, such as `common/national_focus/*.txt`, instead of listing internal names. Issue #203.
 - The extension is easier to find on the Marketplace: it is listed under Visualization, searchable for "hoi4", and no longer describes itself as being for "Heart of Iron IV". Issue #203.
 - The extension is smaller to download and the previews are quicker to draw. The world map stops re-measuring its tooltip and rebuilding its supply overlays on every frame you move the mouse, exporting the map no longer copies the image three times on its way to disk, searching a focus tree only touches the nodes whose highlight changed, and the event and decision graphs lay their arrow labels out in one pass. Issue #200.
+- [ Focus Tree Previewer ] A new "Focus tree: layout" setting can take the focus tree's layout from the mod's `interface/nationalfocusview.gui` (falling back to parent mods and the game): focus spacing, the grid offset, where the icon, title bar, name and overlay sit in a focus, the ends of prerequisite lines, and the mutually exclusive link. The default "standard" layout is unchanged. Issue #276.
 
 v1.1.38
 
