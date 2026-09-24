@@ -30,6 +30,7 @@ v1.1.39
 - Show the texture in the DDS/TGA viewer instead of a broken image icon.
 - [ Testing ] Give the previewmanager context-keys fake the required displayName.
 - [ Testing ] Isolate webview test listeners and fail on unexpected runtime errors. Issue #351.
+- [ CI ] No changelog bullet: CI-only, nothing changes for users.
 
   Functionality:
 
