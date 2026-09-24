@@ -526,6 +526,61 @@ describe("webview/ideapreview rendering", () => {
 		);
 	});
 
+	it("draws a chain that crosses categories once, in its row only", () => {
+		const crossPayload: IdeaPreviewPayload = {
+			...integrationPayload,
+			groups: [
+				{ category: "country", isLaw: false, isDesigner: false, ideaIds: ["a_idea", "c_idea"] },
+				{ category: "economy", isLaw: false, isDesigner: false, ideaIds: ["b_idea", "d_idea"] },
+				{ category: "trade", isLaw: false, isDesigner: false, ideaIds: ["e_idea"] },
+			],
+			cards: [
+				card("a_idea"),
+				card("b_idea", { category: "economy" }),
+				card("c_idea"),
+				card("d_idea", { category: "economy" }),
+				card("e_idea", { category: "trade" }),
+			],
+			chains: [
+				{ ideaIds: ["a_idea", "b_idea"], sources: [undefined] },
+				{ ideaIds: ["c_idea", "e_idea"], sources: [undefined] },
+			],
+		};
+		window.dispatchEvent(
+			new (window as any).MessageEvent("message", {
+				data: { type: "updateBody", data: { ideaPreview: crossPayload } },
+			}),
+		);
+
+		const ids = Array.from(content().querySelectorAll(".ev-id")).map((e) => e.textContent);
+		assert.strictEqual(ids.filter((id) => id === "b_idea").length, 1);
+		assert.strictEqual(ids.filter((id) => id === "e_idea").length, 1);
+
+		const counts = new Map(
+			Array.from(content().querySelectorAll(".idea-group")).map((g) => [
+				g.querySelector(".idea-group-name")?.textContent,
+				g.querySelector(".idea-group-count")?.textContent,
+			]),
+		);
+		assert.strictEqual(counts.get("country"), "4 idea(s)");
+		assert.strictEqual(counts.get("economy"), "1 idea(s)");
+		// Its only idea is drawn in another category's chain row, so there is nothing left to head.
+		assert.strictEqual(counts.has("trade"), false);
+
+		const box = document.getElementById("idea-searchbox") as HTMLInputElement;
+		box.value = "b_idea";
+		box.dispatchEvent(new (window as any).Event("input"));
+		assert.strictEqual(document.getElementById("idea-search-count")?.textContent, "-/1");
+		box.value = "";
+		box.dispatchEvent(new (window as any).Event("input"));
+
+		window.dispatchEvent(
+			new (window as any).MessageEvent("message", {
+				data: { type: "updateBody", data: { ideaPreview: integrationPayload } },
+			}),
+		);
+	});
+
 	it("hides a control this file cannot use", () => {
 		const gatedPayload: IdeaPreviewPayload = {
 			...integrationPayload,
