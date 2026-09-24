@@ -5,6 +5,7 @@ import {
 	WorldMapWarningSource,
 	Region,
 	StateCategory,
+	Resource,
 } from "../definitions";
 import {
 	Enum,
@@ -20,7 +21,7 @@ import {
 	FileLoader,
 	mergeInLoadResult,
 	sortItems,
-	mergeRegion,
+	mergeRegionWithWarnings,
 	convertColor,
 	LoadResultOD,
 } from "./common";
@@ -29,7 +30,7 @@ import { arrayToMap, UserError } from "../../../util/common";
 import { DefaultMapLoader } from "./provincemap";
 import { localize } from "../../../util/i18n";
 import { LoaderSession } from "../../../util/loader/loader";
-import { flatMap } from "lodash";
+import flatMap from "lodash/flatMap";
 import { ResourceDefinitionLoader } from "./resource";
 
 interface StateFile {
@@ -105,7 +106,7 @@ const stateCategoryFileSchema: SchemaDef<StateCategoryFile> = {
 	},
 };
 
-type StateNoBoundingBox = Omit<State, keyof Region>;
+export type StateNoBoundingBox =Omit<State, keyof Region>;
 
 type StateLoaderResult = { states: State[]; badStatesCount: number };
 export class StatesLoader extends FolderLoader<
@@ -173,7 +174,7 @@ export class StatesLoader extends FolderLoader<
 		for (let i = badStateId + 1; i < sortedStates.length; i++) {
 			const sortedState = sortedStates[i];
 			if (sortedState) {
-				const state = calculateBoundingBox(
+				const state = calculateStateBoundingBox(
 					sortedState,
 					provinces,
 					width,
@@ -181,34 +182,12 @@ export class StatesLoader extends FolderLoader<
 					warnings,
 				);
 				filledStates[i] = state;
-
-				if (!(state.category in stateCategories.result)) {
-					warnings.push({
-						source: [{ type: "state", id: i }],
-						relatedFiles: [state.file],
-						text: localize(
-							"worldmap.warnings.statecategorynotexist",
-							"State category of state {0} is not defined: {1}.",
-							i,
-							state.category,
-						),
-					});
-				}
-
-				for (const key of Object.keys(state.resources)) {
-					if (state.resources[key] !== undefined && !(key in resources)) {
-						warnings.push({
-							source: [{ type: "state", id: i }],
-							relatedFiles: [state.file],
-							text: localize(
-								"worldmap.warnings.resourcenotexist",
-								"Resource {0} used in state {1} is not defined.",
-								key,
-								i,
-							),
-						});
-					}
-				}
+				validateStateReferences(
+					state,
+					stateCategories.result,
+					resources,
+					warnings,
+				);
 			}
 		}
 
@@ -443,7 +422,7 @@ async function loadState(
 	}
 }
 
-function sortStates(
+export function sortStates(
 	states: StateNoBoundingBox[],
 	warnings: WorldMapWarning[],
 ): { sortedStates: StateNoBoundingBox[]; badStateId: number } {
@@ -487,39 +466,33 @@ function sortStates(
 	};
 }
 
-function calculateBoundingBox(
+export function calculateStateBoundingBox(
 	noBoundingBoxState: StateNoBoundingBox,
 	provinces: (Province | undefined | null)[],
 	width: number,
 	height: number,
 	warnings: WorldMapWarning[],
 ): State {
-	const state = mergeRegion(
+	const state = mergeRegionWithWarnings(
 		noBoundingBoxState,
 		"provinces",
 		provinces,
 		width,
+		"state",
+		warnings,
 		(provinceId) =>
-			warnings.push({
-				source: [{ type: "state", id: noBoundingBoxState.id }],
-				relatedFiles: [noBoundingBoxState.file],
-				text: localize(
-					"worldmap.warnings.stateprovincenotexist",
-					"Province {0} used in state {1} doesn't exist.",
-					provinceId,
-					noBoundingBoxState.id,
-				),
-			}),
+			localize(
+				"worldmap.warnings.stateprovincenotexist",
+				"Province {0} used in state {1} doesn't exist.",
+				provinceId,
+				noBoundingBoxState.id,
+			),
 		() =>
-			warnings.push({
-				source: [{ type: "state", id: noBoundingBoxState.id }],
-				relatedFiles: [noBoundingBoxState.file],
-				text: localize(
-					"worldmap.warnings.statenovalidprovinces",
-					"State {0} in doesn't have valid provinces.",
-					noBoundingBoxState.id,
-				),
-			}),
+			localize(
+				"worldmap.warnings.statenovalidprovinces",
+				"State {0} doesn't have valid provinces.",
+				noBoundingBoxState.id,
+			),
 	);
 
 	if (state.boundingBox.w > width / 2 || state.boundingBox.h > height / 2) {
@@ -539,7 +512,42 @@ function calculateBoundingBox(
 	return state;
 }
 
-function validateProvinceInState(
+export function validateStateReferences(
+	state: State,
+	stateCategories: Record<string, StateCategory>,
+	resources: Record<string, Resource>,
+	warnings: WorldMapWarning[],
+): void {
+	if (!(state.category in stateCategories)) {
+		warnings.push({
+			source: [{ type: "state", id: state.id }],
+			relatedFiles: [state.file],
+			text: localize(
+				"worldmap.warnings.statecategorynotexist",
+				"State category of state {0} is not defined: {1}.",
+				state.id,
+				state.category,
+			),
+		});
+	}
+
+	for (const key of Object.keys(state.resources)) {
+		if (state.resources[key] !== undefined && !(key in resources)) {
+			warnings.push({
+				source: [{ type: "state", id: state.id }],
+				relatedFiles: [state.file],
+				text: localize(
+					"worldmap.warnings.resourcenotexist",
+					"Resource {0} used in state {1} is not defined.",
+					key,
+					state.id,
+				),
+			});
+		}
+	}
+}
+
+export function validateProvinceInState(
 	provinces: (Province | undefined | null)[],
 	states: (State | undefined | null)[],
 	badStatesCount: number,

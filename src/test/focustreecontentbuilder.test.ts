@@ -443,8 +443,13 @@ describe("previewdef/focustree contentbuilder", () => {
 		const html = buildFocusTreeErrorHtml(webview, uri, new Error("test error"));
 		assert.ok(html.includes("Error"));
 		assert.ok(html.includes("test"));
-		assert.ok(html.includes('id="ft-reload"'));
+		// The button now comes from the shared error page, which every preview reaches.
+		assert.ok(html.includes("<button"));
 		assert.ok(html.includes("Reload"));
+		assert.ok(html.includes("command: 'reload'"));
+		// Its own heading survives the delegation. htmlEscape turns the spaces into &nbsp;,
+		// as it always did here, so this matches a word rather than the phrase.
+		assert.ok(html.includes("memory"));
 	});
 
 	it("renders the standard layout exactly as before when the loader gives no layout", async () => {

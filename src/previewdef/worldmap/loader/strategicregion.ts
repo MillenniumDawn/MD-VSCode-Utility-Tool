@@ -15,7 +15,7 @@ import {
 	LoadResult,
 	mergeInLoadResult,
 	sortItems,
-	mergeRegion,
+	mergeRegionWithWarnings,
 	LoadResultOD,
 	shouldReloadDependencies,
 } from "./common";
@@ -26,7 +26,7 @@ import { StatesLoader } from "./states";
 import { arrayToMap, UserError } from "../../../util/common";
 import { Token } from "../../../hoiformat/hoiparser";
 import { LoaderSession } from "../../../util/loader/loader";
-import { flatMap } from "lodash";
+import flatMap from "lodash/flatMap";
 
 interface StrategicRegionFile {
 	strategic_region: StrategicRegionDefinition[];
@@ -125,11 +125,26 @@ export class StrategicRegionsLoader extends FolderLoader<
 		) {
 			const sortedRegion = sortedStrategicRegions[i];
 			if (sortedRegion) {
-				filledStrategicRegions[i] = calculateBoundingBox(
+				filledStrategicRegions[i] = mergeRegionWithWarnings(
 					sortedRegion,
+					"provinces",
 					provinces,
 					width,
+					"strategicregion",
 					warnings,
+					(provinceId) =>
+						localize(
+							"worldmap.warnings.provinceinstrategicregionnotexist",
+							"Province {0} used in strategic region {1} doesn't exist.",
+							provinceId,
+							sortedRegion.id,
+						),
+					() =>
+						localize(
+							"worldmap.warnings.strategicregionnovalidprovinces",
+							"Strategic region {0} doesn't have valid provinces.",
+							sortedRegion.id,
+						),
 				);
 			}
 		}
@@ -322,41 +337,6 @@ function sortStrategicRegions(
 		sortedStrategicRegions: sorted,
 		badStrategicRegionId: badId,
 	};
-}
-
-function calculateBoundingBox(
-	strategicRegionNoRegion: StrategicRegionNoRegion,
-	provinces: (Province | undefined | null)[],
-	width: number,
-	warnings: WorldMapWarning[],
-): StrategicRegion {
-	return mergeRegion(
-		strategicRegionNoRegion,
-		"provinces",
-		provinces,
-		width,
-		(provinceId) =>
-			warnings.push({
-				source: [{ type: "strategicregion", id: strategicRegionNoRegion.id }],
-				relatedFiles: [strategicRegionNoRegion.file],
-				text: localize(
-					"worldmap.warnings.provinceinstrategicregionnotexist",
-					"Province {0} used in strategic region {1} doesn't exist.",
-					provinceId,
-					strategicRegionNoRegion.id,
-				),
-			}),
-		() =>
-			warnings.push({
-				source: [{ type: "strategicregion", id: strategicRegionNoRegion.id }],
-				relatedFiles: [strategicRegionNoRegion.file],
-				text: localize(
-					"worldmap.warnings.strategicregionnovalidprovinces",
-					"Strategic region {0} doesn't have valid provinces.",
-					strategicRegionNoRegion.id,
-				),
-			}),
-	);
 }
 
 function validateProvincesInStrategicRegions(

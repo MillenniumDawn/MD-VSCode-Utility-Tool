@@ -9,7 +9,8 @@ import {
 	initCommon,
 } from "./util/common";
 import { DivDropdown } from "./util/dropdown";
-import { difference, minBy } from "lodash";
+import difference from "lodash/difference";
+import minBy from "lodash/minBy";
 import {
 	renderGridBoxCommon,
 	GridBoxItem,
@@ -60,9 +61,15 @@ function showBranch(visibility: boolean, optionClass: string) {
 	}
 }
 
-function search(searchContent: string, navigate: boolean = true) {
+// The highlight used to be two inline style writes on every focus in the tree, on every keystroke.
+// Remembering which nodes carry it means a keystroke only touches the ones that actually changed.
+const searchHitClass = "focus-search-hit";
+let highlightedFocuses = new Set<HTMLDivElement>();
+
+export function search(searchContent: string, navigate: boolean = true) {
 	const focuses = document.getElementsByClassName("focus");
 	const searchedFocus: HTMLDivElement[] = [];
+	const hits = new Set<HTMLDivElement>();
 	let navigated = false;
 	for (let i = 0; i < focuses.length; i++) {
 		const focus = focuses[i] as HTMLDivElement;
@@ -73,18 +80,24 @@ function search(searchContent: string, navigate: boolean = true) {
 				.replace(/^focus_/, "")
 				.includes(searchContent)
 		) {
-			focus.style.outline = "1px solid #E33";
-			focus.style.background = "rgba(255, 0, 0, 0.5)";
+			hits.add(focus);
+			// delete() reports whether it was already highlighted, so what is left in
+			// highlightedFocuses afterwards is exactly the set that has to be cleared.
+			if (!highlightedFocuses.delete(focus)) {
+				focus.classList.add(searchHitClass);
+			}
 			if (navigate && !navigated) {
 				focus.scrollIntoView({ block: "center", inline: "center" });
 				navigated = true;
 			}
 			searchedFocus.push(focus);
-		} else {
-			focus.style.outlineWidth = "0";
-			focus.style.background = "transparent";
 		}
 	}
+
+	for (const stale of highlightedFocuses) {
+		stale.classList.remove(searchHitClass);
+	}
+	highlightedFocuses = hits;
 
 	return searchedFocus;
 }

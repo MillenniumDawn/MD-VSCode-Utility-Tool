@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import * as path from "path";
 import * as vscode from "vscode";
 import { LoaderSession } from "../util/loader/loader";
 import { UserError } from "../util/common";
@@ -303,13 +304,6 @@ describe("previewdef/worldmap/loader strategicregion", () => {
 		}
 	}
 
-	it("module loads and exports StrategicRegionsLoader", async () => {
-		const mod: any = await import(
-			"../previewdef/worldmap/loader/strategicregion"
-		);
-		assert.ok(mod.StrategicRegionsLoader);
-	});
-
 	it("lists a file it could not load as a warning and merges the rest", async () => {
 		const fileloader: any = await import("../util/fileloader");
 		const origToken = fileloader.hoiFileExpiryToken;
@@ -399,26 +393,49 @@ describe("previewdef/worldmap/loader strategicregion", () => {
 						},
 					],
 				},
-				"c.txt": new Error("boom"),
 			},
 			async (loader) => {
 				const result = await loader.load(new LoaderSession(true));
+				const regions = result.result.strategicRegions;
+				const b = path.join("map/strategicregions", "b.txt");
 
-				assert.strictEqual(result.result.strategicRegions.length, 6);
-				assert.ok(result.result.badStrategicRegionsCount >= 1);
+				// A duplicate id keeps the later definition; the earlier one and the region
+				// without an id move to negative slots.
+				assert.strictEqual(result.result.badStrategicRegionsCount, 2);
+				assert.strictEqual(regions.length, 6);
+				assert.deepStrictEqual(
+					[-2, -1, 0, 1, 2, 3, 4, 5].map((i) => regions[i]?.name),
+					["NoIdRegion", "Region2", undefined, "Region1", "DupRegion2", undefined, undefined, ""],
+				);
+				assert.deepStrictEqual(
+					[-2, -1, 1, 2, 5].map((i) => regions[i].id),
+					[-2, -1, 1, 2, 5],
+				);
+				assert.deepStrictEqual(regions[1].provinces, [1, 2]);
+				assert.strictEqual(regions[1].navalTerrain, "ocean");
+				assert.deepStrictEqual(regions[1].boundingBox, { x: 0, y: 0, w: 2, h: 1 });
+				assert.deepStrictEqual(regions[-1].provinces, [2, 3]);
+				assert.deepStrictEqual(regions[2].provinces, [4]);
+				assert.strictEqual(regions[2].navalTerrain, null);
+				assert.deepStrictEqual(result.dependencies, ["map/strategicregions/*"]);
 
-				const texts = result.warnings.map((w: any) => w.text);
-				const has = (s: string) => texts.some((t: string) => t.includes(s));
-				assert.ok(has("doesn't have id field"), texts.join("\n"));
-				assert.ok(has("doesn't have name field"), texts.join("\n"));
-				assert.ok(has("doesn't have provinces"), texts.join("\n"));
-				assert.ok(has("more than one strategic regions using ID"), texts.join("\n"));
-				assert.ok(has("Naval terrain") && has("is not defined"), texts.join("\n"));
-				assert.ok(has("used in strategic region"), texts.join("\n"));
-				assert.ok(has("doesn't have valid provinces"), texts.join("\n"));
-				assert.ok(has("exists in multiple strategic regions"), texts.join("\n"));
-				assert.ok(has("is not in any strategic region"), texts.join("\n"));
-				assert.ok(has("not belong to same strategic region"), texts.join("\n"));
+				assert.deepStrictEqual(
+					result.warnings.map((w: any) => w.text),
+					[
+						`A strategic region in "${b}" doesn't have id field.`,
+						`Strategic region -1 in "${b}" doesn't have provinces.`,
+						"Strategic region 5 doesn't have name field.",
+						'Naval terrain "land_terrain" is not defined.',
+						'Naval terrain "unknownterr" is not defined.',
+						"There're more than one strategic regions using ID 2.",
+						"Strategic region with id 3-4 doesn't exist.",
+						"Province 99 used in strategic region 5 doesn't exist.",
+						"Strategic region 5 doesn't have valid provinces.",
+						"Province 2 exists in multiple strategic regions: -1, 1.",
+						"Province 5 is not in any strategic region.",
+						"In state 1, province 3 are not belong to same strategic region as other provinces.",
+					],
+				);
 			},
 		);
 	});
@@ -438,7 +455,10 @@ describe("previewdef/worldmap/loader strategicregion", () => {
 				},
 			},
 			async (loader) => {
-				await assert.rejects(loader.load(new LoaderSession(true)), Error);
+				await assert.rejects(
+					loader.load(new LoaderSession(true)),
+					/Max strategic region ID is too large: 99999\./,
+				);
 			},
 		);
 	});
@@ -532,11 +552,6 @@ describe("previewdef/worldmap/loader supplyarea", () => {
 		}
 	}
 
-	it("module loads and exports SupplyAreasLoader", async () => {
-		const mod: any = await import("../previewdef/worldmap/loader/supplyarea");
-		assert.ok(mod.SupplyAreasLoader);
-	});
-
 	it("merges files, sorts by id and flags gaps, duplicates and non-contiguous states", async () => {
 		await withSupplyAreasLoader(
 			{
@@ -563,26 +578,52 @@ describe("previewdef/worldmap/loader supplyarea", () => {
 						{ id: 7, name: "SA5", value: 0, states: { _values: ["999"] } },
 					],
 				},
-				"d.txt": new Error("boom"),
 			},
 			async (loader) => {
 				const result = await loader.load(new LoaderSession(true));
+				const areas = result.result.supplyAreas;
+				const a = path.join("map/supplyareas", "a.txt");
+				const b = path.join("map/supplyareas", "b.txt");
 
-				assert.ok(result.result.supplyAreas.length >= 5);
-				assert.ok(result.result.badSupplyAreasCount >= 1);
+				assert.strictEqual(result.result.badSupplyAreasCount, 2);
+				assert.strictEqual(areas.length, 8);
+				assert.deepStrictEqual(
+					[-2, -1, 0, 1, 2, 3, 4, 5, 6, 7].map((i) => areas[i]?.name),
+					["", "SA1", undefined, "SA1dup", "SA2", "SA3", undefined, undefined, undefined, "SA5"],
+				);
+				assert.deepStrictEqual(
+					[-2, -1, 1, 2, 3, 7].map((i) => areas[i].id),
+					[-2, -1, 1, 2, 3, 7],
+				);
+				assert.deepStrictEqual(
+					[-1, 2, 3].map((i) => [areas[i].value, areas[i].states]),
+					[
+						[5, [1, 2]],
+						[3, [3, 1]],
+						[1, [1, 4]],
+					],
+				);
+				assert.deepStrictEqual(areas[-1].boundingBox, { x: 1, y: 0, w: 2, h: 1 });
+				assert.deepStrictEqual(result.dependencies, ["map/supplyareas/*"]);
 
-				const texts = result.warnings.map((w: any) => w.text);
-				const has = (s: string) => texts.some((t: string) => t.includes(s));
-				assert.ok(has("doesn't have id field"), texts.join("\n"));
-				assert.ok(has("doesn't have name field"), texts.join("\n"));
-				assert.ok(has("doesn't have states"), texts.join("\n"));
-				assert.ok(has("more than one supply areas using ID"), texts.join("\n"));
-				assert.ok(has("Supply area with id"), texts.join("\n")); // id gap warning
-				assert.ok(has("used in supply area"), texts.join("\n"));
-				assert.ok(has("doesn't have valid states"), texts.join("\n"));
-				assert.ok(has("exists in multiple supply areas"), texts.join("\n"));
-				assert.ok(has("is not in any supply area"), texts.join("\n"));
-				assert.ok(has("are not contiguous"), texts.join("\n"));
+				assert.deepStrictEqual(
+					result.warnings.map((w: any) => w.text),
+					[
+						`Supply area 1 in "${a}" doesn't have states.`,
+						`A supply area in "${b}" doesn't have id field.`,
+						"Supply area -1 doesn't have name field.",
+						`Supply area -1 in "${b}" doesn't have states.`,
+						"There're more than one supply areas using ID 1.",
+						"Supply area with id 4-6 doesn't exist.",
+						"State 999 used in supply area 7 doesn't exist.",
+						"Supply area 7 doesn't have valid states.",
+						"State 1 exists in multiple supply areas: -1, 2.",
+						"States in supply area 2 are not contiguous: 1, 3.",
+						"State 1 exists in multiple supply areas: -1, 3.",
+						"States in supply area 3 are not contiguous: 4, 1.",
+						"State 5 is not in any supply area.",
+					],
+				);
 			},
 		);
 	});
@@ -597,35 +638,201 @@ describe("previewdef/worldmap/loader supplyarea", () => {
 				},
 			},
 			async (loader) => {
-				await assert.rejects(loader.load(new LoaderSession(true)), Error);
+				await assert.rejects(
+					loader.load(new LoaderSession(true)),
+					/Max supply area ID is too large: 99999\./,
+				);
 			},
 		);
 	});
 });
 
-describe("previewdef/worldmap/loader states additional", () => {
-	it("StateLoader handles malformed state via file mock", async () => {
-		await withMockedJson(
-			async () => ({ _map: {} }) as any,
-			async () => {
-				// Just verify module loads and loader can be instantiated with mocks
-				const mod: any = await import("../previewdef/worldmap/loader/states");
-				assert.ok(mod.StatesLoader);
-				assert.ok(mod);
+describe("previewdef/worldmap/loader states", () => {
+	const zone = (x: number, y: number) => ({ x, y, w: 1, h: 1 });
+	const province = (id: number, type: string) => ({
+		id,
+		color: id,
+		type,
+		boundingBox: zone(id, 0),
+		centerOfMass: { x: id, y: 0 },
+		mass: 1,
+	});
+	const provinces = [
+		undefined,
+		province(1, "land"),
+		province(2, "land"),
+		province(3, "sea"),
+		province(4, "land"),
+	];
+	const enumOf = (...values: string[]) => ({ _values: values });
+	const resourcesOf = (resources: Record<string, number>) => ({
+		_map: Object.fromEntries(
+			Object.entries(resources).map(([k, v]) => [k, { _key: k, _value: v }]),
+		),
+	});
+	const s1 = path.join("history/states", "s1.txt");
+	const s2 = path.join("history/states", "s2.txt");
+	const files: Record<string, unknown> = {
+		[path.join("common/state_category", "categories.txt")]: {
+			state_categories: {
+				_map: {
+					city: {
+						_key: "city",
+						_value: { color: { _value: enumOf("255", "0", "0") } },
+					},
+				},
 			},
+		},
+		[s1]: {
+			state: [
+				{
+					id: 1,
+					name: "STATE_1",
+					manpower: 1000,
+					state_category: "city",
+					history: {
+						owner: "GER",
+						victory_points: [enumOf("1", "10"), enumOf("4", "5")],
+						add_core_of: ["GER", "GER", "POL"],
+					},
+					provinces: enumOf("1", "2"),
+					resources: resourcesOf({ oil: 3, steel: 2 }),
+				},
+			],
+		},
+		[s2]: {
+			state: [
+				{
+					id: 3,
+					name: "",
+					state_category: "farm",
+					provinces: enumOf("2", "3"),
+					resources: resourcesOf({ uranium: 1 }),
+				},
+				{
+					id: 3,
+					name: "DUP",
+					state_category: "city",
+					provinces: enumOf("4", "99"),
+					resources: resourcesOf({}),
+				},
+				{
+					name: "Orphan",
+					provinces: enumOf(),
+					resources: resourcesOf({}),
+				},
+			],
+		},
+	};
+
+	async function loadStates() {
+		const fileloader: any = await import("../util/fileloader");
+		const origList = fileloader.listFilesFromModOrHOI4;
+		const origJson = fileloader.readFileFromModOrHOI4AsJson;
+		fileloader.listFilesFromModOrHOI4 = async (folder: string) =>
+			Object.keys(files)
+				.filter((file) => path.dirname(file) === path.normalize(folder))
+				.map((file) => path.basename(file));
+		fileloader.readFileFromModOrHOI4AsJson = async (file: string) => {
+			if (!(file in files)) {
+				throw new Error(`unexpected file: ${file}`);
+			}
+			return files[file];
+		};
+		try {
+			const { StatesLoader } = await import(
+				"../previewdef/worldmap/loader/states"
+			);
+			const defaultMapLoader = {
+				load: async () => ({
+					result: { width: 100, height: 100, provinces },
+					warnings: [],
+					dependencies: [],
+				}),
+			};
+			const resourcesLoader = {
+				load: async () => ({
+					result: [{ name: "oil" }, { name: "steel" }],
+					warnings: [],
+					dependencies: [],
+				}),
+			};
+			const loader = new StatesLoader(
+				defaultMapLoader as any,
+				resourcesLoader as any,
+			);
+			return await loader.load(new LoaderSession(true));
+		} finally {
+			fileloader.listFilesFromModOrHOI4 = origList;
+			fileloader.readFileFromModOrHOI4AsJson = origJson;
+		}
+	}
+
+	it("parses every field of a state", async () => {
+		const result = await loadStates();
+		const state = result.result.states[1] as any;
+
+		assert.strictEqual(state.id, 1);
+		assert.strictEqual(state.name, "STATE_1");
+		assert.strictEqual(state.manpower, 1000);
+		assert.strictEqual(state.category, "city");
+		assert.strictEqual(state.owner, "GER");
+		assert.deepStrictEqual(state.cores, ["GER", "POL"]);
+		assert.deepStrictEqual(state.provinces, [1, 2]);
+		assert.deepStrictEqual(state.victoryPoints, { 1: 10, 4: 5 });
+		assert.deepStrictEqual(state.resources, { oil: 3, steel: 2 });
+		assert.strictEqual(state.impassable, false);
+		assert.deepStrictEqual(state.impassableIgnoredLinks, []);
+		assert.strictEqual(state.file, s1);
+		assert.deepStrictEqual(state.boundingBox, { x: 1, y: 0, w: 2, h: 1 });
+		assert.deepStrictEqual(result.dependencies, [
+			"history/states/*",
+			"common/state_category/*",
+		]);
+	});
+
+	it("moves duplicate and missing ids to bad slots and warns on every mismatch", async () => {
+		const result = await loadStates();
+		const states = result.result.states as any[];
+
+		assert.strictEqual(result.result.badStatesCount, 2);
+		assert.strictEqual(states.length, 4);
+		assert.deepStrictEqual(
+			[-2, -1, 0, 1, 2, 3].map((i) => states[i]?.name),
+			["Orphan", "", undefined, "STATE_1", undefined, "DUP"],
+		);
+		assert.deepStrictEqual(
+			[-2, -1, 1, 3].map((i) => states[i].id),
+			[-2, -1, 1, 3],
+		);
+		assert.deepStrictEqual(states[3].provinces, [4, 99]);
+
+		assert.deepStrictEqual(
+			result.warnings.map((w: any) => w.text),
+			[
+				"Province 4 not included in this state. But victory points defined here.",
+				"The state doesn't have name field.",
+				`State -1 in "${s2}" doesn't have provinces.`,
+				`A state in ${s2} doesn't have id field.`,
+				"The state doesn't have category field.",
+				"There're more than one states using state id 3.",
+				"State with id 2 doesn't exist.",
+				"State category of state -2 is not defined: .",
+				"State category of state -1 is not defined: farm.",
+				"Resource uranium used in state -1 is not defined.",
+				"Province 99 used in state 3 doesn't exist.",
+				"Sea province 3 shouldn't belong to a state.",
+				"Province 2 exists in multiple states: -1, 1.",
+			],
 		);
 	});
 });
 
 describe("previewdef/worldmap/loader provincemap", () => {
-	it("DefaultMap loader handles missing default.map", async () => {
+	it("DefaultMap loader rejects when default.map can't be read", async () => {
 		const fileloader: any = await import("../util/fileloader");
 		const orig = fileloader.readFileFromModOrHOI4AsJson;
-		const orig2 = fileloader.readFileFromModOrHOI4;
 		fileloader.readFileFromModOrHOI4AsJson = async () => {
-			throw new UserError("missing");
-		};
-		fileloader.readFileFromModOrHOI4 = async () => {
 			throw new UserError("missing");
 		};
 		try {
@@ -633,15 +840,36 @@ describe("previewdef/worldmap/loader provincemap", () => {
 				"../previewdef/worldmap/loader/provincemap"
 			);
 			const loader = new DefaultMapLoader();
-			try {
-				await loader.load(new LoaderSession(false));
-				assert.ok(true);
-			} catch (e) {
-				assert.ok(e instanceof UserError || e instanceof Error);
-			}
+			await assert.rejects(
+				loader.load(new LoaderSession(false)),
+				(e: unknown) => e instanceof UserError && e.message === "missing",
+			);
 		} finally {
 			fileloader.readFileFromModOrHOI4AsJson = orig;
-			fileloader.readFileFromModOrHOI4 = orig2;
+		}
+	});
+
+	it("DefaultMap loader rejects a default.map without a continent field", async () => {
+		const fileloader: any = await import("../util/fileloader");
+		const orig = fileloader.readFileFromModOrHOI4AsJson;
+		fileloader.readFileFromModOrHOI4AsJson = async () => ({
+			definitions: "definition.csv",
+			provinces: "provinces.bmp",
+			adjacencies: "adjacencies.csv",
+		});
+		try {
+			const { DefaultMapLoader } = await import(
+				"../previewdef/worldmap/loader/provincemap"
+			);
+			const loader = new DefaultMapLoader();
+			await assert.rejects(
+				loader.load(new LoaderSession(false)),
+				(e: unknown) =>
+					e instanceof UserError &&
+					e.message === 'Field "continent" is not found in default.map.',
+			);
+		} finally {
+			fileloader.readFileFromModOrHOI4AsJson = orig;
 		}
 	});
 

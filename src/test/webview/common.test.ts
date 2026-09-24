@@ -1,12 +1,11 @@
-import { takePostedMessages } from './setup';
+import { recordedPosts, resetWebviewState } from './setup';
 import * as assert from 'assert';
-import { copyArray, tryRun, getState, setState, enableZoom, scrollToState, subscribeNavigators, subscribeRefreshButton, initCommon } from '../../../webviewsrc/util/common';
+import { copyArray, tryRun, getState, setState, setPreviewOption, enableZoom, scrollToState, subscribeNavigators, subscribeRefreshButton, initCommon } from '../../../webviewsrc/util/common';
 
 describe('webview/util/common', function () {
     beforeEach(function () {
         document.body.innerHTML = '';
-        setState({});
-        takePostedMessages();
+        resetWebviewState();
     });
 
     describe('copyArray', function () {
@@ -75,6 +74,17 @@ describe('webview/util/common', function () {
             assert.strictEqual(s.a, 1);
             assert.strictEqual(s.b, 2);
         });
+
+        it('starts each test from an empty state', function () {
+            assert.deepStrictEqual(getState(), {});
+        });
+
+        it('the vscode api replaces state rather than merging it', function () {
+            const api = (global as any).acquireVsCodeApi();
+            api.setState({ a: 1 });
+            api.setState({ b: 2 });
+            assert.deepStrictEqual(api.getState(), { b: 2 });
+        });
     });
 
     describe('scrollToState', function () {
@@ -113,7 +123,7 @@ describe('webview/util/common', function () {
             el.dispatchEvent(space);
 
             assert.strictEqual(space.defaultPrevented, true);
-            assert.deepStrictEqual(takePostedMessages(), [
+            assert.deepStrictEqual(recordedPosts(), [
                 { command: 'navigate', start: 5, end: 10, file: 'test.txt' },
                 { command: 'navigate', start: 5, end: 10, file: 'test.txt' },
             ]);
@@ -126,21 +136,54 @@ describe('webview/util/common', function () {
             subscribeNavigators();
             el.dispatchEvent(new Event('click'));
 
-            assert.deepStrictEqual(takePostedMessages(), [
+            assert.deepStrictEqual(recordedPosts(), [
                 { command: 'navigate', start: 5, end: 10, file: 'test.txt' },
+            ]);
+        });
+
+        // A node with no known position renders `start="undefined"`, which must reach the host as
+        // no range at all rather than as NaN.
+        it('sends no line range for a navigator without a position', function () {
+            const el = navigator();
+            el.setAttribute('start', 'undefined');
+            el.removeAttribute('end');
+
+            subscribeNavigators();
+            el.dispatchEvent(new Event('click'));
+
+            assert.deepStrictEqual(recordedPosts(), [
+                { command: 'navigate', start: undefined, end: undefined, file: 'test.txt' },
             ]);
         });
     });
 
     describe('subscribeRefreshButton', function () {
-        it('attaches click handler to #refresh', function () {
+        it('asks the host for a reload and disables the button until it arrives', function () {
             const btn = document.createElement('button');
             btn.id = 'refresh';
             document.body.appendChild(btn);
 
             subscribeRefreshButton();
-            // Does not throw when clicked
             btn.dispatchEvent(new Event('click'));
+
+            assert.deepStrictEqual(recordedPosts(), [{ command: 'reload' }]);
+            assert.strictEqual(btn.disabled, true);
+        });
+
+        it('posts nothing on a page without a refresh button', function () {
+            subscribeRefreshButton();
+
+            assert.deepStrictEqual(recordedPosts(), []);
+        });
+    });
+
+    describe('setPreviewOption', function () {
+        it('hands the toggle to the host, which keeps it across panels', function () {
+            setPreviewOption('showIds', true);
+
+            assert.deepStrictEqual(recordedPosts(), [
+                { command: 'setPreviewOption', key: 'showIds', value: true },
+            ]);
         });
     });
 

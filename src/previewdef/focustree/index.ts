@@ -55,8 +55,6 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // generation it belongs to so a cache from a superseded load is never re-pushed.
     private lastPushedIconCss: string | undefined = undefined;
     private lastPushedIconGeneration = -1;
-    // Serializes updates so two loads can never run concurrently against the same loader.
-    private updateQueue: Promise<void> = Promise.resolve();
     // Generation token: each full (re)load bumps it so a slow background icon push from an earlier
     // load is dropped instead of overwriting a newer render.
     private iconRenderGeneration = 0;
@@ -68,6 +66,22 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // Resolves when the webview signals it has rendered the structure and can accept icon CSS.
     private webviewReady: Promise<void> = Promise.resolve();
     private signalWebviewReady: () => void = () => {};
+
+    // useConditionInFocus changes what the schema reads and what the tree draws; sharedFocusIndex
+    // changes whether shared focuses resolve; inlayWindowGfxRoots changes which .gfx files the inlay
+    // windows scan; gfxIndex changes which icons resolve; localisationIndex and previewLocalisation
+    // change every label. inlayWindowGfxRoots had no listener at all, so fixing a missing inlay
+    // sprite did nothing until the file was edited or the preview reopened.
+    protected get reloadOnConfigurationChange(): readonly string[] {
+        return [
+            'useConditionInFocus',
+            'sharedFocusIndex',
+            'inlayWindowGfxRoots',
+            'gfxIndex',
+            'localisationIndex',
+            'previewLocalisation',
+        ];
+    }
 
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
         super(uri, panel);
@@ -137,14 +151,6 @@ class FocusTreePreview extends UpdateablePreviewBase {
         return fingerprints;
     }
 
-    public onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
-        // Chain onto the previous update so renders are serialized. By the time a queued
-        // render runs it reads the live document text, coalescing intermediate edits.
-        const run = this.updateQueue.then(() => super.onDocumentChange(document, dependencyChanged));
-        this.updateQueue = run.catch(() => undefined);
-        return run;
-    }
-
     protected getLoadingShellHtml(): string {
         return loadingShellHtml(localize('focustree.loading.start', 'Preparing focus tree...'));
     }
@@ -171,7 +177,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         }
         if (sideChanged) {
             // The structure was patched in place (or was unchanged) but the icon set moved. Awaited,
-            // not backgrounded, so it stays on the update queue and never runs a second concurrent
+            // not backgrounded, so it stays on the render queue and never runs a second concurrent
             // load against the loader.
             await this.repushResolvedIconStyles();
         }
@@ -393,6 +399,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
 
 export const focusTreePreviewDef: PreviewProviderDef = {
     type: 'focustree',
+    displayName: () => localize('preview.type.focustree', 'Focus tree (common/national_focus/*.txt)'),
     canPreview: canPreviewFocusTree,
     previewConstructor: FocusTreePreview,
 };

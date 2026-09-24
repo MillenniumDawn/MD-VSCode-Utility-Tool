@@ -4,7 +4,8 @@ import { NumberSize, NumberPosition } from "../common";
 import { StyleTable, normalizeForStyle } from '../styletable';
 import { escapeAttr } from '../escape';
 import { GridBoxType, Format, Background } from "../../hoiformat/gui";
-import { map, flatMap } from "lodash";
+import map from "lodash/map";
+import flatMap from "lodash/flatMap";
 
 export type GridBoxConnectionType = 'child' | 'parent' | 'related';
 

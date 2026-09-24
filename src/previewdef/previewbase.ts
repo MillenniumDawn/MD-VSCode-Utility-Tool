@@ -2,12 +2,13 @@ import * as vscode from 'vscode';
 import { localize } from '../util/i18n';
 import { error, debug } from '../util/debug';
 import { getDocumentByUri } from '../util/vsccommon';
-import { isEqual } from 'lodash';
+import isEqual from 'lodash/isEqual';
 import { sendByMessage, isTelemetryMessage } from '../util/telemetry';
 import { isOffset, isOptionalOffset, isOptionalString, isRecord } from '../util/messageguards';
 import { loadingShellHtml } from '../util/html';
 import { openOrCopyHoiFile } from '../util/previewfileopener';
 import { setPreviewOption } from '../util/previewoptions';
+import { ConfigurationKey } from '../constants';
 
 export abstract class PreviewBase {
     private cachedDependencies: string[] | undefined = undefined;
@@ -23,6 +24,9 @@ export abstract class PreviewBase {
     // the preview (and its cached dependencies) through its emitters.
     protected readonly subscriptions: vscode.Disposable[] = [];
     protected panelInitialized = false;
+    // Renders run one at a time, so a slow render can never land after a newer one and overwrite
+    // it. A queued render reads the live document when it starts, so edits in between coalesce.
+    private renderQueue: Promise<void> = Promise.resolve();
 
     constructor(
         readonly uri: vscode.Uri,
@@ -31,7 +35,17 @@ export abstract class PreviewBase {
         this.registerEvents(panel);
     }
 
-    public async onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
+    public onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
+        return this.enqueueRender(() => this.renderDocument(document, dependencyChanged));
+    }
+
+    protected enqueueRender(task: () => Promise<void>): Promise<void> {
+        const run = this.renderQueue.then(task);
+        this.renderQueue = run.catch(() => undefined);
+        return run;
+    }
+
+    private async renderDocument(document: vscode.TextDocument, dependencyChanged: boolean): Promise<void> {
         if (this.isDisposed) {
             return;
         }
@@ -78,17 +92,38 @@ export abstract class PreviewBase {
         return this.disposed;
     }
 
-    public async initializePanelContent(document: vscode.TextDocument): Promise<void> {
-        if (this.isDisposed) {
-            return;
-        }
-        this.panelInitialized = false;
-        this.panel.webview.html = this.getLoadingShellHtml();
-        await this.onDocumentChange(document);
+    public initializePanelContent(document: vscode.TextDocument): Promise<void> {
+        return this.enqueueRender(async () => {
+            if (this.isDisposed) {
+                return;
+            }
+            this.panelInitialized = false;
+            this.panel.webview.html = this.getLoadingShellHtml();
+            await this.renderDocument(document, false);
+        });
     }
 
     protected getLoadingShellHtml(): string {
         return loadingShellHtml(localize('preview.loading', 'Loading preview...'));
+    }
+
+    /**
+     * Settings whose change makes this preview's rendered page stale, without the `mdHoi4Utilities.`
+     * prefix. A getter rather than a field: registerEvents runs from the constructor, before a
+     * subclass's field initializers have, and a field would still be undefined there.
+     */
+    protected get reloadOnConfigurationChange(): readonly string[] {
+        return [];
+    }
+
+    /**
+     * Whether a configuration-driven reload has to force the loader session. Almost always yes: a
+     * setting change does not move the document's hash, so without it the loader answers from its
+     * cache and the page repaints exactly what it had. A preview that reads its settings while
+     * rendering, rather than through a loader, can leave this false.
+     */
+    protected get configurationChangeForcesReload(): boolean {
+        return true;
     }
 
     protected registerEvents(panel: vscode.WebviewPanel): void {
@@ -137,6 +172,18 @@ export abstract class PreviewBase {
         this.subscriptions.push(panel.onDidDispose(() => {
             this.dispose();
         }));
+
+        // registerFeatureFlags subscribes to this same event during activation, long before any
+        // preview exists, and VS Code fires listeners in subscription order -- so the module flags
+        // a render reads are already refreshed by the time this runs.
+        const keys = this.reloadOnConfigurationChange;
+        if (keys.length > 0) {
+            this.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+                if (keys.some(key => e.affectsConfiguration(`${ConfigurationKey}.${key}`))) {
+                    this.reload(this.configurationChangeForcesReload);
+                }
+            }));
+        }
     }
     
     /**
@@ -175,8 +222,12 @@ export abstract class PreviewBase {
             return;
         }
 
-        this.panelInitialized = false;
-        void this.onDocumentChange(document, dependencyChanged);
+        // The reset runs inside the queue: set now, a render in flight would set it back on
+        // finishing and this full reload would go out as a partial update.
+        void this.enqueueRender(() => {
+            this.panelInitialized = false;
+            return this.renderDocument(document, dependencyChanged);
+        });
     }
 
     protected abstract getContent(document: vscode.TextDocument, dependencyChanged?: boolean): Promise<string>;

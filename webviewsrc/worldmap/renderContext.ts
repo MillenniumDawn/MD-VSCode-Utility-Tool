@@ -22,7 +22,6 @@ export interface RenderContext {
 	stateToSupplyArea: Record<number, number | undefined>;
 	renderedProvincesByOffset: Record<number, Province[]>;
 	renderedProvincesById: Record<number, Province>;
-	renderedProvinces?: Province[];
 	overwriteRenderPrecision?: number;
 	preciseEdge?: boolean;
 	extraState: any;

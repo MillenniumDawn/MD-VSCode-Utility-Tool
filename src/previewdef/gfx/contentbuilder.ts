@@ -3,7 +3,7 @@ import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { getSpriteTypes, SpriteType } from "../../hoiformat/spritetype";
 import { getImageByPath } from "../../util/image/imagecache";
 import { localize } from "../../util/i18n";
-import { escapeAttr, html, htmlEscape, previewedFileUriScript, errorPageContent } from "../../util/html";
+import { escapeAttr, html, htmlEscape, previewedFileUriScript, errorPage } from "../../util/html";
 import { StyleTable, normalizeForStyle } from "../../util/styletable";
 import { mapLimit } from "../../util/common";
 import { LoaderRenderResult } from "../updateablepreview";
@@ -53,9 +53,8 @@ export async function renderGfxFile(
 			},
 		};
 	} catch (e) {
-		const baseContent = errorPageContent(e);
 		return {
-			html: html(webview, baseContent, [previewedFileUriScript(uri)], []),
+			html: errorPage(webview, uri, e),
 		};
 	}
 }
