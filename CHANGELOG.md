@@ -2,9 +2,11 @@ Unreleased
 
   Bugfixes:
 
+- [ DDS ] Opening a .dds or .tga file shows the texture again instead of a broken image icon.
 - [ World Map Previewer ] Drawing province borders no longer slows down sharply as more provinces are on screen. Issue #230.
 - The Preview button now appears or disappears as soon as you add or remove previewable content in a file, instead of only after switching tabs. Issue #239.
 - Previews no longer fall back to older content when you keep typing while they are still updating; every preview now finishes one update before starting the next, as the focus tree already did. Issue #237.
+
 - [ World Map Previewer ] A failed map data request now shows its error instead of leaving the preview stuck on the loading message. Issue #241.
 - Index updates now wait for an overdue build to finish instead of changing the index while it is still being built. Issue #233.
 - Editing or deleting localisation files now removes old entries from every language they contain, even when the filename does not name the language. Issue #235.
