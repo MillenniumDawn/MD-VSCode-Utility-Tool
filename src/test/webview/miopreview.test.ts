@@ -1,4 +1,4 @@
-import { takePostedMessages } from './setup';
+import { takePostedMessages, loadEntrypoint, useEntrypoint } from './setup';
 import * as assert from 'assert';
 import { GridBoxItem } from '../../util/hoi4gui/gridboxcommon';
 import { MioTrait } from '../../previewdef/mio/schema';
@@ -20,9 +20,8 @@ function trait(id: string, x: number, y: number): MioTrait {
 // default of off, so the rendering suite proves the stored value is what wins.
 //
 // Installed twice: once before the require below, because miopreview.ts reads the toggles and the
-// organization list at module scope; and again when the page is rendered, because every webview
-// test file shares one window and a preview module loaded in the same run reassigns these globals
-// from any `updateBody` message dispatched at it -- focustree.ts takes window.gridBox that way.
+// organization list at module scope; and again when the page is rendered, so the suite draws from
+// its own payload whatever another file left on the shared window.
 const hostileCondition = `has_country_flag = "x'"><img src=x onerror=alert(1)>"`;
 
 function installPayload(): void {
@@ -78,7 +77,9 @@ const shellHtml = `
     </div></div>
     <div id="miopreviewcontent"><div id="miopreviewplaceholder"></div></div>`;
 
-const { findOverlaps } = require('../../../webviewsrc/miopreview') as typeof import('../../../webviewsrc/miopreview');
+const { module: { findOverlaps }, listeners } = loadEntrypoint(
+    () => require('../../../webviewsrc/miopreview') as typeof import('../../../webviewsrc/miopreview'),
+);
 
 function item(id: string, gridX: number, gridY: number): GridBoxItem {
     return { id, gridX, gridY, connections: [] };
@@ -125,6 +126,8 @@ describe('webview/miopreview findOverlaps', () => {
 // The toolbar as the reader meets it: wired into the page, not a detached element a builder handed
 // back. buildContent is async, so every step waits a macrotask for it to settle.
 describe('webview/miopreview rendering', () => {
+    useEntrypoint(listeners);
+
     function placeholder(): HTMLElement {
         const element = document.getElementById('miopreviewplaceholder');
         assert.ok(element, 'expected the shell placeholder element');
