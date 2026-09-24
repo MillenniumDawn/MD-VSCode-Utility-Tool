@@ -10,13 +10,23 @@ const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
 (global as any).document = dom.window.document;
 
 // Everything the webview posted back to the host, newest last. A test that cares what a click did
-// -- whether it asked the editor to navigate, say -- reads and clears this instead of stubbing the
-// api again after the module under test has already taken its handle.
+// -- whether it asked the editor to navigate, say -- reads this instead of stubbing the api again
+// after the module under test has already taken its handle. It is emptied before every test.
 export const postedMessages: any[] = [];
+
+// What the page has posted since the test started, without clearing it.
+export function recordedPosts(): any[] {
+    return postedMessages.slice();
+}
 
 export function takePostedMessages(): any[] {
     return postedMessages.splice(0, postedMessages.length);
 }
+
+// A root hook: this module is imported from spec files, so mocha's globals exist while it loads.
+beforeEach(function () {
+    postedMessages.length = 0;
+});
 
 // Mock acquireVsCodeApi for webview tests. The real `setState` replaces the persisted state
 // wholesale, so this one does too. The object lives for the whole mocha run, so a test that needs
