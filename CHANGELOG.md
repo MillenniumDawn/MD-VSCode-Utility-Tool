@@ -1,5 +1,7 @@
 Unreleased
 
+v1.1.40
+
   Bugfixes:
 
 - [ GUI ] Showing or hiding a container window no longer affects a sibling whose name starts with the same text, such as `battle` and `battleplan`. Issue #363.
