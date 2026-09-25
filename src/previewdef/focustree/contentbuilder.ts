@@ -84,7 +84,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             startX: layout.exclusive.startX,
             endX: layout.exclusive.endX,
             y: layout.exclusive.offsetY,
-        });
+        }, layout.spacing.y);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');

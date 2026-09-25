@@ -1,6 +1,7 @@
 /// <reference types="mocha" />
 import * as assert from "assert";
 import {
+	gridBoxContentOffset,
 	renderGridBoxCommon,
 	renderGridBoxConnection,
 	renderLineConnections,
@@ -259,6 +260,29 @@ describe("util/hoi4gui/gridboxcommon", () => {
 				1,
 			);
 			assert.strictEqual(html, "");
+		});
+	});
+
+	describe("gridBoxContentOffset", () => {
+		// The focus tree's grid: one 96x130 slot wide and of no height.
+		const slot = { width: 96, height: 130 };
+		const grid = { width: 96, height: 0 };
+		const items = [
+			{ gridX: 0, gridY: 0 },
+			{ gridX: 1, gridY: 2 },
+			{ gridX: -1, gridY: 1 },
+		];
+
+		it("reaches past the grid corner by the extent each format lays out towards", () => {
+			assert.deepStrictEqual(gridBoxContentOffset(items, "up", slot, grid), { x: -96, y: 0 });
+			assert.deepStrictEqual(gridBoxContentOffset(items, "down", slot, grid), { x: -96, y: -390 });
+			assert.deepStrictEqual(gridBoxContentOffset(items, "left", slot, grid), { x: 0, y: -195 });
+			assert.deepStrictEqual(gridBoxContentOffset(items, "right", slot, grid), { x: -192, y: -195 });
+		});
+
+		it("is zero when every item is inside the grid", () => {
+			assert.deepStrictEqual(gridBoxContentOffset([{ gridX: 2, gridY: 3 }], "up", slot, grid), { x: 0, y: 0 });
+			assert.deepStrictEqual(gridBoxContentOffset([], "down", slot, grid), { x: 0, y: 0 });
 		});
 	});
 
