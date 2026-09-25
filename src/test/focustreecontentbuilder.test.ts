@@ -505,6 +505,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(css.includes("margin-top: 85px;"));
 		const html = buildFocusTreeHtml(payload!, webview, uri);
 		assert.ok(!html.includes("focusLinkOffsets"));
+		assert.ok(!html.includes("focusTreeCenter"));
 		assert.ok(html.includes('window.continuousFocusSize = {"width":770,"height":380}'));
 	});
 
@@ -516,6 +517,7 @@ describe("previewdef/focustree contentbuilder", () => {
 			spacing: { x: 120, y: 150 },
 			item: { ...standardFocusTreeLayout.item, iconOffsetY: -8, titlebarOffsetX: 6, textOffsetX: 4 },
 			links: { parent: { x: 0, y: 10 }, child: { x: 0, y: -5 } },
+			center: { x: 130, y: 32 },
 			continuous: { width: 600, height: 300 },
 		};
 		const payload = await buildFocusTreePayload(
@@ -535,6 +537,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(css.includes("left: 4px;"));
 		const html = buildFocusTreeHtml(payload!, webview, uri);
 		assert.ok(html.includes('window.focusLinkOffsets = {"parent":{"x":0,"y":10},"child":{"x":0,"y":-5}}'));
+		assert.ok(html.includes('window.focusTreeCenter = {"x":130,"y":32}'));
 		assert.ok(html.includes('window.continuousFocusSize = {"width":600,"height":300}'));
 	});
 
