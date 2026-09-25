@@ -3,7 +3,7 @@ import { ParentInfo, calculateBBox, RenderCommonOptions, normalizeNumberLike } f
 import { htmlEscape } from "../html";
 import { InstantTextBoxType } from "../../hoiformat/gui";
 import { getLocalisedTextQuick } from "../localisationIndex";
-import { localisationIndex } from "../featureflags";
+import { getFlags } from "../featureflags";
 
 export interface RenderInstantTextBoxOptions extends RenderCommonOptions {
     // Show textbox.text verbatim instead of looking it up in the localisation index. Used by the
@@ -44,6 +44,6 @@ export async function renderInstantTextBox(textbox: HOIPartial<InstantTextBoxTyp
         `)}
         ${options.enableNavigator ? 'navigator navigator-highlight' : ''}
     ">
-        ${htmlEscape(localisationIndex && !options.rawText ? ((await getLocalisedTextQuick(textbox.text)) ?? ' ') : (textbox.text ?? ''))}
+        ${htmlEscape(getFlags().localisationIndex && !options.rawText ? ((await getLocalisedTextQuick(textbox.text)) ?? ' ') : (textbox.text ?? ''))}
     </div>`;
 }

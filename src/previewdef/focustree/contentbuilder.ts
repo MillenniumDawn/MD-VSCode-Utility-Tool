@@ -10,7 +10,7 @@ import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug, error } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
-import { useConditionInFocus, localisationIndex } from '../../util/featureflags';
+import { getFlags } from '../../util/featureflags';
 import flatMap from 'lodash/flatMap';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { getFocusTitlebarImage, getFocusOverlayImage, loadFocusTitlebarStyles } from "./titlebar";
@@ -80,7 +80,11 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         const exclusiveLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
             ? await loadExclusiveLinkImages(layout.exclusive.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
             : await loadExclusiveLinkImages();
-        registerExclusiveLinkStyles(styleTable, exclusiveLinkImages, layout.spacing.x, layout.exclusive.offsetY, layout.spacing.y);
+        registerExclusiveLinkStyles(styleTable, exclusiveLinkImages, layout.spacing.x, {
+            startX: layout.exclusive.startX,
+            endX: layout.exclusive.endX,
+            y: layout.exclusive.offsetY,
+        }, layout.spacing.y);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
@@ -137,7 +141,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             renderedFocus,
             renderedInlayWindows,
             gridBox: focusTreeGridBoxFor(layout),
-            useConditionInFocus,
+            useConditionInFocus: getFlags().useConditionInFocus,
             xGridSize: layout.spacing.x,
             layout,
             styleTable,
@@ -185,6 +189,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
     if (payload.layout.links) {
         jsCodes.push('window.focusLinkOffsets = ' + jsonForScript(payload.layout.links));
     }
+    jsCodes.push('window.continuousFocusSize = ' + jsonForScript(payload.layout.continuous));
     jsCodes.push(i18nTableAsScript());
 
     const baseContent = renderFocusTreeShell(payload.focusTrees, payload.styleTable, payload.toolbarFlags, payload.styleNonce);
@@ -412,7 +417,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 52px;`)}">
         <div class="toolbar">
-            ${useConditionInFocus ? conditions + inlayConditions : allowbranch}
+            ${getFlags().useConditionInFocus ? conditions + inlayConditions : allowbranch}
             ${focuses}
             ${searchbox}
             ${customTitlebars}
@@ -631,7 +636,7 @@ async function renderFocus(
     );
 
     let textContent = htmlEscape(focus.id);
-    if (localisationIndex){
+    if (getFlags().localisationIndex){
         let localizedText = await getLocalisedTextQuick(focus.id);
         if (localizedText === focus.id || !localizedText){
             if (focus.text){

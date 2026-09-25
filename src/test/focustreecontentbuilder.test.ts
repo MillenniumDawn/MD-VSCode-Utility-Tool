@@ -505,6 +505,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(css.includes("margin-top: 85px;"));
 		const html = buildFocusTreeHtml(payload!, webview, uri);
 		assert.ok(!html.includes("focusLinkOffsets"));
+		assert.ok(html.includes('window.continuousFocusSize = {"width":770,"height":380}'));
 	});
 
 	it("takes the grid, the focus layers and the link ends from a gui layout", async () => {
@@ -515,6 +516,7 @@ describe("previewdef/focustree contentbuilder", () => {
 			spacing: { x: 120, y: 150 },
 			item: { ...standardFocusTreeLayout.item, iconOffsetY: -8, titlebarOffsetX: 6, textOffsetX: 4 },
 			links: { parent: { x: 0, y: 10 }, child: { x: 0, y: -5 } },
+			continuous: { width: 600, height: 300 },
 		};
 		const payload = await buildFocusTreePayload(
 			loaderWithLayout([minimalFocusTree()], layout),
@@ -533,11 +535,12 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(css.includes("left: 4px;"));
 		const html = buildFocusTreeHtml(payload!, webview, uri);
 		assert.ok(html.includes('window.focusLinkOffsets = {"parent":{"x":0,"y":10},"child":{"x":0,"y":-5}}'));
+		assert.ok(html.includes('window.continuousFocusSize = {"width":600,"height":300}'));
 	});
 
 	it("registerExclusiveLinkStyles moves the link by the layout's offset", () => {
 		const plain = new StyleTable();
-		registerExclusiveLinkStyles(plain, undefined, 96, 5);
+		registerExclusiveLinkStyles(plain, undefined, 96, { y: 5 });
 		assert.ok(plain.toRawCss().includes("top: 5px"));
 
 		const image = (name: string) =>
@@ -547,9 +550,52 @@ describe("previewdef/focustree contentbuilder", () => {
 			textured,
 			{ line: image("line"), left: image("left"), mid: image("mid"), right: image("right") },
 			96,
-			5,
+			{ y: 5 },
 		);
 		assert.ok(textured.toRawCss().includes("top: -3px"));
+	});
+
+	it("registerExclusiveLinkStyles moves each end of the link by the layout's x offsets", () => {
+		const plain = new StyleTable();
+		registerExclusiveLinkStyles(plain, undefined, 96, { startX: 10, endX: -2 });
+		const plainCss = plain.toRawCss();
+		assert.ok(plainCss.includes("left: 10px;"));
+		assert.ok(plainCss.includes("right: 2px;"));
+
+		// 16px icons in a 96px slot: icons inset 40px, the line 48px, before the offsets.
+		const image = (name: string) =>
+			({ uri: `data:image/png;base64,${name}`, width: 16, height: 16 }) as any;
+		const textured = new StyleTable();
+		registerExclusiveLinkStyles(
+			textured,
+			{ line: image("line"), left: image("left"), mid: image("mid"), right: image("right") },
+			96,
+			{ startX: 10, endX: -2 },
+		);
+		const css = textured.toRawCss();
+		assert.ok(/::before \{[^}]*left: 58px;[^}]*right: 50px;/.test(css));
+		assert.ok(/::after \{[^}]*left: 50px;[^}]*right: 42px;/.test(css));
+	});
+
+	it("registerExclusiveLinkStyles without offsets keeps the link where it was", () => {
+		const plain = new StyleTable();
+		registerExclusiveLinkStyles(plain, undefined, 96);
+		const plainCss = plain.toRawCss();
+		assert.ok(plainCss.includes("left: 0;"));
+		assert.ok(plainCss.includes("right: 0;"));
+		assert.ok(plainCss.includes("top: 0;"));
+
+		const image = (name: string) =>
+			({ uri: `data:image/png;base64,${name}`, width: 16, height: 16 }) as any;
+		const textured = new StyleTable();
+		registerExclusiveLinkStyles(
+			textured,
+			{ line: image("line"), left: image("left"), mid: image("mid"), right: image("right") },
+			96,
+		);
+		const css = textured.toRawCss();
+		assert.ok(/::before \{[^}]*left: 48px;[^}]*right: 48px;/.test(css));
+		assert.ok(/::after \{[^}]*left: 40px;[^}]*right: 40px;/.test(css));
 	});
 
 	it("the standard layout's grid box is stable", () => {

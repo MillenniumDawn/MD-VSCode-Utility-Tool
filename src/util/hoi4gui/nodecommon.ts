@@ -45,7 +45,7 @@ export function renderSprite(
         `,
 				)}
         ${options.styleTable.style(
-					`sprite-img-${normalizeForStyle(sprite.id)}-${frame}`,
+					`sprite-img-${normalizeForStyle(sprite.id)}-${frame}-${normalizeForStyle(String(scale))}`,
 					() => `
             background-image: url(${sprite.frames[frame]?.uri});
             background-size: ${sprite.width * scale}px ${sprite.height * scale}px;

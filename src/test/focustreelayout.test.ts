@@ -27,6 +27,12 @@ const mdGui = `guiTypes = {
 					slotsize = { width = 1 height = 1 }
 					format = "UP"
 				}
+				containerWindowType = {
+					name = "continuous_focus_window"
+					position = { x=0 y=0 }
+					size = { width = 770 height = 380 }
+					margin = { top = 13 left = 0 bottom = 13 right = 13}
+				}
 			}
 		}
 		containerWindowType = {
@@ -81,6 +87,8 @@ const mdGui = `guiTypes = {
 	positionType = { name = "link_begin" position = { x = 80 y = 64 } }
 	positionType = { name = "link_end" position = { x = 80  y = 0 } }
 	positionType = { name = "exclusive_offset" position = { x = 172 y = 24 } }
+	positionType = { name = "exclusive_offset_left" position = { x = 12 y = 24 } }
+	positionType = { name = "exclusive_positioning" position = { x = 2 y = 0 } }
 }`;
 
 describe('previewdef/focustree/layout', () => {
@@ -94,6 +102,24 @@ describe('previewdef/focustree/layout', () => {
         const layout = buildFocusTreeLayout([parseGui('guiTypes = { containerWindowType = { name = "unrelated" } }')]);
         assert.deepStrictEqual({ ...layout, mode: 'standard' }, standardFocusTreeLayout);
         assert.deepStrictEqual({ ...buildFocusTreeLayout([]), mode: 'standard' }, standardFocusTreeLayout);
+    });
+
+    it('sizes the continuous focus box from continuous_focus_window', () => {
+        const gui = (size: string) => `guiTypes = { containerWindowType = {
+            name = "nationalfocusview"
+            containerWindowType = {
+                name = "tree"
+                containerWindowType = {
+                    name = "grid_window"
+                    containerWindowType = { name = "continuous_focus_window" ${size} }
+                }
+            }
+        } }`;
+        assert.deepStrictEqual(buildFocusTreeLayout([parseGui(gui('size = { width = 600 height = 300 }'))]).continuous, { width: 600, height: 300 });
+        assert.deepStrictEqual(buildFocusTreeLayout([parseGui(gui('size = { width = 500 }'))]).continuous, { width: 500, height: 380 });
+        assert.deepStrictEqual(buildFocusTreeLayout([parseGui(gui('size = { width = 100%% height = 200 }'))]).continuous, { width: 770, height: 200 });
+        assert.deepStrictEqual(buildFocusTreeLayout([parseGui(gui(''))]).continuous, standardFocusTreeLayout.continuous);
+        assert.deepStrictEqual(standardFocusTreeLayout.continuous, { width: 770, height: 380 });
     });
 
     it('takes the spacing and the grid from the file, resolving @constants', () => {
@@ -155,6 +181,19 @@ guiTypes = {
         const layout = buildFocusTreeLayout([parseGui(moved)]);
         assert.deepStrictEqual(layout.links, { parent: { x: 0, y: 10 }, child: { x: 0, y: -6 } });
         assert.strictEqual(layout.exclusive.offsetY, 6);
+        assert.strictEqual(layout.exclusive.startX, 0);
+        assert.strictEqual(layout.exclusive.endX, 0);
+    });
+
+    it('moves the exclusive link ends sideways from exclusive_offset, exclusive_offset_left and the item x', () => {
+        const moved = mdGui
+            .replace('name = "exclusive_offset" position = { x = 172 y = 24 }', 'name = "exclusive_offset" position = { x = 180 y = 24 }')
+            .replace('name = "exclusive_offset_left" position = { x = 12 y = 24 }', 'name = "exclusive_offset_left" position = { x = 8 y = 24 }')
+            .replace('position = { x=-5 y=28 }', 'position = { x=-3 y=28 }');
+        const exclusive = buildFocusTreeLayout([parseGui(moved)]).exclusive;
+        assert.strictEqual(exclusive.startX, 10);
+        assert.strictEqual(exclusive.endX, -2);
+        assert.strictEqual(exclusive.offsetY, 0);
     });
 
     it('takes the exclusive link sprites and 1 based frames from the file', () => {

@@ -12,6 +12,7 @@ import * as fileloader from '../util/fileloader';
 // telemetry state.
 class RecordingLoader extends Loader<{ id: number }> {
     public loadImplCalls = 0;
+    public shouldReloadCalls = 0;
     public shouldReloadReturn = false;
     private loadGate: { promise: Promise<void>; resolve(v: void): void } | undefined;
 
@@ -19,6 +20,7 @@ class RecordingLoader extends Loader<{ id: number }> {
     release() { this.loadGate!.resolve(); this.loadGate = undefined; }
 
     protected async shouldReloadImpl(_session: LoaderSession): Promise<boolean> {
+        this.shouldReloadCalls++;
         return this.shouldReloadReturn;
     }
 
@@ -113,6 +115,44 @@ describe('util/loader/loader', () => {
             assert.deepStrictEqual(r1.result, r2.result);
         });
 
+        it('checks shouldReloadImpl once per session when the answer is no, and marks the loader loaded', async () => {
+            const loader = new RecordingLoader();
+            await loader.load(new LoaderSession(false));
+
+            const session = new LoaderSession(false);
+            await loader.load(session);
+            assert.strictEqual(session.isLoaded(loader), true);
+            assert.strictEqual(await loader.shouldReload(session), false);
+            await loader.load(session);
+
+            assert.strictEqual(loader.shouldReloadCalls, 1);
+            assert.strictEqual(loader.loadImplCalls, 1);
+
+            // A new session asks again.
+            await loader.load(new LoaderSession(false));
+            assert.strictEqual(loader.shouldReloadCalls, 2);
+        });
+
+        it('does not mark a loader loaded for a caller that only saw the check in progress', async () => {
+            const gate = deferred<boolean>();
+            class GatedLoader extends RecordingLoader {
+                protected async shouldReloadImpl(): Promise<boolean> { return gate.promise; }
+            }
+            const loader = new GatedLoader();
+            await loader.load(new LoaderSession(false));
+
+            const session = new LoaderSession(false);
+            const first = loader.load(session);
+            // The second caller sees "checking" and keeps the cached value for now.
+            await loader.load(session);
+            assert.strictEqual(session.isLoaded(loader), false);
+
+            gate.resolve(true);
+            await first;
+            assert.strictEqual(session.isLoaded(loader), true);
+            assert.strictEqual(loader.loadImplCalls, 2);
+        });
+
         it('clears loadingPromise after a load even when loadImpl throws', async () => {
             class ThrowLoader extends Loader<{}> {
                 protected async loadImpl(): Promise<LoadResult<{}>> {
@@ -175,7 +215,7 @@ describe('util/loader/loader', () => {
             cancelled = true;
             assert.throws(() => child.throwIfCancelled(), (e: unknown) => e instanceof UserError);
             // And the marks are shared both ways, not copied.
-            child.clearShouldReload(loader);
+            child.setShouldReload(loader, false);
             assert.strictEqual(parent.shouldReload(loader), false);
         });
 
@@ -419,6 +459,53 @@ describe('util/loader/loader', () => {
 
             payload = 'aab' + 'b';
             await loader.load(new LoaderSession(false));
+            assert.strictEqual(loader.postLoadCalls, 3);
+        });
+
+        it('reloads an edit that arrived while an earlier load was still running (#369)', async () => {
+            // postLoad parks on a gate, so a second load can check the text and then join the
+            // first one's promise, which parses the older text.
+            let entered: () => void = () => undefined;
+            let release: () => void = () => undefined;
+            class GatedContentLoader extends ContentLoader<{ payload: string }> {
+                public postLoadCalls = 0;
+                public gated = false;
+                constructor(provider: () => Promise<string>) {
+                    super('a.txt', provider);
+                    this.disableTelemetry = true;
+                    this.readDependency = false;
+                }
+                protected async postLoad(content: string | undefined): Promise<LoadResultOD<{ payload: string }>> {
+                    this.postLoadCalls++;
+                    if (this.gated) {
+                        entered();
+                        await new Promise<void>((resolve) => { release = resolve; });
+                    }
+                    return { result: { payload: content ?? '' } };
+                }
+            }
+            let payload = 'v0';
+            const loader = new GatedContentLoader(async () => payload);
+            await loader.load(new LoaderSession(false));
+
+            loader.gated = true;
+            payload = 'v1';
+            const inPostLoad = new Promise<void>((resolve) => { entered = resolve; });
+            const first = loader.load(new LoaderSession(false));
+            await inPostLoad;
+
+            payload = 'v2';
+            const second = loader.load(new LoaderSession(false));
+            await new Promise((resolve) => setImmediate(resolve));
+            loader.gated = false;
+            release();
+
+            assert.strictEqual((await first).result.payload, 'v1');
+            assert.strictEqual((await second).result.payload, 'v1');
+            assert.strictEqual(loader.postLoadCalls, 2);
+
+            const next = await loader.load(new LoaderSession(false));
+            assert.strictEqual(next.result.payload, 'v2');
             assert.strictEqual(loader.postLoadCalls, 3);
         });
 

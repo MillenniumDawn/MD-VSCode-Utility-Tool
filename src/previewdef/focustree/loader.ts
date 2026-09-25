@@ -5,7 +5,7 @@ import { localize } from "../../util/i18n";
 import uniq from "lodash/uniq";
 import flatten from "lodash/flatten";
 import { getGfxContainerFiles } from "../../util/gfxindex";
-import { sharedFocusIndex, focusTreeLayout } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 import { findFileByFocusKey } from "../../util/sharedFocusIndex";
 import { focusTitlebarStylesFile, nationalFocusViewGfxFile, goalsOverlaysGfxFile } from "./titlebar";
 import { GuiFileLoader } from "../gui/loader";
@@ -29,8 +29,8 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
     // without this a flip would be answered from the load cached for the unchanged text.
     private loadedLayoutMode: FocusTreeLayoutMode | undefined;
 
-    public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
-        if (this.loadedLayoutMode !== undefined && this.loadedLayoutMode !== focusTreeLayout) {
+    public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+        if (this.loadedLayoutMode !== undefined && this.loadedLayoutMode !== getFlags().focusTreeLayout) {
             return true;
         }
         return super.shouldReloadImpl(session);
@@ -54,7 +54,7 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
         this.emitProgress(localize('focustree.loading.parsing', 'Parsing focus file'));
         const file = convertFocusFileNodeToJson(parseHoi4File(content, localize('infile', 'In file {0}:\n', this.file)), constants);
 
-        if (sharedFocusIndex) {
+        if (getFlags().sharedFocusIndex) {
             const depPaths = new Set(dependencies.map(d => d.path));
             for (const focusTree of file.focus_tree) {
                 for (const sharedFocus of extractOrListIds(focusTree.shared_focus)) {
@@ -131,10 +131,10 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
             ...inlayResolvedGfxFiles,
         ];
 
-        this.loadedLayoutMode = focusTreeLayout;
+        this.loadedLayoutMode = getFlags().focusTreeLayout;
         let layout: FocusTreeLayout | undefined = undefined;
         let layoutDependencies: string[] = [];
-        if (focusTreeLayout === 'gui') {
+        if (getFlags().focusTreeLayout === 'gui') {
             // Loaded through the dependency loaders, so an edit to the gui reloads this tree.
             const layoutGui = await this.loaderDependencies.loadMultiple([nationalFocusViewGuiFile], session, GuiFileLoader);
             layout = buildFocusTreeLayout(layoutGui.flatMap(r => r.result.guiFiles).map(g => g.data));
@@ -163,7 +163,7 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[FocusTreeLoader ${this.file}]`;
     }
 }

@@ -27,7 +27,7 @@ export class ProvinceBmpLoader extends FileLoader<ProvinceBmp> {
 		};
 	}
 
-	protected extraMeasurements(result: LoadResult<ProvinceBmp>) {
+	protected override extraMeasurements(result: LoadResult<ProvinceBmp>) {
 		return {
 			...super.extraMeasurements(result),
 			width: result.result.width,
@@ -36,7 +36,7 @@ export class ProvinceBmpLoader extends FileLoader<ProvinceBmp> {
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[ProvinceBmpLoader: ${this.file}]`;
 	}
 }

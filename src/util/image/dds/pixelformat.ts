@@ -971,11 +971,11 @@ function getDxgiFormatMap(): Partial<Record<DxgiFormat, PixelFormat>> {
 			PixelValueType.typeless,
 		),
 		[DxgiFormat.DXGI_FORMAT_BC7_UNORM]: compressedPixelFormat(
-			CompressFormat.bc6h,
+			CompressFormat.bc7,
 			PixelValueType.unorm,
 		),
 		[DxgiFormat.DXGI_FORMAT_BC7_UNORM_SRGB]: compressedPixelFormat(
-			CompressFormat.bc6h,
+			CompressFormat.bc7,
 			PixelValueType.unorm_srgb,
 		),
 		[DxgiFormat.DXGI_FORMAT_AYUV]: rawPixelFormat(

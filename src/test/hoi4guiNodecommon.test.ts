@@ -84,6 +84,46 @@ describe("util/hoi4gui/nodecommon", () => {
 			assert.ok(table.toRawCss().includes("width: 20px"));
 		});
 
+		it("gives the same sprite at two scales two background rules", () => {
+			const table = st();
+			const sprite: any = {
+				id: "shared",
+				width: 10,
+				height: 10,
+				frames: [{ uri: "file:///a.png", width: 10, height: 10 }],
+			};
+			const small = renderSprite({ x: 0, y: 0 }, { width: 10, height: 10 }, sprite, 0, 1, {
+				styleTable: table,
+			});
+			const large = renderSprite({ x: 0, y: 0 }, { width: 10, height: 10 }, sprite, 0, 2, {
+				styleTable: table,
+			});
+			assert.ok(small.includes("st-sprite-img-shared-0-1"));
+			assert.ok(large.includes("st-sprite-img-shared-0-2"));
+			assert.ok(table.toRawCss().includes("background-size: 10px 10px"));
+			assert.ok(table.toRawCss().includes("background-size: 20px 20px"));
+		});
+
+		it("shares one background rule for the same sprite at the same scale", () => {
+			const table = st();
+			const sprite: any = {
+				id: "shared",
+				width: 10,
+				height: 10,
+				frames: [{ uri: "file:///a.png", width: 10, height: 10 }],
+			};
+			renderSprite({ x: 0, y: 0 }, { width: 10, height: 10 }, sprite, 0, 0.5, {
+				styleTable: table,
+			});
+			renderSprite({ x: 5, y: 5 }, { width: 10, height: 10 }, sprite, 0, 0.5, {
+				styleTable: table,
+			});
+			const rules = Object.keys(table.styleRecords).filter((k) =>
+				k.startsWith("st-sprite-img-shared-"),
+			);
+			assert.deepStrictEqual(rules, ["st-sprite-img-shared-0-0_465"]);
+		});
+
 		it("normalizes a hostile sprite id before using it as a class name", () => {
 			const table = st();
 			const sprite: any = {
@@ -100,10 +140,10 @@ describe("util/hoi4gui/nodecommon", () => {
 				1,
 				{ styleTable: table },
 			);
-			assert.ok(html.includes("st-sprite-img-evil_34_125_46x_123color_58red-0"));
+			assert.ok(html.includes("st-sprite-img-evil_34_125_46x_123color_58red-0-1"));
 			assert.ok(!html.includes(sprite.id));
 			assert.ok(
-				table.toRawCss().includes(".st-sprite-img-evil_34_125_46x_123color_58red-0 {"),
+				table.toRawCss().includes(".st-sprite-img-evil_34_125_46x_123color_58red-0-1 {"),
 			);
 			assert.ok(!table.toRawCss().includes(sprite.id));
 		});

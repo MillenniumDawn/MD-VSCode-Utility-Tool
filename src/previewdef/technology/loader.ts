@@ -10,7 +10,7 @@ import { GuiFileLoader } from "../gui/loader";
 import { hoiFilesExpiryToken, listFilesFromModOrHOI4, readFileFromModOrHOI4 } from "../../util/fileloader";
 import { getConfiguration } from "../../util/vsccommon";
 import { listGfxFilesFromConfiguredRoots } from "../../util/guiwindowindex";
-import { localisationIndex, technologyCountryIcons } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 import { debug } from "../../util/debug";
 import { PromiseCache } from "../../util/cache";
 import { getCountryTagsByFolder } from "./countryicons";
@@ -68,7 +68,7 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[TechnologyTreeLoader ${this.file}]`;
     }
 }
@@ -81,7 +81,7 @@ interface CountryTagsByFolderResult {
 // Returns the country_tags files it read so they can be registered as preview dependencies: the
 // dropdown is built from them, so a tag added while the preview is open has to reach it.
 async function loadCountryTagsByFolder(technologyTrees: TechnologyTree[]): Promise<CountryTagsByFolderResult> {
-    if (!technologyCountryIcons) {
+    if (!getFlags().technologyCountryIcons) {
         return { countryTagsByFolder: {}, countryTagFiles: [] };
     }
 
@@ -113,7 +113,7 @@ const equipmentArchetypeCache = new PromiseCache<EquipmentArchetypesResult>({
     // The setting is a part of the token because with the localisation index off the load
     // short-circuits to an empty result with no files, which nothing on disk could then invalidate.
     expireWhenChange: (_key, cached) => cached.then(
-        async value => `${localisationIndex ? 'on' : 'off'}|${await hoiFilesExpiryToken(value.equipmentFiles)}`,
+        async value => `${getFlags().localisationIndex ? 'on' : 'off'}|${await hoiFilesExpiryToken(value.equipmentFiles)}`,
         () => '',
     ),
     life: 3 * 1000,
@@ -129,7 +129,7 @@ function loadEquipmentArchetypes(): Promise<EquipmentArchetypesResult> {
 // id -> archetype map so the renderer can resolve equipment short names. Skipped when the
 // localisation index is off, since without it all name modes fall back to the raw id anyway.
 async function loadEquipmentArchetypesUncached(): Promise<EquipmentArchetypesResult> {
-    if (!localisationIndex) {
+    if (!getFlags().localisationIndex) {
         return { equipmentArchetypes: {}, equipmentFiles: [] };
     }
 
