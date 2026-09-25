@@ -115,7 +115,7 @@ export class CorneredTileSprite extends Sprite {
 		super(id, image, noOfFrames);
 	}
 
-	public get retainedBytes(): number {
+	public override get retainedBytes(): number {
 		let bytes = super.retainedBytes;
 		for (const tiles of Object.values(this.cachedTiles)) {
 			for (const tile of tiles) {

@@ -18,15 +18,19 @@ import { error } from "../../../util/debug";
 import {
 	LoadResult,
 	FolderLoader,
-	FileLoader,
 	mergeInLoadResult,
-	sortItems,
-	mergeRegionWithWarnings,
 	convertColor,
-	LoadResultOD,
 } from "./common";
+import {
+	RegionFolderLoader,
+	RegionKind,
+	calculateRegionBoundingBox,
+	fillRegions,
+	sortRegionItems,
+	worldMapFileLoader,
+} from "./regionloader";
 import { Token } from "../../../hoiformat/hoiparser";
-import { arrayToMap, UserError } from "../../../util/common";
+import { arrayToMap } from "../../../util/common";
 import { DefaultMapLoader } from "./provincemap";
 import { localize } from "../../../util/i18n";
 import { LoaderSession } from "../../../util/loader/loader";
@@ -106,10 +110,34 @@ const stateCategoryFileSchema: SchemaDef<StateCategoryFile> = {
 	},
 };
 
-export type StateNoBoundingBox =Omit<State, keyof Region>;
+export type StateNoBoundingBox = Omit<State, keyof Region>;
+
+const stateKind: RegionKind = {
+	sourceType: "state",
+	idTooLarge: [
+		"worldmap.warnings.stateidtoolarge",
+		"Max state id is too large: {0}",
+	],
+	idConflict: [
+		"worldmap.warnings.stateidconflict",
+		"There're more than one states using state id {0}.",
+	],
+	notExist: [
+		"worldmap.warnings.statenotexist",
+		"State with id {0} doesn't exist.",
+	],
+	subRegionNotExist: [
+		"worldmap.warnings.stateprovincenotexist",
+		"Province {0} used in state {1} doesn't exist.",
+	],
+	noValidSubRegions: [
+		"worldmap.warnings.statenovalidprovinces",
+		"State {0} doesn't have valid provinces.",
+	],
+};
 
 type StateLoaderResult = { states: State[]; badStatesCount: number };
-export class StatesLoader extends FolderLoader<
+export class StatesLoader extends RegionFolderLoader<
 	StateLoaderResult,
 	StateNoBoundingBox[]
 > {
@@ -119,27 +147,18 @@ export class StatesLoader extends FolderLoader<
 		private defaultMapLoader: DefaultMapLoader,
 		private resourcesLoader: ResourceDefinitionLoader,
 	) {
-		super("history/states", StateLoader);
+		super(
+			"history/states",
+			worldMapFileLoader("StateLoader", loadState),
+			"StatesLoader",
+			["worldmap.progress.loadingstates", "Loading states..."],
+		);
 		this.categoriesLoader = new StateCategoriesLoader();
 		this.categoriesLoader.onProgress((e) => this.onProgressEmitter.fire(e));
 	}
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
-		return (
-			(await super.shouldReloadImpl(session)) ||
-			(await this.defaultMapLoader.shouldReload(session)) ||
-			(await this.categoriesLoader.shouldReload(session)) ||
-			(await this.resourcesLoader.shouldReload(session))
-		);
-	}
-
-	protected async loadImpl(
-		session: LoaderSession,
-	): Promise<LoadResult<StateLoaderResult>> {
-		await this.fireOnProgressEvent(
-			localize("worldmap.progress.loadingstates", "Loading states..."),
-		);
-		return super.loadImpl(session);
+	protected override dependencyLoaders() {
+		return [this.defaultMapLoader, this.categoriesLoader, this.resourcesLoader];
 	}
 
 	protected async mergeLoadedFiles(
@@ -168,30 +187,26 @@ export class StatesLoader extends FolderLoader<
 
 		const states = flatMap(fileResults, (c) => c.result);
 
-		const { sortedStates, badStateId } = sortStates(states, warnings);
-
-		const filledStates: State[] = new Array(sortedStates.length);
-		for (let i = badStateId + 1; i < sortedStates.length; i++) {
-			const sortedState = sortedStates[i];
-			if (sortedState) {
-				const state = calculateStateBoundingBox(
-					sortedState,
-					provinces,
-					width,
-					height,
-					warnings,
-				);
-				filledStates[i] = state;
+		const { sorted, badId } = sortRegionItems(states, stateKind, warnings);
+		const { filled: filledStates, badCount: badStatesCount } = fillRegions(
+			sorted,
+			badId,
+			"provinces",
+			provinces,
+			width,
+			stateKind,
+			warnings,
+			(state) => {
+				warnIfStateTooLarge(state, width, height, warnings);
 				validateStateReferences(
 					state,
 					stateCategories.result,
 					resources,
 					warnings,
 				);
-			}
-		}
+			},
+		);
 
-		const badStatesCount = -badStateId - 1;
 		validateProvinceInState(provinces, filledStates, badStatesCount, warnings);
 
 		return {
@@ -203,24 +218,6 @@ export class StatesLoader extends FolderLoader<
 			warnings,
 		};
 	}
-
-	public toString() {
-		return `[StatesLoader]`;
-	}
-}
-
-class StateLoader extends FileLoader<StateNoBoundingBox[]> {
-	protected async loadFromFile(): Promise<LoadResultOD<StateNoBoundingBox[]>> {
-		const warnings: WorldMapWarning[] = [];
-		return {
-			result: await loadState(this.file, warnings),
-			warnings,
-		};
-	}
-
-	public toString() {
-		return `[StateLoader: ${this.file}]`;
-	}
 }
 
 class StateCategoriesLoader extends FolderLoader<
@@ -228,10 +225,13 @@ class StateCategoriesLoader extends FolderLoader<
 	StateCategory[]
 > {
 	constructor() {
-		super("common/state_category", StateCategoryLoader);
+		super(
+			"common/state_category",
+			worldMapFileLoader("StateCategoryLoader", loadStateCategory),
+		);
 	}
 
-	protected async loadImpl(
+	protected override async loadImpl(
 		session: LoaderSession,
 	): Promise<LoadResult<Record<string, StateCategory>>> {
 		await this.fireOnProgressEvent(
@@ -275,22 +275,8 @@ class StateCategoriesLoader extends FolderLoader<
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[StateCategoriesLoader]`;
-	}
-}
-
-class StateCategoryLoader extends FileLoader<StateCategory[]> {
-	protected async loadFromFile(): Promise<LoadResultOD<StateCategory[]>> {
-		const warnings: WorldMapWarning[] = [];
-		return {
-			result: await loadStateCategory(this.file, warnings),
-			warnings,
-		};
-	}
-
-	public toString() {
-		return `[StateCategoryLoader: ${this.file}]`;
 	}
 }
 
@@ -426,40 +412,7 @@ export function sortStates(
 	states: StateNoBoundingBox[],
 	warnings: WorldMapWarning[],
 ): { sortedStates: StateNoBoundingBox[]; badStateId: number } {
-	const { sorted, badId } = sortItems(
-		states,
-		10000,
-		(maxId) => {
-			throw new UserError(
-				localize(
-					"worldmap.warnings.stateidtoolarge",
-					"Max state id is too large: {0}",
-					maxId,
-				),
-			);
-		},
-		(newState, existingState, badId) =>
-			warnings.push({
-				source: [{ type: "state", id: badId }],
-				relatedFiles: [newState.file, existingState.file],
-				text: localize(
-					"worldmap.warnings.stateidconflict",
-					"There're more than one states using state id {0}.",
-					newState.id,
-				),
-			}),
-		(startId, endId) =>
-			warnings.push({
-				source: [{ type: "state", id: startId }],
-				relatedFiles: [],
-				text: localize(
-					"worldmap.warnings.statenotexist",
-					"State with id {0} doesn't exist.",
-					startId === endId ? startId : `${startId}-${endId}`,
-				),
-			}),
-	);
-
+	const { sorted, badId } = sortRegionItems(states, stateKind, warnings);
 	return {
 		sortedStates: sorted,
 		badStateId: badId,
@@ -473,28 +426,24 @@ export function calculateStateBoundingBox(
 	height: number,
 	warnings: WorldMapWarning[],
 ): State {
-	const state = mergeRegionWithWarnings(
+	const state = calculateRegionBoundingBox(
 		noBoundingBoxState,
 		"provinces",
 		provinces,
 		width,
-		"state",
+		stateKind,
 		warnings,
-		(provinceId) =>
-			localize(
-				"worldmap.warnings.stateprovincenotexist",
-				"Province {0} used in state {1} doesn't exist.",
-				provinceId,
-				noBoundingBoxState.id,
-			),
-		() =>
-			localize(
-				"worldmap.warnings.statenovalidprovinces",
-				"State {0} doesn't have valid provinces.",
-				noBoundingBoxState.id,
-			),
 	);
+	warnIfStateTooLarge(state, width, height, warnings);
+	return state;
+}
 
+function warnIfStateTooLarge(
+	state: State,
+	width: number,
+	height: number,
+	warnings: WorldMapWarning[],
+): void {
 	if (state.boundingBox.w > width / 2 || state.boundingBox.h > height / 2) {
 		warnings.push({
 			source: [{ type: "state", id: state.id }],
@@ -508,8 +457,6 @@ export function calculateStateBoundingBox(
 			),
 		});
 	}
-
-	return state;
 }
 
 export function validateStateReferences(

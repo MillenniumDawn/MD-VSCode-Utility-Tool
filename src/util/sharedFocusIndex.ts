@@ -15,7 +15,7 @@ import {
 import { createIndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
 import { extractFocusIds } from "../previewdef/focustree/schema";
 import { parseHoi4File } from "../hoiformat/hoiparser";
-import { sharedFocusIndex } from "./featureflags";
+import { getFlags } from "./featureflags";
 
 interface FocusIndex {
 	[file: string]: string[]; // Filename -> array of focus keys
@@ -269,7 +269,7 @@ function applyFocusIds(
 export async function findFileByFocusKey(
 	key: string,
 ): Promise<string | undefined> {
-	if (!sharedFocusIndex) {
+	if (!getFlags().sharedFocusIndex) {
 		return undefined;
 	}
 	await ensureIndexBuilt().catch(() => undefined);
@@ -318,7 +318,7 @@ async function reindexWorkspaceFocusFile(file: vscode.Uri): Promise<void> {
 }
 
 const watchers = createIndexWatchers({
-	enabled: sharedFocusIndex,
+	enabled: getFlags().sharedFocusIndex,
 	extension: ".txt",
 	hasStarted: () => builder.hasStarted(),
 	gate: buildGate,

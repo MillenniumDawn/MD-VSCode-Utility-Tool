@@ -22,7 +22,7 @@ class MioPreview extends LoaderPreview<MioLoader> {
 
     // localisationIndex and previewLocalisation change every trait and organization name;
     // gfxIndex changes which trait icons resolve.
-    protected get reloadOnConfigurationChange(): readonly string[] {
+    protected override get reloadOnConfigurationChange(): readonly string[] {
         return ['localisationIndex', 'previewLocalisation', 'gfxIndex'];
     }
 }

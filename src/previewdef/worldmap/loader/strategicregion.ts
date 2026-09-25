@@ -9,21 +9,19 @@ import {
 	Region,
 } from "../definitions";
 import { DefaultMapLoader } from "./provincemap";
+import { LoadResult, mergeInLoadResult } from "./common";
 import {
-	FolderLoader,
-	FileLoader,
-	LoadResult,
-	mergeInLoadResult,
-	sortItems,
-	mergeRegionWithWarnings,
-	LoadResultOD,
-	shouldReloadDependencies,
-} from "./common";
+	RegionFolderLoader,
+	RegionKind,
+	fillRegions,
+	sortRegionItems,
+	worldMapFileLoader,
+} from "./regionloader";
 import { readFileFromModOrHOI4AsJson } from "../../../util/fileloader";
 import { error } from "../../../util/debug";
 import { localize } from "../../../util/i18n";
 import { StatesLoader } from "./states";
-import { arrayToMap, UserError } from "../../../util/common";
+import { arrayToMap } from "../../../util/common";
 import { Token } from "../../../hoiformat/hoiparser";
 import { LoaderSession } from "../../../util/loader/loader";
 import flatMap from "lodash/flatMap";
@@ -52,11 +50,35 @@ const strategicRegionFileSchema: SchemaDef<StrategicRegionFile> = {
 	},
 };
 
+const strategicRegionKind: RegionKind = {
+	sourceType: "strategicregion",
+	idTooLarge: [
+		"worldmap.warnings.strategicregionidtoolarge",
+		"Max strategic region ID is too large: {0}.",
+	],
+	idConflict: [
+		"worldmap.warnings.strategicregionidconflict",
+		"There're more than one strategic regions using ID {0}.",
+	],
+	notExist: [
+		"worldmap.warnings.strategicregionnotexist",
+		"Strategic region with id {0} doesn't exist.",
+	],
+	subRegionNotExist: [
+		"worldmap.warnings.provinceinstrategicregionnotexist",
+		"Province {0} used in strategic region {1} doesn't exist.",
+	],
+	noValidSubRegions: [
+		"worldmap.warnings.strategicregionnovalidprovinces",
+		"Strategic region {0} doesn't have valid provinces.",
+	],
+};
+
 type StrategicRegionsLoaderResult = {
 	strategicRegions: StrategicRegion[];
 	badStrategicRegionsCount: number;
 };
-export class StrategicRegionsLoader extends FolderLoader<
+export class StrategicRegionsLoader extends RegionFolderLoader<
 	StrategicRegionsLoaderResult,
 	StrategicRegionNoRegion[]
 > {
@@ -64,29 +86,19 @@ export class StrategicRegionsLoader extends FolderLoader<
 		private defaultMapLoader: DefaultMapLoader,
 		private statesLoader: StatesLoader,
 	) {
-		super("map/strategicregions", StrategicRegionLoader);
-	}
-
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
-		return (
-			(await super.shouldReloadImpl(session)) ||
-			(await shouldReloadDependencies(session, [
-				this.defaultMapLoader,
-				this.statesLoader,
-			]))
-		);
-	}
-
-	protected async loadImpl(
-		session: LoaderSession,
-	): Promise<LoadResult<StrategicRegionsLoaderResult>> {
-		await this.fireOnProgressEvent(
-			localize(
+		super(
+			"map/strategicregions",
+			worldMapFileLoader("StrategicRegionLoader", loadStrategicRegion),
+			"StrategicRegionsLoader",
+			[
 				"worldmap.progress.loadingstrategicregions",
 				"Loading strategic regions...",
-			),
+			],
 		);
-		return super.loadImpl(session);
+	}
+
+	protected override dependencyLoaders() {
+		return [this.defaultMapLoader, this.statesLoader];
 	}
 
 	protected async mergeLoadedFiles(
@@ -109,45 +121,25 @@ export class StrategicRegionsLoader extends FolderLoader<
 		const { width, provinces, terrains } = provinceMap.result;
 		validateStrategicRegions(strategicRegions, terrains, warnings);
 
-		const { sortedStrategicRegions, badStrategicRegionId } =
-			sortStrategicRegions(strategicRegions, warnings);
-
 		const { states, badStatesCount } = stateMap.result;
-		const badStrategicRegionsCount = -badStrategicRegionId - 1;
 
-		const filledStrategicRegions: StrategicRegion[] = new Array(
-			sortedStrategicRegions.length,
+		const { sorted, badId } = sortRegionItems(
+			strategicRegions,
+			strategicRegionKind,
+			warnings,
 		);
-		for (
-			let i = -badStrategicRegionsCount;
-			i < sortedStrategicRegions.length;
-			i++
-		) {
-			const sortedRegion = sortedStrategicRegions[i];
-			if (sortedRegion) {
-				filledStrategicRegions[i] = mergeRegionWithWarnings(
-					sortedRegion,
-					"provinces",
-					provinces,
-					width,
-					"strategicregion",
-					warnings,
-					(provinceId) =>
-						localize(
-							"worldmap.warnings.provinceinstrategicregionnotexist",
-							"Province {0} used in strategic region {1} doesn't exist.",
-							provinceId,
-							sortedRegion.id,
-						),
-					() =>
-						localize(
-							"worldmap.warnings.strategicregionnovalidprovinces",
-							"Strategic region {0} doesn't have valid provinces.",
-							sortedRegion.id,
-						),
-				);
-			}
-		}
+		const {
+			filled: filledStrategicRegions,
+			badCount: badStrategicRegionsCount,
+		} = fillRegions(
+			sorted,
+			badId,
+			"provinces",
+			provinces,
+			width,
+			strategicRegionKind,
+			warnings,
+		);
 
 		validateProvincesInStrategicRegions(
 			provinces,
@@ -166,26 +158,6 @@ export class StrategicRegionsLoader extends FolderLoader<
 			dependencies: [this.folder + "/*"],
 			warnings,
 		};
-	}
-
-	public toString() {
-		return `[StrategicRegionsLoader]`;
-	}
-}
-
-class StrategicRegionLoader extends FileLoader<StrategicRegionNoRegion[]> {
-	protected async loadFromFile(): Promise<
-		LoadResultOD<StrategicRegionNoRegion[]>
-	> {
-		const warnings: WorldMapWarning[] = [];
-		return {
-			result: await loadStrategicRegion(this.file, warnings),
-			warnings,
-		};
-	}
-
-	public toString() {
-		return `[StrategicRegionLoader: ${this.file}]`;
 	}
 }
 
@@ -290,53 +262,6 @@ function validateStrategicRegions(
 			}
 		}
 	}
-}
-
-function sortStrategicRegions(
-	strategicRegions: StrategicRegionNoRegion[],
-	warnings: WorldMapWarning[],
-): {
-	sortedStrategicRegions: StrategicRegionNoRegion[];
-	badStrategicRegionId: number;
-} {
-	const { sorted, badId } = sortItems(
-		strategicRegions,
-		10000,
-		(maxId) => {
-			throw new UserError(
-				localize(
-					"worldmap.warnings.strategicregionidtoolarge",
-					"Max strategic region ID is too large: {0}.",
-					maxId,
-				),
-			);
-		},
-		(newStrategicRegion, existingStrategicRegion, badId) =>
-			warnings.push({
-				source: [{ type: "strategicregion", id: badId }],
-				relatedFiles: [newStrategicRegion.file, existingStrategicRegion.file],
-				text: localize(
-					"worldmap.warnings.strategicregionidconflict",
-					"There're more than one strategic regions using ID {0}.",
-					newStrategicRegion.id,
-				),
-			}),
-		(startId, endId) =>
-			warnings.push({
-				source: [{ type: "strategicregion", id: startId }],
-				relatedFiles: [],
-				text: localize(
-					"worldmap.warnings.strategicregionnotexist",
-					"Strategic region with id {0} doesn't exist.",
-					startId === endId ? startId : `${startId}-${endId}`,
-				),
-			}),
-	);
-
-	return {
-		sortedStrategicRegions: sorted,
-		badStrategicRegionId: badId,
-	};
 }
 
 function validateProvincesInStrategicRegions(

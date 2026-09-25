@@ -12,7 +12,7 @@ export class DefinitionsLoader extends FileLoader<ProvinceDefinition[]> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[DefinitionsLoader: ${this.file}]`;
     }
 }

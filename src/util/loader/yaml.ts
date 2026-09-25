@@ -7,7 +7,7 @@ export class YamlLoader extends ContentLoader<unknown> {
         this.readDependency = false;
     }
 
-    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: unknown, _session: LoaderSession): Promise<LoadResultOD<unknown>> {
+    protected async postLoad(content: string | undefined, _dependencies: Dependency[], error: unknown, _session: LoaderSession): Promise<LoadResultOD<unknown>> {
         if (error || (content === undefined)) {
             throw error;
         }
@@ -17,7 +17,7 @@ export class YamlLoader extends ContentLoader<unknown> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[YamlLoader ${this.file}]`;
     }
 }
