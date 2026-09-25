@@ -73,7 +73,7 @@ class ScriptedGuiFileLoader extends FileLoader<ScriptedGuiDef[]> {
 		}
 	}
 
-	public toString() {
+	public override toString() {
 		return `[ScriptedGuiFileLoader: ${this.file}]`;
 	}
 }
@@ -92,7 +92,7 @@ export class ScriptedGuisLoader extends FolderLoader<ScriptedGuiDef[], ScriptedG
 		});
 	}
 
-	public toString() {
+	public override toString() {
 		return "[ScriptedGuisLoader]";
 	}
 }

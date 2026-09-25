@@ -299,7 +299,10 @@ function applyFocusOverlayVisibility() {
 	}
 }
 
+let renderGeneration = 0;
+
 async function buildContent() {
+	const generation = ++renderGeneration;
 	const focusCheckState = getState().checkedFocuses ?? {};
 	const checkedFocusesExprs = Object.keys(focusCheckState)
 		.filter((fid) => focusCheckState[fid])
@@ -394,6 +397,12 @@ async function buildContent() {
 			connectionOffsets: (window as any).focusLinkOffsets,
 		},
 	);
+
+	// A newer build started while this one awaited its render: its markup is what belongs on
+	// screen, so this one stops before writing over it.
+	if (generation !== renderGeneration) {
+		return;
+	}
 
 	focustreeplaceholder.innerHTML =
 		focusTreeContent + styleTable.toStyleElement((window as any).styleNonce);

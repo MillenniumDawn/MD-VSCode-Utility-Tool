@@ -159,6 +159,13 @@ async function checkAndUpdateModFileStatus(
 	}
 }
 
+export function pickedFirst(
+	a: vscode.QuickPickItem,
+	b: vscode.QuickPickItem,
+): number {
+	return !!a.picked === !!b.picked ? 0 : a.picked ? -1 : 1;
+}
+
 async function selectModFile(): Promise<void> {
 	const conf = getConfiguration();
 	const modFileInspect = conf.inspect<string>("modFile");
@@ -212,7 +219,7 @@ async function selectModFile(): Promise<void> {
 		});
 	}
 
-	modsList.sort((a, b) => (a.picked ? -1 : b.picked ? 1 : 0));
+	modsList.sort(pickedFirst);
 
 	modsList.push({
 		label: localize("modfile.select", "Browse a .mod file..."),

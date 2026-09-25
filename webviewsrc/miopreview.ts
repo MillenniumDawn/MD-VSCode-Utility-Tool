@@ -27,7 +27,10 @@ let conditions: DivDropdown | undefined = undefined;
 
 initCommon();
 
+let renderGeneration = 0;
+
 async function buildContent() {
+    const generation = ++renderGeneration;
     const miopreviewplaceholder = document.getElementById('miopreviewplaceholder') as HTMLDivElement;
 
     const styleTable = new StyleTable();
@@ -70,6 +73,12 @@ async function buildContent() {
             (renderedTrait[item.id] ?? '').replace('{{position}}', item.gridX + ', ' + item.gridY)),
         cornerPosition: 0.5,
     });
+
+    // A newer build started while this one awaited its render: its markup is what belongs on
+    // screen, so this one stops before writing over it.
+    if (generation !== renderGeneration) {
+        return;
+    }
 
     // Column headers (tree_header_text). Server-rendered and localised per mio; each header carries
     // only its column offset (left = x * xGridSize). We wrap them in a layer anchored to the same

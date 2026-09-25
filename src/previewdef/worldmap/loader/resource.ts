@@ -56,7 +56,7 @@ export class ResourceDefinitionLoader extends FolderLoader<Resource[], Resource[
         });
     }
 
-    public toString() {
+    public override toString() {
         return `[ResourceDefinitionLoader]`;
     }
 }
@@ -70,7 +70,7 @@ export class ResourceFileLoader extends FileLoader<Resource[]> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[ResourceFileLoader ${this.file}]`;
     }
 }

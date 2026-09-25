@@ -31,7 +31,8 @@ export interface FocusTreeLayout {
     // Undefined when both ends are where the standard layout puts them, so a standard page carries
     // nothing extra.
     links?: { parent: NumberPosition; child: NumberPosition };
-    exclusive: { offsetY: number; sprites: ExclusiveLinkSpriteSpec };
+    // startX and endX move the left and right ends of the link to the right.
+    exclusive: { offsetY: number; startX: number; endX: number; sprites: ExclusiveLinkSpriteSpec };
     // The continuous focus box. Only its size comes from the file: the tree's
     // continuous_focus_position replaces the window's own position in the game.
     continuous: { width: number; height: number };
@@ -51,7 +52,7 @@ export const standardFocusTreeLayout: FocusTreeLayout = {
         textOffsetX: 0,
         textTop: 85,
     },
-    exclusive: { offsetY: 0, sprites: defaultExclusiveLinkSprites },
+    exclusive: { offsetY: 0, startX: 0, endX: 0, sprites: defaultExclusiveLinkSprites },
     continuous: { width: 770, height: 380 },
 };
 
@@ -65,8 +66,9 @@ const reference = {
     name: { x: 15, y: 58, maxWidth: 147 },
     linkBegin: { x: 80, y: 64 },
     linkEnd: { x: 80, y: 0 },
-    exclusiveOffsetY: 24,
-    exclusiveItemY: 28,
+    exclusiveOffset: { x: 172, y: 24 },
+    exclusiveOffsetLeftX: 12,
+    exclusiveItem: { x: -5, y: 28 },
 };
 
 type Window = HOIPartial<ContainerWindowType>;
@@ -168,8 +170,17 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
     const links = parent.x === 0 && parent.y === 0 && child.x === 0 && child.y === 0 ? undefined : { parent, child };
 
     const exclusiveItem = findWindow(windows, 'national_focus_exclusive_item');
-    const exclusiveOffsetY = shift(0, positions['exclusive_offset']?.y, reference.exclusiveOffsetY) +
-        shift(0, num(exclusiveItem?.position?.y), reference.exclusiveItemY);
+    const exclusiveOffset = positions['exclusive_offset'] ?? {};
+    const exclusiveItemPosition = point(exclusiveItem?.position);
+    const exclusiveOffsetY = shift(0, exclusiveOffset.y, reference.exclusiveOffset.y) +
+        shift(0, exclusiveItemPosition.y, reference.exclusiveItem.y);
+    // The game has no documented rule for this, so it is read off its own numbers: against a 165px
+    // focus centred at x=80, the link starts at the left focus plus `exclusive_offset.x` and ends at
+    // the right focus plus `exclusive_offset_left.x`, both moved by the exclusive item's own x.
+    // `exclusive_positioning` is not read.
+    const exclusiveItemShiftX = shift(0, exclusiveItemPosition.x, reference.exclusiveItem.x);
+    const exclusiveStartX = shift(0, exclusiveOffset.x, reference.exclusiveOffset.x) + exclusiveItemShiftX;
+    const exclusiveEndX = shift(0, positions['exclusive_offset_left']?.x, reference.exclusiveOffsetLeftX) + exclusiveItemShiftX;
     const exclusiveIcon = (iconName: string) => byName(exclusiveItem?.icontype, iconName);
     const line = exclusiveIcon('link1');
     const left = exclusiveIcon('left');
@@ -194,6 +205,8 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
         ...(links ? { links } : {}),
         exclusive: {
             offsetY: exclusiveOffsetY,
+            startX: exclusiveStartX,
+            endX: exclusiveEndX,
             sprites: {
                 lineGfx: line?.spritetype ?? line?.quadtexturesprite ?? defaults.lineGfx,
                 lineFrame: frameOf(line, defaults.lineFrame),

@@ -87,6 +87,8 @@ const mdGui = `guiTypes = {
 	positionType = { name = "link_begin" position = { x = 80 y = 64 } }
 	positionType = { name = "link_end" position = { x = 80  y = 0 } }
 	positionType = { name = "exclusive_offset" position = { x = 172 y = 24 } }
+	positionType = { name = "exclusive_offset_left" position = { x = 12 y = 24 } }
+	positionType = { name = "exclusive_positioning" position = { x = 2 y = 0 } }
 }`;
 
 describe('previewdef/focustree/layout', () => {
@@ -170,6 +172,19 @@ guiTypes = {
         const layout = buildFocusTreeLayout([parseGui(moved)]);
         assert.deepStrictEqual(layout.links, { parent: { x: 0, y: 10 }, child: { x: 0, y: -6 } });
         assert.strictEqual(layout.exclusive.offsetY, 6);
+        assert.strictEqual(layout.exclusive.startX, 0);
+        assert.strictEqual(layout.exclusive.endX, 0);
+    });
+
+    it('moves the exclusive link ends sideways from exclusive_offset, exclusive_offset_left and the item x', () => {
+        const moved = mdGui
+            .replace('name = "exclusive_offset" position = { x = 172 y = 24 }', 'name = "exclusive_offset" position = { x = 180 y = 24 }')
+            .replace('name = "exclusive_offset_left" position = { x = 12 y = 24 }', 'name = "exclusive_offset_left" position = { x = 8 y = 24 }')
+            .replace('position = { x=-5 y=28 }', 'position = { x=-3 y=28 }');
+        const exclusive = buildFocusTreeLayout([parseGui(moved)]).exclusive;
+        assert.strictEqual(exclusive.startX, 10);
+        assert.strictEqual(exclusive.endX, -2);
+        assert.strictEqual(exclusive.offsetY, 0);
     });
 
     it('takes the exclusive link sprites and 1 based frames from the file', () => {
