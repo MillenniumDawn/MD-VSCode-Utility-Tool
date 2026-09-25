@@ -2,6 +2,7 @@ Unreleased
 
   Bugfixes:
 
+- [ DDS ] BC7-compressed DDS textures are now identified as BC7 instead of BC6H, so the error shown for them names the right format. Issue #373.
 - [ Decision Previewer ] A scripted-GUI window placed away from the top-left corner is no longer cut off on its right and bottom edges in its decision card. Issue #365.
 - Icons and buttons that share a sprite but are drawn at different scales now each show their background at the right size, instead of all taking the size of the first one drawn. Issue #366.
 - [ Focus Tree Previewer ] [ MIO Preview ] Changing several options in quick succession no longer leaves an older version of the tree on screen; the latest change always wins. Issue #367.
