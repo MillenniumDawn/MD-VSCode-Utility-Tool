@@ -312,8 +312,8 @@ async function loadGfxMap(path: string): Promise<GfxMap> {
 		}
 	} catch (e) {
 		// The output channel is the only trace a broken .gfx leaves when the icon fallback scan or
-		// the inlay sprite scan reads through this cache (issue #182); the error call keeps the
-		// console/telemetry line.
+		// the inlay sprite scan reads through this cache (issue #182). This line names the file; the
+		// error call adds the stack to the channel and keeps the console/telemetry line.
 		Logger.error(`Cannot parse ${path}: ${describeParseFailure(e)}`);
 		error(e);
 	}

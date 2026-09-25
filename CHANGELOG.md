@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- Errors from previews and file loading now appear in the HOI4 Modding output channel, not only in the developer console. Issue #370.
 - [ Focus Tree ] With the focus tree layout set to `gui`, a focus tree preview now opens centred on the tree's `initial_show_position`, the way the game does, using `national_focus_center` from `nationalfocusview.gui`. Issue #400.
 - [ Focus Tree Previewer ] With the gui focus tree layout, a focus grid whose `format` is `DOWN`, `LEFT` or `RIGHT` now previews the tree growing that way, prerequisite lines and mutually exclusive links included, instead of always top-down. Issue #399.
 - [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the continuous focus box now takes its size from `continuous_focus_window` in `nationalfocusview.gui` instead of always being 770 by 380. Issue #398.
@@ -18,6 +19,8 @@ Unreleased
 - Previews no longer re-check unchanged files over and over while one preview loads, which made opening large previews slower than needed. Issue #368.
 - A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
 - [ GUI ] Showing or hiding a container window no longer affects a sibling whose name starts with the same text, such as `battle` and `battleplan`. Issue #363.
+
+>>>>>>> origin/main
 
 v1.1.39
 
