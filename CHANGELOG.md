@@ -2,6 +2,7 @@ Unreleased
 
   Bugfixes:
 
+- A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
 - [ GUI ] Showing or hiding a container window no longer affects a sibling whose name starts with the same text, such as `battle` and `battleplan`. Issue #363.
 
 v1.1.39
