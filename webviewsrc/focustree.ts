@@ -11,9 +11,9 @@ import {
 } from "./util/common";
 import { DivDropdown } from "./util/dropdown";
 import difference from "lodash/difference";
-import minBy from "lodash/minBy";
 import {
 	renderGridBoxCommon,
+	gridBoxContentOffset,
 	GridBoxItem,
 	GridBoxConnection,
 } from "../src/util/hoi4gui/gridboxcommon";
@@ -355,7 +355,10 @@ export function scrollToInitialShowPosition(
 	return true;
 }
 
+let renderGeneration = 0;
+
 async function buildContent() {
+	const generation = ++renderGeneration;
 	const focusCheckState = getState().checkedFocuses ?? {};
 	const checkedFocusesExprs = Object.keys(focusCheckState)
 		.filter((fid) => focusCheckState[fid])
@@ -415,18 +418,31 @@ async function buildContent() {
 		)
 		.filter((v): v is GridBoxItem => !!v);
 
-	applyExclusiveLinkStyle(focusGrixBoxItems);
+	const format = gridbox.format?._name ?? "up";
+	applyExclusiveLinkStyle(focusGrixBoxItems, format);
 
-	const minX = minBy(Object.values(focusPosition), "x")?.x ?? 0;
-	const leftPadding =
-		gridbox.position.x._value - Math.min(minX * (window as any).xGridSize, 0);
-	renderedOrigin = { x: leftPadding, y: gridbox.position.y._value };
+	// A tree that grows down, left or right lays out towards negative coordinates, so the grid is
+	// moved by however far its focuses reach past its corner. The grid box itself is one slot wide
+	// and of no height, which is what renderGridBoxCommon measures it as.
+	const xGridSize: number = (window as any).xGridSize;
+	const contentOffset = gridBoxContentOffset(
+		Object.values(focusPosition).map((p) => ({ gridX: p.x, gridY: p.y })),
+		format,
+		{ width: xGridSize, height: gridbox.slotsize?.height?._value ?? xGridSize },
+		{ width: xGridSize, height: 0 },
+	);
+	// Where the last render put grid slot (0, 0), so the initial scroll lands on the slot the tree
+	// was actually drawn in.
+	renderedOrigin = { x: gridbox.position.x._value - contentOffset.x, y: gridbox.position.y._value - contentOffset.y };
 	renderedFocusPosition = focusPosition;
 
 	const focusTreeContent = await renderGridBoxCommon(
 		{
 			...gridbox,
-			position: { ...gridbox.position, x: toNumberLike(leftPadding) },
+			position: {
+				x: toNumberLike(gridbox.position.x._value - contentOffset.x),
+				y: toNumberLike(gridbox.position.y._value - contentOffset.y),
+			},
 		},
 		{
 			size: { width: 0, height: 0 },
@@ -452,6 +468,12 @@ async function buildContent() {
 			connectionOffsets: (window as any).focusLinkOffsets,
 		},
 	);
+
+	// A newer build started while this one awaited its render: its markup is what belongs on
+	// screen, so this one stops before writing over it.
+	if (generation !== renderGeneration) {
+		return;
+	}
 
 	focustreeplaceholder.innerHTML =
 		focusTreeContent + styleTable.toStyleElement((window as any).styleNonce);
@@ -634,21 +656,7 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 	if (!focusTree) {
 		return;
 	}
-	const continuousFocuses = document.getElementById(
-		"continuousFocuses",
-	) as HTMLDivElement;
-
-	if (
-		focusTree.continuousFocusPositionX !== undefined &&
-		focusTree.continuousFocusPositionY !== undefined
-	) {
-		continuousFocuses.style.left =
-			focusTree.continuousFocusPositionX - 59 + "px";
-		continuousFocuses.style.top = focusTree.continuousFocusPositionY + 7 + "px";
-		continuousFocuses.style.display = "block";
-	} else {
-		continuousFocuses.style.display = "none";
-	}
+	placeContinuousFocuses(focusTree);
 
 	if (useConditionInFocus) {
 		const conditionExprs = dedupeConditionExprs(
@@ -751,6 +759,31 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 	}
 
 	renderWarningList(focusTree);
+}
+
+// The size is the layout's: continuous_focus_window's in gui mode. The shell is not rebuilt on an
+// in-place update, so it is set here rather than in the shell's stylesheet.
+export function placeContinuousFocuses(focusTree: FocusTree) {
+	const continuousFocuses = document.getElementById("continuousFocuses");
+	if (!continuousFocuses) {
+		return;
+	}
+	const size: { width: number; height: number } | undefined = (window as any)
+		.continuousFocusSize;
+
+	if (
+		focusTree.continuousFocusPositionX !== undefined &&
+		focusTree.continuousFocusPositionY !== undefined
+	) {
+		continuousFocuses.style.left =
+			focusTree.continuousFocusPositionX - 59 + "px";
+		continuousFocuses.style.top = focusTree.continuousFocusPositionY + 7 + "px";
+		continuousFocuses.style.width = (size?.width ?? 770) + "px";
+		continuousFocuses.style.height = (size?.height ?? 380) + "px";
+		continuousFocuses.style.display = "block";
+	} else {
+		continuousFocuses.style.display = "none";
+	}
 }
 
 // The warnings panel lists one clickable entry per warning: activating it closes the panel and
@@ -1150,6 +1183,7 @@ window.addEventListener("message", tryRun(async (event) => {
 	(window as any).useConditionInFocus = data.useConditionInFocus;
 	(window as any).xGridSize = data.xGridSize;
 	(window as any).focusLinkOffsets = data.layout?.links;
+	(window as any).continuousFocusSize = data.layout?.continuous;
 
 	if (selectedFocusTreeIndex >= focusTrees.length) {
 		selectedFocusTreeIndex = Math.max(0, focusTrees.length - 1);

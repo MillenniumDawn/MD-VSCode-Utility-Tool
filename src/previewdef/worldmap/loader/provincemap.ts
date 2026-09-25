@@ -54,7 +54,7 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 		);
 	}
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		if (await super.shouldReloadImpl(session)) {
 			return true;
 		}
@@ -222,7 +222,7 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 		return loader;
 	}
 
-	protected extraMeasurements(result: LoadResult<ProvinceMap>) {
+	protected override extraMeasurements(result: LoadResult<ProvinceMap>) {
 		return {
 			...super.extraMeasurements(result),
 			width: result.result.width,
@@ -231,7 +231,7 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[DefaultMapLoader]`;
 	}
 }

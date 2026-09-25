@@ -23,7 +23,7 @@ import uniq from 'lodash/uniq';
 import { StyleTable } from '../../util/styletable';
 import { RenderNodeCommonOptions } from '../../util/hoi4gui/nodecommon';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
-import { gfxIndex, localisationIndex, technologyCountryIcons } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 import { LoaderRender, RenderContentOptions } from '../loaderpreview';
 import { getPreviewOptions } from '../../util/previewoptions';
 import { technologyCountryOption } from './countryicons';
@@ -181,7 +181,7 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
 
 async function renderFolderOptions(folders: string[]): Promise<string> {
     return (await Promise.all(folders.map(async (folder) => {
-        const localizedText = localisationIndex ? `${await getLocalisedTextQuick(folder)} (${folder})` : folder;
+        const localizedText = getFlags().localisationIndex ? `${await getLocalisedTextQuick(folder)} (${folder})` : folder;
         return `<option value="techfolder_${escapeAttr(folder)}">${htmlEscape(localizedText)}</option>`;
     }))).join('');
 }
@@ -193,7 +193,7 @@ async function renderCountryOptions(countryTagsByFolder: Record<string, string[]
     for (const folder of Object.keys(countryTagsByFolder)) {
         result[folder] = await Promise.all((countryTagsByFolder[folder] ?? []).map(async tag => ({
             tag,
-            label: localisationIndex ? `${await getLocalisedTextQuick(tag)} (${tag})` : tag,
+            label: getFlags().localisationIndex ? `${await getLocalisedTextQuick(tag)} (${tag})` : tag,
         })));
     }
 
@@ -204,7 +204,7 @@ async function renderCountryOptions(countryTagsByFolder: Record<string, string[]
 // is not a tag this file has art for, so a selection made in another preview cannot strand this one
 // on a country its dropdown does not offer.
 function getSelectedCountry(countryTagsByFolder: Record<string, string[]>): string | undefined {
-    if (!technologyCountryIcons) {
+    if (!getFlags().technologyCountryIcons) {
         return undefined;
     }
 
@@ -247,7 +247,7 @@ async function renderFolderSelector(folderOptionsHtml: string, styleTable: Style
             <select
                 id="tech-name-mode"
                 class="${styleTable.style('techNameMode', () => `margin-left:5px`)}"
-                data-localisation-index="${localisationIndex}"
+                data-localisation-index="${getFlags().localisationIndex}"
             >
                 <option value="id">${localize('techtree.namemode.id', 'Id')}</option>
                 <option value="short">${localize('techtree.namemode.short', 'Short name')}</option>
@@ -268,7 +268,7 @@ async function renderFolderSelector(folderOptionsHtml: string, styleTable: Style
 // no selected option and no country attribute either -- keeping the selection out of the shell is
 // what lets a country change be applied by an in-place update instead of a full page reload.
 function renderCountrySelector(styleTable: StyleTable): string {
-    if (!technologyCountryIcons) {
+    if (!getFlags().technologyCountryIcons) {
         return '';
     }
 
@@ -282,7 +282,7 @@ function renderCountrySelector(styleTable: StyleTable): string {
             </select>
             <span
                 id="country-index-warning"
-                class="${styleTable.style('countryIndexWarning', () => `color:var(--vscode-editorWarning-foreground); margin-left:8px; display:${gfxIndex ? 'none' : 'inline'}`)}"
+                class="${styleTable.style('countryIndexWarning', () => `color:var(--vscode-editorWarning-foreground); margin-left:8px; display:${getFlags().gfxIndex ? 'none' : 'inline'}`)}"
             >⚠ ${localize('techtree.countrynoindex', 'GFX index is off — country icons can\'t be listed. Enable the GFX index setting to pick a country.')}</span>
         </div>`;
 }
@@ -528,7 +528,7 @@ const techNameModes: { id: string; key: (k: TechNameKeys) => string | undefined 
 async function resolveTechNameKeys(technology: Technology, equipmentArchetypes: Record<string, EquipmentArchetype>): Promise<TechNameKeys> {
     const keys: TechNameKeys = { id: technology.id };
 
-    if (!localisationIndex) {
+    if (!getFlags().localisationIndex) {
         return keys;
     }
 
@@ -641,7 +641,7 @@ async function renderTechnology(
         data-tech-id="${escapeAttr(technology.id)}" data-tech-small="${technology.enableEquipments ? '0' : '1'}"
         start="${technology.token?.start}"
         end="${technology.token?.end}"
-        title="${escapeAttr(technology.id)}${localisationIndex ? `\n${escapeAttr((await getLocalisedTextQuick(bestNameKey)) ?? '')}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${escapeAttr(technology.id)}${getFlags().localisationIndex ? `\n${escapeAttr((await getLocalisedTextQuick(bestNameKey)) ?? '')}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `
@@ -723,7 +723,7 @@ async function renderSubTechnology(
         data-subtech-id="${escapeAttr(subTechnology.id)}"
         start="${subTechnology.token?.start}"
         end="${subTechnology.token?.end}"
-        title="${escapeAttr(subTechnology.id)}${localisationIndex ? `\n${escapeAttr((await getLocalisedTextQuick(subTechnology.id)) ?? '')}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${escapeAttr(subTechnology.id)}${getFlags().localisationIndex ? `\n${escapeAttr((await getLocalisedTextQuick(subTechnology.id)) ?? '')}` : ''}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `

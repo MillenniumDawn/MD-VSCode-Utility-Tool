@@ -8,6 +8,8 @@ import {
 	FocusTree,
 	FocusWarning,
 } from "../previewdef/focustree/schema";
+import { refreshFeatureFlags } from "../util/featureflags";
+import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
 const filePath = "common/national_focus/test.txt";
 
@@ -57,10 +59,8 @@ function mergeSharedFocuses(
 		{},
 	);
 
-	const flags = require("../util/featureflags") as {
-		useConditionInFocus: boolean;
-	};
-	flags.useConditionInFocus = true;
+	stubVscode({ configuration: { useConditionInFocus: true } });
+	refreshFeatureFlags();
 	try {
 		const references = sharedFocusRefs
 			.map((ref) => `\n    shared_focus = ${ref}`)
@@ -79,7 +79,8 @@ function mergeSharedFocuses(
 		assert.ok(host, "the merging tree must exist");
 		return { donor: donors[0], host };
 	} finally {
-		flags.useConditionInFocus = false;
+		restoreVscodeStubs();
+		refreshFeatureFlags();
 	}
 }
 

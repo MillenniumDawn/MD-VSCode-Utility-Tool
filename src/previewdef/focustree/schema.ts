@@ -20,7 +20,7 @@ import {
 	extractConditionalExprs,
 } from "../../hoiformat/condition";
 import { countryScope } from "../../hoiformat/scope";
-import { useConditionInFocus } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 import { randomString, Warning } from "../../util/common";
 import { localize } from "../../util/i18n";
 import * as path from "path";
@@ -363,7 +363,7 @@ export function getFocusTreeWithFocusFile(
 			constants,
 		);
 
-		if (useConditionInFocus) {
+		if (getFlags().useConditionInFocus) {
 			for (const sharedFocus of extractOrListIds(focusTree.shared_focus)) {
 				addSharedFocus(
 					focuses,

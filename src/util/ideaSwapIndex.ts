@@ -13,7 +13,7 @@ import {
 } from "./indexHalf";
 import { createIndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
 import { Node, parseHoi4File } from "../hoiformat/hoiparser";
-import { ideaSwapIndex } from "./featureflags";
+import { getFlags } from "./featureflags";
 import { Logger } from "./logger";
 
 /*
@@ -345,7 +345,7 @@ function symbolName(value: Node["value"]): string | undefined {
  * an idea ends up even when the rest of the chain is defined elsewhere.
  */
 export async function getIdeaSwaps(ideaIds: string[]): Promise<IdeaSwap[]> {
-	if (!ideaSwapIndex || ideaIds.length === 0) {
+	if (!getFlags().ideaSwapIndex || ideaIds.length === 0) {
 		return [];
 	}
 
@@ -466,7 +466,7 @@ function reindexWorkspaceSwapFile(file: vscode.Uri): void {
 }
 
 const watchers = createIndexWatchers({
-	enabled: ideaSwapIndex,
+	enabled: getFlags().ideaSwapIndex,
 	extension: ".txt",
 	hasStarted: () => builder.hasStarted(),
 	gate: buildGate,
