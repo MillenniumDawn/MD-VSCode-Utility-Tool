@@ -8,6 +8,8 @@ import {
 	FocusTree,
 	FocusWarning,
 } from "../previewdef/focustree/schema";
+import { refreshFeatureFlags } from "../util/featureflags";
+import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
 const filePath = "common/national_focus/test.txt";
 
@@ -57,10 +59,8 @@ function mergeSharedFocuses(
 		{},
 	);
 
-	const flags = require("../util/featureflags") as {
-		useConditionInFocus: boolean;
-	};
-	flags.useConditionInFocus = true;
+	stubVscode({ configuration: { useConditionInFocus: true } });
+	refreshFeatureFlags();
 	try {
 		const references = sharedFocusRefs
 			.map((ref) => `\n    shared_focus = ${ref}`)
@@ -79,7 +79,8 @@ function mergeSharedFocuses(
 		assert.ok(host, "the merging tree must exist");
 		return { donor: donors[0], host };
 	} finally {
-		flags.useConditionInFocus = false;
+		restoreVscodeStubs();
+		refreshFeatureFlags();
 	}
 }
 
@@ -739,5 +740,32 @@ shared_focus = {
 		);
 		assert.ok(host.focuses["SH_a"], "SH_a must be merged in");
 		assert.ok(host.focuses["SH_b"], "SH_b must be merged in");
+	});
+});
+
+describe("focus tree initial_show_position", () => {
+	it("reads the grid position form", () => {
+		const [tree] = treesOf(`focus_tree = {
+    id = test_tree
+    initial_show_position = { x = 80 y = 0 }
+    ${focusBlock("TST_a", 0, 0)}
+}`);
+		assert.deepStrictEqual(tree.initialShowPosition, { x: 80, y: 0 });
+	});
+
+	it("reads the focus form", () => {
+		const [tree] = treesOf(`focus_tree = {
+    id = test_tree
+    initial_show_position = {
+        focus = TST_a
+    }
+    ${focusBlock("TST_a", 3, 1)}
+}`);
+		assert.deepStrictEqual(tree.initialShowPosition, { focus: "TST_a", x: 0, y: 0 });
+	});
+
+	it("leaves a tree without one undefined", () => {
+		const [tree] = treesOf(treeWithFocuses(focusBlock("TST_a", 0, 0)));
+		assert.strictEqual(tree.initialShowPosition, undefined);
 	});
 });

@@ -100,6 +100,23 @@ function getLeftUpPosition(gridX: number, gridY: number, format: Format['_name']
     };
 }
 
+/**
+ * How far the items' slots reach above and left of the grid box's own corner, as a non-positive
+ * offset: a grid that grows `down` or `right` lays its items out towards negative coordinates, and
+ * `left`/`right` centre their first row on the box's edge. Subtracting it from the box's position
+ * keeps every item in view.
+ */
+export function gridBoxContentOffset(items: Pick<GridBoxItem, 'gridX' | 'gridY'>[],format: Format['_name'], slotSize: NumberSize, gridSize: NumberSize): NumberPosition {
+    let x = 0;
+    let y = 0;
+    for (const item of items) {
+        const position = getLeftUpPosition(item.gridX, item.gridY, format, slotSize, gridSize);
+        x = Math.min(x, position.x);
+        y = Math.min(y, position.y);
+    }
+    return { x, y };
+}
+
 function getCenterPosition(gridX: number, gridY: number, format: Format['_name'], slotSize: NumberSize, gridSize: NumberSize): NumberPosition {
     const position = getLeftUpPosition(gridX, gridY, format, slotSize, gridSize);
     position.x += slotSize.width / 2;
