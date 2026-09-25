@@ -82,6 +82,13 @@ const mdGui = `guiTypes = {
 		iconType = { name = "right" spriteType = "GFX_focus_link_exclusive" frame = 3 }
 		iconType = { name = "mid" spriteType = "GFX_focus_link_exclusive" frame = 1 }
 	}
+	containerWindowType = {
+		name = "national_focus_link"
+		position = { x=-2 y=0 }
+		size = { width = 16 height = 16 }
+		clipping = no
+		iconType = { name = "link" spriteType = "GFX_focus_link_up_down" frame = 1 alwaystransparent = yes }
+	}
 	positionType = { name = "focus_spacing" position = { x = 96 y = 130 } }
 	positionType = { name = "national_focus_center" position = { x = 130 y = 32 } }
 	positionType = { name = "link_begin" position = { x = 80 y = 64 } }
@@ -216,5 +223,27 @@ guiTypes = {
         assert.strictEqual(sprites.midFrame, 0);
         assert.strictEqual(sprites.leftFrame, 1);
         assert.strictEqual(sprites.rightFrame, 2);
+    });
+
+    it('takes the prerequisite line tiles from national_focus_link', () => {
+        const moved = mdGui
+            .replace('position = { x=-2 y=0 }', 'position = { x=1 y=4 }')
+            .replace('size = { width = 16 height = 16 }', 'size = { width = 20 height = 20 }')
+            .replace('spriteType = "GFX_focus_link_up_down" frame = 1', 'spriteType = "GFX_md_link_up_down" frame = 3');
+        const link = buildFocusTreeLayout([parseGui(moved)]).prerequisiteLink;
+        assert.strictEqual(link.size, 20);
+        assert.deepStrictEqual(link.offset, { x: 3, y: 4 });
+        assert.strictEqual(link.sprites.gfx.up_down, 'GFX_md_link_up_down');
+        assert.strictEqual(link.sprites.gfx.down_left, 'GFX_md_link_down_left');
+        assert.strictEqual(link.sprites.frame, 2);
+        assert.strictEqual(link.sprites.dashedFrame, 3);
+    });
+
+    it('keeps the standard corner sprites when the line sprite is not named after its shape', () => {
+        const moved = mdGui.replace('spriteType = "GFX_focus_link_up_down" frame = 1', 'spriteType = "GFX_md_line"');
+        const sprites = buildFocusTreeLayout([parseGui(moved)]).prerequisiteLink.sprites;
+        assert.strictEqual(sprites.gfx.up_down, 'GFX_md_line');
+        assert.strictEqual(sprites.gfx.up_right, 'GFX_focus_link_up_right');
+        assert.strictEqual(sprites.frame, 0);
     });
 });

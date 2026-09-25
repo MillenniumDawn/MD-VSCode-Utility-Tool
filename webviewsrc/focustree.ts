@@ -16,6 +16,7 @@ import {
 	gridBoxContentOffset,
 	GridBoxItem,
 	GridBoxConnection,
+	GridBoxConnectionTiles,
 } from "../src/util/hoi4gui/gridboxcommon";
 import { StyleTable, normalizeForStyle } from "../src/util/styletable";
 import { escapeAttr } from "../src/util/escape";
@@ -31,6 +32,7 @@ import {
 	traceLineClass,
 } from "../src/previewdef/focustree/tracestyles";
 import { applyExclusiveLinkStyle } from "../src/util/hoi4gui/exclusivelink";
+import { focusLinkClass } from "../src/util/hoi4gui/focuslink";
 import { applyCondition, ConditionItem } from "../src/hoiformat/condition";
 import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
@@ -466,6 +468,7 @@ async function buildContent() {
 				),
 			cornerPosition: 0.5,
 			connectionOffsets: (window as any).focusLinkOffsets,
+			connectionTiles: focusLinkTiles(),
 		},
 	);
 
@@ -930,6 +933,11 @@ function getFocusIcon(
 	return styleTable.name("focus-icon-" + normalizeForStyle("-empty"));
 }
 
+function focusLinkTiles(): GridBoxConnectionTiles | undefined {
+	const tiles = (window as any).focusLinkTiles as { size: number; offset: NumberPosition } | undefined;
+	return tiles ? { size: tiles.size, offset: tiles.offset, className: focusLinkClass } : undefined;
+}
+
 function focusToGridItem(
 	focus: Focus,
 	focustree: FocusTree,
@@ -947,12 +955,8 @@ function focusToGridItem(
 	const connections: GridBoxConnection[] = [];
 
 	for (const prerequisites of focus.prerequisite) {
-		let style: string;
-		if (prerequisites.length > 1) {
-			style = "1px dashed #88aaff";
-		} else {
-			style = "1px solid #88aaff";
-		}
+		const dashed = prerequisites.length > 1;
+		const style = dashed ? "1px dashed #88aaff" : "1px solid #88aaff";
 
 		prerequisites.forEach((p) => {
 			const fp = focustree.focuses[p];
@@ -962,6 +966,7 @@ function focusToGridItem(
 				target: p,
 				targetType: "parent",
 				style: style,
+				dashed,
 				classNames: classNames + " " + classNames2,
 			});
 		});
@@ -1183,6 +1188,7 @@ window.addEventListener("message", tryRun(async (event) => {
 	(window as any).useConditionInFocus = data.useConditionInFocus;
 	(window as any).xGridSize = data.xGridSize;
 	(window as any).focusLinkOffsets = data.layout?.links;
+	(window as any).focusLinkTiles = data.layout?.prerequisiteLink;
 	(window as any).continuousFocusSize = data.layout?.continuous;
 
 	if (selectedFocusTreeIndex >= focusTrees.length) {

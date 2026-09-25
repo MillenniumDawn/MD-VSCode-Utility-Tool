@@ -1,8 +1,9 @@
 import { HOIPartial, NumberLike, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { ContainerWindowType, GridBoxType, GuiFile, PositionType } from '../../hoiformat/gui';
 import { NumberPosition } from '../../util/common';
-import { normalizeNumberLike } from '../../util/hoi4gui/common';
+import { getWidth, normalizeNumberLike } from '../../util/hoi4gui/common';
 import { defaultExclusiveLinkSprites, ExclusiveLinkSpriteSpec } from '../../util/hoi4gui/exclusivelink';
+import { defaultFocusLinkSprites, FocusLinkSpriteSpec, focusLinkShapes } from '../../util/hoi4gui/focuslink';
 
 export type FocusTreeLayoutMode = 'standard' | 'gui';
 
@@ -38,8 +39,10 @@ export interface FocusTreeLayout {
     // `national_focus_center`: the point of the initial_show_position slot the game centres the view
     // on. Only set when the gui file declares it, so the preview keeps opening at the top left otherwise.
     center?: NumberPosition;
-    // startX and endX move the left and right ends of the link to the right.
     exclusive: { offsetY: number; startX: number; endX: number; sprites: ExclusiveLinkSpriteSpec };
+    // The tiles the prerequisite lines are drawn from: their size, how far they sit off the line,
+    // and their sprites.
+    prerequisiteLink: { size: number; offset: NumberPosition; sprites: FocusLinkSpriteSpec };
     // The continuous focus box. Only its size comes from the file: the tree's
     // continuous_focus_position replaces the window's own position in the game.
     continuous: { width: number; height: number };
@@ -61,6 +64,7 @@ export const standardFocusTreeLayout: FocusTreeLayout = {
         textTop: 85,
     },
     exclusive: { offsetY: 0, startX: 0, endX: 0, sprites: defaultExclusiveLinkSprites },
+    prerequisiteLink: { size: 16, offset: { x: 0, y: 0 }, sprites: defaultFocusLinkSprites },
     continuous: { width: 770, height: 380 },
 };
 
@@ -77,6 +81,9 @@ const reference = {
     exclusiveOffset: { x: 172, y: 24 },
     exclusiveOffsetLeftX: 12,
     exclusiveItem: { x: -5, y: 28 },
+    exclusiveOffsetY: 24,
+    exclusiveItemY: 28,
+    link: { x: -2, y: 0 },
 };
 
 type Window = HOIPartial<ContainerWindowType>;
@@ -116,6 +123,26 @@ function length(value: NumberLike | undefined): number | undefined {
 
 function byName<T extends { name?: string }>(elements: T[] | undefined, name: string): T | undefined {
     return elements?.find(e => e.name === name);
+}
+
+// The gui names one sprite, the vertical run. When it follows the game's `..._up_down` naming the
+// other shapes are its siblings; otherwise only the vertical run is replaced.
+function focusLinkSprites(icon: { spritetype?: string; quadtexturesprite?: string; frame?: number } | undefined): FocusLinkSpriteSpec {
+    const defaults = defaultFocusLinkSprites;
+    const name = icon?.spritetype ?? icon?.quadtexturesprite;
+    if (name === undefined) {
+        return defaults;
+    }
+    const suffix = '_up_down';
+    const prefix = name.endsWith(suffix) ? name.slice(0, -suffix.length) : undefined;
+    const gfx = { ...defaults.gfx, up_down: name };
+    if (prefix !== undefined) {
+        for (const shape of focusLinkShapes) {
+            gfx[shape] = `${prefix}_${shape}`;
+        }
+    }
+    const frame = frameOf(icon, defaults.frame);
+    return { gfx, frame, dashedFrame: frame + 1 };
 }
 
 function shift(standard: number, value: number | undefined, referenceValue: number): number {
@@ -200,6 +227,10 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
     const right = exclusiveIcon('right');
     const defaults = defaultExclusiveLinkSprites;
 
+    const linkWindow = findWindow(windows, 'national_focus_link');
+    const linkPosition = point(linkWindow?.position);
+    const linkSize = num(getWidth(linkWindow?.size));
+
     return {
         mode: 'gui',
         // `center` would stack every focus on one slot; the game's own file says `UP`.
@@ -232,6 +263,14 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
                 rightGfx: right?.spritetype ?? right?.quadtexturesprite ?? defaults.rightGfx,
                 rightFrame: frameOf(right, defaults.rightFrame),
             },
+        },
+        prerequisiteLink: {
+            size: linkSize !== undefined && linkSize > 0 ? linkSize : standard.prerequisiteLink.size,
+            offset: {
+                x: shift(0, linkPosition.x, reference.link.x),
+                y: shift(0, linkPosition.y, reference.link.y),
+            },
+            sprites: focusLinkSprites(byName(linkWindow?.icontype, 'link')),
         },
         continuous: {
             width: length(continuousSize?.width) ?? standard.continuous.width,

@@ -22,6 +22,8 @@ import { registerWarningStyles, warningListClass } from "./warningstyles";
 import { registerTraceStyles } from "./tracestyles";
 import { registerExclusiveLinkStyles } from "../../util/hoi4gui/exclusivelink";
 import { loadExclusiveLinkImages, nationalFocusViewGfxFile } from "../../util/hoi4gui/exclusivelinkimages";
+import { registerFocusLinkStyles } from "../../util/hoi4gui/focuslink";
+import { loadFocusLinkImages } from "../../util/hoi4gui/focuslinkimages";
 import { FocusItemLayout, FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "./layout";
 import { describeParseFailure } from "../../util/indexHalf";
 import { Logger } from "../../util/logger";
@@ -85,6 +87,12 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             endX: layout.exclusive.endX,
             y: layout.exclusive.offsetY,
         }, layout.spacing.y);
+
+        // The same two passes for the prerequisite lines: the webview draws the same tiles either way.
+        const focusLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
+            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
+            : await loadFocusLinkImages();
+        registerFocusLinkStyles(styleTable, focusLinkImages);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
@@ -189,6 +197,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
     if (payload.layout.links) {
         jsCodes.push('window.focusLinkOffsets = ' + jsonForScript(payload.layout.links));
     }
+    jsCodes.push('window.focusLinkTiles = ' + jsonForScript(payload.layout.prerequisiteLink));
     if (payload.layout.center) {
         jsCodes.push('window.focusTreeCenter = ' + jsonForScript(payload.layout.center));
     }
