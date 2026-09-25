@@ -341,7 +341,7 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		return renderedHtml(rendered);
 	}
 
-	protected async sendPartialUpdate(
+	protected override async sendPartialUpdate(
 		document: vscode.TextDocument,
 		dependencyChanged = false,
 	): Promise<void> {

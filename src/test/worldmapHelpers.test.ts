@@ -9,6 +9,11 @@ import type {
 } from "../previewdef/worldmap/definitions";
 import { mergeRegionWithWarnings } from "../previewdef/worldmap/loader/common";
 import {
+	fillRegions,
+	RegionKind,
+	sortRegionItems,
+} from "../previewdef/worldmap/loader/regionloader";
+import {
 	calculateStateBoundingBox,
 	sortStates,
 	StateNoBoundingBox,
@@ -228,6 +233,91 @@ describe("previewdef/worldmap/loader/common mergeRegionWithWarnings", () => {
 				(w) => w.source[0]?.type === "strategicregion" && w.source[0].id === 4,
 			),
 		);
+	});
+});
+
+describe("previewdef/worldmap/loader/regionloader", () => {
+	const kind: RegionKind = {
+		sourceType: "supplyarea",
+		idTooLarge: [
+			"worldmap.warnings.supplyareaidtoolarge",
+			"Max supply area ID is too large: {0}.",
+		],
+		idConflict: [
+			"worldmap.warnings.supplyareaidconflict",
+			"There're more than one supply areas using ID {0}.",
+		],
+		notExist: [
+			"worldmap.warnings.supplyareanotexist",
+			"Supply area with id {0} doesn't exist.",
+		],
+		subRegionNotExist: [
+			"worldmap.warnings.stateinsupplyareanotexist",
+			"State {0} used in supply area {1} doesn't exist.",
+		],
+		noValidSubRegions: [
+			"worldmap.warnings.supplyareanovalidstates",
+			"Supply area {0} doesn't have valid states.",
+		],
+	};
+	const area = (
+		id: number,
+		states: number[],
+		file = `map/supplyareas/${id}.txt`,
+	) => ({
+		id,
+		states,
+		file,
+	});
+
+	it("sortRegionItems tags gap and conflict warnings with the kind's source type", () => {
+		const warnings: WorldMapWarning[] = [];
+		const { badId } = sortRegionItems(
+			[area(1, [1]), area(3, [1]), area(1, [1], "dup.txt")],
+			kind,
+			warnings,
+		);
+		assert.strictEqual(badId, -2);
+		assert.deepStrictEqual(warnings, [
+			{
+				source: [{ type: "supplyarea", id: -1 }],
+				relatedFiles: ["dup.txt", "map/supplyareas/1.txt"],
+				text: "There're more than one supply areas using ID 1.",
+			},
+			{
+				source: [{ type: "supplyarea", id: 2 }],
+				relatedFiles: [],
+				text: "Supply area with id 2 doesn't exist.",
+			},
+		]);
+	});
+
+	it("fillRegions fills bad ids too, in order, and calls afterFill once per region", () => {
+		const warnings: WorldMapWarning[] = [];
+		const states = [undefined, state(1, [1], { boundingBox: zone(4, 4) })];
+		const sorted: ReturnType<typeof area>[] = [];
+		sorted[-1] = area(-1, [2]);
+		sorted[1] = area(1, [1]);
+		const filledIds: number[] = [];
+
+		const { filled, badCount } = fillRegions(
+			sorted,
+			-2,
+			"states",
+			states,
+			100,
+			kind,
+			warnings,
+			(region) => filledIds.push(region.id),
+		);
+
+		assert.strictEqual(badCount, 1);
+		assert.deepStrictEqual(filledIds, [-1, 1]);
+		assert.deepStrictEqual(filled[1]?.boundingBox, zone(4, 4));
+		assert.deepStrictEqual(texts(warnings), [
+			"State 2 used in supply area -1 doesn't exist.",
+			"Supply area -1 doesn't have valid states.",
+		]);
 	});
 });
 

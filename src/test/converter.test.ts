@@ -72,6 +72,7 @@ interface Dx10Options {
 	arraySize?: number;
 	dxgiFormat?: number;
 	pixelBytes?: number;
+	pixelFormatFlags?: number;
 }
 
 function makeDdsDx10Header(
@@ -89,7 +90,7 @@ function makeDdsDx10Header(
 	setInt(3, height);
 	setInt(4, width);
 	setInt(19, 32); // ddspf.dwSize
-	setInt(20, DDPF_FOURCC);
+	setInt(20, options.pixelFormatFlags ?? DDPF_FOURCC);
 	setInt(21, fourCC("DX10"));
 	setInt(27, 0x1000); // dwCaps: DDSCAPS_TEXTURE
 	setInt(32, options.dxgiFormat ?? 28); // DXGI_FORMAT_R8G8B8A8_UNORM
@@ -412,6 +413,20 @@ describe("DDS malformed input", () => {
 			() => ddsToPng(dds),
 			isUserError(/Compress format not implemented/),
 		);
+	});
+
+	it("decodes a DX10 texture whose pixel format carries flags besides FourCC", () => {
+		const buf = makeDdsDx10Header(2, 2, {
+			pixelFormatFlags: DDPF_FOURCC | 0x1, // DDPF_ALPHAPIXELS
+			pixelBytes: 16,
+		});
+		for (let i = 0; i < 16; i++) {
+			buf[148 + i] = i + 1;
+		}
+		const png = ddsToPng(parseDds(buf));
+		assert.strictEqual(png.width, 2);
+		assert.strictEqual(png.height, 2);
+		assert.deepStrictEqual(Array.from(png.data), Array.from(buf.subarray(148)));
 	});
 
 	it("still decodes a complete mipmap chain", () => {

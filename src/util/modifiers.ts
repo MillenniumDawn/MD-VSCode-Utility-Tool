@@ -1,7 +1,7 @@
 import { Node } from "../hoiformat/hoiparser";
 import { listFilesFromModOrHOI4, parseHoi4FileCached } from "./fileloader";
 import { getLocalisedTextQuick } from "./localisationIndex";
-import { localisationIndex } from "./featureflags";
+import { getFlags } from "./featureflags";
 import { isSymbolNode } from "../hoiformat/schema";
 import { debug } from "./debug";
 import { ModifierPair, ModifierLine, ModifierTone } from "../previewdef/sharedpayload";
@@ -220,7 +220,7 @@ export function resolveDefinition(
  * modifier nothing localises still says something rather than showing a raw token.
  */
 export async function localiseModifierName(key: string): Promise<string> {
-	if (!localisationIndex) {
+	if (!getFlags().localisationIndex) {
 		return key;
 	}
 
@@ -367,7 +367,7 @@ export async function formatResearchBonuses(
 
 	return Promise.all(
 		pairs.map(async ({ key, value }) => {
-			const localised = localisationIndex ? await getLocalisedTextQuick(key) : undefined;
+			const localised = getFlags().localisationIndex ? await getLocalisedTextQuick(key) : undefined;
 			return {
 				key,
 				name: localised && localised !== key ? localised : humaniseKey(key),

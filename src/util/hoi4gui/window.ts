@@ -2,7 +2,7 @@ import { ContainerWindowType } from "../../hoiformat/gui";
 import { HOIPartial, toStringAsSymbolIgnoreCase } from "../../hoiformat/schema";
 import { getSpriteByGfxName } from "../image/imagecache";
 import { StyleTable, normalizeForStyle } from "../styletable";
-import { getHeight, getWidth } from "./common";
+import { ParentInfo, calculateBBox, getHeight, getWidth } from "./common";
 import { RenderContainerWindowOptions, renderContainerWindow } from "./containerwindow";
 import { RenderNodeCommonOptions } from "./nodecommon";
 
@@ -18,7 +18,8 @@ export interface RenderedWindow {
 // is replaced by -- need all of it, so it lives here rather than in either.
 //
 // The size is returned as well as the markup: a caller fitting the window into a card has to know
-// how big it came out to scale it.
+// how big it came out to scale it. It is the extent from the origin, the window's position included,
+// since that is the box the markup needs to be seen whole.
 export async function renderStandaloneWindow(
 	containerWindow: HOIPartial<ContainerWindowType>,
 	styleTable: StyleTable,
@@ -69,24 +70,24 @@ export async function renderStandaloneWindow(
 		return undefined;
 	};
 
-	const html = await renderContainerWindow(
-		{
-			...containerWindow,
-			position,
-			orientation: toStringAsSymbolIgnoreCase("upper_left"),
-			origo: toStringAsSymbolIgnoreCase("upper_left"),
-		},
-		{
-			size,
-			orientation: "upper_left",
-		},
-		{
-			...commonOptions,
-			ignorePosition: false,
-			enableNavigator: true,
-			onRenderChild,
-		},
-	);
+	const positionedWindow: HOIPartial<ContainerWindowType> = {
+		...containerWindow,
+		position,
+		orientation: toStringAsSymbolIgnoreCase("upper_left"),
+		origo: toStringAsSymbolIgnoreCase("upper_left"),
+	};
+	const parentInfo: ParentInfo = {
+		size,
+		orientation: "upper_left",
+	};
 
-	return { html, width: size.width, height: size.height };
+	const html = await renderContainerWindow(positionedWindow, parentInfo, {
+		...commonOptions,
+		ignorePosition: false,
+		enableNavigator: true,
+		onRenderChild,
+	});
+
+	const [x, y, drawnWidth, drawnHeight] = calculateBBox(positionedWindow, parentInfo);
+	return { html, width: x + drawnWidth, height: y + drawnHeight };
 }

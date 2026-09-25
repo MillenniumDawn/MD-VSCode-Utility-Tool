@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import { getSpriteTypes } from "../hoiformat/spritetype";
-import { gfxIndex } from "./featureflags";
+import { getFlags } from "./featureflags";
 import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import uniq from "lodash/uniq";
@@ -77,7 +77,7 @@ function ensureIndexBuilt(): Promise<[void, void, void]> {
 export async function getGfxContainerFile(
 	gfxName: string | undefined,
 ): Promise<string | undefined> {
-	if (!gfxIndex || !gfxName) {
+	if (!getFlags().gfxIndex || !gfxName) {
 		return undefined;
 	}
 
@@ -98,7 +98,7 @@ export async function getGfxContainerFile(
  * Empty when the index is off, like `getGfxContainerFile`.
  */
 export async function getIndexedGfxNames(): Promise<string[]> {
-	if (!gfxIndex) {
+	if (!getFlags().gfxIndex) {
 		return [];
 	}
 
@@ -329,7 +329,7 @@ async function fillGfxItems(
 }
 
 const watchers = createIndexWatchers({
-	enabled: gfxIndex,
+	enabled: getFlags().gfxIndex,
 	extension: ".gfx",
 	hasStarted: () => builder.hasStarted(),
 	gate: buildGate,

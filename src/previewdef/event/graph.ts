@@ -1,6 +1,6 @@
 import repeat from "lodash/repeat";
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
-import { localisationIndex } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 import { localise } from "../localise";
 import { ConditionComplexExpr } from "../../hoiformat/condition";
 import { Token } from "../../hoiformat/hoiparser";
@@ -392,7 +392,7 @@ export function toolbarFlagsOf(
 		// whose .yml is still missing, and gating on resolution would make the control come and go as
 		// localisation files are edited. getConfiguration().get can hand back undefined, so coerce --
 		// an undefined field would be dropped by JSON.stringify and read as "hide" in the webview.
-		hasLocalisation: !!localisationIndex,
+		hasLocalisation: !!getFlags().localisationIndex,
 		hasPicture: nodes.some((n) => n.kind === "event" && n.picture !== undefined),
 	};
 }
@@ -552,7 +552,7 @@ async function makeUnresolvedNode(
 	// An unresolved id is not a localisation key itself, so try it and then its `.t` title key,
 	// and report nothing rather than echoing the id back when neither resolves.
 	let title: LocText | undefined = undefined;
-	if (localisationIndex) {
+	if (getFlags().localisationIndex) {
 		const direct = await getLocalisedTextQuick(eventId);
 		if (direct && direct !== eventId) {
 			title = { key: eventId, text: direct };

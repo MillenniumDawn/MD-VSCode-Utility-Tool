@@ -124,7 +124,7 @@ class DecisionCategoryFileLoader extends FileLoader<HOIDecisionCategory[]> {
 		}
 	}
 
-	public toString() {
+	public override toString() {
 		return `[DecisionCategoryFileLoader: ${this.file}]`;
 	}
 }
@@ -146,7 +146,7 @@ export class DecisionCategoriesLoader extends FolderLoader<
 		});
 	}
 
-	public toString() {
+	public override toString() {
 		return "[DecisionCategoriesLoader]";
 	}
 }

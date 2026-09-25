@@ -14,7 +14,7 @@ import { getGfxContainerFiles } from "../../util/gfxindex";
 import { getLanguageIdInYml } from "../../util/vsccommon";
 import { ModifierDefinitions, loadModifierDefinitions } from "../../util/modifiers";
 import { IdeaSwap, getIdeaSwaps } from "../../util/ideaSwapIndex";
-import { ideaSwapIndex } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 
 export interface IdeasLoaderResult {
 	ideas: HOIIdeaFile;
@@ -37,7 +37,7 @@ export function ideaSpriteName(picture: string): string {
 export class IdeasLoader extends ContentLoader<IdeasLoaderResult> {
 	private languageKey: string = "";
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		return (
 			(await super.shouldReloadImpl(session)) ||
 			this.languageKey !== getLanguageIdInYml()
@@ -110,7 +110,7 @@ export class IdeasLoader extends ContentLoader<IdeasLoaderResult> {
 				gfxFiles: uniq([...gfxDependencies, ideasGFX]),
 				modifierDefinitions,
 				swaps,
-				swapsUnavailable: !ideaSwapIndex,
+				swapsUnavailable: !getFlags().ideaSwapIndex,
 			},
 			dependencies: uniq([
 				this.file,
@@ -120,7 +120,7 @@ export class IdeasLoader extends ContentLoader<IdeasLoaderResult> {
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[IdeasLoader ${this.file}]`;
 	}
 }

@@ -25,6 +25,7 @@ import {
 import {
 	exclusiveLinkClass,
 	exclusiveLinkInsets,
+	exclusiveLinkVerticalClass,
 	registerExclusiveLinkStyles,
 } from "../util/hoi4gui/exclusivelink";
 import {
@@ -33,6 +34,7 @@ import {
 	_resetImageWorkerPathForTest,
 } from "../util/image/imagedecoder";
 import { FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "../previewdef/focustree/layout";
+import { focusLinkClass, focusLinkShapes, registerFocusLinkStyles } from "../util/hoi4gui/focuslink";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
@@ -420,6 +422,72 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(fallback.toRawCss().includes("background-image: none"));
 	});
 
+	it("registerFocusLinkStyles draws the plain prerequisite line without textures", () => {
+		const styleTable = new StyleTable();
+		registerFocusLinkStyles(styleTable, undefined);
+		const css = styleTable.toRawCss();
+		assert.ok(css.includes(`.${focusLinkClass("up_down", false)}::before {`));
+		assert.ok(css.includes("border-left: 1px solid #88aaff"));
+		assert.ok(css.includes("border-top: 1px dashed #88aaff"));
+		assert.ok(!css.includes("background-image: url("));
+	});
+
+	it("registerFocusLinkStyles paints a solid and a dashed texture per tile shape", () => {
+		const images = (frame: string) =>
+			Object.fromEntries(focusLinkShapes.map(shape => [shape, { uri: `data:image/png;base64,${shape}-${frame}`, width: 16, height: 16 }])) as any;
+		const styleTable = new StyleTable();
+		registerFocusLinkStyles(styleTable, { solid: images("solid"), dashed: images("dashed") });
+		const css = styleTable.toRawCss();
+		assert.ok(css.includes("background-image: url(data:image/png;base64,up_down-solid)"));
+		assert.ok(css.includes("background-image: url(data:image/png;base64,down_left-dashed)"));
+		assert.ok(css.includes("background-repeat: repeat-y"));
+		assert.ok(css.includes("background-repeat: repeat-x"));
+		// The fallback's line lives on the pseudo elements; the textured rules switch them off.
+		assert.ok(css.includes("border-left: none"));
+		assert.ok(css.includes("border-top: none"));
+		assert.ok(!css.includes("#88aaff"));
+	});
+
+	it("buildFocusTreeHtml hands the webview the prerequisite line tiles", async () => {
+		const payload = await buildFocusTreePayload(loaderWithTrees([minimalFocusTree()]), undefined, { resolveIcons: false });
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		assert.ok(html.includes('window.focusLinkTiles = {"size":16,"offset":{"x":0,"y":0}'));
+		assert.ok(payload!.styleTable.toRawCss().includes(`.${focusLinkClass("left_right", true)}::after {`));
+	});
+	// A LEFT or RIGHT tree's exclusive pairs share a column. Its link rotates the same strips, and
+	// its two branches blend in one page just like the horizontal link's do.
+	it("registerExclusiveLinkStyles registers a vertical link sized by the slot height", () => {
+		const image = (name: string) =>
+			({ uri: `data:image/png;base64,${name}`, width: 32, height: 12 }) as any;
+		const textured = new StyleTable();
+		registerExclusiveLinkStyles(
+			textured,
+			{ line: image("line"), left: image("left"), mid: image("mid"), right: image("right") },
+			96,
+			{},
+			130,
+		);
+		const fallback = new StyleTable();
+		registerExclusiveLinkStyles(fallback, undefined, 96, {}, 130);
+
+		const properties = (css: string, selector: string) => {
+			const start = css.indexOf(`${selector} {`);
+			assert.ok(start >= 0, `${selector} is registered`);
+			const body = css.slice(css.indexOf("{", start) + 1, css.indexOf("}", start));
+			return [...body.matchAll(/^\s*([a-z-]+)\s*:/gm)].map(m => m[1]).sort();
+		};
+		const before = `.${exclusiveLinkVerticalClass}::before`;
+		assert.deepStrictEqual(properties(textured.toRawCss(), before), properties(fallback.toRawCss(), before));
+		assert.ok(textured.toRawCss().includes("container-type: size"));
+
+		const css = textured.toRawCss();
+		const { iconInset, lineInset } = exclusiveLinkInsets(130, 32);
+		assert.ok(css.includes(`width: calc(100cqh - ${lineInset * 2}px)`));
+		assert.ok(css.includes(`width: calc(100cqh - ${iconInset * 2}px)`));
+		assert.ok(css.includes("transform: translateX(6px) rotate(90deg)"));
+		assert.ok(fallback.toRawCss().includes("border-left: 1px solid red"));
+	});
+
 	it("exclusiveLinkInsets keeps the marker between the boxes on both grid sizes", () => {
 		// Focus tree: 96px slot, 32px icons -- the numbers the link was hand-tuned to.
 		assert.deepStrictEqual(exclusiveLinkInsets(96, 32), {
@@ -470,6 +538,8 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(css.includes("margin-top: 85px;"));
 		const html = buildFocusTreeHtml(payload!, webview, uri);
 		assert.ok(!html.includes("focusLinkOffsets"));
+		assert.ok(!html.includes("focusTreeCenter"));
+		assert.ok(html.includes('window.continuousFocusSize = {"width":770,"height":380}'));
 	});
 
 	it("takes the grid, the focus layers and the link ends from a gui layout", async () => {
@@ -480,6 +550,8 @@ describe("previewdef/focustree contentbuilder", () => {
 			spacing: { x: 120, y: 150 },
 			item: { ...standardFocusTreeLayout.item, iconOffsetY: -8, titlebarOffsetX: 6, textOffsetX: 4 },
 			links: { parent: { x: 0, y: 10 }, child: { x: 0, y: -5 } },
+			center: { x: 130, y: 32 },
+			continuous: { width: 600, height: 300 },
 		};
 		const payload = await buildFocusTreePayload(
 			loaderWithLayout([minimalFocusTree()], layout),
@@ -498,11 +570,13 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(css.includes("left: 4px;"));
 		const html = buildFocusTreeHtml(payload!, webview, uri);
 		assert.ok(html.includes('window.focusLinkOffsets = {"parent":{"x":0,"y":10},"child":{"x":0,"y":-5}}'));
+		assert.ok(html.includes('window.focusTreeCenter = {"x":130,"y":32}'));
+		assert.ok(html.includes('window.continuousFocusSize = {"width":600,"height":300}'));
 	});
 
 	it("registerExclusiveLinkStyles moves the link by the layout's offset", () => {
 		const plain = new StyleTable();
-		registerExclusiveLinkStyles(plain, undefined, 96, 5);
+		registerExclusiveLinkStyles(plain, undefined, 96, { y: 5 });
 		assert.ok(plain.toRawCss().includes("top: 5px"));
 
 		const image = (name: string) =>
@@ -512,9 +586,52 @@ describe("previewdef/focustree contentbuilder", () => {
 			textured,
 			{ line: image("line"), left: image("left"), mid: image("mid"), right: image("right") },
 			96,
-			5,
+			{ y: 5 },
 		);
 		assert.ok(textured.toRawCss().includes("top: -3px"));
+	});
+
+	it("registerExclusiveLinkStyles moves each end of the link by the layout's x offsets", () => {
+		const plain = new StyleTable();
+		registerExclusiveLinkStyles(plain, undefined, 96, { startX: 10, endX: -2 });
+		const plainCss = plain.toRawCss();
+		assert.ok(plainCss.includes("left: 10px;"));
+		assert.ok(plainCss.includes("right: 2px;"));
+
+		// 16px icons in a 96px slot: icons inset 40px, the line 48px, before the offsets.
+		const image = (name: string) =>
+			({ uri: `data:image/png;base64,${name}`, width: 16, height: 16 }) as any;
+		const textured = new StyleTable();
+		registerExclusiveLinkStyles(
+			textured,
+			{ line: image("line"), left: image("left"), mid: image("mid"), right: image("right") },
+			96,
+			{ startX: 10, endX: -2 },
+		);
+		const css = textured.toRawCss();
+		assert.ok(/::before \{[^}]*left: 58px;[^}]*right: 50px;/.test(css));
+		assert.ok(/::after \{[^}]*left: 50px;[^}]*right: 42px;/.test(css));
+	});
+
+	it("registerExclusiveLinkStyles without offsets keeps the link where it was", () => {
+		const plain = new StyleTable();
+		registerExclusiveLinkStyles(plain, undefined, 96);
+		const plainCss = plain.toRawCss();
+		assert.ok(plainCss.includes("left: 0;"));
+		assert.ok(plainCss.includes("right: 0;"));
+		assert.ok(plainCss.includes("top: 0;"));
+
+		const image = (name: string) =>
+			({ uri: `data:image/png;base64,${name}`, width: 16, height: 16 }) as any;
+		const textured = new StyleTable();
+		registerExclusiveLinkStyles(
+			textured,
+			{ line: image("line"), left: image("left"), mid: image("mid"), right: image("right") },
+			96,
+		);
+		const css = textured.toRawCss();
+		assert.ok(/::before \{[^}]*left: 48px;[^}]*right: 48px;/.test(css));
+		assert.ok(/::after \{[^}]*left: 40px;[^}]*right: 40px;/.test(css));
 	});
 
 	it("the standard layout's grid box is stable", () => {
