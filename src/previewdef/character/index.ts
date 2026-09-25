@@ -5,10 +5,10 @@ import { matchPathEnd } from "../../util/nodecommon";
 import { PreviewProviderDef } from "../previewmanager";
 import { LoaderPreview } from "../loaderpreview";
 import { CharactersLoader } from "./loader";
-import { characterPreview } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 
 function canPreviewCharacter(document: vscode.TextDocument) {
-	if (!characterPreview) {
+	if (!getFlags().characterPreview) {
 		return undefined;
 	}
 
@@ -48,7 +48,7 @@ class CharacterPreview extends LoaderPreview<CharactersLoader> {
 export const characterPreviewDef: PreviewProviderDef = {
 	type: "character",
 	displayName: () => localize("preview.type.character", "Characters (common/characters/*.txt)"),
-	isEnabled: () => characterPreview,
+	isEnabled: () => getFlags().characterPreview,
 	canPreview: canPreviewCharacter,
 	previewConstructor: CharacterPreview,
 };

@@ -11,7 +11,7 @@ import { debug } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { Mio, MioTrait, TraitEffect } from './schema';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
-import { localisationIndex } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 import { LoaderRender } from '../loaderpreview';
 import { registerExclusiveLinkStyles } from '../../util/hoi4gui/exclusivelink';
 import { loadExclusiveLinkImages } from '../../util/hoi4gui/exclusivelinkimages';
@@ -164,7 +164,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
 
 async function renderMioOptions(mios: Mio[]): Promise<string> {
     return (await Promise.all(mios.map(async (mio, i) => {
-        const localizedText = localisationIndex ? `(${mio.id}) ${await getLocalisedTextQuick(mio.id)}` : mio.id;
+        const localizedText = getFlags().localisationIndex ? `(${mio.id}) ${await getLocalisedTextQuick(mio.id)}` : mio.id;
         return `<option value="${i}">${htmlEscape(localizedText)}</option>`;
     }))).join('');
 }
@@ -252,7 +252,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
 
     // The token may be a quoted string and the localised name is copied verbatim out of the .yml, so
     // both are mod text and are escaped for the context they land in: the title attribute and the body.
-    const traitName = localisationIndex ? (await getLocalisedTextQuick(trait.name)) ?? '' : '';
+    const traitName = getFlags().localisationIndex ? (await getLocalisedTextQuick(trait.name)) ?? '' : '';
 
     return `<div
     class="
@@ -285,7 +285,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
         start="${trait.token?.start}"
         end="${trait.token?.end}"
         ${file === trait.file ? '' : `file="${escapeAttr(trait.file)}"`}
-        title="${escapeAttr(trait.id)}${localisationIndex ? `\n${escapeAttr(traitName)}` : ''}\n({{position}})">
+        title="${escapeAttr(trait.id)}${getFlags().localisationIndex ? `\n${escapeAttr(traitName)}` : ''}\n({{position}})">
             <div class="
                 ${styleTable.style('effect-host', () => `
                     text-align: center;

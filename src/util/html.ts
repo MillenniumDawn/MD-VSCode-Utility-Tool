@@ -4,7 +4,7 @@ import { StyleTable } from './styletable';
 import { forceError, randomString, jsonForScript } from './common';
 import { htmlEscape } from './escape';
 import { localize } from './i18n';
-import { previewWheel } from './featureflags';
+import { getFlags } from './featureflags';
 
 export interface DynamicScript {
     content: string;
@@ -30,7 +30,7 @@ export function previewedFileUriScript(uri: vscode.Uri): DynamicScript {
 // JSON.stringify: the value is whatever the workspace settings say it is, and a string holding
 // `</script` would otherwise end the inline script.
 function previewWheelScript(): DynamicScript {
-    return { content: `window.previewWheel = ${jsonForScript(previewWheel ?? 'scroll')};` };
+    return { content: `window.previewWheel = ${jsonForScript(getFlags().previewWheel ?? 'scroll')};` };
 }
 
 export interface HtmlOptions {

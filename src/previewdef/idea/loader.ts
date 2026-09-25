@@ -14,7 +14,7 @@ import { getGfxContainerFiles } from "../../util/gfxindex";
 import { getLanguageIdInYml } from "../../util/vsccommon";
 import { ModifierDefinitions, loadModifierDefinitions } from "../../util/modifiers";
 import { IdeaSwap, getIdeaSwaps } from "../../util/ideaSwapIndex";
-import { ideaSwapIndex } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 
 export interface IdeasLoaderResult {
 	ideas: HOIIdeaFile;
@@ -110,7 +110,7 @@ export class IdeasLoader extends ContentLoader<IdeasLoaderResult> {
 				gfxFiles: uniq([...gfxDependencies, ideasGFX]),
 				modifierDefinitions,
 				swaps,
-				swapsUnavailable: !ideaSwapIndex,
+				swapsUnavailable: !getFlags().ideaSwapIndex,
 			},
 			dependencies: uniq([
 				this.file,

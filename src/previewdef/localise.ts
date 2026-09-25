@@ -1,4 +1,4 @@
-import { localisationIndex } from "../util/featureflags";
+import { getFlags } from "../util/featureflags";
 import { getLocalisedTextQuick } from "../util/localisationIndex";
 import { LocText } from "./sharedpayload";
 
@@ -15,7 +15,7 @@ import { LocText } from "./sharedpayload";
 export async function localise(key: string): Promise<LocText> {
 	// getLocalisedTextQuick echoes the key back when nothing resolves, which is exactly the fallback
 	// the preview wants, so an unresolved key simply reads the same either way.
-	const text = localisationIndex ? await getLocalisedTextQuick(key) : key;
+	const text = getFlags().localisationIndex ? await getLocalisedTextQuick(key) : key;
 	return { key, text: text ?? key };
 }
 
