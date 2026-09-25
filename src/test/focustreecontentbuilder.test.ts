@@ -431,11 +431,11 @@ describe("previewdef/focustree contentbuilder", () => {
 			textured,
 			{ line: image("line"), left: image("left"), mid: image("mid"), right: image("right") },
 			96,
-			0,
+			{},
 			130,
 		);
 		const fallback = new StyleTable();
-		registerExclusiveLinkStyles(fallback, undefined, 96, 0, 130);
+		registerExclusiveLinkStyles(fallback, undefined, 96, {}, 130);
 
 		const properties = (css: string, selector: string) => {
 			const start = css.indexOf(`${selector} {`);
