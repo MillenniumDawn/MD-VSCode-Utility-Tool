@@ -58,7 +58,7 @@ export class TerrainDefinitionLoader extends FolderLoader<Terrain[], Terrain[]> 
         });
     }
 
-    public toString() {
+    public override toString() {
         return `[TerrainDefinitionLoader]`;
     }
 }
@@ -71,7 +71,7 @@ export class TerrainFileLoader extends FileLoader<Terrain[]> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[TerrainFileLoader ${this.file}]`;
     }
 }

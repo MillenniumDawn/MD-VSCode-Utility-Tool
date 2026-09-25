@@ -1,9 +1,25 @@
 Unreleased
 
+  Functionality:
+
+- [ Build ] The build now rejects a method that no longer overrides anything and a parameter that is never read, so renaming a shared loader or preview method can no longer leave a stale copy behind unnoticed. Issue #376.
+
+  Bugfixes:
+
+- When the same mod file appears more than once in the "Select working mod" list, the selected entries now keep a fixed order at the top instead of one that could change between VS Code versions. Issue #374.
+- [ DDS ] BC7-compressed DDS textures are now identified as BC7 instead of BC6H, so the error shown for them names the right format. Issue #373.
+- [ Decision Previewer ] A scripted-GUI window placed away from the top-left corner is no longer cut off on its right and bottom edges in its decision card. Issue #365.
+- Icons and buttons that share a sprite but are drawn at different scales now each show their background at the right size, instead of all taking the size of the first one drawn. Issue #366.
+- [ Focus Tree Previewer ] [ MIO Preview ] Changing several options in quick succession no longer leaves an older version of the tree on screen; the latest change always wins. Issue #367.
+- Previews no longer re-check unchanged files over and over while one preview loads, which made opening large previews slower than needed. Issue #368.
+- A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
+- [ GUI ] Showing or hiding a container window no longer affects a sibling whose name starts with the same text, such as `battle` and `battleplan`. Issue #363.
+
 v1.1.39
 
   Bugfixes:
 
+- [ DDS ] A DX10 .dds texture whose pixel format carries extra flags besides FourCC now opens instead of failing with a "dxt10Header should be provided" error. Issue #364.
 - [ Decision Previewer ] The "filtered out" count and tooltip on a bridged arrow now name only the decisions on that arrow's own path, instead of every decision the filter removed along other branches of the chain. Issue #362.
 - [ Idea Previewer ] An idea whose chain continues into another category is no longer drawn a second time as a loose card in that category, so it is counted and found by search only once. Issue #361.
 - Dates written without quotes, such as `date > 1936.1.1` or a `1939.1.1 = { ... }` history block, are now read whole instead of losing their day to a stray `.1` entry. Issue #360.

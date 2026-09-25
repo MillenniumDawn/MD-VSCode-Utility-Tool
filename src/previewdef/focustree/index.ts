@@ -72,7 +72,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // change every label. inlayWindowGfxRoots had no listener at all, so fixing a missing inlay
     // sprite did nothing until the file was edited or the preview reopened. focusTreeLayout decides the
     // page's grid and the focus markup.
-    protected get reloadOnConfigurationChange(): readonly string[] {
+    protected override get reloadOnConfigurationChange(): readonly string[] {
         return [
             'useConditionInFocus',
             'focusTreeLayout',
@@ -145,11 +145,11 @@ class FocusTreePreview extends UpdateablePreviewBase {
         return fingerprints;
     }
 
-    protected getLoadingShellHtml(): string {
+    protected override getLoadingShellHtml(): string {
         return loadingShellHtml(localize('focustree.loading.start', 'Preparing focus tree...'));
     }
 
-    protected beforeRenderAssign(): void {
+    protected override beforeRenderAssign(): void {
         // A full (re)load tears the page down: bump the generation so a slow background icon push
         // from the superseded render is dropped instead of overwriting the newer one, and re-arm the
         // ready signal before the replacement page can fire it.
@@ -157,7 +157,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         this.webviewReady = new Promise<void>(resolve => { this.signalWebviewReady = resolve; });
     }
 
-    protected async onRenderApplied(_rendered: LoaderRenderResult, assigned: boolean, sideChanged: boolean): Promise<void> {
+    protected override async onRenderApplied(_rendered: LoaderRenderResult, assigned: boolean, sideChanged: boolean): Promise<void> {
         if (this.pendingTreeFingerprints !== undefined) {
             this.lastTreeStructural = this.pendingTreeFingerprints.structural;
             this.lastTreeIcon = this.pendingTreeFingerprints.icon;

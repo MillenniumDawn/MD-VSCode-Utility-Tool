@@ -28,7 +28,7 @@ class TechnologyTreePreview extends LoaderPreview<TechnologyTreeLoader> {
     // and whether the dropdown's warning shows; technologyGfxRoots changes which gfx files the
     // icons resolve against; localisationIndex and previewLocalisation change every label and
     // the name-mode warning.
-    protected get reloadOnConfigurationChange(): readonly string[] {
+    protected override get reloadOnConfigurationChange(): readonly string[] {
         return [
             'technologyCountryIcons',
             'technologyGfxRoots',
@@ -42,7 +42,7 @@ class TechnologyTreePreview extends LoaderPreview<TechnologyTreeLoader> {
     // its own. Re-render once the choice is stored -- the render reads it back from there -- and let
     // it go out as an in-place update, so zoom, scroll, the selected folder and the name mode all
     // survive the change.
-    protected async onPreviewOptionSet(key: string, value: unknown): Promise<void> {
+    protected override async onPreviewOptionSet(key: string, value: unknown): Promise<void> {
         await super.onPreviewOptionSet(key, value);
         if (key !== technologyCountryOption) {
             return;

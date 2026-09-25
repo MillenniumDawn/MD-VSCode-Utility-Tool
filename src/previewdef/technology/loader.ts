@@ -68,7 +68,7 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[TechnologyTreeLoader ${this.file}]`;
     }
 }
