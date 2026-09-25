@@ -32,13 +32,29 @@ export class Image {
 	}
 }
 
+// noofframes comes straight from the .gfx file: 0 would make the frame width Infinity, and more
+// frames than the texture has columns would cut zero-width frames that pngjs refuses to blit.
+export function effectiveFrameCount(
+	noOfFrames: number,
+	imageWidth: number,
+): number {
+	const frames = Math.floor(noOfFrames);
+	if (!Number.isFinite(frames) || frames < 1) {
+		return 1;
+	}
+	return Math.min(frames, Math.max(1, Math.floor(imageWidth)));
+}
+
 export class Sprite {
 	private cachedFrames: Image[] | undefined = undefined;
+	readonly noOfFrames: number;
 	constructor(
 		readonly id: string,
 		readonly image: Image,
-		readonly noOfFrames: number,
-	) {}
+		noOfFrames: number,
+	) {
+		this.noOfFrames = effectiveFrameCount(noOfFrames, image.width);
+	}
 
 	public get frames(): Image[] {
 		if (this.cachedFrames) {
@@ -78,7 +94,7 @@ export class Sprite {
 	}
 
 	public get width(): number {
-		return this.image.width / this.noOfFrames;
+		return Math.floor(this.image.width / this.noOfFrames);
 	}
 
 	public get height(): number {

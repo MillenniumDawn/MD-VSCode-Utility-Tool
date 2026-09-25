@@ -24,6 +24,7 @@ v1.1.40
 - A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
 - [ GUI ] Showing or hiding a container window no longer affects a sibling whose name starts with the same text, such as `battle` and `battleplan`. Issue #363.
 - DDS textures using the DX10 pixel format alongside extra flags now open correctly. Previously they were misread because the DX10 header was skipped, causing pixel data to be read too early. Issue #364.
+- [ GFX ] Sprites whose texture width does not divide evenly by `noofframes` no longer lose pixels at the edge of each frame, and a `noofframes` of 0 or larger than the texture width no longer breaks the preview. Issue #371.
 
 v1.1.39
 
