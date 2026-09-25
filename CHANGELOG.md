@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the continuous focus box now takes its size from `continuous_focus_window` in `nationalfocusview.gui` instead of always being 770 by 380. Issue #398.
 - [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the mutually exclusive link now also moves sideways with `exclusive_offset`, `exclusive_offset_left` and the x of `national_focus_exclusive_item` in nationalfocusview.gui. Issue #397.
 - [ Build ] The build now rejects a method that no longer overrides anything and a parameter that is never read, so renaming a shared loader or preview method can no longer leave a stale copy behind unnoticed. Issue #376.
 

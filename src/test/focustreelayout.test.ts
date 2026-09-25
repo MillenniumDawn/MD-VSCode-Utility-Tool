@@ -27,6 +27,12 @@ const mdGui = `guiTypes = {
 					slotsize = { width = 1 height = 1 }
 					format = "UP"
 				}
+				containerWindowType = {
+					name = "continuous_focus_window"
+					position = { x=0 y=0 }
+					size = { width = 770 height = 380 }
+					margin = { top = 13 left = 0 bottom = 13 right = 13}
+				}
 			}
 		}
 		containerWindowType = {
@@ -96,6 +102,24 @@ describe('previewdef/focustree/layout', () => {
         const layout = buildFocusTreeLayout([parseGui('guiTypes = { containerWindowType = { name = "unrelated" } }')]);
         assert.deepStrictEqual({ ...layout, mode: 'standard' }, standardFocusTreeLayout);
         assert.deepStrictEqual({ ...buildFocusTreeLayout([]), mode: 'standard' }, standardFocusTreeLayout);
+    });
+
+    it('sizes the continuous focus box from continuous_focus_window', () => {
+        const gui = (size: string) => `guiTypes = { containerWindowType = {
+            name = "nationalfocusview"
+            containerWindowType = {
+                name = "tree"
+                containerWindowType = {
+                    name = "grid_window"
+                    containerWindowType = { name = "continuous_focus_window" ${size} }
+                }
+            }
+        } }`;
+        assert.deepStrictEqual(buildFocusTreeLayout([parseGui(gui('size = { width = 600 height = 300 }'))]).continuous, { width: 600, height: 300 });
+        assert.deepStrictEqual(buildFocusTreeLayout([parseGui(gui('size = { width = 500 }'))]).continuous, { width: 500, height: 380 });
+        assert.deepStrictEqual(buildFocusTreeLayout([parseGui(gui('size = { width = 100%% height = 200 }'))]).continuous, { width: 770, height: 200 });
+        assert.deepStrictEqual(buildFocusTreeLayout([parseGui(gui(''))]).continuous, standardFocusTreeLayout.continuous);
+        assert.deepStrictEqual(standardFocusTreeLayout.continuous, { width: 770, height: 380 });
     });
 
     it('takes the spacing and the grid from the file, resolving @constants', () => {

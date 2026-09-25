@@ -585,21 +585,7 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 	if (!focusTree) {
 		return;
 	}
-	const continuousFocuses = document.getElementById(
-		"continuousFocuses",
-	) as HTMLDivElement;
-
-	if (
-		focusTree.continuousFocusPositionX !== undefined &&
-		focusTree.continuousFocusPositionY !== undefined
-	) {
-		continuousFocuses.style.left =
-			focusTree.continuousFocusPositionX - 59 + "px";
-		continuousFocuses.style.top = focusTree.continuousFocusPositionY + 7 + "px";
-		continuousFocuses.style.display = "block";
-	} else {
-		continuousFocuses.style.display = "none";
-	}
+	placeContinuousFocuses(focusTree);
 
 	if (useConditionInFocus) {
 		const conditionExprs = dedupeConditionExprs(
@@ -702,6 +688,31 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 	}
 
 	renderWarningList(focusTree);
+}
+
+// The size is the layout's: continuous_focus_window's in gui mode. The shell is not rebuilt on an
+// in-place update, so it is set here rather than in the shell's stylesheet.
+export function placeContinuousFocuses(focusTree: FocusTree) {
+	const continuousFocuses = document.getElementById("continuousFocuses");
+	if (!continuousFocuses) {
+		return;
+	}
+	const size: { width: number; height: number } | undefined = (window as any)
+		.continuousFocusSize;
+
+	if (
+		focusTree.continuousFocusPositionX !== undefined &&
+		focusTree.continuousFocusPositionY !== undefined
+	) {
+		continuousFocuses.style.left =
+			focusTree.continuousFocusPositionX - 59 + "px";
+		continuousFocuses.style.top = focusTree.continuousFocusPositionY + 7 + "px";
+		continuousFocuses.style.width = (size?.width ?? 770) + "px";
+		continuousFocuses.style.height = (size?.height ?? 380) + "px";
+		continuousFocuses.style.display = "block";
+	} else {
+		continuousFocuses.style.display = "none";
+	}
 }
 
 // The warnings panel lists one clickable entry per warning: activating it closes the panel and
@@ -1101,6 +1112,7 @@ window.addEventListener("message", tryRun(async (event) => {
 	(window as any).useConditionInFocus = data.useConditionInFocus;
 	(window as any).xGridSize = data.xGridSize;
 	(window as any).focusLinkOffsets = data.layout?.links;
+	(window as any).continuousFocusSize = data.layout?.continuous;
 
 	if (selectedFocusTreeIndex >= focusTrees.length) {
 		selectedFocusTreeIndex = Math.max(0, focusTrees.length - 1);
