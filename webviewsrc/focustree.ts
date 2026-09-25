@@ -7,6 +7,7 @@ import {
 	tryRun,
 	enableZoom,
 	initCommon,
+	currentScale,
 } from "./util/common";
 import { DivDropdown } from "./util/dropdown";
 import difference from "lodash/difference";
@@ -299,6 +300,61 @@ function applyFocusOverlayVisibility() {
 	}
 }
 
+// Where the last render put grid slot (0, 0) inside #focustreeplaceholder and where it resolved
+// each focus, so the initial scroll lands on the slot the tree was actually drawn in.
+let renderedOrigin: NumberPosition = { x: 0, y: 0 };
+let renderedFocusPosition: Record<string, NumberPosition> = {};
+
+/**
+ * The point, relative to #focustreeplaceholder at scale 1, that the game centres the view on when it
+ * opens the tree: the `initial_show_position` slot moved by `national_focus_center`. Undefined when
+ * the gui layout declares no centre or the tree no initial_show_position.
+ */
+export function initialShowPoint(
+	focusTree: FocusTree,
+	focusPosition: Record<string, NumberPosition>,
+	origin: NumberPosition,
+	spacing: NumberPosition,
+	center: NumberPosition | undefined,
+): NumberPosition | undefined {
+	const show = focusTree.initialShowPosition;
+	if (!center || !show) {
+		return undefined;
+	}
+	const slot = (show.focus !== undefined ? focusPosition[show.focus] : undefined) ?? show;
+	return {
+		x: origin.x + slot.x * spacing.x + center.x,
+		y: origin.y + slot.y * spacing.y + center.y,
+	};
+}
+
+export function scrollToInitialShowPosition(
+	focusTree: FocusTree | undefined = focusTrees[selectedFocusTreeIndex],
+): boolean {
+	const gridbox: GridBoxType | undefined = (window as any).gridBox;
+	if (!focusTree || !gridbox) {
+		return false;
+	}
+	const point = initialShowPoint(
+		focusTree,
+		renderedFocusPosition,
+		renderedOrigin,
+		{ x: (window as any).xGridSize, y: gridbox.slotsize?.height?._value ?? 0 },
+		(window as any).focusTreeCenter,
+	);
+	const placeholder = document.getElementById("focustreeplaceholder");
+	if (!point || !placeholder) {
+		return false;
+	}
+	const rect = placeholder.getBoundingClientRect();
+	const scale = currentScale();
+	window.scroll(
+		Math.max(0, rect.left + window.scrollX + point.x * scale - window.innerWidth / 2),
+		Math.max(0, rect.top + window.scrollY + point.y * scale - window.innerHeight / 2),
+	);
+	return true;
+}
+
 let renderGeneration = 0;
 
 async function buildContent() {
@@ -375,6 +431,10 @@ async function buildContent() {
 		{ width: xGridSize, height: gridbox.slotsize?.height?._value ?? xGridSize },
 		{ width: xGridSize, height: 0 },
 	);
+	// Where the last render put grid slot (0, 0), so the initial scroll lands on the slot the tree
+	// was actually drawn in.
+	renderedOrigin = { x: gridbox.position.x._value - contentOffset.x, y: gridbox.position.y._value - contentOffset.y };
+	renderedFocusPosition = focusPosition;
 
 	const focusTreeContent = await renderGridBoxCommon(
 		{
@@ -1401,9 +1461,15 @@ window.addEventListener(
 			}));
 		}
 
+		// A preview with no scroll saved yet is opening for the first time: open it where the game
+		// opens the tree. A reopened one goes back to where the reader left it.
+		const state = getState();
+		const firstOpen = state.xOffset === undefined && state.yOffset === undefined;
 		updateSelectedFocusTree(false);
 		await buildContent();
-		scrollToState();
+		if (!firstOpen || !scrollToInitialShowPosition()) {
+			scrollToState();
+		}
 
 		// Tells the extension the structure is on screen so it can post the deferred focus-icon CSS.
 		vscode.postMessage({ command: "ready" });
