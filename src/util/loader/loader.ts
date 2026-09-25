@@ -18,6 +18,9 @@ export class LoaderSession {
 		boolean | "checking"
 	> = new Map();
 	private cachedLoader: Record<string, Loader<unknown, unknown>> = {};
+	// Text a content loader read while deciding to reload, handed to that same session's load.
+	// Kept here rather than on the loader so an overlapping load cannot swap it out.
+	private peekedContent: Map<Loader<unknown, unknown>, string> = new Map();
 	public loadingLoader: Loader<unknown, unknown>[] = [];
 
 	constructor(
@@ -54,6 +57,18 @@ export class LoaderSession {
 		return this.shouldLoaderReload.get(loader) ?? false;
 	}
 
+	public setPeekedContent(loader: Loader<unknown, unknown>, content: string) {
+		this.peekedContent.set(loader, content);
+	}
+
+	public takePeekedContent(
+		loader: Loader<unknown, unknown>,
+	): string | undefined {
+		const content = this.peekedContent.get(loader);
+		this.peekedContent.delete(loader);
+		return content;
+	}
+
 	public createOrGetCachedLoader<R extends Loader<unknown, unknown>>(
 		file: string,
 		loaderType: { new (file: string): R },
@@ -75,6 +90,7 @@ export class LoaderSession {
 		clone.loadedLoader = this.loadedLoader;
 		clone.shouldLoaderReload = this.shouldLoaderReload;
 		clone.cachedLoader = this.cachedLoader;
+		clone.peekedContent = this.peekedContent;
 		clone.loadingLoader = [...this.loadingLoader];
 		clone.force = this.force;
 		clone.cancelled = this.cancelled;
@@ -334,8 +350,9 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 	protected readDependency = true;
 	// The text the last load saw, kept whole. Comparing strings is a length check and a memcmp,
 	// where hashing walked every character of the document on every render, changed or not.
+	// Only a load that read the text sets it, so a load that joined another's promise cannot
+	// claim text whose result was never cached.
 	private lastContent: string | undefined = undefined;
-	private pendingContent: string | undefined = undefined;
 
 	constructor(
 		public file: string,
@@ -351,14 +368,13 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 				this.loaderDependencies.shouldReload(session)
 			);
 		}
-		// Peek at in-memory content; store it to avoid a second call in loadImpl
+		// Peek at in-memory content; hand it to this session's loadImpl to avoid a second call
 		const content = await this.contentProvider();
 		const depsChanged = await this.loaderDependencies.shouldReload(session);
 		if (content === this.lastContent && !depsChanged) {
 			return false;
 		}
-		this.pendingContent = content;
-		this.lastContent = content;
+		session.setPeekedContent(this, content);
 		return true;
 	}
 
@@ -381,15 +397,14 @@ export abstract class ContentLoader<T, E = {}> extends Loader<T, E> {
 					.toString("utf-8")
 					.replace(/^\uFEFF/, "");
 			} else {
-				content = this.pendingContent ?? (await this.contentProvider());
+				content =
+					session.takePeekedContent(this) ?? (await this.contentProvider());
 				// The first load never goes through shouldReloadImpl, so it records the text
 				// itself; otherwise the next check had nothing to compare against and every
 				// second render reloaded an unchanged document.
 				this.lastContent = content;
 			}
-			this.pendingContent = undefined;
 		} catch (e) {
-			this.pendingContent = undefined;
 			error(e);
 			errorValue = e;
 		}
