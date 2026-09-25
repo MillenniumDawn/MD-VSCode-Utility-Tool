@@ -5,6 +5,7 @@ v1.1.40
   Functionality:
 
 - [ World Map ] Share one skeleton between the state, supply area and strategic region loaders. Issue #375.
+- [ Build ] The build now rejects a method that no longer overrides anything and a parameter that is never read, so renaming a shared loader or preview method can no longer leave a stale copy behind unnoticed. Issue #376.
 
   Bugfixes:
 

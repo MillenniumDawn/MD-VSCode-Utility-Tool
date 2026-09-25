@@ -17,7 +17,7 @@ class GuiPreview extends LoaderPreview<GuiFileLoader> {
 
     // gfxIndex changes which sprites the window can draw; localisationIndex and
     // previewLocalisation change the text inside it.
-    protected get reloadOnConfigurationChange(): readonly string[] {
+    protected override get reloadOnConfigurationChange(): readonly string[] {
         return ['gfxIndex', 'localisationIndex', 'previewLocalisation'];
     }
 }

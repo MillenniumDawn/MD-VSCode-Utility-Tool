@@ -32,7 +32,7 @@ export class GuiFileLoader extends ContentLoader<GuiFileLoaderResult> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[GuiFileLoader ${this.file}]`;
     }
 }

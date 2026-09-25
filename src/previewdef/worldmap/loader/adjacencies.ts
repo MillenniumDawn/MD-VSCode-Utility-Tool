@@ -12,7 +12,7 @@ export class AdjacenciesLoader extends FileLoader<ProvinceEdgeAdjacency[]> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[AdjacenciesLoader: ${this.file}]`;
     }
 }
