@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { getSpriteTypes, SpriteType } from "../../hoiformat/spritetype";
 import { getImageByPath } from "../../util/image/imagecache";
+import { effectiveFrameCount } from "../../util/image/sprite";
 import { localize } from "../../util/i18n";
 import { escapeAttr, html, htmlEscape, previewedFileUriScript, errorPage } from "../../util/html";
 import { StyleTable, normalizeForStyle } from "../../util/styletable";
@@ -128,8 +129,11 @@ async function renderSpriteType(
         title="${htmlEscape(spriteType.name)}${
 					image
 						? ` (${
-								image.width / spriteType.noofframes
-							}x${image.height}x${spriteType.noofframes})`
+								Math.floor(
+									image.width /
+										effectiveFrameCount(spriteType.noofframes, image.width),
+								)
+							}x${image.height}x${effectiveFrameCount(spriteType.noofframes, image.width)})`
 						: ""
 				}\n${image ? image.path : localize("gfx.imagenotfound", "Image not found")}">
         ${
