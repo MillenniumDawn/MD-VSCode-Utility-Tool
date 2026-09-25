@@ -4,6 +4,7 @@ v1.1.40
 
   Bugfixes:
 
+- When the same mod file appears more than once in the "Select working mod" list, the selected entries now keep a fixed order at the top instead of one that could change between VS Code versions. Issue #374.
 - [ DDS ] BC7-compressed DDS textures are now identified as BC7 instead of BC6H, so the error shown for them names the right format. Issue #373.
 - [ Decision Previewer ] A scripted-GUI window placed away from the top-left corner is no longer cut off on its right and bottom edges in its decision card. Issue #365.
 - Icons and buttons that share a sprite but are drawn at different scales now each show their background at the right size, instead of all taking the size of the first one drawn. Issue #366.
