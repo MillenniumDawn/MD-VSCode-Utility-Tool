@@ -5,10 +5,10 @@ import { matchPathEnd } from '../../util/nodecommon';
 import { PreviewProviderDef } from '../previewmanager';
 import { LoaderPreview } from '../loaderpreview';
 import { EventsLoader } from './loader';
-import { eventTreePreview } from '../../util/featureflags';
+import { getFlags } from '../../util/featureflags';
 
 function canPreviewEvent(document: vscode.TextDocument) {
-    if (!eventTreePreview) {
+    if (!getFlags().eventTreePreview) {
         return undefined;
     }
 
@@ -37,7 +37,7 @@ class EventPreview extends LoaderPreview<EventsLoader> {
 export const eventPreviewDef: PreviewProviderDef = {
     type: 'event',
     displayName: () => localize('preview.type.event', 'Event tree (events/*.txt)'),
-    isEnabled: () => eventTreePreview,
+    isEnabled: () => getFlags().eventTreePreview,
     canPreview: canPreviewEvent,
     previewConstructor: EventPreview,
 };

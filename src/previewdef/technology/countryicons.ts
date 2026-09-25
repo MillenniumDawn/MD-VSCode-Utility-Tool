@@ -2,7 +2,7 @@ import { TechnologyTree } from "./schema";
 import { getGfxIndexVersion, getIndexedGfxNames } from "../../util/gfxindex";
 import { countryTagsExpiryToken, loadCountryTags } from "../../util/countrytags";
 import { PromiseCache } from "../../util/cache";
-import { gfxIndex } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 
 // The game draws a technology with the icon its country ships when there is one, falling back to
 // the generic icon otherwise. The preview offers that as a country dropdown, so it has to answer
@@ -90,7 +90,7 @@ export function buildTechnologyTagMap(
  * without any mutation moving that counter.
  */
 export async function technologyTagMapExpiryToken(): Promise<string> {
-	return `${gfxIndex ? getGfxIndexVersion() : "off"}|${await countryTagsExpiryToken()}`;
+	return `${getFlags().gfxIndex ? getGfxIndexVersion() : "off"}|${await countryTagsExpiryToken()}`;
 }
 
 // Reads the whole sprite namespace, so it is empty when the gfx index is off -- which is also when
