@@ -189,6 +189,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
     if (payload.layout.links) {
         jsCodes.push('window.focusLinkOffsets = ' + jsonForScript(payload.layout.links));
     }
+    jsCodes.push('window.continuousFocusSize = ' + jsonForScript(payload.layout.continuous));
     jsCodes.push(i18nTableAsScript());
 
     const baseContent = renderFocusTreeShell(payload.focusTrees, payload.styleTable, payload.toolbarFlags, payload.styleNonce);
