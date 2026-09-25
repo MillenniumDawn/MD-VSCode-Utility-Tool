@@ -462,6 +462,53 @@ describe('util/loader/loader', () => {
             assert.strictEqual(loader.postLoadCalls, 3);
         });
 
+        it('reloads an edit that arrived while an earlier load was still running (#369)', async () => {
+            // postLoad parks on a gate, so a second load can check the text and then join the
+            // first one's promise, which parses the older text.
+            let entered: () => void = () => undefined;
+            let release: () => void = () => undefined;
+            class GatedContentLoader extends ContentLoader<{ payload: string }> {
+                public postLoadCalls = 0;
+                public gated = false;
+                constructor(provider: () => Promise<string>) {
+                    super('a.txt', provider);
+                    this.disableTelemetry = true;
+                    this.readDependency = false;
+                }
+                protected async postLoad(content: string | undefined): Promise<LoadResultOD<{ payload: string }>> {
+                    this.postLoadCalls++;
+                    if (this.gated) {
+                        entered();
+                        await new Promise<void>((resolve) => { release = resolve; });
+                    }
+                    return { result: { payload: content ?? '' } };
+                }
+            }
+            let payload = 'v0';
+            const loader = new GatedContentLoader(async () => payload);
+            await loader.load(new LoaderSession(false));
+
+            loader.gated = true;
+            payload = 'v1';
+            const inPostLoad = new Promise<void>((resolve) => { entered = resolve; });
+            const first = loader.load(new LoaderSession(false));
+            await inPostLoad;
+
+            payload = 'v2';
+            const second = loader.load(new LoaderSession(false));
+            await new Promise((resolve) => setImmediate(resolve));
+            loader.gated = false;
+            release();
+
+            assert.strictEqual((await first).result.payload, 'v1');
+            assert.strictEqual((await second).result.payload, 'v1');
+            assert.strictEqual(loader.postLoadCalls, 2);
+
+            const next = await loader.load(new LoaderSession(false));
+            assert.strictEqual(next.result.payload, 'v2');
+            assert.strictEqual(loader.postLoadCalls, 3);
+        });
+
         it('throws a UserError when the same file is already loading in the session (circular dependency)', async () => {
             const loader = new CapturingContentLoader('cycle.txt', async () => 'x', false);
             const session = new LoaderSession(false);
