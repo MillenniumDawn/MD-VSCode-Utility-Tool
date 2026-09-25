@@ -27,6 +27,12 @@ function folderChange(folder: string) {
 	setupContainerWindowToggles(folder);
 }
 
+// Toggle ids nest by appending "_" + name, so a bare prefix test would take
+// sibling "battle" for an ancestor of "battleplan".
+function isSelfOrDescendant(id: string, ancestorId: string): boolean {
+	return id === ancestorId || id.startsWith(ancestorId + "_");
+}
+
 function setupContainerWindowToggles(folder: string) {
 	existingCheckboxes.forEach((checkbox) => checkbox.dispose());
 	existingCheckboxes.length = 0;
@@ -60,7 +66,7 @@ function setupContainerWindowToggles(folder: string) {
 			".containerwindow_" + normalizeForStyle(containerWindowName) + " ";
 		for (let j = 0; j <= i; j++) {
 			const anotherInput = checkboxes.item(j) as HTMLInputElement;
-			if (input.id.startsWith(anotherInput.id)) {
+			if (isSelfOrDescendant(input.id, anotherInput.id)) {
 				selector =
 					selector +
 					".childcontainerwindow_" +
@@ -96,8 +102,8 @@ function setupContainerWindowToggles(folder: string) {
 					const anotherInput = checkboxes.item(i) as HTMLInputElement;
 					if (
 						anotherInput !== input &&
-						(anotherInput.id.startsWith(input.id) ||
-							input.id.startsWith(anotherInput.id))
+						(isSelfOrDescendant(anotherInput.id, input.id) ||
+							isSelfOrDescendant(input.id, anotherInput.id))
 					) {
 						anotherInput.checked = true;
 						containerWindowVisibilities[anotherInput.id] = true;
@@ -106,7 +112,10 @@ function setupContainerWindowToggles(folder: string) {
 			} else {
 				for (let i = 0; i < checkboxes.length; i++) {
 					const anotherInput = checkboxes.item(i) as HTMLInputElement;
-					if (anotherInput !== input && anotherInput.id.startsWith(input.id)) {
+					if (
+						anotherInput !== input &&
+						isSelfOrDescendant(anotherInput.id, input.id)
+					) {
 						anotherInput.checked = false;
 						containerWindowVisibilities[anotherInput.id] = false;
 					}

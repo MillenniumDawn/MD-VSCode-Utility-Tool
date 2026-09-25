@@ -579,6 +579,62 @@ describe("webview entrypoints", () => {
 		);
 	});
 
+	it("keeps a GUI window apart from a sibling whose name is a prefix", () => {
+		installGuiShell();
+		const container = document.getElementById(
+			"containerwindow_main",
+		) as HTMLDivElement;
+		const battle = element("div", undefined, "childcontainerwindow_battle");
+		const map = element("div", undefined, "childcontainerwindow_map");
+		battle.append(map);
+		const battleplan = element(
+			"div",
+			undefined,
+			"childcontainerwindow_battleplan",
+		);
+		container.replaceChildren(battle, battleplan);
+		(window as any).containerWindowToggles = {
+			main: {
+				content: [
+					["toggleContainerWindow_battle", "battle"],
+					["toggleContainerWindow_battle_map", "map"],
+					["toggleContainerWindow_battleplan", "battleplan"],
+				]
+					.map(
+						([id, name]) =>
+							`<input type="checkbox" class="toggleContainerWindowCheckbox" id="${id}" containerWindowName="${name}">`,
+					)
+					.join(""),
+			},
+		};
+		withQuietScrolling(() => run(guipreview, "load", new Event("load")));
+
+		const box = (id: string) =>
+			document.getElementById(
+				"toggleContainerWindow_" + id,
+			) as HTMLInputElement;
+		const setChecked = (id: string, checked: boolean) => {
+			box(id).checked = checked;
+			box(id).dispatchEvent(new Event("change"));
+		};
+
+		setChecked("battleplan", false);
+		assert.strictEqual(battleplan.style.display, "none");
+		assert.strictEqual(box("battle").checked, true);
+		assert.strictEqual(battle.style.display, "block");
+
+		setChecked("battleplan", true);
+		setChecked("battle", false);
+		assert.strictEqual(box("battle_map").checked, false);
+		assert.strictEqual(box("battleplan").checked, true);
+		assert.strictEqual(battleplan.style.display, "block");
+
+		setChecked("battleplan", false);
+		setChecked("battleplan", true);
+		assert.strictEqual(box("battle").checked, false);
+		assert.strictEqual(battle.style.display, "none");
+	});
+
 	it("starts the world-map loader and hides supply-area controls when disabled", () => {
 		installWorldMapShell();
 		(window as any).__enableSupplyArea = false;
