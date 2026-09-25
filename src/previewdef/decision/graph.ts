@@ -1,5 +1,5 @@
 import { localise } from "../localise";
-import { localisationIndex } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 import { navOf } from "../sharedpayload";
 import { getSpriteByGfxName } from "../../util/image/imagecache";
 import { StyleTable, normalizeForStyle } from "../../util/styletable";
@@ -350,7 +350,7 @@ export function toolbarFlagsOf(
 				(d) => d.hasAllowed || d.hasAvailable || d.hasVisible || d.hasActivation || d.hasCancelTrigger,
 			) || categories.some((c) => c.hasAllowed || c.hasVisible),
 		hasIcons: nodes.some((n) => n.kind !== "unresolved" && n.icon !== undefined),
-		hasLocalisation: localisationIndex,
+		hasLocalisation: getFlags().localisationIndex,
 		hasUnresolvedScriptedGui: categories.some(
 			(c) => c.scriptedGui !== undefined && c.scriptedGui.html === undefined,
 		),

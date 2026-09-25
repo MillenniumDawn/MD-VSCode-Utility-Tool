@@ -205,4 +205,33 @@ describe('webview/miopreview rendering', () => {
         ]);
         assert.strictEqual(placeholder().querySelector('.st-mio-grid-line'), null);
     });
+
+    // Two toggles in quick succession start two builds before either finishes; only the newer one
+    // may write, or the older markup can land last and stay on screen.
+    it('discards a build a newer one superseded', async () => {
+        const element = placeholder();
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Object.getPrototypeOf(element)), 'innerHTML')
+            ?? Object.getOwnPropertyDescriptor((window as any).Element.prototype, 'innerHTML')!;
+        let writes = 0;
+        Object.defineProperty(element, 'innerHTML', {
+            configurable: true,
+            get() { return descriptor.get!.call(this); },
+            set(value: string) { writes++; descriptor.set!.call(this, value); },
+        });
+        try {
+            const input = checkbox('show-grid');
+            input.checked = true;
+            input.dispatchEvent(new (window as any).Event('change'));
+            input.checked = false;
+            input.dispatchEvent(new (window as any).Event('change'));
+            await settled();
+        } finally {
+            delete (element as any).innerHTML;
+        }
+        takePostedMessages();
+
+        assert.strictEqual(writes, 1);
+        assert.strictEqual(placeholder().querySelector('.st-mio-grid-line'), null);
+        assert.strictEqual(placeholder().querySelectorAll('.trait').length, 2);
+    });
 });

@@ -10,7 +10,7 @@ import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug, error } from '../../util/debug';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
-import { useConditionInFocus, localisationIndex } from '../../util/featureflags';
+import { getFlags } from '../../util/featureflags';
 import flatMap from 'lodash/flatMap';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
 import { getFocusTitlebarImage, getFocusOverlayImage, loadFocusTitlebarStyles } from "./titlebar";
@@ -141,7 +141,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             renderedFocus,
             renderedInlayWindows,
             gridBox: focusTreeGridBoxFor(layout),
-            useConditionInFocus,
+            useConditionInFocus: getFlags().useConditionInFocus,
             xGridSize: layout.spacing.x,
             layout,
             styleTable,
@@ -416,7 +416,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
 
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 52px;`)}">
         <div class="toolbar">
-            ${useConditionInFocus ? conditions + inlayConditions : allowbranch}
+            ${getFlags().useConditionInFocus ? conditions + inlayConditions : allowbranch}
             ${focuses}
             ${searchbox}
             ${customTitlebars}
@@ -635,7 +635,7 @@ async function renderFocus(
     );
 
     let textContent = htmlEscape(focus.id);
-    if (localisationIndex){
+    if (getFlags().localisationIndex){
         let localizedText = await getLocalisedTextQuick(focus.id);
         if (localizedText === focus.id || !localizedText){
             if (focus.text){

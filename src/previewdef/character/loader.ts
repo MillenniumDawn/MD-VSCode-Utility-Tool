@@ -63,7 +63,7 @@ export function traitIconSprite(
 export class CharactersLoader extends ContentLoader<CharactersLoaderResult> {
 	private languageKey: string = "";
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		return (
 			(await super.shouldReloadImpl(session)) ||
 			this.languageKey !== getLanguageIdInYml()
@@ -140,7 +140,7 @@ export class CharactersLoader extends ContentLoader<CharactersLoaderResult> {
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[CharactersLoader ${this.file}]`;
 	}
 }

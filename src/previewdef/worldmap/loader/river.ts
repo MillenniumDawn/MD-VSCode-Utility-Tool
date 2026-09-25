@@ -23,14 +23,14 @@ export class RiverLoader extends FileLoader<RiverBmp> {
 		};
 	}
 
-	protected extraMeasurements(result: LoadResult<RiverBmp>) {
+	protected override extraMeasurements(result: LoadResult<RiverBmp>) {
 		return {
 			...super.extraMeasurements(result),
 			riverCount: result.result.rivers.length,
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[RiverLoader: ${this.file}]`;
 	}
 }
