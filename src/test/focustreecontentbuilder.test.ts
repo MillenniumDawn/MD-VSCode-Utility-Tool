@@ -25,6 +25,7 @@ import {
 import {
 	exclusiveLinkClass,
 	exclusiveLinkInsets,
+	exclusiveLinkVerticalClass,
 	registerExclusiveLinkStyles,
 } from "../util/hoi4gui/exclusivelink";
 import {
@@ -418,6 +419,40 @@ describe("previewdef/focustree contentbuilder", () => {
 		const fallback = new StyleTable();
 		registerExclusiveLinkStyles(fallback, undefined, 96);
 		assert.ok(fallback.toRawCss().includes("background-image: none"));
+	});
+
+	// A LEFT or RIGHT tree's exclusive pairs share a column. Its link rotates the same strips, and
+	// its two branches blend in one page just like the horizontal link's do.
+	it("registerExclusiveLinkStyles registers a vertical link sized by the slot height", () => {
+		const image = (name: string) =>
+			({ uri: `data:image/png;base64,${name}`, width: 32, height: 12 }) as any;
+		const textured = new StyleTable();
+		registerExclusiveLinkStyles(
+			textured,
+			{ line: image("line"), left: image("left"), mid: image("mid"), right: image("right") },
+			96,
+			{},
+			130,
+		);
+		const fallback = new StyleTable();
+		registerExclusiveLinkStyles(fallback, undefined, 96, {}, 130);
+
+		const properties = (css: string, selector: string) => {
+			const start = css.indexOf(`${selector} {`);
+			assert.ok(start >= 0, `${selector} is registered`);
+			const body = css.slice(css.indexOf("{", start) + 1, css.indexOf("}", start));
+			return [...body.matchAll(/^\s*([a-z-]+)\s*:/gm)].map(m => m[1]).sort();
+		};
+		const before = `.${exclusiveLinkVerticalClass}::before`;
+		assert.deepStrictEqual(properties(textured.toRawCss(), before), properties(fallback.toRawCss(), before));
+		assert.ok(textured.toRawCss().includes("container-type: size"));
+
+		const css = textured.toRawCss();
+		const { iconInset, lineInset } = exclusiveLinkInsets(130, 32);
+		assert.ok(css.includes(`width: calc(100cqh - ${lineInset * 2}px)`));
+		assert.ok(css.includes(`width: calc(100cqh - ${iconInset * 2}px)`));
+		assert.ok(css.includes("transform: translateX(6px) rotate(90deg)"));
+		assert.ok(fallback.toRawCss().includes("border-left: 1px solid red"));
 	});
 
 	it("exclusiveLinkInsets keeps the marker between the boxes on both grid sizes", () => {

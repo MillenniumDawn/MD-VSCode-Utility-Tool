@@ -23,8 +23,12 @@ export interface FocusItemLayout {
     textTop: number;
 }
 
+// The way the tree grows from its first row, which the game takes from the grid's `format`.
+export type FocusTreeFormat = 'up' | 'down' | 'left' | 'right';
+
 export interface FocusTreeLayout {
     mode: FocusTreeLayoutMode;
+    format: FocusTreeFormat;
     grid: NumberPosition;
     spacing: NumberPosition;
     item: FocusItemLayout;
@@ -40,6 +44,7 @@ export interface FocusTreeLayout {
 
 export const standardFocusTreeLayout: FocusTreeLayout = {
     mode: 'standard',
+    format: 'up',
     grid: { x: 50, y: 50 },
     spacing: { x: 96, y: 130 },
     item: {
@@ -144,6 +149,7 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
     const gridWindow = childWindow(childWindow(view, 'tree'), 'grid_window');
     const gridBox = byName(gridWindow?.gridboxtype, 'grid');
     const gridPosition = point(gridBox?.position);
+    const format = gridBox?.format?._name;
 
     const spacing = positions['focus_spacing'] ?? {};
     const continuousSize = childWindow(gridWindow, 'continuous_focus_window')?.size;
@@ -190,6 +196,8 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
 
     return {
         mode: 'gui',
+        // `center` would stack every focus on one slot; the game's own file says `UP`.
+        format: format === 'down' || format === 'left' || format === 'right' ? format : 'up',
         grid: { x: gridPosition.x ?? standard.grid.x, y: gridPosition.y ?? standard.grid.y },
         spacing: { x: spacing.x ?? standard.spacing.x, y: spacing.y ?? standard.spacing.y },
         item: {
@@ -228,7 +236,7 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
 export function focusTreeGridBoxFor(layout: FocusTreeLayout): HOIPartial<GridBoxType> {
     return {
         position: { x: toNumberLike(layout.grid.x), y: toNumberLike(layout.grid.y) },
-        format: toStringAsSymbolIgnoreCase('up'),
+        format: toStringAsSymbolIgnoreCase(layout.format),
         size: { width: toNumberLike(layout.spacing.x), height: undefined },
         slotsize: { width: toNumberLike(layout.spacing.x), height: toNumberLike(layout.spacing.y) },
     } as HOIPartial<GridBoxType>;
