@@ -21,7 +21,7 @@ const eventsGFX = 'interface/eventpictures.gfx';
 export class EventsLoader extends ContentLoader<EventsLoaderResult> {
     private languageKey: string = '';
 
-    public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+    public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
         return await super.shouldReloadImpl(session) || this.languageKey !== getLanguageIdInYml();
     }
 
@@ -69,7 +69,7 @@ export class EventsLoader extends ContentLoader<EventsLoaderResult> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[EventsLoader ${this.file}]`;
     }
 }

@@ -288,7 +288,7 @@ export class PromiseCache<V> extends Cache<Promise<V>> {
 		this.pweigher = weigher;
 	}
 
-	public async get(key: string = ""): Promise<V> {
+	public override async get(key: string = ""): Promise<V> {
 		const cacheEntry = this._cache[key];
 		const now = Date.now();
 		let expireToken: unknown = undefined;

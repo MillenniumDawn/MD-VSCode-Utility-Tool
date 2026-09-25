@@ -97,7 +97,7 @@ export class StrategicRegionsLoader extends RegionFolderLoader<
 		);
 	}
 
-	protected dependencyLoaders() {
+	protected override dependencyLoaders() {
 		return [this.defaultMapLoader, this.statesLoader];
 	}
 

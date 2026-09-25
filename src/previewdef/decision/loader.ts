@@ -58,7 +58,7 @@ export class DecisionsLoader extends ContentLoader<DecisionsLoaderResult> {
 	private categoriesLoader = new DecisionCategoriesLoader();
 	private scriptedGuisLoader = new ScriptedGuisLoader();
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		return (
 			(await super.shouldReloadImpl(session)) ||
 			this.languageKey !== getLanguageIdInYml() ||
@@ -178,7 +178,7 @@ export class DecisionsLoader extends ContentLoader<DecisionsLoaderResult> {
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[DecisionsLoader ${this.file}]`;
 	}
 }

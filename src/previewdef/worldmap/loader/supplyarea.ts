@@ -92,7 +92,7 @@ export class SupplyAreasLoader extends RegionFolderLoader<
 		);
 	}
 
-	protected dependencyLoaders() {
+	protected override dependencyLoaders() {
 		return [this.defaultMapLoader, this.statesLoader];
 	}
 

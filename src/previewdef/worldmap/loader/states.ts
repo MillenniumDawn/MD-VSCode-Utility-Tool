@@ -157,7 +157,7 @@ export class StatesLoader extends RegionFolderLoader<
 		this.categoriesLoader.onProgress((e) => this.onProgressEmitter.fire(e));
 	}
 
-	protected dependencyLoaders() {
+	protected override dependencyLoaders() {
 		return [this.defaultMapLoader, this.categoriesLoader, this.resourcesLoader];
 	}
 
@@ -231,7 +231,7 @@ class StateCategoriesLoader extends FolderLoader<
 		);
 	}
 
-	protected async loadImpl(
+	protected override async loadImpl(
 		session: LoaderSession,
 	): Promise<LoadResult<Record<string, StateCategory>>> {
 		await this.fireOnProgressEvent(
@@ -275,7 +275,7 @@ class StateCategoriesLoader extends FolderLoader<
 		};
 	}
 
-	public toString() {
+	public override toString() {
 		return `[StateCategoriesLoader]`;
 	}
 }

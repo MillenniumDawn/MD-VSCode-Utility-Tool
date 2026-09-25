@@ -129,7 +129,7 @@ export function worldMapFileLoader<T>(
 	load: (file: string, warnings: WorldMapWarning[]) => Promise<T[]>,
 ): new (file: string) => FileLoader<T[]> {
 	return class extends FileLoader<T[]> {
-		protected async loadFromFile(): Promise<LoadResultOD<T[]>> {
+		protected override async loadFromFile(): Promise<LoadResultOD<T[]>> {
 			const warnings: WorldMapWarning[] = [];
 			return {
 				result: await load(this.file, warnings),
@@ -137,7 +137,7 @@ export function worldMapFileLoader<T>(
 			};
 		}
 
-		public toString() {
+		public override toString() {
 			return `[${name}: ${this.file}]`;
 		}
 	};
@@ -159,19 +159,19 @@ export abstract class RegionFolderLoader<T, F> extends FolderLoader<T, F> {
 		shouldReload(session: LoaderSession): Promise<boolean>;
 	}[];
 
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		return (
 			(await super.shouldReloadImpl(session)) ||
 			(await shouldReloadDependencies(session, this.dependencyLoaders()))
 		);
 	}
 
-	protected async loadImpl(session: LoaderSession): Promise<LoadResult<T>> {
+	protected override async loadImpl(session: LoaderSession): Promise<LoadResult<T>> {
 		await this.fireOnProgressEvent(text(this.progress));
 		return super.loadImpl(session);
 	}
 
-	public toString() {
+	public override toString() {
 		return `[${this.name}]`;
 	}
 }
