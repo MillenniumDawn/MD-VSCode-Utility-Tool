@@ -20,7 +20,7 @@ import { UserError } from "../common";
 import { describeParseFailure } from "../indexHalf";
 import { Logger } from "../logger";
 import { getGfxContainerFile } from "../gfxindex";
-import { gfxIndex } from "../featureflags";
+import { getFlags } from "../featureflags";
 export { Sprite, Image };
 
 // Decoded PNG buffers are the heaviest thing in memory; bound the image and sprite caches by
@@ -135,7 +135,7 @@ export async function getSpriteByGfxName(
 	// indexed gfx file. The `gfxFilePath` fallback list is itself derived from index hits, so
 	// scanning it cannot find the sprite either. Return undefined immediately instead of re-parsing
 	// every gfx file for each unresolved focus icon. (plan Stap 2)
-	if (gfxIndex) {
+	if (getFlags().gfxIndex) {
 		return undefined;
 	}
 

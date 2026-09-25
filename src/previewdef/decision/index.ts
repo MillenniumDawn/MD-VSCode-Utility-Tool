@@ -5,10 +5,10 @@ import { matchPathEnd } from "../../util/nodecommon";
 import { PreviewProviderDef } from "../previewmanager";
 import { LoaderPreview } from "../loaderpreview";
 import { DecisionsLoader } from "./loader";
-import { decisionPreview } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 
 function canPreviewDecision(document: vscode.TextDocument) {
-	if (!decisionPreview) {
+	if (!getFlags().decisionPreview) {
 		return undefined;
 	}
 
@@ -45,7 +45,7 @@ class DecisionPreview extends LoaderPreview<DecisionsLoader> {
 	// previewLocalisation changes the text in the payload; localisationIndex changes whether
 	// there is any text to show, and so whether the localisation toggle is offered at all;
 	// gfxIndex changes which icons resolve, and which sprites a rendered scripted GUI can draw.
-	protected get reloadOnConfigurationChange(): readonly string[] {
+	protected override get reloadOnConfigurationChange(): readonly string[] {
 		return ["previewLocalisation", "localisationIndex", "gfxIndex"];
 	}
 }
@@ -53,7 +53,7 @@ class DecisionPreview extends LoaderPreview<DecisionsLoader> {
 export const decisionPreviewDef: PreviewProviderDef = {
 	type: "decision",
 	displayName: () => localize("preview.type.decision", "Decisions (common/decisions/*.txt)"),
-	isEnabled: () => decisionPreview,
+	isEnabled: () => getFlags().decisionPreview,
 	canPreview: canPreviewDecision,
 	previewConstructor: DecisionPreview,
 };

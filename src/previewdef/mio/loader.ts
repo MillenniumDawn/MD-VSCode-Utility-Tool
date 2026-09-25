@@ -62,7 +62,7 @@ export class MioLoader extends ContentLoader<MioLoaderResult> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[MioLoader ${this.file}]`;
     }
 }

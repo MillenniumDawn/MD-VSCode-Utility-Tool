@@ -11,11 +11,11 @@ export class RailwayLoader extends FileLoader<RailwayLoaderResult> {
         super("map/railways.txt");
     }
 
-    public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+    public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
         return await super.shouldReloadImpl(session) || await this.defaultMapLoader.shouldReload(session);
     }
     
-    protected async loadImpl(session: LoaderSession): Promise<LoadResult<RailwayLoaderResult>> {
+    protected override async loadImpl(session: LoaderSession): Promise<LoadResult<RailwayLoaderResult>> {
         await this.fireOnProgressEvent(localize('worldmap.progress.loadingrailways', 'Loading railways...'));
         return super.loadImpl(session);
     }
@@ -31,7 +31,7 @@ export class RailwayLoader extends FileLoader<RailwayLoaderResult> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[RailwayLoader: ${this.file}]`;
     }
 }
@@ -94,11 +94,11 @@ export class SupplyNodeLoader extends FileLoader<SupplyNodeLoaderResult> {
         super("map/supply_nodes.txt");
     }
 
-    public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
+    public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
         return await super.shouldReloadImpl(session) || await this.defaultMapLoader.shouldReload(session);
     }
     
-    protected async loadImpl(session: LoaderSession): Promise<LoadResult<SupplyNodeLoaderResult>> {
+    protected override async loadImpl(session: LoaderSession): Promise<LoadResult<SupplyNodeLoaderResult>> {
         await this.fireOnProgressEvent(localize('worldmap.progress.loadingsupplynodes', 'Loading supply nodes...'));
         return super.loadImpl(session);
     }
@@ -114,7 +114,7 @@ export class SupplyNodeLoader extends FileLoader<SupplyNodeLoaderResult> {
         };
     }
 
-    public toString() {
+    public override toString() {
         return `[SupplyNodeLoader: ${this.file}]`;
     }
 }

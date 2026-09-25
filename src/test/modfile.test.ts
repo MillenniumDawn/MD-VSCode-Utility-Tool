@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import {
     modFileStatusContainer,
+    pickedFirst,
     redrawSelectedModFileStatus,
     registerModFile,
     updateSelectedModFileStatus,
@@ -134,5 +135,28 @@ describe('util/modfile configuration change', () => {
         fireConfigurationChange('mdHoi4Utilities.parentModPaths');
 
         assert.ok(item().text.endsWith(' +1'), item().text);
+    });
+});
+
+describe('util/modfile pickedFirst', () => {
+    const item = (label: string, picked?: boolean): vscode.QuickPickItem => ({ label, picked });
+
+    it('treats two picked rows as equal in both orders', () => {
+        assert.strictEqual(pickedFirst(item('a', true), item('b', true)), 0);
+        assert.strictEqual(pickedFirst(item('b', true), item('a', true)), 0);
+    });
+
+    it('puts a picked row before an unpicked one in both orders', () => {
+        assert.strictEqual(pickedFirst(item('a', true), item('b')), -1);
+        assert.strictEqual(pickedFirst(item('b'), item('a', true)), 1);
+    });
+
+    it('treats unset and false as the same', () => {
+        assert.strictEqual(pickedFirst(item('a'), item('b', false)), 0);
+    });
+
+    it('keeps picked rows first in their original order', () => {
+        const rows = [item('x'), item('p1', true), item('y', false), item('p2', true)];
+        assert.deepStrictEqual(rows.sort(pickedFirst).map(r => r.label), ['p1', 'p2', 'x', 'y']);
     });
 });

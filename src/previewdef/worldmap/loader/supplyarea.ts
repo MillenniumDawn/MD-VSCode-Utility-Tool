@@ -1,15 +1,13 @@
 import { Enum, SchemaDef } from "../../../hoiformat/schema";
 import { Token } from "../../../hoiformat/hoiparser";
+import { LoadResult, mergeInLoadResult } from "./common";
 import {
-	FileLoader,
-	FolderLoader,
-	LoadResult,
-	mergeInLoadResult,
-	sortItems,
-	mergeRegionWithWarnings,
-	LoadResultOD,
-	shouldReloadDependencies,
-} from "./common";
+	RegionFolderLoader,
+	RegionKind,
+	fillRegions,
+	sortRegionItems,
+	worldMapFileLoader,
+} from "./regionloader";
 import {
 	WorldMapWarning,
 	SupplyArea,
@@ -25,7 +23,6 @@ import { DefaultMapLoader } from "./provincemap";
 import { StatesLoader } from "./states";
 import { LoaderSession } from "../../../util/loader/loader";
 import flatMap from "lodash/flatMap";
-import { UserError } from "../../../util/common";
 
 interface SupplyAreaFile {
 	supply_area: SupplyAreaDefinition[];
@@ -51,11 +48,35 @@ const supplyAreaFileSchema: SchemaDef<SupplyAreaFile> = {
 	},
 };
 
+const supplyAreaKind: RegionKind = {
+	sourceType: "supplyarea",
+	idTooLarge: [
+		"worldmap.warnings.supplyareaidtoolarge",
+		"Max supply area ID is too large: {0}.",
+	],
+	idConflict: [
+		"worldmap.warnings.supplyareaidconflict",
+		"There're more than one supply areas using ID {0}.",
+	],
+	notExist: [
+		"worldmap.warnings.supplyareanotexist",
+		"Supply area with id {0} doesn't exist.",
+	],
+	subRegionNotExist: [
+		"worldmap.warnings.stateinsupplyareanotexist",
+		"State {0} used in supply area {1} doesn't exist.",
+	],
+	noValidSubRegions: [
+		"worldmap.warnings.supplyareanovalidstates",
+		"Supply area {0} doesn't have valid states.",
+	],
+};
+
 type SupplyAreasLoaderResult = {
 	supplyAreas: SupplyArea[];
 	badSupplyAreasCount: number;
 };
-export class SupplyAreasLoader extends FolderLoader<
+export class SupplyAreasLoader extends RegionFolderLoader<
 	SupplyAreasLoaderResult,
 	SupplyAreaNoRegion[]
 > {
@@ -63,29 +84,16 @@ export class SupplyAreasLoader extends FolderLoader<
 		private defaultMapLoader: DefaultMapLoader,
 		private statesLoader: StatesLoader,
 	) {
-		super("map/supplyareas", SupplyAreaLoader);
-	}
-
-	public async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
-		return (
-			(await super.shouldReloadImpl(session)) ||
-			(await shouldReloadDependencies(session, [
-				this.defaultMapLoader,
-				this.statesLoader,
-			]))
+		super(
+			"map/supplyareas",
+			worldMapFileLoader("SupplyAreaLoader", loadSupplyArea),
+			"SupplyAreasLoader",
+			["worldmap.progress.loadingsupplyareas", "Loading supply areas..."],
 		);
 	}
 
-	protected async loadImpl(
-		session: LoaderSession,
-	): Promise<LoadResult<SupplyAreasLoaderResult>> {
-		await this.fireOnProgressEvent(
-			localize(
-				"worldmap.progress.loadingsupplyareas",
-				"Loading supply areas...",
-			),
-		);
-		return super.loadImpl(session);
+	protected override dependencyLoaders() {
+		return [this.defaultMapLoader, this.statesLoader];
 	}
 
 	protected async mergeLoadedFiles(
@@ -103,45 +111,26 @@ export class SupplyAreasLoader extends FolderLoader<
 		);
 
 		const warnings = mergeInLoadResult(fileResults, "warnings");
-		const SupplyAreas = flatMap(fileResults, (c) => c.result);
+		const supplyAreas = flatMap(fileResults, (c) => c.result);
 
 		const { width, provinces } = provinceMap.result;
+		const { states } = stateMap.result;
 
-		const { sortedSupplyAreas, badSupplyAreaId } = sortSupplyAreas(
-			SupplyAreas,
+		const { sorted, badId } = sortRegionItems(
+			supplyAreas,
+			supplyAreaKind,
 			warnings,
 		);
-
-		const { states } = stateMap.result;
-		const badSupplyAreasCount = -badSupplyAreaId - 1;
-
-		const filledSupplyAreas: SupplyArea[] = new Array(sortedSupplyAreas.length);
-		for (let i = -badSupplyAreasCount; i < sortedSupplyAreas.length; i++) {
-			const sortedArea = sortedSupplyAreas[i];
-			if (sortedArea) {
-				filledSupplyAreas[i] = mergeRegionWithWarnings(
-					sortedArea,
-					"states",
-					states,
-					width,
-					"supplyarea",
-					warnings,
-					(stateId) =>
-						localize(
-							"worldmap.warnings.stateinsupplyareanotexist",
-							"State {0} used in supply area {1} doesn't exist.",
-							stateId,
-							sortedArea.id,
-						),
-					() =>
-						localize(
-							"worldmap.warnings.supplyareanovalidstates",
-							"Supply area {0} doesn't have valid states.",
-							sortedArea.id,
-						),
-				);
-			}
-		}
+		const { filled: filledSupplyAreas, badCount: badSupplyAreasCount } =
+			fillRegions(
+				sorted,
+				badId,
+				"states",
+				states,
+				width,
+				supplyAreaKind,
+				warnings,
+			);
 
 		validateStatesInSupplyAreas(
 			states,
@@ -159,24 +148,6 @@ export class SupplyAreasLoader extends FolderLoader<
 			dependencies: [this.folder + "/*"],
 			warnings,
 		};
-	}
-
-	public toString() {
-		return `[SupplyAreasLoader]`;
-	}
-}
-
-class SupplyAreaLoader extends FileLoader<SupplyAreaNoRegion[]> {
-	protected async loadFromFile(): Promise<LoadResultOD<SupplyAreaNoRegion[]>> {
-		const warnings: WorldMapWarning[] = [];
-		return {
-			result: await loadSupplyArea(this.file, warnings),
-			warnings,
-		};
-	}
-
-	public toString() {
-		return `[SupplyAreaLoader: ${this.file}]`;
 	}
 }
 
@@ -249,50 +220,6 @@ async function loadSupplyArea(
 	}
 
 	return result;
-}
-
-function sortSupplyAreas(
-	supplyAreas: SupplyAreaNoRegion[],
-	warnings: WorldMapWarning[],
-): { sortedSupplyAreas: SupplyAreaNoRegion[]; badSupplyAreaId: number } {
-	const { sorted, badId } = sortItems(
-		supplyAreas,
-		10000,
-		(maxId) => {
-			throw new UserError(
-				localize(
-					"worldmap.warnings.supplyareaidtoolarge",
-					"Max supply area ID is too large: {0}.",
-					maxId,
-				),
-			);
-		},
-		(newSupplyArea, existingSupplyArea, badId) =>
-			warnings.push({
-				source: [{ type: "supplyarea", id: badId }],
-				relatedFiles: [newSupplyArea.file, existingSupplyArea.file],
-				text: localize(
-					"worldmap.warnings.supplyareaidconflict",
-					"There're more than one supply areas using ID {0}.",
-					newSupplyArea.id,
-				),
-			}),
-		(startId, endId) =>
-			warnings.push({
-				source: [{ type: "supplyarea", id: startId }],
-				relatedFiles: [],
-				text: localize(
-					"worldmap.warnings.supplyareanotexist",
-					"Supply area with id {0} doesn't exist.",
-					startId === endId ? startId : `${startId}-${endId}`,
-				),
-			}),
-	);
-
-	return {
-		sortedSupplyAreas: sorted,
-		badSupplyAreaId: badId,
-	};
 }
 
 function validateStatesInSupplyAreas(

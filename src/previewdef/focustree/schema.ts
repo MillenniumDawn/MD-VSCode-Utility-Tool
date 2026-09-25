@@ -20,7 +20,7 @@ import {
 	extractConditionalExprs,
 } from "../../hoiformat/condition";
 import { countryScope } from "../../hoiformat/scope";
-import { useConditionInFocus } from "../../util/featureflags";
+import { getFlags } from "../../util/featureflags";
 import { randomString, Warning } from "../../util/common";
 import { localize } from "../../util/i18n";
 import * as path from "path";
@@ -38,6 +38,8 @@ export interface FocusTree {
 	isSharedFocues: boolean;
 	continuousFocusPositionX?: number;
 	continuousFocusPositionY?: number;
+	// Where the game opens the tree: a focus, or a grid position when no focus is named.
+	initialShowPosition?: { focus?: string; x: number; y: number };
 	warnings: FocusWarning[];
 }
 
@@ -131,7 +133,12 @@ interface FocusTreeDef {
 	shared_focus: Raw[];
 	focus: FocusDef[];
 	continuous_focus_position: Position;
+	initial_show_position: InitialShowPositionDef;
 	inlay_window: Raw[];
+}
+
+interface InitialShowPositionDef extends Position {
+	focus: string;
 }
 
 interface FocusDef {
@@ -245,6 +252,10 @@ const focusTreeSchema: SchemaDef<FocusTreeDef> = {
 		_type: "array",
 	},
 	continuous_focus_position: positionSchema,
+	initial_show_position: {
+		...positionSchema,
+		focus: "string",
+	},
 	inlay_window: {
 		_innerType: "raw",
 		_type: "array",
@@ -352,7 +363,7 @@ export function getFocusTreeWithFocusFile(
 			constants,
 		);
 
-		if (useConditionInFocus) {
+		if (getFlags().useConditionInFocus) {
 			for (const sharedFocus of extractOrListIds(focusTree.shared_focus)) {
 				addSharedFocus(
 					focuses,
@@ -384,6 +395,17 @@ export function getFocusTreeWithFocusFile(
 				normalizeNumberLike(focusTree.continuous_focus_position?.x, 0) ?? 50,
 			continuousFocusPositionY:
 				normalizeNumberLike(focusTree.continuous_focus_position?.y, 0) ?? 1000,
+			...(focusTree.initial_show_position
+				? {
+						initialShowPosition: {
+							...(focusTree.initial_show_position.focus
+								? { focus: focusTree.initial_show_position.focus }
+								: {}),
+							x: normalizeNumberLike(focusTree.initial_show_position.x, 0) ?? 0,
+							y: normalizeNumberLike(focusTree.initial_show_position.y, 0) ?? 0,
+						},
+					}
+				: {}),
 			conditionExprs,
 			isSharedFocues: false,
 			warnings,
