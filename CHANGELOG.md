@@ -2,6 +2,7 @@ Unreleased
 
   Bugfixes:
 
+- Icons and buttons that share a sprite but are drawn at different scales now each show their background at the right size, instead of all taking the size of the first one drawn. Issue #366.
 - [ Focus Tree Previewer ] [ MIO Preview ] Changing several options in quick succession no longer leaves an older version of the tree on screen; the latest change always wins. Issue #367.
 - Previews no longer re-check unchanged files over and over while one preview loads, which made opening large previews slower than needed. Issue #368.
 - A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
