@@ -46,6 +46,13 @@ export const defaultExclusiveLinkSprites: ExclusiveLinkSpriteSpec = {
     rightFrame: 2,
 };
 
+/** How far a gui layout moves the link from the standard one, in pixels; everything defaults to 0. */
+export interface ExclusiveLinkOffset {
+    startX?: number;
+    endX?: number;
+    y?: number;
+}
+
 export interface ExclusiveLinkImages {
     line: Image;
     left: Image;
@@ -83,15 +90,19 @@ export function exclusiveLinkInsets(slotWidth: number, iconWidth: number): { ico
  * not overridden but blended in -- which is exactly how the red border used to survive underneath
  * the textures it was replaced by.
  *
- * `offsetY` moves the link down from the line between the node centres, for a focus tree whose gui
- * layout places it elsewhere.
+ * `offset` moves the link away from where the standard layout draws it, for a focus tree whose gui
+ * layout places it elsewhere: `y` moves it down, `startX` and `endX` move its left and right ends to
+ * the right.
  */
 export function registerExclusiveLinkStyles(
     styleTable: StyleTable,
     images: ExclusiveLinkImages | undefined,
     slotWidth: number,
-    offsetY: number = 0,
+    offset: ExclusiveLinkOffset = {},
 ): void {
+    const { startX = 0, endX = 0, y: offsetY = 0 } = offset;
+    const px = (value: number) => value === 0 ? '0' : value + 'px';
+
     // Both layers are taller than the 1px connection element they hang off, on purpose.
     styleTable.style('focus-exclusive-link', () => `
         overflow: visible;
@@ -101,9 +112,9 @@ export function registerExclusiveLinkStyles(
         styleTable.raw(`.${exclusiveLinkClass}::before`, `
             content: '';
             position: absolute;
-            left: 0;
-            right: 0;
-            top: ${offsetY === 0 ? '0' : offsetY + 'px'};
+            left: ${px(startX)};
+            right: ${px(-endX)};
+            top: ${px(offsetY)};
             height: 0;
             border-top: 1px solid red;
             background-image: none;
@@ -121,8 +132,8 @@ export function registerExclusiveLinkStyles(
     styleTable.raw(`.${exclusiveLinkClass}::before`, `
         content: '';
         position: absolute;
-        left: ${lineInset}px;
-        right: ${lineInset}px;
+        left: ${lineInset + startX}px;
+        right: ${lineInset - endX}px;
         top: ${offsetY - line.height / 2}px;
         height: ${line.height}px;
         border-top: none;
@@ -137,8 +148,8 @@ export function registerExclusiveLinkStyles(
     styleTable.raw(`.${exclusiveLinkClass}::after`, `
         content: '';
         position: absolute;
-        left: ${iconInset}px;
-        right: ${iconInset}px;
+        left: ${iconInset + startX}px;
+        right: ${iconInset - endX}px;
         top: ${offsetY - left.height / 2}px;
         height: ${left.height}px;
         background-image: url(${left.uri}), url(${mid.uri}), url(${right.uri});
