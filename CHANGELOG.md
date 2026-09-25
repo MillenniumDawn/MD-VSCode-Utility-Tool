@@ -4,6 +4,7 @@ v1.1.40
 
   Bugfixes:
 
+- Previews no longer re-check unchanged files over and over while one preview loads, which made opening large previews slower than needed. Issue #368.
 - A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
 - [ GUI ] Showing or hiding a container window no longer affects a sibling whose name starts with the same text, such as `battle` and `battleplan`. Issue #363.
 
