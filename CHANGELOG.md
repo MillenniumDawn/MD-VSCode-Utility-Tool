@@ -12,6 +12,7 @@ v1.1.40
 - [ Focus Tree Previewer ] With the gui focus tree layout, a focus grid whose `format` is `DOWN`, `LEFT` or `RIGHT` now previews the tree growing that way, prerequisite lines and mutually exclusive links included, instead of always top-down. Issue #399.
 - [ Focus Tree ] With the focus tree layout set to `gui`, a focus tree preview now opens centred on the tree's `initial_show_position`, the way the game does, using `national_focus_center` from `nationalfocusview.gui`. Issue #400.
 - Errors from previews and file loading now appear in the HOI4 Modding output channel, not only in the developer console. Issue #370.
+- [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
 
   Bugfixes:
 

@@ -249,6 +249,67 @@ describe("util/hoi4gui/gridboxcommon", () => {
 			assert.ok(moved.includes("left: 25px; top: 35px; width: 1px; height: 35px;"));
 		});
 
+		describe("with connection tiles", () => {
+			const tiles = {
+				size: 16,
+				className: (shape: string, dashed: boolean) => `t-${shape}${dashed ? "-d" : ""}`,
+			};
+			const slot = { width: 96, height: 130 };
+			const size = { width: 96, height: 1000 };
+
+			function tileBoxes(html: string): string[] {
+				return [...html.matchAll(/class="([^"]*)"\s*style="([^"]*)"/g)].flatMap(m => {
+					const tile = m[1]!.split(/\s+/).find(c => c.startsWith("t-"));
+					return tile ? [`${tile} ${m[2]}`] : [];
+				});
+			}
+
+			it("draws a straight parent link as one vertical run", () => {
+				const items: any = {
+					child: { id: "child", gridX: 0, gridY: 1, connections: [{ target: "parent", targetType: "parent", style: "1px solid black" }] },
+					parent: { id: "parent", gridX: 0, gridY: 0, connections: [] },
+				};
+				const html = renderLineConnections(items, "up", slot, size, makeStyleTable(), 0.5, undefined, tiles);
+				assert.deepStrictEqual(tileBoxes(html), ["t-up_down left: 40px; top: 65px; width: 16px; height: 130px;"]);
+			});
+
+			it("draws an elbow as runs meeting corner tiles, on the path the border line takes", () => {
+				const items: any = {
+					child: { id: "child", gridX: 2, gridY: 1, connections: [{ target: "parent", targetType: "parent", style: "1px dashed black", dashed: true }] },
+					parent: { id: "parent", gridX: 0, gridY: 0, connections: [] },
+				};
+				const html = renderLineConnections(items, "up", slot, size, makeStyleTable(), 0.5, undefined, tiles);
+				assert.deepStrictEqual(tileBoxes(html), [
+					"t-up_down-d left: 40px; top: 65px; width: 16px; height: 57px;",
+					"t-left_right-d left: 56px; top: 122px; width: 176px; height: 16px;",
+					"t-up_down-d left: 232px; top: 138px; width: 16px; height: 57px;",
+					"t-up_right-d left: 40px; top: 122px; width: 16px; height: 16px;",
+					"t-down_left-d left: 232px; top: 122px; width: 16px; height: 16px;",
+				]);
+				assert.strictEqual((html.match(/data-conn-from="child" data-conn-to="parent" data-conn-type="parent"/g) ?? []).length, 5);
+			});
+
+			it("moves every tile by the tile offset", () => {
+				const items: any = {
+					child: { id: "child", gridX: 0, gridY: 1, connections: [{ target: "parent", targetType: "parent" }] },
+					parent: { id: "parent", gridX: 0, gridY: 0, connections: [] },
+				};
+				const html = renderLineConnections(items, "up", slot, size, makeStyleTable(), 0.5, undefined, { ...tiles, offset: { x: 3, y: -2 } });
+				assert.deepStrictEqual(tileBoxes(html), ["t-up_down left: 43px; top: 63px; width: 16px; height: 130px;"]);
+			});
+
+			it("leaves related connections on the border line", () => {
+				const items: any = {
+					a: { id: "a", gridX: 0, gridY: 0, connections: [{ target: "b", targetType: "related", style: "1px solid red" }] },
+					b: { id: "b", gridX: 2, gridY: 0, connections: [] },
+				};
+				const st = makeStyleTable();
+				const html = renderLineConnections(items, "up", slot, size, st, 0.5, undefined, tiles);
+				assert.deepStrictEqual(tileBoxes(html), []);
+				assert.ok(st.toRawCss().includes("border-top: 1px solid red"));
+			});
+		});
+
 		it("returns empty for no items", () => {
 			const st = makeStyleTable();
 			const html = renderLineConnections(

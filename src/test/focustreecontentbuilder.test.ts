@@ -34,6 +34,7 @@ import {
 	_resetImageWorkerPathForTest,
 } from "../util/image/imagedecoder";
 import { FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "../previewdef/focustree/layout";
+import { focusLinkClass, focusLinkShapes, registerFocusLinkStyles } from "../util/hoi4gui/focuslink";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
@@ -421,6 +422,38 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(fallback.toRawCss().includes("background-image: none"));
 	});
 
+	it("registerFocusLinkStyles draws the plain prerequisite line without textures", () => {
+		const styleTable = new StyleTable();
+		registerFocusLinkStyles(styleTable, undefined);
+		const css = styleTable.toRawCss();
+		assert.ok(css.includes(`.${focusLinkClass("up_down", false)}::before {`));
+		assert.ok(css.includes("border-left: 1px solid #88aaff"));
+		assert.ok(css.includes("border-top: 1px dashed #88aaff"));
+		assert.ok(!css.includes("background-image: url("));
+	});
+
+	it("registerFocusLinkStyles paints a solid and a dashed texture per tile shape", () => {
+		const images = (frame: string) =>
+			Object.fromEntries(focusLinkShapes.map(shape => [shape, { uri: `data:image/png;base64,${shape}-${frame}`, width: 16, height: 16 }])) as any;
+		const styleTable = new StyleTable();
+		registerFocusLinkStyles(styleTable, { solid: images("solid"), dashed: images("dashed") });
+		const css = styleTable.toRawCss();
+		assert.ok(css.includes("background-image: url(data:image/png;base64,up_down-solid)"));
+		assert.ok(css.includes("background-image: url(data:image/png;base64,down_left-dashed)"));
+		assert.ok(css.includes("background-repeat: repeat-y"));
+		assert.ok(css.includes("background-repeat: repeat-x"));
+		// The fallback's line lives on the pseudo elements; the textured rules switch them off.
+		assert.ok(css.includes("border-left: none"));
+		assert.ok(css.includes("border-top: none"));
+		assert.ok(!css.includes("#88aaff"));
+	});
+
+	it("buildFocusTreeHtml hands the webview the prerequisite line tiles", async () => {
+		const payload = await buildFocusTreePayload(loaderWithTrees([minimalFocusTree()]), undefined, { resolveIcons: false });
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		assert.ok(html.includes('window.focusLinkTiles = {"size":16,"offset":{"x":0,"y":0}'));
+		assert.ok(payload!.styleTable.toRawCss().includes(`.${focusLinkClass("left_right", true)}::after {`));
+	});
 	// A LEFT or RIGHT tree's exclusive pairs share a column. Its link rotates the same strips, and
 	// its two branches blend in one page just like the horizontal link's do.
 	it("registerExclusiveLinkStyles registers a vertical link sized by the slot height", () => {
