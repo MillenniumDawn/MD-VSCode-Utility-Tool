@@ -441,6 +441,22 @@ describe("DDS malformed input", () => {
 	});
 });
 
+describe("DDS sub-byte pixel decode", () => {
+	it("reads a 4-bit pixel from the high half of its byte", () => {
+		const DDPF_ALPHA_CHANNEL = 0x2;
+		const buf = makeDdsHeader(2, 1, 1, {
+			bitsPerPixel: 4,
+			pixelFormatFlags: DDPF_ALPHA_CHANNEL,
+		});
+		buf.writeUInt32LE(0x0f, 26 * 4); // alpha mask
+		buf[128] = 0xf0; // pixel 0 in the low nibble, pixel 1 in the high nibble
+		const rgba = parseDds(buf).images[0]?.getFullRgba();
+		assert.ok(rgba);
+		assert.strictEqual(rgba[3], 0);
+		assert.strictEqual(rgba[7], 255);
+	});
+});
+
 describe("DDS block-compressed decode", () => {
 	const red: Rgba = [255, 0, 0, 255];
 	const green: Rgba = [0, 255, 0, 255];

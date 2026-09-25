@@ -135,7 +135,7 @@ export class Surface {
 				reader(
 					readerState,
 					i + (pb >> 3),
-					pb & 3,
+					pb & 7,
 					channelStartByOrder,
 					channelLengthByOrder,
 					channelMaskByOrder,
