@@ -121,6 +121,17 @@ The Settings editor lists them under the extension in these sections.
 | `mdHoi4Utilities.localisationIndex` | Index localisation so previews show translated text. Uses more memory. |
 | `mdHoi4Utilities.imageDecodeWorkers` | Threads used to decode `.dds` / `.tga` images. More is faster on icon-heavy trees. |
 
+**Auditor**
+
+The **Check all focus trees** link in this section (also **Check All Focus Trees** in the command
+palette) checks every focus tree file for the problems the focus tree preview warns about, and
+lists them per file in one Markdown report you can paste into a GitHub issue.
+
+| Setting | What it does |
+|---|---|
+| `mdHoi4Utilities.auditor.reportFolder` | Folder the report is saved to, as `focus-tree-audit.md`. Relative to the first workspace folder. Empty opens it in an unsaved editor tab. |
+| `mdHoi4Utilities.auditor.includeVanilla` | Also check the game's own focus tree files, not only the mod's. |
+
 Settings that say so in their description need a window reload, or the preview reopened,
 to take effect. **Show Index
 Status** in the command palette tells you what the indexes are doing.

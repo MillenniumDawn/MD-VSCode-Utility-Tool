@@ -54,7 +54,8 @@
 				"mdHoi4Utilities.parentModPaths",
 				"mdHoi4Utilities.userDataPath",
 				"mdHoi4Utilities.inlayWindowGfxRoots",
-				"mdHoi4Utilities.technologyGfxRoots"
+				"mdHoi4Utilities.technologyGfxRoots",
+				"mdHoi4Utilities.auditor.reportFolder"
 			]
 		}
 	},
@@ -264,6 +265,24 @@
 						"description": "%hoi4modutilities.imageDecodeWorkers.desc%"
 					}
 				}
+			},
+			{
+				"title": "%hoi4modutilities.section.auditor%",
+				"order": 5,
+				"properties": {
+					"mdHoi4Utilities.auditor.reportFolder": {
+						"title": "%hoi4modutilities.auditor.reportFolder.title%",
+						"type": "string",
+						"default": "",
+						"markdownDescription": "%hoi4modutilities.auditor.reportFolder.desc%"
+					},
+					"mdHoi4Utilities.auditor.includeVanilla": {
+						"title": "%hoi4modutilities.auditor.includeVanilla.title%",
+						"type": "boolean",
+						"default": false,
+						"description": "%hoi4modutilities.auditor.includeVanilla.desc%"
+					}
+				}
 			}
 		],
 		"commands": [
@@ -297,6 +316,11 @@
 			{
 				"command": "mdhoi4utilities.showindexstatus",
 				"title": "%hoi4modutilities.showindexstatus.title%",
+				"category": "%hoi4modutilities.category%"
+			},
+			{
+				"command": "mdhoi4utilities.auditfocustrees",
+				"title": "%hoi4modutilities.auditfocustrees.title%",
 				"category": "%hoi4modutilities.category%"
 			}
 		],
@@ -375,6 +399,9 @@
 				},
 				{
 					"command": "mdhoi4utilities.showindexstatus"
+				},
+				{
+					"command": "mdhoi4utilities.auditfocustrees"
 				}
 			]
 		}

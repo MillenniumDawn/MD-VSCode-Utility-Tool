@@ -104,4 +104,47 @@ describe('webview/focustree rendering', () => {
         assert.ok(element.querySelector('#focus_second_focus'), 'expected the newer tree on screen');
         assert.strictEqual(element.querySelector('#focus_first_focus'), null);
     });
+
+    // The button is wired by the page's load handler, so the click is only real on a loaded page.
+    // The tree it reads is the one on screen now, not the one the page was loaded with.
+    it('posts the tree on screen and its warnings when the copy button is clicked', async () => {
+        const searchbox = document.createElement('input');
+        searchbox.id = 'searchbox';
+        const copyButton = document.createElement('button');
+        copyButton.id = 'copy-warnings';
+        document.body.append(searchbox, copyButton);
+        // The load restores the scroll position, which jsdom only reports as not implemented.
+        const originalScroll = window.scroll;
+        const originalScrollTo = window.scrollTo;
+        (window as any).scroll = () => undefined;
+        (window as any).scrollTo = () => undefined;
+        try {
+            window.dispatchEvent(new (window as any).Event('load'));
+            for (let i = 0; i < 100 && !takePostedMessages().some(m => m.command === 'ready'); i++) {
+                await settled();
+            }
+
+            const warned = updateBody('warned_focus');
+            warned.data.focusTrees[0].warnings = [{ text: 'Focuses overlap.', source: 'warned_focus' }];
+            window.dispatchEvent(new (window as any).MessageEvent('message', { data: warned }));
+            const element = document.getElementById('focustreeplaceholder')!;
+            for (let i = 0; i < 100 && !element.querySelector('#focus_warned_focus'); i++) {
+                await settled();
+            }
+            takePostedMessages();
+
+            copyButton.click();
+
+            assert.deepStrictEqual(takePostedMessages(), [{
+                command: 'copyWarnings',
+                treeId: 'test_tree',
+                warnings: [{ source: 'warned_focus', text: 'Focuses overlap.' }],
+            }]);
+        } finally {
+            (window as any).scroll = originalScroll;
+            (window as any).scrollTo = originalScrollTo;
+            searchbox.remove();
+            copyButton.remove();
+        }
+    });
 });
