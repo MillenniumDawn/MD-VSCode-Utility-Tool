@@ -1,16 +1,18 @@
 import { tryRun, subscribeNavigators, initCommon, getState, setState } from "./util/common";
-import { applyNav, badge } from "./util/card";
+import { applyNav } from "./util/card";
 import { gateToggle, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { wireUpdateBody } from "./util/updatebody";
+import { buildGuiFrame } from "./util/guiframe";
+import { normalizeForStyle } from "../src/util/styletable";
 import {
 	BopCard,
 	BopPreviewPayload,
 	BopRangeView,
-	BopSideView,
+	BopWindowView,
 	LocText,
-	ModifierLine,
 	activeRangeAt,
+	rangeBoundaries,
 } from "../src/previewdef/bop/payload";
 
 initCommon();
@@ -22,8 +24,8 @@ let payload: BopPreviewPayload =
 
 let showLocalisation: boolean = getState().showLocalisation ?? true;
 
-// The value each card's slider was left at, keyed on BopCard.key, so an edit to the file or a
-// reopened panel puts every bar back where the reader had it.
+// The value each BoP was left at, keyed on BopCard.key, so an edit to the file, a switch to another
+// BoP of the file or a reopened panel puts every one back where the reader had it.
 function storedValues(): Record<string, number> {
 	const stored = getState().bopValues;
 	return stored && typeof stored === "object" ? (stored as Record<string, number>) : {};
@@ -32,9 +34,6 @@ function storedValues(): Record<string, number> {
 function storeValue(key: string, value: number): void {
 	setState({ bopValues: { ...storedValues(), [key]: value } });
 }
-
-// The steps Millennium Dawn's add_power_balance_value calls use most.
-const steps = [-0.1, -0.05, 0.05, 0.1];
 
 export function clampValue(value: number): number {
 	if (isNaN(value)) {
@@ -48,301 +47,220 @@ function textFor(loc: LocText): string {
 	return showLocalisation ? loc.text : loc.key;
 }
 
-// Where `value` sits along the bar, as a percentage from its left end.
-function percentOf(value: number): number {
-	return ((clampValue(value) + 1) / 2) * 100;
-}
-
 function formatValue(value: number): string {
 	return (value > 0 ? "+" : "") + value.toFixed(2);
 }
 
-export function modifierLineToDom(line: ModifierLine): HTMLDivElement {
-	const row = document.createElement("div");
-	row.className = "bop-mod";
+// The widest a window is drawn; the game's is 550 pixels, so it is shown unscaled.
+const windowMaxWidth = 738;
 
-	const name = document.createElement("span");
-	name.className = "bop-mod-name";
-	name.textContent = line.name;
-	name.title = line.key;
-	row.appendChild(name);
-
-	const value = document.createElement("span");
-	value.className = "bop-mod-value bop-mod-" + line.tone;
-	value.textContent = line.value;
-	row.appendChild(value);
-
-	return row;
+// The BoP of the file on screen: which one the dropdown picks, keyed like the stored values so a
+// BoP added above it in the file does not change the selection.
+function selectedCard(): BopCard | undefined {
+	const key = getState().selectedBop;
+	return payload.cards.find((c) => c.key === key) ?? payload.cards[0];
 }
 
-// A range's modifiers, its custom tooltips and whether it runs effects, as the game lists them
-// under the active range's name.
-function rangeDetails(range: BopRangeView): HTMLDivElement {
-	const box = document.createElement("div");
-	box.className = "bop-range-details";
-
-	for (const line of range.modifiers) {
-		box.appendChild(modifierLineToDom(line));
-	}
-	for (const tooltip of range.tooltips) {
-		const row = document.createElement("div");
-		row.className = "bop-tooltip";
-		row.textContent = textFor(tooltip);
-		box.appendChild(row);
-	}
-
-	const meta = document.createElement("div");
-	meta.className = "ev-meta bop-range-meta";
-	if (range.hasOnActivate) {
-		badge(meta, "", feLocalize("boppreview.onactivate", "on_activate"));
-	}
-	if (range.hasOnDeactivate) {
-		badge(meta, "", feLocalize("boppreview.ondeactivate", "on_deactivate"));
-	}
-	if (meta.childElementCount > 0) {
-		box.appendChild(meta);
-	}
-
-	if (box.childElementCount === 0) {
-		const none = document.createElement("div");
-		none.className = "bop-none";
-		none.textContent = feLocalize("boppreview.nomodifiers", "No modifiers");
-		box.appendChild(none);
-	}
-
-	return box;
+// The parts of the game window the game's code moves with the value, looked up once per build.
+interface WindowSlots {
+	window: BopWindowView;
+	title?: HTMLElement;
+	activeRange?: HTMLElement;
+	needle?: HTMLElement;
+	fills: Record<string, HTMLElement>;
+	marks: { value: number; indicators: HTMLElement[] }[];
 }
 
-function rangeTitle(range: BopRangeView): HTMLDivElement {
-	const head = document.createElement("div");
-	head.className = "bop-range-head";
-
-	const name = document.createElement("span");
-	name.className = "bop-range-name";
-	name.textContent = textFor(range.name);
-	name.title = range.id;
-	applyNav(name, range.nav);
-	head.appendChild(name);
-
-	const span = document.createElement("span");
-	span.className = "bop-range-span";
-	span.textContent = `${formatValue(range.min)} … ${formatValue(range.max)}`;
-	head.appendChild(span);
-
-	return head;
-}
-
-function sideToDom(side: BopSideView | undefined, which: "left" | "right"): HTMLDivElement {
-	const element = document.createElement("div");
-	element.className = "bop-side bop-side-" + which;
-	if (!side) {
-		return element;
-	}
-	applyNav(element, side.nav);
-
-	const icon = document.createElement("div");
-	icon.className = "bop-icon" + (side.icon ? " " + side.icon.styleKey : " bop-icon-missing");
-	icon.title = side.iconName ?? "";
-	element.appendChild(icon);
-
-	const name = document.createElement("div");
-	name.className = "bop-side-name";
-	name.textContent = textFor(side.name);
-	name.title = side.id;
-	element.appendChild(name);
-
-	return element;
-}
-
-interface RenderedCard {
-	card: BopCard;
-	element: HTMLDivElement;
-	setValue: (value: number) => void;
-}
-
-let rendered: RenderedCard[] = [];
-
-function buildCard(card: BopCard, initial: number): RenderedCard {
-	const element = document.createElement("div");
-	element.className = "ev-card bop-card";
-	element.dataset.key = card.key;
-
-	const head = document.createElement("div");
-	head.className = "ev-head";
-	const text = document.createElement("div");
-	text.className = "ev-text";
-	const id = document.createElement("div");
-	id.className = "ev-id";
-	id.textContent = card.id;
-	applyNav(id, card.nav);
-	text.appendChild(id);
-	const title = textFor(card.title);
-	if (title !== card.id) {
-		const sub = document.createElement("div");
-		sub.className = "ev-sub bop-title";
-		sub.textContent = title;
-		text.appendChild(sub);
-	}
-	head.appendChild(text);
-	element.appendChild(head);
-
-	if (card.category) {
-		const meta = document.createElement("div");
-		meta.className = "ev-meta";
-		badge(meta, "", textFor(card.category));
-		element.appendChild(meta);
-	}
-
-	for (const warning of card.warnings) {
-		const row = document.createElement("div");
-		row.className = "bop-warning";
-		row.textContent = warning;
-		element.appendChild(row);
-	}
-
-	// The bar, between the two side icons, as the game draws it.
-	const barRow = document.createElement("div");
-	barRow.className = "bop-bar-row";
-	barRow.appendChild(sideToDom(card.left, "left"));
-
-	const bar = document.createElement("div");
-	bar.className = "bop-bar";
-	const segments: { range: BopRangeView; element: HTMLDivElement }[] = [];
-	for (const range of card.ranges) {
-		const segment = document.createElement("div");
-		segment.className = "bop-segment bop-segment-" + range.side;
-		const left = percentOf(range.min);
-		segment.style.left = left + "%";
-		segment.style.width = Math.max(0, percentOf(range.max) - left) + "%";
-		segment.title = `${textFor(range.name)} (${formatValue(range.min)} … ${formatValue(range.max)})`;
-		applyNav(segment, range.nav);
-		bar.appendChild(segment);
-		segments.push({ range, element: segment });
-	}
-	const needle = document.createElement("div");
-	needle.className = "bop-needle";
-	bar.appendChild(needle);
-	barRow.appendChild(bar);
-
-	barRow.appendChild(sideToDom(card.right, "right"));
-	element.appendChild(barRow);
-
-	// The controls to move the value, standing in for add_power_balance_value.
-	const controls = document.createElement("div");
-	controls.className = "bop-controls";
-	const slider = document.createElement("input");
-	slider.type = "range";
-	slider.className = "bop-slider";
-	slider.min = "-1";
-	slider.max = "1";
-	slider.step = "0.01";
-	const number = document.createElement("input");
-	number.type = "number";
-	number.className = "bop-number";
-	number.min = "-1";
-	number.max = "1";
-	number.step = "0.01";
-
-	const stepButton = (step: number) => {
-		const button = document.createElement("button");
-		button.className = "bop-step";
-		button.textContent = (step > 0 ? "+" : "") + step;
-		button.addEventListener("click", tryRun(() => setValue(current + step)));
-		return button;
-	};
-
-	for (const step of steps.filter((s) => s < 0)) {
-		controls.appendChild(stepButton(step));
-	}
-	controls.appendChild(slider);
-	for (const step of steps.filter((s) => s > 0)) {
-		controls.appendChild(stepButton(step));
-	}
-	controls.appendChild(number);
-	const reset = document.createElement("button");
-	reset.className = "bop-reset";
-	reset.textContent = feLocalize("boppreview.reset", "Reset to initial_value");
-	reset.title = formatValue(card.initialValue);
-	reset.addEventListener("click", tryRun(() => setValue(card.initialValue)));
-	controls.appendChild(reset);
-	element.appendChild(controls);
-
-	slider.addEventListener("input", tryRun(() => setValue(parseFloat(slider.value))));
-	number.addEventListener("change", tryRun(() => setValue(parseFloat(number.value))));
-
-	// The range the value falls in, and what it grants.
-	const active = document.createElement("div");
-	active.className = "bop-active";
-	element.appendChild(active);
-
-	// Every range, so the whole balance can be read without walking the slider across it.
-	const all = document.createElement("details");
-	all.className = "bop-all";
-	const summary = document.createElement("summary");
-	summary.textContent = feLocalize("boppreview.allranges", "All ranges ({0})", card.ranges.length);
-	all.appendChild(summary);
-	for (const range of card.ranges) {
-		all.appendChild(rangeBlock(range));
-	}
-	for (const side of card.extraSides) {
-		const sideHead = document.createElement("div");
-		sideHead.className = "bop-extra-side";
-		sideHead.textContent = feLocalize("boppreview.extraside", "Side {0} (not on the bar)", textFor(side.name));
-		applyNav(sideHead, side.nav);
-		all.appendChild(sideHead);
-		for (const range of side.ranges) {
-			all.appendChild(rangeBlock(range));
+function slotsOf(frame: HTMLElement, card: BopCard, window: BopWindowView): WindowSlots {
+	const fills: Record<string, HTMLElement> = {};
+	for (const fill of Array.from(frame.querySelectorAll<HTMLElement>(".bop-slot-fill"))) {
+		const variant = Array.from(fill.classList).find((c) => c.startsWith("bop-slot-fill-"));
+		if (variant) {
+			fills[variant.substring("bop-slot-fill-".length)] = fill;
 		}
 	}
-	element.appendChild(all);
 
-	let current = clampValue(initial);
-
-	function setValue(value: number): void {
-		current = clampValue(value);
-		slider.value = String(current);
-		number.value = String(current);
-		needle.style.left = percentOf(current) + "%";
-		needle.title = formatValue(current);
-
-		const range = activeRangeAt(card.ranges, current);
-		for (const segment of segments) {
-			segment.element.classList.toggle("bop-segment-active", segment.range === range);
+	// A tick at every inner range boundary, the way the game copies range_bar and range_indicator
+	// onto the bar.
+	const marks: WindowSlots["marks"] = [];
+	const layer = frame.querySelector<HTMLElement>(".bop-slot-marks");
+	if (layer) {
+		for (const value of rangeBoundaries(card.ranges)) {
+			const mark = document.createElement("div");
+			mark.className = "bop-mark";
+			mark.style.transform = `translate(${barX(window, value)}px, ${window.bar.y}px)`;
+			mark.innerHTML = window.splitterHtml ?? "";
+			const indicators: HTMLElement[] = [];
+			for (const [frameIndex, html] of (window.indicatorHtml ?? []).entries()) {
+				const indicator = document.createElement("div");
+				indicator.className = "bop-mark bop-mark-indicator bop-mark-indicator-" + frameIndex;
+				indicator.innerHTML = html;
+				mark.appendChild(indicator);
+				indicators.push(indicator);
+			}
+			linkRange(mark, rangeAtTick(card.ranges, value));
+			layer.appendChild(mark);
+			marks.push({ value, indicators });
 		}
-
-		active.replaceChildren();
-		if (range) {
-			active.appendChild(rangeTitle(range));
-			active.appendChild(rangeDetails(range));
-		} else {
-			const none = document.createElement("div");
-			none.className = "bop-none";
-			none.textContent = feLocalize("boppreview.norange", "No range covers {0}.", formatValue(current));
-			active.appendChild(none);
-		}
-		subscribeNavigators();
 	}
-
-	// Positions the needle and fills the active panel. The store is left alone: a value only
-	// becomes the reader's once they move it.
-	setValue(current);
 
 	return {
-		card,
-		element,
-		setValue: (value) => {
-			setValue(value);
-			storeValue(card.key, current);
-		},
+		window,
+		title: frame.querySelector<HTMLElement>(".bop-slot-title") ?? undefined,
+		activeRange: frame.querySelector<HTMLElement>(".bop-slot-active-range") ?? undefined,
+		needle: frame.querySelector<HTMLElement>(".bop-slot-needle") ?? undefined,
+		fills,
+		marks,
 	};
 }
 
-function rangeBlock(range: BopRangeView): HTMLDivElement {
-	const block = document.createElement("div");
-	block.className = "bop-range bop-range-" + range.side;
-	block.appendChild(rangeTitle(range));
-	block.appendChild(rangeDetails(range));
-	return block;
+// The range a tick at `value` opens: of the two it separates, the one further from the centre,
+// which is the one the value enters when it moves out past the tick.
+function rangeAtTick(ranges: BopRangeView[], value: number): BopRangeView | undefined {
+	const near = (a: number) => Math.abs(a - value) < 1e-6;
+	return (
+		ranges.find((r) => (value < 0 ? near(r.max) : near(r.min))) ??
+		ranges.find((r) => near(r.min) || near(r.max))
+	);
+}
+
+// Makes `element` open `range` in the previewed file, with the hover box that says it can be
+// clicked. The only links the preview has.
+function linkRange(element: HTMLElement, range: BopRangeView | undefined): void {
+	applyNav(element, range?.nav);
+	element.classList.toggle("bop-range-link", range?.nav !== undefined);
+}
+
+// Where `value` sits on the bar, in the window's own pixels.
+function barX(window: BopWindowView, value: number): number {
+	return window.bar.x + ((clampValue(value) + 1) / 2) * window.bar.width;
+}
+
+function rangeText(range: BopRangeView | undefined, value: number): string {
+	return range
+		? textFor(range.name)
+		: feLocalize("boppreview.norange", "No range covers {0}.", formatValue(value));
+}
+
+// Moves the parts of the window the game's code moves: the needle, the fill between the centre and
+// the value (the arrow variant when the value last moved towards that side), the lit indicators at
+// the active range's edges, and the active range's name.
+function drawValue(
+	slots: WindowSlots,
+	value: number,
+	direction: number,
+	range: BopRangeView | undefined,
+): void {
+	const { window } = slots;
+	if (slots.needle) {
+		slots.needle.style.transform = `translate(${barX(window, value)}px, ${window.bar.y}px)`;
+	}
+
+	const side = value < 0 ? "left" : value > 0 ? "right" : undefined;
+	const moving = side !== undefined && Math.sign(direction) === Math.sign(value);
+	const shown = side && (moving && slots.fills[side + "-moving"] ? side + "-moving" : side);
+	const percent = ((value + 1) / 2) * 100;
+	for (const [variant, fill] of Object.entries(slots.fills)) {
+		fill.classList.toggle("bop-shown", variant === shown);
+		fill.style.clipPath =
+			side === "left" ? `inset(0 50% 0 ${percent}%)` : `inset(0 ${100 - percent}% 0 50%)`;
+	}
+
+	for (const mark of slots.marks) {
+		const lit =
+			range !== undefined &&
+			(Math.abs(mark.value - range.min) < 1e-6 || Math.abs(mark.value - range.max) < 1e-6);
+		mark.indicators[0]?.classList.toggle("bop-shown", !lit || mark.indicators.length < 2);
+		mark.indicators[1]?.classList.toggle("bop-shown", lit);
+	}
+
+	if (slots.activeRange) {
+		slots.activeRange.textContent = rangeText(range, value);
+		linkRange(slots.activeRange, range);
+	}
+}
+
+// What is on screen: the BoP, its window's slots (or the plain line standing in for a window that
+// was not found), and where its value is.
+interface Shown {
+	card: BopCard;
+	slots?: WindowSlots;
+	fallback?: HTMLElement;
+	value: number;
+}
+
+let shown: Shown | undefined;
+
+function control<T extends HTMLElement>(id: string): T | null {
+	return document.getElementById(id) as T | null;
+}
+
+// `direction` is which way the value last moved, which picks the game's arrow fill; a reset, a
+// switch of BoP and the first draw have none.
+function setValue(value: number, direction: number): void {
+	if (!shown) {
+		return;
+	}
+	shown.value = clampValue(value);
+	const slider = control<HTMLInputElement>("bop-slider");
+	const number = control<HTMLInputElement>("bop-number");
+	if (slider) {
+		slider.value = String(shown.value);
+	}
+	if (number) {
+		number.value = String(shown.value);
+	}
+
+	const range = activeRangeAt(shown.card.ranges, shown.value);
+	if (shown.slots) {
+		drawValue(shown.slots, shown.value, direction, range);
+	} else if (shown.fallback) {
+		shown.fallback.textContent = rangeText(range, shown.value);
+		linkRange(shown.fallback, range);
+	}
+	subscribeNavigators();
+}
+
+// A value only becomes the reader's, and is stored, once they move it.
+function update(value: number, direction?: number): void {
+	if (!shown) {
+		return;
+	}
+	setValue(value, direction ?? clampValue(value) - shown.value);
+	storeValue(shown.card.key, shown.value);
+}
+
+function syncToolbar(card: BopCard | undefined): void {
+	const select = control<HTMLSelectElement>("bops");
+	if (select) {
+		select.replaceChildren(
+			...payload.cards.map((c) => {
+				const option = document.createElement("option");
+				option.value = c.key;
+				const title = textFor(c.title);
+				option.textContent = title === c.id ? c.id : `(${c.id}) ${title}`;
+				return option;
+			}),
+		);
+		if (card) {
+			select.value = card.key;
+		}
+	}
+	const container = control<HTMLElement>("bop-select-container");
+	if (container) {
+		container.style.display = payload.cards.length > 1 ? "block" : "none";
+	}
+
+	const reset = control<HTMLElement>("bop-reset");
+	if (reset && card) {
+		reset.title = formatValue(card.initialValue);
+	}
+	for (const id of ["bop-slider", "bop-number"]) {
+		const input = control<HTMLInputElement>(id);
+		if (input) {
+			input.disabled = card === undefined;
+		}
+	}
 }
 
 function buildContent(): void {
@@ -353,23 +271,73 @@ function buildContent(): void {
 	showLocalisation = gateToggle("show-localisation", payload.hasLocalisation, getState().showLocalisation, true);
 
 	content.replaceChildren();
-	rendered = [];
-	const values = storedValues();
+	shown = undefined;
+	const card = selectedCard();
+	syncToolbar(card);
 
-	if (payload.cards.length === 0) {
+	if (!card) {
 		const empty = document.createElement("div");
 		empty.className = "bop-none";
 		empty.textContent = feLocalize("boppreview.empty", "No balance of power in this file.");
 		content.appendChild(empty);
+		return;
 	}
 
-	for (const card of payload.cards) {
-		const item = buildCard(card, values[card.key] ?? card.initialValue);
-		content.appendChild(item.element);
-		rendered.push(item);
+	// The game's window, or, without one, just the name of the active range.
+	shown = { card, value: clampValue(storedValues()[card.key] ?? card.initialValue) };
+	if (card.window) {
+		const frame = buildGuiFrame(card.window.html, windowMaxWidth, "bop-gui-frame");
+		content.appendChild(frame);
+		shown.slots = slotsOf(frame, card, card.window);
+		if (shown.slots.title) {
+			shown.slots.title.textContent = textFor(card.title);
+		}
+		for (const { id, text } of card.window.texts) {
+			const element = frame.querySelector<HTMLElement>(".bop-slot-text-" + normalizeForStyle(id));
+			if (element) {
+				element.textContent = textFor(text);
+			}
+		}
+	} else {
+		shown.fallback = document.createElement("div");
+		shown.fallback.className = "bop-none";
+		content.appendChild(shown.fallback);
 	}
 
-	subscribeNavigators();
+	// Under the window, where they do not push it down the page.
+	for (const warning of card.warnings) {
+		const row = document.createElement("div");
+		row.className = "bop-warning";
+		row.textContent = warning;
+		content.appendChild(row);
+	}
+
+	setValue(shown.value, 0);
+}
+
+// The toolbar's controls live outside #boppreviewcontent, so they are bound once, here, and always
+// act on the BoP on screen.
+function bindControls(): void {
+	for (const button of Array.from(document.querySelectorAll<HTMLElement>(".bop-step"))) {
+		const step = parseFloat(button.dataset.step ?? "0");
+		button.addEventListener("click", tryRun(() => shown && update(shown.value + step)));
+	}
+	const slider = control<HTMLInputElement>("bop-slider");
+	slider?.addEventListener("input", tryRun(() => update(parseFloat(slider.value))));
+	const number = control<HTMLInputElement>("bop-number");
+	number?.addEventListener("change", tryRun(() => update(parseFloat(number.value))));
+	control<HTMLElement>("bop-reset")?.addEventListener(
+		"click",
+		tryRun(() => shown && update(shown.card.initialValue, 0)),
+	);
+	const select = control<HTMLSelectElement>("bops");
+	select?.addEventListener(
+		"change",
+		tryRun(() => {
+			setState({ selectedBop: select.value });
+			buildContent();
+		}),
+	);
 }
 
 const bindToggle = toggleBinder(buildContent);
@@ -391,9 +359,10 @@ window.addEventListener(
 			showLocalisation = value;
 			setState({ showLocalisation: value });
 		});
+		bindControls();
 		buildContent();
 	}),
 );
 
-// Exported for the tests, which drive the cards without a load event.
-export { buildContent, rendered };
+// Exported for the tests, which drive the preview without a load event.
+export { buildContent };

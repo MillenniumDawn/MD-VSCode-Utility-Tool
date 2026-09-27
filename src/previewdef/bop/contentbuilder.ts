@@ -9,8 +9,12 @@ import { jsonForScript } from "../../util/common";
 import { buildBopPreviewPayload } from "./build";
 import { LoaderRender, RenderContentOptions } from "../loaderpreview";
 
-// Height of the fixed toolbar strip. The cards are offset by it so they never render underneath.
-const toolbarHeight = 40;
+// Height of the fixed toolbar strip, as the MIO preview's: room for the dropdown and the strip's
+// own thin scrollbar. The window is offset by it so it never renders underneath.
+const toolbarHeight = 52;
+
+// The steps Millennium Dawn's add_power_balance_value calls use most.
+const steps = [-0.1, -0.05, 0.05, 0.1];
 
 export async function renderBopFile(
 	loader: BopLoader,
@@ -71,14 +75,32 @@ function renderShell(styleTable: StyleTable): string {
     `;
 }
 
-// Outside #boppreviewcontent so its listener is bound once and an in-place update never rebinds it.
+// Outside #boppreviewcontent so its listeners are bound once and an in-place update never rebinds
+// them. The BoP dropdown, as the MIO preview's, is only shown when the file has more than one; the
+// value controls stand in for add_power_balance_value and act on the BoP shown.
 function renderToolBar(styleTable: StyleTable): string {
 	const labelStyle = styleTable.style("bopToggleLabel", () => `margin-right:5px`);
+	const gap = styleTable.style("marginRight10", () => `margin-right:10px`);
+	const stepButton = (step: number) =>
+		`<button class="bop-step" data-step="${step}">${step > 0 ? "+" : ""}${step}</button>`;
 	return `<div class="toolbar-outer ${styleTable.style(
 		"toolbar-height",
 		() => `box-sizing: border-box; height: ${toolbarHeight}px;`,
 	)}">
         <div class="toolbar">
+            <div id="bop-select-container" class="${styleTable.style("bop-select-hidden", () => `display:none`)}">
+                <label for="bops" class="${labelStyle}">${localize("boppreview.bop", "Balance of power: ")}</label>
+                <div class="select-container ${gap}">
+                    <select id="bops" class="select multiple-select" tabindex="0" role="combobox"></select>
+                </div>
+            </div>
+            <div class="bop-controls ${gap}">
+                ${steps.filter((s) => s < 0).map(stepButton).join("")}
+                <input type="range" id="bop-slider" class="bop-slider" min="-1" max="1" step="0.01">
+                ${steps.filter((s) => s > 0).map(stepButton).join("")}
+                <input type="number" id="bop-number" class="bop-number" min="-1" max="1" step="0.01">
+                <button id="bop-reset" class="bop-reset">${localize("boppreview.reset", "Reset to initial_value")}</button>
+            </div>
             <label for="show-localisation" class="${labelStyle}">${localize("boppreview.showlocalisation", "Show localisation")}</label>
             <input type="checkbox" id="show-localisation">
         </div>

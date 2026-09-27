@@ -1,11 +1,10 @@
 /*
  * Balance of power view.
  *
- * One hoicard.css card per BoP. What is here is what only a BoP has: the bar between its two side
- * icons, the controls that move the value along it, and the active range's modifiers.
- *
- * The bar is coloured the way the game fills it -- orange towards the left side, blue towards the
- * right -- with each range drawn as its own segment, which the game only marks with a tick.
+ * One BoP at a time, picked in the toolbar the way the MIO preview picks an organisation: the
+ * game's own powerbalanceview window as the host drew it, with the controls that move the value in
+ * the toolbar. What is here positions the parts the game's code fills in -- the bar fill, the
+ * needle, the range ticks -- and styles the controls.
  */
 
 #boppreviewcontent {
@@ -13,132 +12,85 @@
 	padding: 12px 16px 32px;
 }
 
-.bop-card {
-	max-width: 760px;
-	margin-bottom: 18px;
-}
-
 .bop-warning {
-	margin: 0 11px 6px;
+	max-width: 550px;
+	margin: 0 0 6px;
 	padding: 3px 8px;
 	border-left: 3px solid var(--vscode-editorWarning-foreground);
 	font-size: 11px;
 	color: var(--vscode-editorWarning-foreground);
 }
 
-/* ---------- Bar ---------- */
-
-.bop-bar-row {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 10px 11px;
-}
-
-.bop-side {
-	flex: none;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	width: 84px;
-	gap: 4px;
-	text-align: center;
-}
-
-.bop-icon {
-	width: 64px;
-	height: 64px;
-}
-
-.bop-icon-missing {
-	border: 1px dashed var(--ev-border);
-	border-radius: 3px;
-}
-
-.bop-side-name {
+.bop-none {
+	margin: 0 0 10px;
 	font-size: 11px;
-	overflow-wrap: anywhere;
+	color: var(--ev-fg-muted);
 }
 
-.bop-bar {
+/* ---------- Game window ---------- */
+
+.bop-gui-frame {
 	position: relative;
-	flex: 1;
-	min-width: 120px;
-	height: 18px;
-	border: 1px solid var(--ev-border);
-	border-radius: 2px;
-	background: var(--ev-surface-alt);
+	overflow: hidden;
 }
 
-.bop-segment {
+.bop-gui-window {
+	position: relative;
+}
+
+/* All four progress bars are drawn; the one for the value's side is shown and clipped to the
+   stretch between the centre and the value. */
+.bop-slot-fill {
+	display: none;
+}
+
+.bop-slot-fill.bop-shown {
+	display: block;
+}
+
+.bop-mark {
 	position: absolute;
+	left: 0;
 	top: 0;
-	bottom: 0;
-	box-sizing: border-box;
-	border-right: 1px solid var(--vscode-editor-background);
-	opacity: 0.45;
 }
 
-.bop-segment:first-child {
-	border-left: 1px solid var(--vscode-editor-background);
+.bop-mark-indicator {
+	display: none;
 }
 
-.bop-segment-left {
-	background: var(--vscode-charts-orange);
+.bop-mark-indicator.bop-shown {
+	display: block;
 }
 
-.bop-segment-centre {
-	background: var(--vscode-charts-foreground, var(--ev-fg-muted));
-}
-
-.bop-segment-right {
-	background: var(--vscode-charts-blue);
-}
-
-.bop-segment-active {
-	opacity: 1;
-}
-
-.bop-needle {
-	position: absolute;
-	top: -5px;
-	bottom: -5px;
-	width: 3px;
-	margin-left: -1.5px;
-	border-radius: 1px;
-	background: var(--ev-fg);
-	box-shadow: 0 0 2px var(--vscode-editor-background);
-	pointer-events: none;
-}
-
-/* ---------- Controls ---------- */
+/* ---------- Toolbar controls ---------- */
 
 .bop-controls {
 	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
-	padding: 0 11px 10px;
+	height: 26px;
 }
 
 .bop-slider {
-	flex: 1;
-	min-width: 120px;
+	width: 180px;
 }
 
 .bop-number {
 	width: 64px;
 }
 
+/* Wider than the toolbar's 20px icon buttons: these carry text. */
 .bop-step,
 .bop-reset {
-	padding: 2px 8px;
+	width: auto;
+	height: 22px;
+	padding: 0 8px;
 	border: 1px solid var(--vscode-button-border, transparent);
 	border-radius: 2px;
 	color: var(--vscode-button-secondaryForeground);
 	background: var(--vscode-button-secondaryBackground);
 	font-family: var(--vscode-editor-font-family, monospace);
-	cursor: pointer;
+	white-space: nowrap;
 }
 
 .bop-step:hover,
@@ -146,102 +98,35 @@
 	background: var(--vscode-button-secondaryHoverBackground);
 }
 
-/* ---------- Ranges ---------- */
+/* ---------- Range links ---------- */
 
-.bop-active {
-	margin: 0 11px 10px;
-	padding: 8px 10px;
-	border: 1px solid var(--ev-border);
-	border-radius: 4px;
+/* The ranges are the only thing in the window that can be clicked, so they say so on hover with a
+   blue box over the text, or over the tick's sprites. */
+.bop-range-link {
+	position: relative;
 }
 
-.bop-range-head {
-	display: flex;
-	justify-content: space-between;
-	gap: 8px;
-	margin-bottom: 4px;
-	font-weight: 600;
+.bop-slot-active-range.bop-range-link {
+	position: absolute;
 }
 
-.bop-range-span {
-	flex: none;
-	font-family: var(--vscode-editor-font-family, monospace);
-	font-weight: normal;
-	color: var(--ev-fg-muted);
+.bop-mark.bop-range-link {
+	position: absolute;
 }
 
-.bop-range-details {
-	font-size: 11px;
-	line-height: 1.6;
+.bop-range-link:hover::after,
+.bop-mark.bop-range-link:hover > div:not(.bop-mark)::after,
+.bop-mark.bop-range-link:hover > .bop-mark.bop-shown > div::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: color-mix(in srgb, var(--vscode-focusBorder, #007fd4) 35%, transparent);
+	pointer-events: none;
 }
 
-.bop-mod {
-	display: flex;
-	justify-content: space-between;
-	gap: 8px;
-}
-
-.bop-mod-name {
-	min-width: 0;
-	color: var(--ev-fg-muted);
-	overflow-wrap: anywhere;
-}
-
-.bop-mod-value {
-	flex: none;
-	font-family: var(--vscode-editor-font-family, monospace);
-	font-variant-numeric: tabular-nums;
-}
-
-.bop-mod-good {
-	color: var(--ev-good);
-}
-
-.bop-mod-bad {
-	color: var(--ev-bad);
-}
-
-.bop-mod-neutral {
-	color: var(--ev-fg);
-}
-
-.bop-tooltip {
-	font-style: italic;
-}
-
-.bop-range-meta {
-	padding: 4px 0 0;
-}
-
-.bop-none {
-	font-size: 11px;
-	color: var(--ev-fg-muted);
-}
-
-.bop-all {
-	padding: 0 11px 10px;
-}
-
-.bop-all > summary {
-	cursor: pointer;
-	color: var(--ev-fg-muted);
-}
-
-.bop-range {
-	margin-top: 8px;
-	padding-left: 8px;
-	border-left: 3px solid var(--ev-border);
-}
-
-.bop-range-left {
-	border-left-color: var(--vscode-charts-orange);
-}
-
-.bop-range-right {
-	border-left-color: var(--vscode-charts-blue);
-}
-
-.bop-extra-side {
-	margin-top: 12px;
-	font-weight: 600;
+.bop-mark.bop-range-link:hover::after {
+	content: none;
 }

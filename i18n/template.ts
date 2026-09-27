@@ -1,18 +1,15 @@
 import { __table } from './en';
 /*eslint sort-keys: "warn"*/
 const table: Partial<typeof __table> = {
-    "boppreview.allranges": "All ranges ({0})",
+    "boppreview.bop": "Balance of power: ",
     "boppreview.empty": "No balance of power in this file.",
-    "boppreview.extraside": "Side {0} (not on the bar)",
     "boppreview.gap": "No range covers {0} to {1}.",
     "boppreview.iconmissing": "Icon {0} of side {1} was not found.",
     "boppreview.initialoutside": "initial_value {0} is outside -1 to 1.",
     "boppreview.missingside": "Side {0} is not defined in this balance of power.",
-    "boppreview.nomodifiers": "No modifiers",
     "boppreview.norange": "No range covers {0}.",
     "boppreview.noranges": "This balance of power has no ranges.",
-    "boppreview.onactivate": "on_activate",
-    "boppreview.ondeactivate": "on_deactivate",
+    "boppreview.nowindow": "The {0} window was not found in the mod or the game install, so the balance of power cannot be drawn the way the game does.",
     "boppreview.overlap": "Ranges {0} and {1} overlap.",
     "boppreview.reset": "Reset to initial_value",
     "boppreview.showlocalisation": "Show localisation",

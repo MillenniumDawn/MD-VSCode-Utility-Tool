@@ -1,20 +1,12 @@
 import { localise } from "../localise";
 import { navOf } from "../sharedpayload";
 import { getSpriteByGfxName } from "../../util/image/imagecache";
-import { StyleTable, normalizeForStyle } from "../../util/styletable";
+import { StyleTable } from "../../util/styletable";
 import { localize } from "../../util/i18n";
-import { formatModifiers } from "../../util/modifiers";
-import { HOIBop, HOIBopRange, HOIBopSide } from "./schema";
-import { BopLoaderResult } from "./loader";
-import {
-	BopCard,
-	BopExtraSide,
-	BopIcon,
-	BopPreviewPayload,
-	BopRangeSide,
-	BopRangeView,
-	BopSideView,
-} from "./payload";
+import { HOIBop, HOIBopRange } from "./schema";
+import { BopLoaderResult, bopWindowName } from "./loader";
+import { BopCard, BopPreviewPayload, BopRangeView } from "./payload";
+import { renderBopWindow } from "./window";
 
 // Two range bounds this close are the same number written differently (0.1 against 0.10000001).
 const epsilon = 1e-6;
@@ -33,7 +25,8 @@ export async function buildBopPreviewPayload(
 		hasLocalisation: cards.some(
 			(c) =>
 				c.title.text !== c.title.key ||
-				c.ranges.some((r) => r.name.text !== r.name.key),
+				c.ranges.some((r) => r.name.text !== r.name.key) ||
+				(c.window?.texts ?? []).some((t) => t.text.text !== t.text.key),
 		),
 	};
 }
@@ -57,111 +50,61 @@ async function buildCard(
 		}
 	}
 
-	const buildRanges = (ranges: HOIBopRange[], side: BopRangeSide) =>
-		Promise.all(ranges.map((r) => buildRange(r, side, bop.file, loadResult)));
-
-	const ranges = [
-		...(bop.centreRange ? await buildRanges([bop.centreRange], "centre") : []),
-		...(leftSide ? await buildRanges(leftSide.ranges, "left") : []),
-		...(rightSide ? await buildRanges(rightSide.ranges, "right") : []),
-	].sort((a, b) => a.min - b.min || a.max - b.max);
-
-	const extraSides: BopExtraSide[] = [];
-	for (const side of bop.sides) {
-		if (side === leftSide || side === rightSide) {
-			continue;
-		}
-		extraSides.push({
-			...(await buildSide(side, bop.file, styleTable, loadResult, warnings)),
-			// Not on the bar, so coloured by the end of it the range sits on.
-			ranges: await Promise.all(
-				side.ranges.map((r) => buildRange(r, r.max <= 0 ? "left" : "right", bop.file, loadResult)),
-			),
-		});
-	}
+	const ranges = await Promise.all(
+		[
+			...(bop.centreRange ? [bop.centreRange] : []),
+			...(leftSide?.ranges ?? []),
+			...(rightSide?.ranges ?? []),
+		].map((r) => buildRange(r, bop.file)),
+	);
+	ranges.sort((a, b) => a.min - b.min || a.max - b.max);
 
 	if (bop.initialValue < -1 || bop.initialValue > 1) {
 		warnings.push(localize("boppreview.initialoutside", "initial_value {0} is outside -1 to 1.", bop.initialValue));
 	}
 	warnings.push(...coverageWarnings(ranges));
 
+	const window = await renderBopWindow(
+		{ leftIcon: leftSide?.icon, rightIcon: rightSide?.icon },
+		loadResult,
+		styleTable,
+	);
+	if (!window) {
+		warnings.push(
+			localize(
+				"boppreview.nowindow",
+				"The {0} window was not found in the mod or the game install, so the balance of power cannot be drawn the way the game does.",
+				bopWindowName,
+			),
+		);
+	} else {
+		for (const side of [leftSide, rightSide]) {
+			if (side?.icon && !(await getSpriteByGfxName(side.icon, loadResult.gfxFiles))) {
+				warnings.push(localize("boppreview.iconmissing", "Icon {0} of side {1} was not found.", side.icon, side.id));
+			}
+		}
+	}
+
 	return {
 		key: bop.occurrence === 0 ? bop.id : `${bop.id}#${bop.occurrence}`,
 		id: bop.id,
 		title: await localise(bop.id),
-		category: bop.decisionCategory !== undefined ? await localise(bop.decisionCategory) : undefined,
 		initialValue: bop.initialValue,
-		left: leftSide ? await buildSide(leftSide, bop.file, styleTable, loadResult, warnings) : undefined,
-		right: rightSide ? await buildSide(rightSide, bop.file, styleTable, loadResult, warnings) : undefined,
 		ranges,
-		extraSides,
+		window,
 		warnings,
-		nav: navOf(bop.token, bop.file),
 	};
 }
 
-async function buildRange(
-	range: HOIBopRange,
-	side: BopRangeSide,
-	file: string,
-	loadResult: BopLoaderResult,
-): Promise<BopRangeView> {
+async function buildRange(range: HOIBopRange, file: string): Promise<BopRangeView> {
 	return {
 		id: range.id,
 		name: await localise(range.id),
 		// A range written max-first still covers the same stretch of the bar.
 		min: Math.min(range.min, range.max),
 		max: Math.max(range.min, range.max),
-		side,
-		modifiers: await formatModifiers(range.modifiers, loadResult.modifierDefinitions),
-		tooltips: await Promise.all(range.customTooltips.map(localise)),
-		hasOnActivate: range.hasOnActivate,
-		hasOnDeactivate: range.hasOnDeactivate,
 		nav: navOf(range.token, file),
 	};
-}
-
-async function buildSide(
-	side: HOIBopSide,
-	file: string,
-	styleTable: StyleTable,
-	loadResult: BopLoaderResult,
-	warnings: string[],
-): Promise<BopSideView> {
-	const icon = side.icon ? await buildIcon(side.icon, styleTable, loadResult) : undefined;
-	if (side.icon && !icon) {
-		warnings.push(localize("boppreview.iconmissing", "Icon {0} of side {1} was not found.", side.icon, side.id));
-	}
-	return {
-		id: side.id,
-		name: await localise(side.id),
-		iconName: side.icon,
-		icon,
-		nav: navOf(side.token, file),
-	};
-}
-
-async function buildIcon(
-	name: string,
-	styleTable: StyleTable,
-	loadResult: BopLoaderResult,
-): Promise<BopIcon | undefined> {
-	const sprite = await getSpriteByGfxName(name, loadResult.gfxFiles);
-	if (!sprite) {
-		return undefined;
-	}
-	const image = sprite.image;
-	// Keyed on the sprite, so the two BoPs of a file sharing an icon share one rule.
-	const styleKey = styleTable.style(
-		"bop-icon-" + normalizeForStyle(name),
-		() => `
-            background-image: url(${image.uri});
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-        `,
-	);
-	return { styleKey, width: image.width, height: image.height };
 }
 
 /**

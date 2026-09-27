@@ -2,7 +2,7 @@ Unreleased
 
   Functionality:
 
-- [ Balance of Power Previewer ] Added a preview for `common/bop` files: each balance of power is drawn with its localised title, side icons and a bar showing every range as a segment. A slider and step buttons move the value, the active range's modifiers are shown the way the game words them, and overlapping or missing ranges are flagged. Issue #434.
+- [ Balance of Power Previewer ] Added a preview for `common/bop` files that draws the game's own balance of power window from `powerbalanceview.gui`, with each balance of power's title and side icons. A slider and step buttons in the toolbar stand in for `add_power_balance_value`: the needle, the bar fill and the active range follow the value the way they do in game, and clicking a range opens it in the file. A file with several balances of power gets a dropdown to pick one, and overlapping or missing ranges are flagged. Issue #434.
 - [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
 - Errors from previews and file loading now appear in the HOI4 Modding output channel, not only in the developer console. Issue #370.
 - [ Focus Tree ] With the focus tree layout set to `gui`, a focus tree preview now opens centred on the tree's `initial_show_position`, the way the game does, using `national_focus_center` from `nationalfocusview.gui`. Issue #400.
@@ -13,6 +13,8 @@ Unreleased
 
   Bugfixes:
 
+- [ GFX ] Sprites defined as `progressBarType` now show, and a `.gfx` file whose last block is never closed, such as the game's own `powerbalanceview.gfx`, is read the way the game reads it instead of losing every sprite in it.
+- [ Decision Previewer ] Clicking an element of a scripted-GUI window in a decision card now opens it in its `.gui` file, instead of jumping to an unrelated spot in the decision file.
 - DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.
 - [ GFX ] Sprites whose texture width does not divide evenly by `noofframes` no longer lose pixels at the edge of each frame, and a `noofframes` of 0 or larger than the texture width no longer breaks the preview. Issue #371.
 - When the same mod file appears more than once in the "Select working mod" list, the selected entries now keep a fixed order at the top instead of one that could change between VS Code versions. Issue #374.
@@ -23,11 +25,6 @@ Unreleased
 - Previews no longer re-check unchanged files over and over while one preview loads, which made opening large previews slower than needed. Issue #368.
 - A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
 - [ GUI ] Showing or hiding a container window no longer affects a sibling whose name starts with the same text, such as `battle` and `battleplan`. Issue #363.
-
->>>>>>> origin/main
->>>>>>> origin/main
->>>>>>> origin/main
->>>>>>> origin/main
 
 v1.1.39
 
