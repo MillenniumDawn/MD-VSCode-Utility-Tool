@@ -12,6 +12,7 @@ declare module 'vscode' {
             readonly ideaPreview: boolean;
             readonly decisionPreview: boolean;
             readonly characterPreview: boolean;
+            readonly bopPreview: boolean;
             readonly ideaSwapIndex: boolean;
             readonly sharedFocusIndex: boolean;
             readonly gfxIndex: boolean;

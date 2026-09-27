@@ -1,0 +1,247 @@
+/*
+ * Balance of power view.
+ *
+ * One hoicard.css card per BoP. What is here is what only a BoP has: the bar between its two side
+ * icons, the controls that move the value along it, and the active range's modifiers.
+ *
+ * The bar is coloured the way the game fills it -- orange towards the left side, blue towards the
+ * right -- with each range drawn as its own segment, which the game only marks with a tick.
+ */
+
+#boppreviewcontent {
+	position: relative;
+	padding: 12px 16px 32px;
+}
+
+.bop-card {
+	max-width: 760px;
+	margin-bottom: 18px;
+}
+
+.bop-warning {
+	margin: 0 11px 6px;
+	padding: 3px 8px;
+	border-left: 3px solid var(--vscode-editorWarning-foreground);
+	font-size: 11px;
+	color: var(--vscode-editorWarning-foreground);
+}
+
+/* ---------- Bar ---------- */
+
+.bop-bar-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 11px;
+}
+
+.bop-side {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 84px;
+	gap: 4px;
+	text-align: center;
+}
+
+.bop-icon {
+	width: 64px;
+	height: 64px;
+}
+
+.bop-icon-missing {
+	border: 1px dashed var(--ev-border);
+	border-radius: 3px;
+}
+
+.bop-side-name {
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+
+.bop-bar {
+	position: relative;
+	flex: 1;
+	min-width: 120px;
+	height: 18px;
+	border: 1px solid var(--ev-border);
+	border-radius: 2px;
+	background: var(--ev-surface-alt);
+}
+
+.bop-segment {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	box-sizing: border-box;
+	border-right: 1px solid var(--vscode-editor-background);
+	opacity: 0.45;
+}
+
+.bop-segment:first-child {
+	border-left: 1px solid var(--vscode-editor-background);
+}
+
+.bop-segment-left {
+	background: var(--vscode-charts-orange);
+}
+
+.bop-segment-centre {
+	background: var(--vscode-charts-foreground, var(--ev-fg-muted));
+}
+
+.bop-segment-right {
+	background: var(--vscode-charts-blue);
+}
+
+.bop-segment-active {
+	opacity: 1;
+}
+
+.bop-needle {
+	position: absolute;
+	top: -5px;
+	bottom: -5px;
+	width: 3px;
+	margin-left: -1.5px;
+	border-radius: 1px;
+	background: var(--ev-fg);
+	box-shadow: 0 0 2px var(--vscode-editor-background);
+	pointer-events: none;
+}
+
+/* ---------- Controls ---------- */
+
+.bop-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	padding: 0 11px 10px;
+}
+
+.bop-slider {
+	flex: 1;
+	min-width: 120px;
+}
+
+.bop-number {
+	width: 64px;
+}
+
+.bop-step,
+.bop-reset {
+	padding: 2px 8px;
+	border: 1px solid var(--vscode-button-border, transparent);
+	border-radius: 2px;
+	color: var(--vscode-button-secondaryForeground);
+	background: var(--vscode-button-secondaryBackground);
+	font-family: var(--vscode-editor-font-family, monospace);
+	cursor: pointer;
+}
+
+.bop-step:hover,
+.bop-reset:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* ---------- Ranges ---------- */
+
+.bop-active {
+	margin: 0 11px 10px;
+	padding: 8px 10px;
+	border: 1px solid var(--ev-border);
+	border-radius: 4px;
+}
+
+.bop-range-head {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 4px;
+	font-weight: 600;
+}
+
+.bop-range-span {
+	flex: none;
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-weight: normal;
+	color: var(--ev-fg-muted);
+}
+
+.bop-range-details {
+	font-size: 11px;
+	line-height: 1.6;
+}
+
+.bop-mod {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.bop-mod-name {
+	min-width: 0;
+	color: var(--ev-fg-muted);
+	overflow-wrap: anywhere;
+}
+
+.bop-mod-value {
+	flex: none;
+	font-family: var(--vscode-editor-font-family, monospace);
+	font-variant-numeric: tabular-nums;
+}
+
+.bop-mod-good {
+	color: var(--ev-good);
+}
+
+.bop-mod-bad {
+	color: var(--ev-bad);
+}
+
+.bop-mod-neutral {
+	color: var(--ev-fg);
+}
+
+.bop-tooltip {
+	font-style: italic;
+}
+
+.bop-range-meta {
+	padding: 4px 0 0;
+}
+
+.bop-none {
+	font-size: 11px;
+	color: var(--ev-fg-muted);
+}
+
+.bop-all {
+	padding: 0 11px 10px;
+}
+
+.bop-all > summary {
+	cursor: pointer;
+	color: var(--ev-fg-muted);
+}
+
+.bop-range {
+	margin-top: 8px;
+	padding-left: 8px;
+	border-left: 3px solid var(--ev-border);
+}
+
+.bop-range-left {
+	border-left-color: var(--vscode-charts-orange);
+}
+
+.bop-range-right {
+	border-left-color: var(--vscode-charts-blue);
+}
+
+.bop-extra-side {
+	margin-top: 12px;
+	font-weight: 600;
+}

@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- [ Balance of Power Previewer ] Added a preview for `common/bop` files: each balance of power is drawn with its localised title, side icons and a bar showing every range as a segment. A slider and step buttons move the value, the active range's modifiers are shown the way the game words them, and overlapping or missing ranges are flagged. Issue #434.
 - [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
 - Errors from previews and file loading now appear in the HOI4 Modding output channel, not only in the developer console. Issue #370.
 - [ Focus Tree ] With the focus tree layout set to `gui`, a focus tree preview now opens centred on the tree's `initial_show_position`, the way the game does, using `national_focus_center` from `nationalfocusview.gui`. Issue #400.

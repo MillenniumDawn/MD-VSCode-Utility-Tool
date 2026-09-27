@@ -19,6 +19,7 @@ export interface FeatureFlags {
     readonly ideaPreview: Configuration['ideaPreview'];
     readonly decisionPreview: Configuration['decisionPreview'];
     readonly characterPreview: Configuration['characterPreview'];
+    readonly bopPreview: Configuration['bopPreview'];
     readonly ideaSwapIndex: Configuration['ideaSwapIndex'];
     readonly sharedFocusIndex: Configuration['sharedFocusIndex'];
     readonly gfxIndex: Configuration['gfxIndex'];
@@ -42,6 +43,7 @@ function readFlags(): FeatureFlags {
         ideaPreview: config.ideaPreview,
         decisionPreview: config.decisionPreview,
         characterPreview: config.characterPreview,
+        bopPreview: config.bopPreview,
         ideaSwapIndex: config.ideaSwapIndex,
         sharedFocusIndex: config.sharedFocusIndex,
         gfxIndex: config.gfxIndex,

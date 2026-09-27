@@ -36,6 +36,7 @@
 		"onWebviewPanel:mdworldmappreview",
 		"workspaceContains:interface/**/*.gfx",
 		"workspaceContains:common/characters/*.txt",
+		"workspaceContains:common/bop/*.txt",
 		"workspaceContains:common/decisions/*.txt",
 		"workspaceContains:common/ideas/*.txt",
 		"workspaceContains:common/national_focus/*.txt",
@@ -160,6 +161,12 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%hoi4modutilities.characterPreview.desc%"
+					},
+					"mdHoi4Utilities.bopPreview": {
+						"title": "%hoi4modutilities.bopPreview.title%",
+						"type": "boolean",
+						"default": true,
+						"description": "%hoi4modutilities.bopPreview.desc%"
 					},
 					"mdHoi4Utilities.useConditionInFocus": {
 						"title": "%hoi4modutilities.useConditionInFocus.title%",
@@ -351,7 +358,7 @@
 			"explorer/context": [
 				{
 					"command": "mdhoi4utilities.preview",
-					"when": "resourceExtname == '.gfx' || resourceExtname == '.gui' || resourceFilename == 'default.map' || resourcePath =~ /[\\\\/](national_focus|events|technologies|ideas|decisions|characters|organizations)[\\\\/][^\\\\/]+\\.txt$/i",
+					"when": "resourceExtname == '.gfx' || resourceExtname == '.gui' || resourceFilename == 'default.map' || resourcePath =~ /[\\\\/](national_focus|events|technologies|ideas|decisions|characters|organizations|bop)[\\\\/][^\\\\/]+\\.txt$/i",
 					"group": "navigation@100"
 				}
 			],
