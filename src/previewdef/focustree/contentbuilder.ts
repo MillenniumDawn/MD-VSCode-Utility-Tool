@@ -92,7 +92,13 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             startX: layout.exclusive.startX,
             endX: layout.exclusive.endX,
             y: layout.exclusive.offsetY,
-        }, layout.spacing.y);
+        }, layout.spacing.y, {
+            // Above the focus layers (up to 3), which it crosses on the name bar row, and below the
+            // traced lines (5) and warning markers (6).
+            zIndex: 4,
+            gapUnderMid: true,
+            clampToCentre: true,
+        });
 
         // The same two passes for the prerequisite lines: the webview draws the same tiles either way.
         const focusLinkState = getFlags().focusTreePrerequisiteLines;

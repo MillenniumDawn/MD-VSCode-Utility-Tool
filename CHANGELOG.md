@@ -51,6 +51,7 @@ v1.1.40
 - [ Focus Tree Previewer ] Inlay windows are drawn where the focus tree places them, instead of a screen height lower when their window is anchored to the bottom, and a ticked inlay now shows outside condition mode instead of staying hidden until its `visible` trigger is met. Issue #436.
 - [ Focus Tree Previewer ] Selecting inlay conditions now changes the inlay window's scripted images, such as the leader portrait in China's inlay; the first image was always shown before.
 - [ Focus Tree ] Selecting inlay conditions now changes the inlay window's scripted images.
+- [ Focus Tree Previewer ] The mutually exclusive marker now sits on the focus name bars, in the gap between the two focuses, as it does in the game. The `<!>` is drawn in front of its line instead of the line showing through it. Issue #461.
 
 v1.1.39
 
