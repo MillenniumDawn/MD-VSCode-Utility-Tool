@@ -65,6 +65,8 @@
     "hoi4modutilities.focusOverlayGfxFiles.desc": "Workspace/mod-relative .gfx files, or folders scanned for .gfx files, that define the mod's focus overlay sprites (e.g. \"interface/goals_overlays.gfx\"). The game's interface/goals.gfx is always searched first. A focus_overlay_gfx = { ... } list in the mod's .mod file adds to this.",
     "hoi4modutilities.decisionGfxFiles.title": "Decision GFX files",
     "hoi4modutilities.decisionGfxFiles.desc": "Workspace/mod-relative .gfx files, or folders scanned for .gfx files, that define the mod's decision sprites (e.g. \"interface/MD_decisions.gfx\"). The game's interface/decisions.gfx is always searched first. A decision_gfx = { ... } list in the mod's .mod file adds to this.",
+    "hoi4modutilities.ideaPlaceholderIcon.title": "Idea placeholder icon",
+    "hoi4modutilities.ideaPlaceholderIcon.desc": "Workspace/mod-relative image drawn for an idea whose picture does not resolve (e.g. \"gfx/interface/ideas/WIP_idea.dds\"). Used when the mod's .mod file has no idea_placeholder_icon = \"...\" line; the game's gfx/interface/ideas/idea_PLACEHOLDER.dds is drawn when neither names an existing file.",
     "hoi4modutilities.technologyGfxRoots.title": "Technology GFX roots",
     "hoi4modutilities.technologyGfxRoots.desc": "Workspace/mod-relative root folders to scan recursively for .gfx files used by the technology tree preview, including country-specific technology icons (e.g. \"interface/technologies\").",
     "hoi4modutilities.technologyCountryIcons.title": "Technology tree: country-specific icons",
