@@ -62,6 +62,39 @@
 	display: block;
 }
 
+/* The decisions of the BoP's category, one row each in the window's decision list. */
+.bop-decision {
+	cursor: pointer;
+}
+
+.bop-decision:hover::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: color-mix(in srgb, var(--vscode-focusBorder, #007fd4) 20%, transparent);
+	pointer-events: none;
+}
+
+.bop-decision-list .bop-decision {
+	position: relative;
+	margin: 0 0 4px;
+}
+
+.bop-decision-plain {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 100%;
+}
+
+.bop-decision-plain .bop-decision-cost {
+	margin-left: auto;
+	padding-right: 8px;
+}
+
 /* ---------- Toolbar controls ---------- */
 
 .bop-controls {

@@ -27,6 +27,7 @@ v1.1.40
 - [ Character Previewer ] A mod names the keys it writes on its character traits that are not modifiers in the new Character trait structural keys setting, or with a `character_trait_structural_keys = { my_key }` list in its `.mod` file, so they stay off the trait cards. Issue #452.
 - [ Idea Previewer ] A mod sets how a game modifier is shown in its ideas, decisions and character traits with files named in the new Modifier format files setting, or with a `modifier_format_files = { "common/my_modifier_formats.txt" }` list in its `.mod` file, written like `common/modifier_definitions`. Issue #453.
 - Check the extension against the base game's layout and real mods in CI. Issue #457.
+- [ Balance of Power Previewer ] The balance of power window now lists the decisions of its `decision_category` the way the game does, each with its icon, name and cost, and clicking one opens it in its decisions file. A category with no decisions is flagged. Issue #442.
 
   Bugfixes:
 

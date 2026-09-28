@@ -11,6 +11,8 @@ import { GuiFile, guiFileSchema } from "../hoiformat/gui";
 import { convertNodeToJson } from "../hoiformat/schema";
 import { collectContainerWindows } from "../util/guiwindowindex";
 import { LoaderSession } from "../util/loader/loader";
+import { HOIDecision, getDecisionsFromFile } from "../previewdef/decision/schema";
+import { decisionsOfCategory } from "../previewdef/bop/decisions";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
@@ -46,8 +48,65 @@ const powerBalanceGui = `guiTypes = {
 		iconType = { name = "position_marker" spriteType = "GFX_bop_needle" position = { x = -12 y = -6 } }
 		iconType = { name = "left_power_icon" position = { x = 20 y = 84 } }
 		iconType = { name = "right_power_icon" position = { x = 458 y = 84 } }
+		containerWindowType = {
+			name = "decision_container"
+			position = { x = 0 y = 200 }
+			size = { width = 100%% height = 100%% }
+			margin = { top = 15 left = 13 bottom = 13 right = 25 }
+			gridboxtype = {
+				name = "decision_grid"
+				position = { x = 0 y = 0 }
+				size = { width = 100%% height = 1 }
+				slotsize = { width = 502 height = 40 }
+				max_slots_horizontal = 1
+				format = "UPPER_LEFT"
+			}
+		}
 	}
 }`;
+
+// The row from Millennium Dawn's interface/countrydecisionview.gui.
+const decisionItemGui = `guiTypes = {
+	containerWindowType = {
+		name = "decision_item"
+		position = { x=6 y=0 }
+		size = { width=100% height=41 }
+		iconType = { name = "btn_bg" position = {x=0 y=0} spriteType = "GFX_decision_item_bg" }
+		iconType = { name = "btn_progress_good" position = {x=9 y=28} spriteType = "GFX_decision_item_progress_good" }
+		iconType = { name = "icon" position = {x=30 y=19} spriteType = "GFX_decision_unknown" centerposition = yes }
+		instantTextboxType = { name = "name_text" position = { x = 63 y = 2 } font = "hoi_16mbs" text = "" maxWidth = 330 maxHeight = 32 }
+		instantTextboxType = { name = "cost_and_timer_text" position = { x = 112 y = 9 } font = "hoi_16mbs" text = "999" maxWidth = 320 maxHeight = 32 format = right }
+	}
+}`;
+
+// Two categories in one decisions file, the BoP's opened twice, as common/decisions files do.
+const decisionsSource = `
+ROM_vadim_struggle = {
+	ROM_rally_the_base = {
+		icon = generic_political_rally
+		cost = 50
+	}
+}
+ROM_other_category = {
+	ROM_unrelated = { cost = 10 }
+}
+ROM_vadim_struggle = {
+	ROM_court_the_army = {
+		icon = { key = GFX_decision_generic_army trigger = { always = yes } }
+		custom_cost_text = ROM_court_the_army_cost
+	}
+}`;
+const decisionsFile = "common/decisions/ROM.txt";
+
+function romDecisions(): Record<string, HOIDecision[]> {
+	const file = getDecisionsFromFile(parseHoi4File(decisionsSource), decisionsFile);
+	return { ROM_vadim_struggle: decisionsOfCategory(file, "ROM_vadim_struggle") };
+}
+
+function decisionItem(): BopLoaderResult["decisionItem"] {
+	const gui = convertNodeToJson<GuiFile>(parseHoi4File(decisionItemGui), guiFileSchema);
+	return { file: "interface/countrydecisionview.gui", window: collectContainerWindows(gui).decision_item };
+}
 
 const guiFile = "interface/powerbalanceview.gui";
 
@@ -63,22 +122,33 @@ function bopWindow(): Pick<BopLoaderResult, "window" | "templates"> {
 	};
 }
 
-function loaderFor(source: string, sessions: LoaderSession[] = [], withWindow = true) {
+function loaderFor(
+	source: string,
+	sessions: LoaderSession[] = [],
+	withWindow = true,
+	decisions: Record<string, HOIDecision[]> = romDecisions(),
+	withDecisionItem = true,
+) {
 	return {
 		load: async (session: LoaderSession) => {
 			sessions.push(session);
 			const result: BopLoaderResult = {
 				bops: getBopsFromFile(parseHoi4File(source), "common/bop/test.txt"),
 				gfxFiles: [],
-				...(withWindow ? bopWindow() : { templates: {} }),
+				...(withWindow ? { ...bopWindow(), decisionItem: withDecisionItem ? decisionItem() : undefined } : { templates: {} }),
+				decisions,
 			};
 			return { result };
 		},
 	} as any;
 }
 
-async function render(source: string, withWindow = true): Promise<LoaderRenderResult> {
-	return (await renderBopFile(loaderFor(source, [], withWindow), uri, webview)) as LoaderRenderResult;
+async function render(
+	source: string,
+	withWindow = true,
+	decisions?: Record<string, HOIDecision[]>,
+): Promise<LoaderRenderResult> {
+	return (await renderBopFile(loaderFor(source, [], withWindow, decisions), uri, webview)) as LoaderRenderResult;
 }
 
 function payloadOf(rendered: LoaderRenderResult): BopPreviewPayload {
@@ -150,6 +220,41 @@ a = { left_side = l right_side = missing side = { id = l } }`));
 		assert.ok(window.html.includes("bop-slot-text-title_355"));
 		assert.ok(!window.html.includes(">balance_of_power_title<"));
 		assert.strictEqual(window.indicatorHtml?.length, 2);
+	});
+
+	it("lists the decisions of its decision_category as rows of the window's decision list", async () => {
+		const [card] = payloadOf(await render(rom)).cards;
+		assert.deepStrictEqual(card.decisions.map((d) => d.id), ["ROM_rally_the_base", "ROM_court_the_army"]);
+		assert.ok(card.decisions.every((d) => d.nav?.file === decisionsFile));
+		assert.strictEqual(card.decisions[0].name.key, "ROM_rally_the_base");
+
+		const html = card.window!.html;
+		assert.strictEqual(html.match(/class="bop-decision"/g)?.length, 2);
+		assert.ok(html.includes(`data-index="0"`) && html.includes(`data-index="1"`));
+		// The rows sit one slot below another, in a list that scrolls like the game's.
+		assert.ok(html.includes("top:40px"));
+		assert.ok(html.includes("overflow-y:auto"));
+		// The name is the webview's to fill; the cost is the file's.
+		assert.ok(html.includes("bop-decision-name"));
+		assert.ok(/>\s*50\s*</.test(html));
+		assert.ok(!html.includes("999"));
+	});
+
+	it("draws plain decision rows when no decision_item window is found", async () => {
+		const rendered = await renderBopFile(loaderFor(rom, [], true, romDecisions(), false), uri, webview);
+		const [card] = payloadOf(rendered as LoaderRenderResult).cards;
+		const html = card.window!.html;
+		assert.strictEqual(html.match(/class="bop-decision-plain"/g)?.length, 2);
+		assert.strictEqual(html.match(/class="bop-decision-name"/g)?.length, 2);
+		assert.ok(html.includes(`<span class="bop-decision-cost">50</span>`));
+	});
+
+	it("warns when no decision is in its decision_category", async () => {
+		const [card] = payloadOf(await render(rom, true, { ROM_vadim_struggle: [] })).cards;
+		assert.deepStrictEqual(card.decisions, []);
+		assert.strictEqual(card.warnings.length, 1);
+		assert.ok(card.warnings[0].includes("ROM_vadim_struggle"));
+		assert.ok(!card.window!.html.includes("bop-decision"));
 	});
 
 	it("warns when the game window cannot be found", async () => {
