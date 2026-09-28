@@ -1,24 +1,26 @@
 import { getSpriteByGfxName, Image } from '../image/imagecache';
 import type { GridBoxTileShape } from './gridboxcommon';
-import { defaultFocusLinkSprites, FocusLinkImages, FocusLinkSpriteSpec, focusLinkShapes } from './focuslink';
+import { defaultFocusLinkSprites, FocusLinkImages, FocusLinkSpriteSpec, FocusLinkState, focusLinkFrames, focusLinkShapes } from './focuslink';
 import { nationalFocusViewGfxFile } from './exclusivelinkimages';
 
 /**
- * Resolves the solid and dashed frame of every prerequisite line tile. Returns undefined when any
- * of them cannot be resolved, so the caller keeps the plain line rather than drawing half a path in
- * textures.
+ * Resolves the solid and dashed frame of every prerequisite line tile in the colour of `state`.
+ * Returns undefined when any of them cannot be resolved, so the caller keeps the plain line rather
+ * than drawing half a path in textures.
  */
 export async function loadFocusLinkImages(
     spec: FocusLinkSpriteSpec = defaultFocusLinkSprites,
     gfxFiles: string | string[] = nationalFocusViewGfxFile,
+    state: FocusLinkState = 'available',
 ): Promise<FocusLinkImages | undefined> {
+    const frames = focusLinkFrames(state);
     const solid: Partial<Record<GridBoxTileShape, Image>> = {};
     const dashed: Partial<Record<GridBoxTileShape, Image>> = {};
     for (const shape of focusLinkShapes) {
         const sprite = await getSpriteByGfxName(spec.gfx[shape], gfxFiles);
         // A frame rather than the sprite, as for the exclusive link: the strip holds all four.
-        const solidFrame = sprite?.frames[spec.frame];
-        const dashedFrame = sprite?.frames[spec.dashedFrame];
+        const solidFrame = sprite?.frames[frames.solid];
+        const dashedFrame = sprite?.frames[frames.dashed];
         if (solidFrame === undefined || dashedFrame === undefined) {
             return undefined;
         }

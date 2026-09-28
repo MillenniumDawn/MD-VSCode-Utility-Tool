@@ -112,6 +112,25 @@ describe('hoiformat/spritetype', () => {
             assert.deepStrictEqual(types.map(t => t.name), ['GFX_keep']);
         });
 
+        // powerbalanceview.gfx defines the balance of power bar fills this way.
+        it('reads a progressBarType as a sprite of its textureFile1', () => {
+            const root = parseHoi4File([
+                'spriteTypes = {',
+                '    progressBarType = {',
+                '        name = "GFX_power_balance_left"',
+                '        textureFile1 = "gfx/interface/bop/bop_bar_orange_light.dds"',
+                '        textureFile2 = "gfx/interface/absolute_nothing.dds"',
+                '        size = { x = 360 y = 16 }',
+                '    }',
+                '}',
+            ].join('\n'));
+
+            const types = getSpriteTypes(root);
+            assert.deepStrictEqual(types.map(t => [t.name, t.texturefile, t.noofframes]), [
+                ['GFX_power_balance_left', 'gfx/interface/bop/bop_bar_orange_light.dds', 1],
+            ]);
+        });
+
         it('returns an empty list when the file has no spritetypes', () => {
             const root = parseHoi4File('unrelated = { foo = 1 }');
             assert.deepStrictEqual(getSpriteTypes(root), []);
