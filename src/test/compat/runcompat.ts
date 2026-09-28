@@ -233,8 +233,12 @@ export async function runCompat(options: CompatOptions): Promise<CompatResult> {
 	const problems: Problem[] = [];
 	try {
 		for (const type of options.only ?? previewTypes) {
+			const files = listPreviewFiles(options.modDir, type);
+			if (files.length === 0) {
+				throw new Error(`No ${type} preview files found under ${path.join(options.modDir, previews[type].dir)}`);
+			}
 			const typeCounts: TypeCounts = counts[type] = { files: 0, clean: 0, problems: 0, ignored: 0 };
-			for (const file of listPreviewFiles(options.modDir, type)) {
+			for (const file of files) {
 				typeCounts.files++;
 				logged.length = 0;
 				const started = Date.now();

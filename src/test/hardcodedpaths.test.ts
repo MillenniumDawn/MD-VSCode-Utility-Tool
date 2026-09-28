@@ -90,6 +90,16 @@ describe('scanHardcoded', () => {
 		]);
 	});
 
+	it('checks fully static concatenations as exact names, including nested parts', () => {
+		assert.deepStrictEqual(values('const a = "interface/" + "MD_only.gfx";'),
+			[['interface/MD_only.gfx', false]]);
+		assert.deepStrictEqual(values('const b = ("interface/" + "MD_") + suffix;'),
+			[['interface/MD_', true]]);
+		const { missing } = checkHardcoded(scanHardcoded('const a = "interface/" + "MD_only.gfx";', 'x.ts'),
+			new ManifestIndex({ version: 't', files: ['interface/goals.gfx'], dirs: ['interface'], sprites: [] }), []);
+		assert.deepStrictEqual(missing.map(formatHit), ['x.ts:1  interface/MD_only.gfx']);
+	});
+
 	it('ignores module specifiers', () => {
 		assert.deepStrictEqual(values('import x from "common/x";\nexport * from "gfx/y";'), []);
 	});

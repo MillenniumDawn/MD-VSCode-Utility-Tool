@@ -116,9 +116,24 @@ function candidate(value: string, prefix: boolean, file: string, line: number): 
 	return { file, line, value: text, prefix: isPrefix };
 }
 
+function literalConcat(node: ts.Expression): string | undefined {
+	if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+		return node.text;
+	}
+	if (ts.isParenthesizedExpression(node)) {
+		return literalConcat(node.expression);
+	}
+	if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+		const left = literalConcat(node.left);
+		const right = literalConcat(node.right);
+		return left === undefined || right === undefined ? undefined : left + right;
+	}
+	return undefined;
+}
+
 /**
  * Every string in `sourceText` that names a game path or a `GFX_` sprite. A template literal or
- * the left side of a `+` is only the start of the name, so it is reported as a prefix.
+ * a concatenation with a dynamic suffix is only the start of the name.
  */
 export function scanHardcoded(sourceText: string, file: string): HardcodedHit[] {
 	const source = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true);
@@ -129,6 +144,23 @@ export function scanHardcoded(sourceText: string, file: string): HardcodedHit[] 
 			return;
 		}
 		let hit: HardcodedHit | undefined;
+		if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+			const value = literalConcat(node);
+			if (value !== undefined) {
+				let expression: ts.Node = node;
+				while (ts.isParenthesizedExpression(expression.parent)) {
+					expression = expression.parent;
+				}
+				const parent = expression.parent;
+				const leftOfPlus = ts.isBinaryExpression(parent)
+					&& parent.operatorToken.kind === ts.SyntaxKind.PlusToken && parent.left === expression;
+				hit = candidate(value, leftOfPlus, file, lineOf(node));
+				if (hit) {
+					hits.push(hit);
+				}
+				return;
+			}
+		}
 		if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
 			const parent = node.parent;
 			const leftOfPlus = ts.isBinaryExpression(parent)

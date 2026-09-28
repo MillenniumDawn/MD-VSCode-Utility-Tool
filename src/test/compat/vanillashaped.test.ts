@@ -75,6 +75,13 @@ describe('compat runner', () => {
 		assert.deepStrictEqual(listPreviewFiles(path.join(fixture, 'missing'), 'event'), []);
 	});
 
+	it('rejects a checkout with no files for a requested preview, even with an empty baseline', async () => {
+		await assert.rejects(
+			runCompat({ modDir: path.join(fixture, 'common'), only: ['event'], baseline: [], manifest }),
+			/No event preview files found under/,
+		);
+	});
+
 	it('fails only on problems the baseline does not list', () => {
 		const a = { type: 'event' as const, file: 'events/a.txt', message: 'a' };
 		const b = { type: 'event' as const, file: 'events/b.txt', message: 'b' };

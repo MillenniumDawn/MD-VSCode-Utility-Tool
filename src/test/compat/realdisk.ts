@@ -120,7 +120,7 @@ export async function mountRealDisk(options: RealDiskOptions, packageJsonFile: s
 			refreshFeatureFlags();
 			await clearCaches();
 			if (emptyGame) {
-				await fs.promises.rm(emptyGame, { recursive: true, force: true });
+				await fs.promises.rmdir(emptyGame);
 			}
 		},
 	};
