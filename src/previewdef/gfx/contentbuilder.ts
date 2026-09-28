@@ -32,6 +32,7 @@ export async function renderGfxFile(
 			parseHoi4File(
 				fileContent,
 				localize("infile", "In file {0}:\n", uri.toString()),
+				{ closeBlocksAtEof: true },
 			),
 		);
 		const styleTable = new StyleTable();

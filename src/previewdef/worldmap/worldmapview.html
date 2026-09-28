@@ -55,9 +55,7 @@
             <div class="group" viewmode="province state strategicregion supplyarea supply">
                 <label for="searchbox">%worldmap.topbar.search|Search: %</label>
                 <input id="searchbox" type="text"/>
-                <button id="search" title="%worldmap.topbar.search.title|Search%">
-                    <i class="codicon codicon-search"></i>
-                </button>
+                %icon:search%
             </div>
 
             <div class="group" viewmode="warnings">
@@ -74,26 +72,7 @@
                 </div>
             </div>
 
-            <div class="group">
-                <button id="refresh" title="%worldmap.topbar.refresh.title|Refresh%">
-                    <i class="codicon codicon-refresh"></i>
-                </button>
-                <button id="export" title="%worldmap.export.title|Export as image%">
-                    <i class="codicon codicon-export"></i>
-                </button>
-            </div>
-
-            <div class="group">
-                <button id="show-warnings" title="%worldmap.topbar.warnings.title|Toggle warnings%">
-                    <i class="codicon codicon-warning"></i>
-                </button>
-            </div>
-
-            <div class="group" viewmode="state strategicregion supplyarea">
-                <button id="open" title="%worldmap.topbar.open.title|Open in workspace%">
-                    <i class="codicon codicon-link-external"></i>
-                </button>
-            </div>
+            %icon:actions%
         </div>
     </div>
     <canvas id="main-canvas"></canvas>

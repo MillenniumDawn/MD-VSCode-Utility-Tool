@@ -138,6 +138,9 @@ function onChangeParentModPaths(e: vscode.ConfigurationChangeEvent): void {
 // folder added or removed can change which file the dependencies come from, and where the
 // launcher's registry is looked for above it.
 function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent): void {
+	// A parent that is also a workspace folder is left out of the list, so the list depends on
+	// the folders too, even when the dependencies resolve the same.
+	clearParentModCache();
 	void refreshModDependencies();
 }
 

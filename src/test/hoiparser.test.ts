@@ -189,6 +189,15 @@ describe('parseHoi4File', () => {
         assert.throws(() => parseHoi4File('a = { b = 1'), /Expect a '}'|Invalid token/);
     });
 
+    // Vanilla interface/powerbalanceview.gfx ends without closing its spriteTypes, and the game
+    // reads it anyway.
+    it('closes blocks left open at the end of the file when asked to', () => {
+        const root = parseHoi4File('spriteTypes = { spriteType = { name = "GFX_a" } b = { c = 1', '', { closeBlocksAtEof: true });
+        const sprites = child(root, 'spriteTypes').value as Node[];
+        assert.strictEqual(sprites.length, 2);
+        assert.strictEqual(((sprites[1].value as Node[])[0]).value, 1);
+    });
+
     it('parses two sequential inputs, resetting the shared sticky regex', () => {
         // The token regex is a module-level sticky constant reused across parses; a
         // stale lastIndex would derail the second parse if it were not reset.
