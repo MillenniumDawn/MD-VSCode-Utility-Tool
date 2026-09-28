@@ -140,6 +140,7 @@ describe("previewdef configuration reload", () => {
 				[
 					"useConditionInFocus",
 					"focusTreeLayout",
+					"focusTreePrerequisiteLines",
 					"sharedFocusIndex",
 					"inlayWindowGfxRoots",
 					"gfxIndex",

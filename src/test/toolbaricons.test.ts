@@ -88,7 +88,7 @@ function isAlarmIcon(icon: string): boolean {
 // The first word of a tooltip has to say what the click does.
 const tooltipVerbs = [
 	"Show", "Hide", "Open", "Save", "Copy", "Reset", "Stop", "Search", "Refresh",
-	"Reload", "Zoom", "Expand", "Collapse", "Scan", "Select",
+	"Reload", "Zoom", "Expand", "Collapse", "Scan", "Select", "Drag",
 ];
 
 interface RenderedButton {
@@ -374,7 +374,7 @@ describe("toolbar icons (issue #446)", () => {
 	});
 
 	it("stays put: a button that is not always on screen says when it is", () => {
-		const conditional = new Set(["clearTrace", "openFile", "search", "scanReferences", "modFileError"]);
+		const conditional = new Set(["clearTrace", "openFile", "search", "scanReferences", "modFileError", "shortcutToggle", "editContinuous"]);
 		const problems = actionIds
 			.filter(id => conditional.has(id) && actions[id].shownWhen === undefined)
 			.map(id => `${id} is only shown sometimes. Write the condition in its shownWhen (rule 6).`);

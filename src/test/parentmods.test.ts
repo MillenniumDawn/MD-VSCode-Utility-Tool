@@ -127,6 +127,54 @@ describe('util/parentmods', () => {
         });
     });
 
+    // A user-level parentModPaths naming a mod makes that mod its own parent when it is opened,
+    // and every index would walk it twice.
+    describe('workspace folders', () => {
+        function openWorkspace(...folders: string[]): void {
+            stubVscode({
+                getConfiguration: () => config,
+                workspaceFolders: folders.map(folder => ({ uri: vscode.Uri.file(folder) })),
+            });
+        }
+
+        it('drops a parent that is the open workspace folder and keeps the rest in order', () => {
+            openWorkspace('D:/mods/md');
+            config = { parentModPaths: ['D:/mods/first', 'D:/mods/md', 'D:/mods/second'] };
+
+            assert.deepStrictEqual(getParentModUris().map(u => u.fsPath), ['D:/mods/first', 'D:/mods/second']);
+        });
+
+        it('matches the workspace folder the way parents are deduplicated', () => {
+            openWorkspace('D:/mods/md');
+            config = { parentModPaths: ['d:\\Mods\\MD'] };
+
+            const paths = getParentModUris().map(u => u.fsPath);
+            assert.deepStrictEqual(paths, process.platform === 'win32' ? [] : ['d:\\Mods\\MD']);
+        });
+
+        it('drops the open workspace folder even when the setting ends in a slash', () => {
+            openWorkspace('D:/mods/md');
+            config = { parentModPaths: ['D:/mods/md/'] };
+
+            assert.deepStrictEqual(getParentModUris().map(u => u.fsPath), []);
+        });
+
+        it('drops a resolved dependency that is the open workspace folder', () => {
+            openWorkspace('D:/mods/md');
+            config = {};
+            setResolvedDependencies([vscode.Uri.file('D:/mods/md'), vscode.Uri.file('D:/mods/other')], []);
+
+            assert.deepStrictEqual(getParentModUris().map(u => u.fsPath), ['D:/mods/other']);
+        });
+
+        it('still resolves the parent of a submod workspace', () => {
+            openWorkspace('D:/mods/submod');
+            config = { parentModPaths: ['D:/mods/md'] };
+
+            assert.deepStrictEqual(getParentModUris().map(u => u.fsPath), ['D:/mods/md']);
+        });
+    });
+
     describe('publishParentMods', () => {
         it('tells the listeners once per change of the list, not once per call', () => {
             let heard = 0;

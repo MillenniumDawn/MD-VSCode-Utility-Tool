@@ -38,9 +38,19 @@ export interface FocusTree {
 	isSharedFocues: boolean;
 	continuousFocusPositionX?: number;
 	continuousFocusPositionY?: number;
+	// The file and offset of the tree's `focus_tree` key, so the preview can write a dragged
+	// continuous focus position back. Only real focus_tree entries have one.
+	continuousFocusSource?: { file: string; start: number };
 	// Where the game opens the tree: a focus, or a grid position when no focus is named.
 	initialShowPosition?: { focus?: string; x: number; y: number };
+	// The tree's shortcut blocks, in file order. Pseudo-trees have none.
+	shortcuts?: FocusTreeShortcut[];
 	warnings: FocusWarning[];
+}
+
+export interface FocusTreeShortcut {
+	name: string;
+	target: string;
 }
 
 interface FocusIconWithCondition {
@@ -135,6 +145,13 @@ interface FocusTreeDef {
 	continuous_focus_position: Position;
 	initial_show_position: InitialShowPositionDef;
 	inlay_window: Raw[];
+	shortcut: ShortcutDef[];
+	_token: Token;
+}
+
+interface ShortcutDef {
+	name: string;
+	target: string;
 }
 
 interface InitialShowPositionDef extends Position {
@@ -258,6 +275,13 @@ const focusTreeSchema: SchemaDef<FocusTreeDef> = {
 	},
 	inlay_window: {
 		_innerType: "raw",
+		_type: "array",
+	},
+	shortcut: {
+		_innerType: {
+			name: "string",
+			target: "string",
+		},
 		_type: "array",
 	},
 };
@@ -395,6 +419,14 @@ export function getFocusTreeWithFocusFile(
 				normalizeNumberLike(focusTree.continuous_focus_position?.x, 0) ?? 50,
 			continuousFocusPositionY:
 				normalizeNumberLike(focusTree.continuous_focus_position?.y, 0) ?? 1000,
+			...(focusTree._token
+				? {
+						continuousFocusSource: {
+							file: filePath,
+							start: focusTree._token.start,
+						},
+					}
+				: {}),
 			...(focusTree.initial_show_position
 				? {
 						initialShowPosition: {
@@ -406,6 +438,9 @@ export function getFocusTreeWithFocusFile(
 						},
 					}
 				: {}),
+			shortcuts: focusTree.shortcut
+				.filter((v): v is ShortcutDef => !!v?.name && !!v.target)
+				.map((v) => ({ name: v.name, target: v.target })),
 			conditionExprs,
 			isSharedFocues: false,
 			warnings,
