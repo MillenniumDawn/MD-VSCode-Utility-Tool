@@ -7,7 +7,7 @@ import flatten from "lodash/flatten";
 import { getGfxContainerFiles } from "../../util/gfxindex";
 import { getFlags } from "../../util/featureflags";
 import { findFileByFocusKey } from "../../util/sharedFocusIndex";
-import { focusTitlebarStylesFile, nationalFocusViewGfxFile, goalsOverlaysGfxFile } from "./titlebar";
+import { focusTitlebarStylesFile, nationalFocusViewGfxFile, getFocusOverlayGfxFiles } from "./titlebar";
 import { GuiFileLoader } from "../gui/loader";
 import { buildFocusTreeLayout, FocusTreeLayout, FocusTreeLayoutMode, nationalFocusViewGuiFile } from "./layout";
 import { addInlayGfxWarnings, listGuiGfxFiles, loadFocusInlayWindows, resolveInlayGfxFiles, resolveInlayGuiWindows, resolveInlaysForTree } from "./inlay";
@@ -15,6 +15,7 @@ import { addInlayGfxWarnings, listGuiGfxFiles, loadFocusInlayWindows, resolveInl
 export interface FocusTreeLoaderResult {
     focusTrees: FocusTree[];
     gfxFiles: string[];
+    overlayGfxFiles: string[];
     // Only set when the focusTreeLayout setting is `gui`; the preview uses the standard layout otherwise.
     layout?: FocusTreeLayout;
 }
@@ -141,10 +142,13 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
             layoutDependencies = [nationalFocusViewGuiFile, ...mergeInLoadResult(layoutGui, 'dependencies')];
         }
 
+        const overlayGfxFiles = await getFocusOverlayGfxFiles();
+
         return {
             result: {
                 focusTrees,
                 gfxFiles: uniq([...gfxDependencies, focusesGFX]),
+                overlayGfxFiles,
                 layout,
             },
             dependencies: uniq([
@@ -152,7 +156,7 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
                 focusesGFX,
                 focusTitlebarStylesFile,
                 nationalFocusViewGfxFile,
-                goalsOverlaysGfxFile,
+                ...overlayGfxFiles,
                 ...gfxDependencies,
                 ...uniq(focusTrees.flatMap(ft => ft.inlayWindows).map(inlay => inlay.file)),
                 ...inlayGuiFiles,

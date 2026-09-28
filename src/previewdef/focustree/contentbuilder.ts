@@ -101,7 +101,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         }
         let renderedFocusCount = 0;
         await mapLimit(allFocuses, renderConcurrency, async (focus) => {
-            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles, layout.item, resolveIcons)).replace(/\s\s+/g, ' ');
+            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loadResult.result.overlayGfxFiles, loader.file, titlebarStyles, layout.item, resolveIcons)).replace(/\s\s+/g, ' ');
             renderedFocusCount++;
             if (progress) {
                 progress(focusMessage, renderedFocusCount, allFocuses.length);
@@ -603,6 +603,7 @@ async function renderFocus(
     focus: Focus,
     styleTable: StyleTable,
     gfxFiles: string[],
+    overlayGfxFiles: string[],
     file: string,
     titlebarStyles: Record<string, string>,
     item: FocusItemLayout,
@@ -634,7 +635,7 @@ async function renderFocus(
             display: none;
         `
     );
-    const overlayObject = await getFocusOverlayImage(focus.overlay);
+    const overlayObject = await getFocusOverlayImage(focus.overlay, overlayGfxFiles);
     const overlayClass = styleTable.style('focus-overlay-' + normalizeForStyle(focus.overlay ?? '-empty'), () =>
         overlayObject ? `
             background-image: url(${overlayObject.uri});

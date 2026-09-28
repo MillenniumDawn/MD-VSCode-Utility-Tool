@@ -142,6 +142,7 @@ describe("previewdef configuration reload", () => {
 					"focusTreeLayout",
 					"sharedFocusIndex",
 					"inlayWindowGfxRoots",
+					"focusOverlayGfxFiles",
 					"gfxIndex",
 					"localisationIndex",
 					"previewLocalisation",
