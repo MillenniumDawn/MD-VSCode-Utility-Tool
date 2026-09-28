@@ -1,6 +1,18 @@
 // Hack tsc
 /*eslint sort-keys: "warn"*/
 const internalTable = /* SOT Do not remove this comment */ {
+	"boppreview.bop": "Balance of power: ",
+	"boppreview.empty": "No balance of power in this file.",
+	"boppreview.gap": "No range covers {0} to {1}.",
+	"boppreview.iconmissing": "Icon {0} of side {1} was not found.",
+	"boppreview.initialoutside": "initial_value {0} is outside -1 to 1.",
+	"boppreview.missingside": "Side {0} is not defined in this balance of power.",
+	"boppreview.norange": "No range covers {0}.",
+	"boppreview.noranges": "This balance of power has no ranges.",
+	"boppreview.nowindow": "The {0} window was not found in the mod or the game install, so the balance of power cannot be drawn the way the game does.",
+	"boppreview.overlap": "Ranges {0} and {1} overlap.",
+	"boppreview.reset": "Reset to initial_value",
+	"boppreview.showlocalisation": "Show localisation",
 	"characterpreview.advisors": "Advisors",
 	"characterpreview.allowed": "Allowed",
 	"characterpreview.alsoroles": "Also: {0}",
@@ -322,6 +334,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"preview.mustopenafolder": 'Must open a folder before opening "{0}".',
 	"preview.noactivedoc": "No active document.",
 	"preview.selectafolder": 'Select a folder to copy "{0}"',
+	"preview.type.bop": "Balance of power (common/bop/*.txt)",
 	"preview.type.character": "Characters (common/characters/*.txt)",
 	"preview.type.decision": "Decisions (common/decisions/*.txt)",
 	"preview.type.event": "Event tree (events/*.txt)",

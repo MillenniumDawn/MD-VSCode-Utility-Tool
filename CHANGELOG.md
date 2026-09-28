@@ -14,6 +14,7 @@ v1.1.40
 - Errors from previews and file loading now appear in the HOI4 Modding output channel, not only in the developer console. Issue #370.
 - [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
 - [ Focus Tree Previewer ] A new setting, Focus tree: prerequisite line colour, picks whether prerequisite lines are drawn blue, as for focuses not yet completed, or green, as for completed ones. Issue #443.
+- [ Balance of Power Previewer ] Added a preview for `common/bop` files that draws the game's own balance of power window from `powerbalanceview.gui`, with each balance of power's title and side icons. A slider and step buttons in the toolbar stand in for `add_power_balance_value`: the needle, the bar fill and the active range follow the value the way they do in game, and clicking a range opens it in the file. A file with several balances of power gets a dropdown to pick one, and overlapping or missing ranges are flagged. Issue #434.
 
   Bugfixes:
 
@@ -30,6 +31,8 @@ v1.1.40
 - DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.
 - Grayscale (luminance) DDS textures now show at their real brightness instead of almost black. Issue #433.
 - The "Select working mod" list now marks your current mod when the mod file setting is written in quotes, instead of listing it a second time as a workspace setting. Issue #455.
+- [ GFX ] Sprites defined as `progressBarType` now show, and a `.gfx` file whose last block is never closed, such as the game's own `powerbalanceview.gfx`, is read the way the game reads it instead of losing every sprite in it.
+- [ Decision Previewer ] Clicking an element of a scripted-GUI window in a decision card now opens it in its `.gui` file, instead of jumping to an unrelated spot in the decision file.
 
 v1.1.39
 

@@ -22,6 +22,8 @@
     "hoi4modutilities.ideaPreview.desc": "국가 정신 미리보기 기능을 활성화합니다. 변경 후 다시 로드해야 합니다.",
     "hoi4modutilities.characterPreview.title": "인물 미리보기",
     "hoi4modutilities.characterPreview.desc": "인물 미리보기 기능을 활성화합니다. 변경 후 다시 로드해야 합니다.",
+    "hoi4modutilities.bopPreview.title": "세력 균형 미리보기",
+    "hoi4modutilities.bopPreview.desc": "세력 균형 미리보기 기능을 활성화합니다. 변경 후 다시 로드해야 합니다.",
     "hoi4modutilities.ideaSwapIndex.title": "국가 정신 교체 색인",
     "hoi4modutilities.ideaSwapIndex.desc": "국가 정신 미리보기에서 국가 정신 연쇄를 표시할 수 있도록 common과 events에서 swap_ideas를 검색합니다. 처음 만들 때 많은 파일을 읽습니다. 변경 후 다시 로드해야 합니다.",
     "hoi4modutilities.sharedFocusIndex.title": "공유 중점 인덱스",
