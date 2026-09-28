@@ -21,15 +21,20 @@ export function focusLinkClass(shape: GridBoxTileShape, dashed: boolean): string
     return 'st-focus-link-' + shape.replace('_', '-') + (dashed ? '-dashed' : '');
 }
 
-/** The sprite of every tile shape and the 0 based frames of the solid and the dashed line. */
+/** The sprite of every tile shape. */
 export interface FocusLinkSpriteSpec {
     gfx: Record<GridBoxTileShape, string>;
-    frame: number;
-    dashedFrame: number;
 }
 
-// Every strip holds four frames: solid, dashed, and both again in the completed colour. The gui's
-// `frame = 1` is the first of them.
+/** Which of the game's two line colours the preview draws: blue for an available focus, green for a completed one. */
+export type FocusLinkState = 'available' | 'completed';
+
+// Every strip holds four frames: the completed (green) solid and dashed line, then the same two in
+// the available (blue) colour. The game picks the frame per line, so the gui's `frame` decides nothing.
+export function focusLinkFrames(state: FocusLinkState): { solid: number; dashed: number } {
+    return state === 'completed' ? { solid: 0, dashed: 1 } : { solid: 2, dashed: 3 };
+}
+
 export const defaultFocusLinkSprites: FocusLinkSpriteSpec = {
     gfx: {
         up_down: 'GFX_focus_link_up_down',
@@ -39,8 +44,6 @@ export const defaultFocusLinkSprites: FocusLinkSpriteSpec = {
         down_left: 'GFX_focus_link_down_left',
         down_right: 'GFX_focus_link_down_right',
     },
-    frame: 0,
-    dashedFrame: 1,
 };
 
 export interface FocusLinkImages {
@@ -48,7 +51,10 @@ export interface FocusLinkImages {
     dashed: Record<GridBoxTileShape, Image>;
 }
 
-const lineColor = '#88aaff';
+const lineColors: Record<FocusLinkState, string> = {
+    available: '#88aaff',
+    completed: '#68b86f',
+};
 
 function repeatOf(shape: GridBoxTileShape): string {
     return shape === 'up_down' ? 'repeat-y' : shape === 'left_right' ? 'repeat-x' : 'no-repeat';
@@ -79,18 +85,19 @@ function horizontalPart(shape: GridBoxTileShape): { left: string; right: string 
 /**
  * Registers the CSS behind every `focusLinkClass`. Pass undefined for `images` to get the plain
  * 1px line the preview has always drawn, which the structure only pass and an unresolvable install
- * path both need.
+ * path both need. That line takes the colour of `state`, so it does not change colour when the
+ * textures replace it.
  *
  * As with the exclusive link, both branches declare the same properties on the tile and on both
  * pseudo elements: the two passes land in two <style> elements of one page, and a property only one
  * of them declared would survive underneath the other.
  */
-export function registerFocusLinkStyles(styleTable: StyleTable, images: FocusLinkImages | undefined): void {
+export function registerFocusLinkStyles(styleTable: StyleTable, images: FocusLinkImages | undefined, state: FocusLinkState = 'available'): void {
     for (const dashed of [false, true]) {
         for (const shape of focusLinkShapes) {
             const className = focusLinkClass(shape, dashed);
             const image = images ? (dashed ? images.dashed : images.solid)[shape] : undefined;
-            const border = `1px ${dashed ? 'dashed' : 'solid'} ${lineColor}`;
+            const border = `1px ${dashed ? 'dashed' : 'solid'} ${lineColors[state]}`;
 
             styleTable.raw(`.${className}`, image ? `
                 background-image: url(${image.uri});
