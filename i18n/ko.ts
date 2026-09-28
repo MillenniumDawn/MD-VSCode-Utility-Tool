@@ -278,6 +278,8 @@ const table: Partial<typeof __table> = {
     "miopreview.warnings.traitAndIncludeCheck2": "설계사 {0} 에 포함 가능한 속성이 아닙니다. add_trait, remove_trait 혹은 override_trait대신 trait을 사용하여야 합니다.",
     "miopreview.warnings.traitConflict": "{0} 와 동일한 ID를 가진 트레잇이 설계사 {1} 에 존재합니다: {2}, {3}.",
     "miopreview.warnings.traitnoid": "이 파일에 정의된 특성에 토큰이 존재하지 않습니다: {0}.",
+    "moddependencies.nouserdatadir": "Hearts of Iron IV 사용자 데이터 폴더를 찾을 수 없어 이 .mod가 의존하는 모드를 찾을 수 없습니다. {0}을(를) 런처의 mod 폴더가 있는 폴더로 설정하세요.",
+    "moddependencies.opensettings": "설정 열기",
     "modfile.clicktoselect": "클릭하여 .mod 파일을 선택하세요...",
     "modfile.errorreading": "파일을 읽는데 실패했습니다: ",
     "modfile.extends": "확장: {0}",
