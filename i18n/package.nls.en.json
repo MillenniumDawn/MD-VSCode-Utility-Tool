@@ -42,7 +42,7 @@
     "hoi4modutilities.modFile.desc": "Path to the working .mod file. This file is used to read replace_path. If not specified, will use first .mod file in first folder of the workspace. Meant as a workspace setting: set in user settings it applies to every window, so another mod opened on this machine would use the same file. The Select mod file command writes it to the workspace.",
     "hoi4modutilities.preview.title": "Preview HOI4 file",
     "hoi4modutilities.previewworld.title": "Preview World Map",
-    "hoi4modutilities.scanreferences.title": "Scan References",
+    "hoi4modutilities.scanreferences.title": "Scan references and add them as dependencies",
     "hoi4modutilities.selecthoifolder.title": "Select HOI4 Install Path",
     "hoi4modutilities.showindexstatus.title": "Show Index Status",
     "hoi4modutilities.selectmodfile.title": "Select Mod File",

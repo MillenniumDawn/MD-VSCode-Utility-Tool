@@ -213,8 +213,6 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"focustree.traceclear": "Stop tracing prerequisite lines",
 	"focustree.tracehint": "Shift+click: show only this focus's prerequisite lines",
 	"focustree.tracing": "Tracing: {0}",
-	"focustree.warningmarkers": "Toggle warning markers on the tree",
-	"focustree.warnings": "Toggle warnings",
 	"focustree.warnings.exclusivenotsamey":
 		"Mutually exclusive focuses {0} and {1} are not on the same row.",
 	"focustree.warnings.focusidconflict":
@@ -239,7 +237,6 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"gfxindex.workspace.building": "Building workspace GFX index...",
 	"guipreview.containerWindow": "Container Window: ",
 	"guipreview.nocontainerwindows": "No containerwindowtype in gui file.",
-	"guipreview.topbar.toggleVisibility.title": "Show or Hide Container Windows",
 	hours: "hour(s)",
 	"index.progress.many": "{0} indexes — {1} / {2} files",
 	"index.progress.one": "{0} — {1} / {2} files",
@@ -330,6 +327,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 		"A trait defined in this file don't have token property: {0}.",
 	"moddependencies.nouserdatadir": "Can't find the Hearts of Iron IV user data directory, so the mods this .mod depends on can't be found. Set {0} to the folder that holds the launcher's mod folder.",
 	"moddependencies.opensettings": "Open Settings",
+	"modfile.cannotread": "(cannot read)",
 	"modfile.clicktoselect": "Click to select a mod file...",
 	"modfile.errorreading": "Error reading this file: ",
 	"modfile.extends": "Extends: {0}",
@@ -388,6 +386,13 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"techtree.showlocnoindex":
 		"Localisation index is off — raw ids are shown. Enable the localisation index setting to see localised names.",
 	"techtree.techfolder": "Technology folder: ",
+	"toolbar.cleartrace": "Stop tracing prerequisite lines (Esc)",
+	"toolbar.containerwindows": "Show container windows",
+	"toolbar.nowarnings": "No warnings to show",
+	"toolbar.openfile": "Open file in editor",
+	"toolbar.saveimage": "Save map as image",
+	"toolbar.warningmarkers": "Show warning markers on the tree",
+	"toolbar.warnings": "Show warning list",
 	"worldmap.error.fieldnotindefaultmap":
 		'Field "{0}" is not found in default.map.',
 	"worldmap.error.multiply256":
@@ -399,7 +404,6 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"worldmap.export.error.imgformat":
 		"Can't export world map: Image is not in correct format.",
 	"worldmap.export.success": "Successfully exported world map.",
-	"worldmap.export.title": "Export as image",
 	"worldmap.failedtoload": "Failed to load world map: {0}.",
 	"worldmap.failedtoopenstate": "Failed to open {0} file: {1}.",
 	"worldmap.mustopenafolder": "Must open a folder before opening {0} file.",
@@ -474,8 +478,6 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"worldmap.topbar.display.river": "Show River",
 	"worldmap.topbar.display.supply": "Show Supply",
 	"worldmap.topbar.display.tooltip": "Show tooltip",
-	"worldmap.topbar.open.title": "Open in workspace",
-	"worldmap.topbar.refresh.title": "Refresh",
 	"worldmap.topbar.search": "Search: ",
 	"worldmap.topbar.search.placeholder": "Range: {0}",
 	"worldmap.topbar.search.title": "Search",
@@ -487,7 +489,6 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"worldmap.topbar.viewmode.warnings": "Warnings",
 	"worldmap.topbar.warningfilter": "Warning filter: ",
 	"worldmap.topbar.warningfilter.river": "River",
-	"worldmap.topbar.warnings.title": "Toggle warnings",
 	"worldmap.warning.riverimagebpp":
 		"The rivers image should be 8 bits per pixel, but it is {0}.",
 	"worldmap.warning.rivermayloop": "River may contain a loop at {0} ~ {1}.",

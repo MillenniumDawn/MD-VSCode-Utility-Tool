@@ -42,7 +42,7 @@
     "hoi4modutilities.modFile.desc": "작업중인 .mod파일의 경로입니다. 이 파일은 replace_path를 읽는 데 사용됩니다. 지정하지 않으면 작업영역의 첫 번째 폴더에 있는 첫 번째 .mod 파일을 사용합니다. Meant as a workspace setting: set in user settings it applies to every window, so another mod opened on this machine would use the same file. The Select mod file command writes it to the workspace.",
     "hoi4modutilities.preview.title": "HOI4 파일 미리보기",
     "hoi4modutilities.previewworld.title": "세계지도 미리보기",
-    "hoi4modutilities.scanreferences.title": "레퍼런스 스캔",
+    "hoi4modutilities.scanreferences.title": "레퍼런스를 스캔하여 의존성으로 추가",
     "hoi4modutilities.selecthoifolder.title": "HOI4 설치 경로 선택",
     "hoi4modutilities.showindexstatus.title": "색인 상태 표시",
     "hoi4modutilities.selectmodfile.title": "모드파일 선택",

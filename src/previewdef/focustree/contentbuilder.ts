@@ -26,6 +26,7 @@ import { registerFocusLinkStyles } from "../../util/hoi4gui/focuslink";
 import { loadFocusLinkImages } from "../../util/hoi4gui/focuslinkimages";
 import { FocusItemLayout, FocusShortcutGui, FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "./layout";
 import { describeParseFailure } from "../../util/indexHalf";
+import { actionGroupHtml, iconButtonHtml, iconClassOf } from "../toolbaricons";
 import { Logger } from "../../util/logger";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
@@ -429,35 +430,13 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             </div>
         </div>`;
     
-    // The warning buttons share the same gate, so ToolbarFlags.hasWarnings alone still decides
-    // whether the toolbar needs a full reload when a tree gains or loses its first warning.
+    // The warning buttons stay in place, disabled while no tree has a warning.
     const hasNoWarnings = focusTrees.every(ft => ft.warnings.length === 0);
-    const warningsButton = hasNoWarnings ? '' : `
-        <button id="show-warnings" title="${localize('focustree.warnings', 'Toggle warnings')}">
-            <i class="codicon codicon-warning"></i>
-        </button>`;
-
-    const warningMarkersButton = hasNoWarnings ? '' : `
-        <button id="toggle-warning-markers" title="${localize('focustree.warningmarkers', 'Toggle warning markers on the tree')}">
-            <i class="codicon codicon-error"></i>
-        </button>`;
-
-    // Always rendered, so a tree gaining or losing its continuous focus box needs no shell reload;
-    // the webview hides it on a tree that has no box to drag.
-    const editContinuousButton = `
-        <button id="edit-continuous-focus" title="${localize('focustree.editcontinuous', 'Drag the continuous focus box to set its position')}">
-            <i class="codicon codicon-move"></i>
-        </button>`;
-    const copyWarningsButton = hasNoWarnings ? '' : `
-        <button id="copy-warnings" title="${localize('focustree.copywarnings', 'Copy this focus tree\'s warnings')}">
-            <i class="codicon codicon-copy"></i>
-        </button>`;
-
-    const hasAllowBranch = focusTrees.some(ft => ft.allowBranchOptions.length > 0);
-    const resetCheckboxesButton = !hasAllowBranch ? '' : `
-        <button id="reset-focus-checkboxes" title="${localize('focustree.resetcheckboxes', 'Reset focus checkboxes')}">
-            <i class="codicon codicon-clear-all"></i>
-        </button>`;
+    const warningsButton = iconButtonHtml('showWarnings', localize, { domId: 'show-warnings', on: false, disabled: hasNoWarnings });
+    const warningMarkersButton = iconButtonHtml('warningMarkers', localize, { domId: 'toggle-warning-markers', on: true, disabled: hasNoWarnings });
+    const resetCheckboxesButton = iconButtonHtml('resetCheckboxes', localize, { domId: 'reset-focus-checkboxes' });
+    const editContinuousButton = iconButtonHtml('editContinuous', localize, { domId: 'edit-continuous-focus' });
+    const copyWarningsButton = iconButtonHtml('copyWarnings', localize, { domId: 'copy-warnings', disabled: hasNoWarnings });
 
     // Shown by the webview only while a prerequisite trace is active, so there is always a visible
     // way out of the dimmed view. Hidden through an inline display rather than the `hidden`
@@ -465,9 +444,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
     const traceStatus = `
         <div id="trace-status-container" style="display:none" class="${styleTable.style('traceStatusContainer', () => `margin-left:10px; align-items:center;`)}">
             <span id="trace-status" class="${styleTable.style('traceStatus', () => `margin-right:5px; opacity:0.8;`)}"></span>
-            <button id="clear-trace" title="${localize('focustree.traceclear', 'Stop tracing prerequisite lines')}">
-                <i class="codicon codicon-close"></i>
-            </button>
+            ${iconButtonHtml('clearTrace', localize, { domId: 'clear-trace' })}
         </div>`;
 
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 52px;`)}">
@@ -479,12 +456,14 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${focusOverlays}
             ${inlayWindowsToggle}
             ${inlayWindows}
-            ${warningsButton}
-            ${warningMarkersButton}
-            ${editContinuousButton}
-            ${copyWarningsButton}
-            ${resetCheckboxesButton}
-            ${traceStatus}
+            ${actionGroupHtml({
+                resetCheckboxes: resetCheckboxesButton,
+                showWarnings: warningsButton,
+                warningMarkers: warningMarkersButton,
+                editContinuous: editContinuousButton,
+                copyWarnings: copyWarningsButton,
+                clearTrace: traceStatus,
+            })}
         </div>
     </div>`;
 }
@@ -681,10 +660,11 @@ function renderShortcutOverlay(styleTable: StyleTable, toggle: string): string {
         cursor: pointer;
     `);
     styleTable.raw('#shortcut-overlay.collapsed #shortcut-toggle > *', `transform: scaleX(-1);`);
+    const title = escapeAttr(localize('focustree.shortcuts.toggle', 'Show or hide the shortcuts'));
     return `
     <div id="shortcut-overlay" style="display:none">
         <div id="shortcut-list"></div>
-        <button id="shortcut-toggle" title="${escapeAttr(localize('focustree.shortcuts.toggle', 'Show or hide the shortcuts'))}">${toggle}</button>
+        <button id="shortcut-toggle" title="${title}" aria-label="${title}" aria-expanded="true">${toggle}</button>
     </div>`;
 }
 
@@ -810,7 +790,7 @@ async function renderShortcutToggle(gui: FocusShortcutGui | undefined, styleTabl
     const spriteName = gui?.toggle?.quadtexturesprite ?? gui?.toggle?.spritetype;
     const sprite = spriteName ? await getSpriteByGfxName(spriteName, gfxFiles) : undefined;
     if (!sprite) {
-        return '<i class="codicon codicon-chevron-left"></i>';
+        return `<i class="${iconClassOf('shortcutToggle')}"></i>`;
     }
     return `<div class="${styleTable.oneTimeStyle('shortcut-toggle-sprite', () => `
         position: relative;
