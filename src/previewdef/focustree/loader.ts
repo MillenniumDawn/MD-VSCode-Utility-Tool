@@ -1,5 +1,5 @@
 import { ContentLoader, LoadResultOD, Dependency, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
-import { convertFocusFileNodeToJson, extractOrListIds, FocusTree, getFocusTreeWithFocusFile } from "./schema";
+import { convertFocusFileNodeToJson, extractOrListIds, FocusTree, getFocusTreeWithFocusFile, importedPseudoTreesToShow } from "./schema";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
 import uniq from "lodash/uniq";
@@ -80,8 +80,8 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
 
         const focusTrees = getFocusTreeWithFocusFile(file, importedFocusTrees, this.file, constants);
 
-        // Include synthetic trees from dependent files (e.g., joint focus trees)
-        focusTrees.push(...importedFocusTrees.filter(tree => tree.isSharedFocues));
+        // Include synthetic trees from dependent files (e.g., joint focus trees), unless already merged in
+        focusTrees.push(...importedPseudoTreesToShow(focusTrees, importedFocusTrees));
 
         // guiResolution.gfxFiles is exactly listGuiGfxFiles() and inlayGfxResolution.resolvedFiles is
         // [] when no tree has inlays, so the short-circuit still lists the interface gfx to keep the

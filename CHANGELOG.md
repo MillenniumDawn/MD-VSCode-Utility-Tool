@@ -52,6 +52,7 @@ v1.1.40
 - [ Focus Tree Previewer ] Selecting inlay conditions now changes the inlay window's scripted images, such as the leader portrait in China's inlay; the first image was always shown before.
 - [ Focus Tree ] Selecting inlay conditions now changes the inlay window's scripted images.
 - [ Focus Tree Previewer ] The mutually exclusive marker now sits on the focus name bars, in the gap between the two focuses, as it does in the game. The `<!>` is drawn in front of its line instead of the line showing through it. Issue #461.
+- [ Focus Tree Previewer ] A file with a single focus tree no longer shows the "Focus tree:" picker just because the tree pulls in `shared_focus` focuses, which are already drawn inside it. Issue #460.
 
 v1.1.39
 
