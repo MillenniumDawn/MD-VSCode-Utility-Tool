@@ -66,7 +66,7 @@ function loaderWithTrees(trees: any[]): any {
 	return {
 		file: "common/national_focus/test.txt",
 		load: async () => ({
-			result: { focusTrees: trees, gfxFiles: [] },
+			result: { focusTrees: trees, gfxFiles: [], overlayGfxFiles: [] },
 		}),
 	};
 }
@@ -75,7 +75,7 @@ function loaderWithLayout(trees: any[], layout: FocusTreeLayout): any {
 	return {
 		file: "common/national_focus/test.txt",
 		load: async () => ({
-			result: { focusTrees: trees, gfxFiles: [], layout },
+			result: { focusTrees: trees, gfxFiles: [], overlayGfxFiles: [], layout },
 		}),
 	};
 }

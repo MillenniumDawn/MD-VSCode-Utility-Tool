@@ -55,6 +55,7 @@
 				"mdHoi4Utilities.parentModPaths",
 				"mdHoi4Utilities.userDataPath",
 				"mdHoi4Utilities.inlayWindowGfxRoots",
+				"mdHoi4Utilities.focusOverlayGfxFiles",
 				"mdHoi4Utilities.technologyGfxRoots",
 				"mdHoi4Utilities.auditor.reportFolder"
 			]
@@ -213,6 +214,15 @@
 							"type": "string"
 						},
 						"description": "%hoi4modutilities.inlayWindowGfxRoots.desc%"
+					},
+					"mdHoi4Utilities.focusOverlayGfxFiles": {
+						"title": "%hoi4modutilities.focusOverlayGfxFiles.title%",
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"description": "%hoi4modutilities.focusOverlayGfxFiles.desc%"
 					},
 					"mdHoi4Utilities.technologyGfxRoots": {
 						"title": "%hoi4modutilities.technologyGfxRoots.title%",
