@@ -24,6 +24,7 @@ declare module 'vscode' {
             readonly inlayWindowGfxRoots: string[];
             readonly technologyGfxRoots: string[];
             readonly focusOverlayGfxFiles: string[];
+            readonly decisionGfxFiles: string[];
             readonly technologyCountryIcons: boolean;
             readonly worldMapRetainContextWhenHidden: boolean;
             readonly previewWheel: 'auto' | 'zoom' | 'scroll';

@@ -44,9 +44,10 @@ class DecisionPreview extends LoaderPreview<DecisionsLoader> {
 
 	// previewLocalisation changes the text in the payload; localisationIndex changes whether
 	// there is any text to show, and so whether the localisation toggle is offered at all;
-	// gfxIndex changes which icons resolve, and which sprites a rendered scripted GUI can draw.
+	// gfxIndex changes which icons resolve, and which sprites a rendered scripted GUI can draw;
+	// decisionGfxFiles changes which .gfx files an icon the index cannot place is looked up in.
 	protected override get reloadOnConfigurationChange(): readonly string[] {
-		return ["previewLocalisation", "localisationIndex", "gfxIndex"];
+		return ["previewLocalisation", "localisationIndex", "gfxIndex", "decisionGfxFiles"];
 	}
 }
 
