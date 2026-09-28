@@ -1,0 +1,11 @@
+spriteTypes = {
+	spriteType = {
+		name = "GFX_fixture_icon"
+		texturefile = "gfx/interface/goals/goal_unknown.dds"
+	}
+	spriteType = {
+		name = "GFX_fixture_strip"
+		texturefile = "gfx/interface/ideas/idea_PLACEHOLDER.dds"
+		noOfFrames = 2
+	}
+}

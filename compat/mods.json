@@ -1,0 +1,9 @@
+[
+	{
+		"id": "millennium-dawn",
+		"repo": "MillenniumDawn/Millennium-Dawn",
+		"ref": "6c0332c2a77967765a64bafda880eeef84f4c397",
+		"paths": ["common", "events", "interface", "localisation"],
+		"parents": []
+	}
+]

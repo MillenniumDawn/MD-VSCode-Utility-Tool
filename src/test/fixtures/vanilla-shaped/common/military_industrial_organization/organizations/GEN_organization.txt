@@ -1,0 +1,62 @@
+GEN_fixture_organization = {
+	allowed = {
+		original_tag = GEN
+	}
+	icon = GFX_idea_generic_infantry_equipment_manufacturer_mio
+	name = GEN_fixture_organization
+	equipment_type = {
+		infantry_equipment
+	}
+	research_categories = {
+		infantry_weapons
+	}
+
+	initial_trait = {
+		name = GEN_fixture_initial
+		equipment_bonus = {
+			reliability = 0.05
+		}
+	}
+
+	trait = {
+		token = GEN_fixture_trait_a
+		name = GEN_fixture_trait_a
+		icon = GFX_generic_mio_trait_icon_soft_attack
+		position = { x = 0 y = 0 }
+		equipment_bonus = {
+			soft_attack = 0.05
+		}
+	}
+
+	trait = {
+		token = GEN_fixture_trait_b
+		name = GEN_fixture_trait_b
+		icon = GFX_generic_mio_trait_icon_reliability
+		parent = {
+			traits = { GEN_fixture_trait_a }
+			num_parents_needed = 1
+		}
+		mutually_exclusive = { GEN_fixture_trait_c }
+		relative_position_id = GEN_fixture_trait_a
+		position = { x = -1 y = 1 }
+		production_bonus = {
+			production_cost_factor = -0.05
+		}
+	}
+
+	trait = {
+		token = GEN_fixture_trait_c
+		name = GEN_fixture_trait_c
+		icon = GFX_generic_mio_trait_icon_hard_attack
+		parent = {
+			traits = { GEN_fixture_trait_a }
+			num_parents_needed = 1
+		}
+		mutually_exclusive = { GEN_fixture_trait_b }
+		relative_position_id = GEN_fixture_trait_a
+		position = { x = 1 y = 1 }
+		equipment_bonus = {
+			hard_attack = 0.05
+		}
+	}
+}

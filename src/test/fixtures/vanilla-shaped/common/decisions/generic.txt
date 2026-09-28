@@ -1,0 +1,32 @@
+fixture_category = {
+	fixture_build_factory = {
+		icon = generic_construction
+		cost = 50
+		available = {
+			has_war = no
+		}
+		complete_effect = {
+			random_owned_controlled_state = {
+				add_building_construction = {
+					type = industrial_complex
+					level = 1
+					instant_build = yes
+				}
+			}
+		}
+		ai_will_do = {
+			factor = 1
+		}
+	}
+
+	fixture_timed_mission = {
+		icon = generic_research
+		days_mission_timeout = 60
+		activation = {
+			always = no
+		}
+		timeout_effect = {
+			add_political_power = -25
+		}
+	}
+}

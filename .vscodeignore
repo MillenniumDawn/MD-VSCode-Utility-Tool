@@ -34,3 +34,4 @@ eslint.config.cjs
 *.log
 *.tmp
 *.vsix
+compat/**

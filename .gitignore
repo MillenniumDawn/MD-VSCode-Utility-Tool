@@ -99,3 +99,7 @@ bullets.json
 fresh.json
 release-pr-body.md
 updated-body.md
+
+# The vanilla-shaped fixture mod lays its files out like the game, under common/ and interface/
+!src/test/fixtures/vanilla-shaped/common/
+!src/test/fixtures/vanilla-shaped/interface/
