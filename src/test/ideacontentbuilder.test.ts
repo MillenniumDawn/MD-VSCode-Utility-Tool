@@ -36,6 +36,7 @@ function loaderFor(source: string, options: StubOptions = {}) {
 				modifierDefinitions: options.modifierDefinitions ?? {},
 				swaps: options.swaps ?? [],
 				swapsUnavailable: options.swapsUnavailable ?? false,
+				placeholderIcon: undefined,
 			},
 		}),
 	} as any;

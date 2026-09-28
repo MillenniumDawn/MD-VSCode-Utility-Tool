@@ -22,6 +22,7 @@ v1.1.40
 - [ Focus Tree Previewer ] A mod names the `.gfx` files that define its focus overlays in the new Focus overlay GFX files setting, or with a `focus_overlay_gfx = { "interface/goals_overlays.gfx" }` list in its `.mod` file, so a submod picks up the overlays of the mod it extends. Issue #448.
 - [ Previews ] Toolbar buttons now sit in a fixed group at the right end of the toolbar, in the same order in every preview. Each icon shows what the button does, toggles look different when on, and tooltips say what a click does, or why a greyed-out button cannot be clicked. The mod file in the status bar now says "(cannot read)" when it cannot be read. Issue #446.
 - [ Decision Previewer ] A mod names the `.gfx` files that define its decision icons in the new Decision GFX files setting, or with a `decision_gfx = { "interface/MD_decisions.gfx" }` list in its `.mod` file. Issue #449.
+- [ Idea Previewer ] A mod names the image drawn for an idea whose `picture` does not resolve in the new Idea placeholder icon setting, or with an `idea_placeholder_icon = "gfx/interface/ideas/WIP_idea.dds"` line in its `.mod` file. Issue #450.
 
   Bugfixes:
 

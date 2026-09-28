@@ -1242,6 +1242,7 @@ interface ModFile {
 	replace_path: string[];
 	focus_overlay_gfx: Enum;
 	decision_gfx: Enum;
+	idea_placeholder_icon?: string;
 }
 
 const modListSchema: SchemaDef<ModFile> = {
@@ -1251,12 +1252,14 @@ const modListSchema: SchemaDef<ModFile> = {
 	},
 	focus_overlay_gfx: "enum",
 	decision_gfx: "enum",
+	idea_placeholder_icon: "string",
 };
 
 interface DescriptorLists {
 	replacePaths: string[];
 	focusOverlayGfx: string[];
 	decisionGfx: string[];
+	ideaPlaceholderIcon: string[];
 }
 
 /**
@@ -1290,6 +1293,15 @@ export async function getDescriptorFocusOverlayGfx(): Promise<string[]> {
  */
 export async function getDescriptorDecisionGfx(): Promise<string[]> {
 	return (await getDescriptorList("decisionGfx")) ?? [];
+}
+
+/**
+ * The `idea_placeholder_icon` images named by the working mod's descriptor, then its parent mods'
+ * descriptors: what the idea preview draws for a picture that does not resolve. Like
+ * `decision_gfx`, the game ignores the key; the preview uses the first of them that exists.
+ */
+export async function getDescriptorIdeaPlaceholderIcon(): Promise<string[]> {
+	return (await getDescriptorList("ideaPlaceholderIcon")) ?? [];
 }
 
 async function getDescriptorList(
@@ -1349,5 +1361,6 @@ async function getListsFromModFile(
 		replacePaths: modFile.replace_path.filter((v): v is string => typeof v === "string"),
 		focusOverlayGfx: modFile.focus_overlay_gfx._values,
 		decisionGfx: modFile.decision_gfx._values,
+		ideaPlaceholderIcon: typeof modFile.idea_placeholder_icon === "string" ? [modFile.idea_placeholder_icon] : [],
 	};
 }

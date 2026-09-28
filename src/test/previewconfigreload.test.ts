@@ -153,7 +153,7 @@ describe("previewdef configuration reload", () => {
 			[
 				"idea",
 				ideaPreviewDef,
-				["previewLocalisation", "localisationIndex", "gfxIndex", "ideaSwapIndex"],
+				["previewLocalisation", "localisationIndex", "gfxIndex", "ideaSwapIndex", "ideaPlaceholderIcon"],
 			],
 			[
 				"decision",

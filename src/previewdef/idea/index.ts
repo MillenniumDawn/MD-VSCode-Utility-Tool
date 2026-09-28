@@ -39,13 +39,15 @@ class IdeaPreview extends LoaderPreview<IdeasLoader> {
 
 	// previewLocalisation changes the text in the payload; localisationIndex changes whether
 	// there is any text to show, and so whether the localisation toggle is offered at all;
-	// gfxIndex changes which icons resolve; ideaSwapIndex changes whether chains are found.
+	// gfxIndex changes which icons resolve; ideaSwapIndex changes whether chains are found;
+	// ideaPlaceholderIcon changes what an icon that does not resolve is drawn with.
 	protected override get reloadOnConfigurationChange(): readonly string[] {
 		return [
 			"previewLocalisation",
 			"localisationIndex",
 			"gfxIndex",
 			"ideaSwapIndex",
+			"ideaPlaceholderIcon",
 		];
 	}
 }
