@@ -1,7 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { listModifierDefinitionFiles, loadModifierDefinitions } from "../util/modifiers";
-import { clearDlcZipCache } from "../util/fileloader";
+import { clearDlcZipCache, invalidateFileDiscoveryCache } from "../util/fileloader";
 import { Logger } from "../util/logger";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 
@@ -110,7 +110,25 @@ describe("util/modifiers format files from the setting and the .mod file", funct
 		files.set("common/md_formats/notes.md", "");
 		directories["common/md_formats"] = [["one.txt", File], ["notes.md", File]];
 		configure(["common/md_formats"]);
-		assert.deepStrictEqual(await listModifierDefinitionFiles(), ["common/md_formats/one.txt"]);
+		assert.deepStrictEqual(await listModifierDefinitionFiles(), ["common/md_formats/one.txt", "common/md_formats/*"]);
+		assert.strictEqual((await loadModifierDefinitions())["stability_weekly"]?.precision, 1);
+	});
+
+	it("tracks even an empty configured folder for new format files", async function () {
+		configure(["common/empty"]);
+		assert.deepStrictEqual(await listModifierDefinitionFiles(), ["common/empty/*"]);
+		assert.strictEqual(warnings.length, 1);
+	});
+
+	it("discovers a new format file after the folder listing was cached", async function () {
+		directories["common/md_formats"] = [];
+		configure(["common/md_formats"]);
+		assert.deepStrictEqual(await listModifierDefinitionFiles(), ["common/md_formats/*"]);
+
+		files.set("common/md_formats/new.txt", "stability_weekly = { precision = 1 }\n");
+		directories["common/md_formats"] = [["new.txt", File]];
+		invalidateFileDiscoveryCache();
+		assert.deepStrictEqual(await listModifierDefinitionFiles(), ["common/md_formats/new.txt", "common/md_formats/*"]);
 		assert.strictEqual((await loadModifierDefinitions())["stability_weekly"]?.precision, 1);
 	});
 

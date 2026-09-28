@@ -838,6 +838,11 @@ const fileListCache = new PromiseCache<string[]>({
 	maxSize: 300,
 });
 
+export function invalidateFileDiscoveryCache(): void {
+	fileListCache.clear();
+	getFilePathMemo.clear();
+}
+
 export function listFilesFromModOrHOI4(
 	relativePath: string,
 	options?: ListFilesOptions,

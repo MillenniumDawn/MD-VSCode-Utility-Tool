@@ -229,12 +229,19 @@ const lowerIsBetterKeys = new Set([
 const modifierFormatFilesSetting = "mdHoi4Utilities.modifierFormatFiles";
 
 /**
- * Every file loadModifierDefinitions reads, as paths: the `common/modifier_definitions` files and
- * the mod's own format files. Exported so a preview built on them can report them as dependencies
- * and refresh when one is edited; the listings are cached, so asking beside the load costs nothing.
+ * Definition files, format files, and configured folders with a wildcard for new files.
+ * Preview dependencies use the wildcard to refresh when a folder gains a format file.
  */
 export async function listModifierDefinitionFiles(): Promise<string[]> {
-	return uniq([...(await listDefinitionDirectoryFiles()), ...(await listModifierFormatFiles())]);
+	const [definitions, formats, entries] = await Promise.all([
+		listDefinitionDirectoryFiles(), listModifierFormatFiles(), modifierFormatEntries(),
+	]);
+	const folders = entries
+		.filter(({ entry }) => typeof entry === "string")
+		.map(({ entry }) => entry.trim().replace(/\\+/g, "/").replace(/\/+$/, ""))
+		.filter((entry) => entry !== "" && !entry.toLowerCase().endsWith(".txt"))
+		.map((entry) => `${entry}/*`);
+	return uniq([...definitions, ...formats, ...folders]);
 }
 
 async function listDefinitionDirectoryFiles(): Promise<string[]> {
@@ -256,12 +263,15 @@ async function listDefinitionDirectoryFiles(): Promise<string[]> {
  * not a .txt file is a folder scanned for them. An entry that names nothing is reported, naming
  * where it was configured, and skipped.
  */
-export async function listModifierFormatFiles(): Promise<string[]> {
-	const configured = [
+async function modifierFormatEntries(): Promise<{ entry: string; source: string }[]> {
+	return [
 		...(getConfiguration().modifierFormatFiles ?? []).map((entry) => ({ entry, source: modifierFormatFilesSetting })),
 		...(await getDescriptorModifierFormatFiles()).map((entry) => ({ entry, source: "modifier_format_files in the .mod file" })),
 	];
+}
 
+export async function listModifierFormatFiles(): Promise<string[]> {
+	const configured = await modifierFormatEntries();
 	const files: string[] = [];
 	for (const { entry, source } of configured) {
 		if (typeof entry !== "string" || entry.trim() === "") {

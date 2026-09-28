@@ -127,6 +127,9 @@ function buildStub() {
         onDidCreateFiles: disposable,
         onDidDeleteFiles: disposable,
         onDidRenameFiles: disposable,
+        createFileSystemWatcher: () => ({
+            onDidCreate: disposable, onDidChange: disposable, onDidDelete: disposable, dispose: () => undefined,
+        }),
         textDocuments: [],
         openTextDocument: async () => undefined,
         registerTextDocumentContentProvider: () => disposable(),
@@ -302,6 +305,7 @@ const pristine = {
     onDidChangeConfiguration: stub.workspace.onDidChangeConfiguration,
     onDidChangeWorkspaceFolders: stub.workspace.onDidChangeWorkspaceFolders,
     onDidChangeTextDocument: stub.workspace.onDidChangeTextDocument,
+    createFileSystemWatcher: stub.workspace.createFileSystemWatcher,
     activeTextEditor: stub.window.activeTextEditor as unknown,
     stat: stub.workspace.fs.stat,
     readDirectory: stub.workspace.fs.readDirectory,
@@ -338,6 +342,7 @@ export interface VscodeStubOverrides {
     onDidChangeWorkspaceFolders?: (handler: any) => { dispose(): void };
     /** Captures the document-change handler a suite's `register()` call installs, to drive it directly. */
     onDidChangeTextDocument?: (handler: any, thisArg?: any) => { dispose(): void };
+    createFileSystemWatcher?: (glob: string, ignoreCreate?: boolean, ignoreChange?: boolean, ignoreDelete?: boolean) => any;
     /** Replaces `window.activeTextEditor`; pass `undefined` explicitly for "no editor". */
     activeTextEditor?: unknown;
     stat?: (uri: any) => Promise<any>;
@@ -406,6 +411,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     }
     if (overrides.onDidChangeTextDocument !== undefined) {
         workspace.onDidChangeTextDocument = overrides.onDidChangeTextDocument;
+    }
+    if (overrides.createFileSystemWatcher !== undefined) {
+        workspace.createFileSystemWatcher = overrides.createFileSystemWatcher;
     }
     if ('activeTextEditor' in overrides) {
         window.activeTextEditor = overrides.activeTextEditor;
@@ -478,6 +486,7 @@ export function restoreVscodeStubs(): void {
     (stub as any)._configurationChanged.dispose();
     workspace.onDidChangeWorkspaceFolders = pristine.onDidChangeWorkspaceFolders;
     workspace.onDidChangeTextDocument = pristine.onDidChangeTextDocument;
+    workspace.createFileSystemWatcher = pristine.createFileSystemWatcher;
     window.activeTextEditor = pristine.activeTextEditor;
     fs.stat = pristine.stat;
     fs.readDirectory = pristine.readDirectory;
