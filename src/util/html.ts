@@ -5,6 +5,7 @@ import { forceError, randomString, jsonForScript } from './common';
 import { htmlEscape } from './escape';
 import { localize } from './i18n';
 import { getFlags } from './featureflags';
+import { iconClassOf } from '../previewdef/toolbaricons';
 
 export interface DynamicScript {
     content: string;
@@ -214,9 +215,9 @@ export function errorPage(webview: vscode.Webview, uri: vscode.Uri, cause: unkno
     const body = `<div style="padding:16px; font:13px var(--vscode-font-family); color:var(--vscode-foreground);">
         ${heading}
         <p>${errorPageContent(cause)}</p>
-        <button id="${buttonId}">${htmlEscape(localize('focustree.reload', 'Reload'))}</button>
+        <button id="${buttonId}" type="button"><i class="${iconClassOf('refresh')}" aria-hidden="true"></i> ${htmlEscape(localize('focustree.reload', 'Reload'))}</button>
     </div>`;
-    return html(webview, body, [previewedFileUriScript(uri), reloadButtonScript(buttonId)], []);
+    return html(webview, body, [previewedFileUriScript(uri), reloadButtonScript(buttonId)], ['codicon.css']);
 }
 
 export { htmlEscape, escapeAttr } from './escape';

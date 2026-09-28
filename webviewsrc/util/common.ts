@@ -5,6 +5,7 @@ import { feLocalize } from "./i18n";
 import { vscode } from "./vscode";
 import { sendException } from "./telemetry";
 import { forceError } from "../../src/util/common";
+import { iconButtonHtml } from "../../src/previewdef/toolbaricons";
 export { arrayToMap } from "../../src/util/common";
 
 // True while the mouse is held down on the drag layer, i.e. while the view is being panned. A
@@ -325,11 +326,9 @@ function installZoomControls(scale: number): void {
 		controls = document.createElement("div");
 		controls.id = "zoom-controls";
 		controls.innerHTML =
-			`<button id="zoom-out" title="${feLocalize("zoom.out", "Zoom out (-)")}">` +
-			`<i class="codicon codicon-zoom-out"></i></button>` +
-			`<span id="zoom-level"></span>` +
-			`<button id="zoom-in" title="${feLocalize("zoom.in", "Zoom in (+)")}">` +
-			`<i class="codicon codicon-zoom-in"></i></button>`;
+			iconButtonHtml("zoomOut", feLocalize, { domId: "zoom-out" }) +
+			`<span id="zoom-level" aria-live="polite"></span>` +
+			iconButtonHtml("zoomIn", feLocalize, { domId: "zoom-in" });
 		document.body.appendChild(controls);
 
 		controls
