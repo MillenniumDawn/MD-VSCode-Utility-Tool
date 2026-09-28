@@ -1,10 +1,5 @@
 [
 	{
-		"value": "interface/scripted_gui",
-		"reason": "Default inlay window GFX root, a Millennium Dawn folder the base game does not have.",
-		"issue": "#451"
-	},
-	{
 		"value": "GFX_technology_small_available_item_bg",
 		"reason": "One entry of a fallback list of technology backgrounds; the later entries resolve in the base game."
 	},
