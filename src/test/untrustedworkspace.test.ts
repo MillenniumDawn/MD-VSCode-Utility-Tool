@@ -13,6 +13,7 @@ const restricted = [
 	"mdHoi4Utilities.userDataPath",
 	"mdHoi4Utilities.inlayWindowGfxRoots",
 	"mdHoi4Utilities.focusOverlayGfxFiles",
+	"mdHoi4Utilities.decisionGfxFiles",
 	"mdHoi4Utilities.technologyGfxRoots",
 ];
 

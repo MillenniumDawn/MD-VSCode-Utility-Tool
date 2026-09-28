@@ -102,6 +102,7 @@ The Settings editor lists them under the extension in these sections.
 | `mdHoi4Utilities.useConditionInFocus` | Show conditions in the focus tree preview. |
 | `mdHoi4Utilities.inlayWindowGfxRoots` | Folders scanned for the `.gfx` files that focus inlay windows use. |
 | `mdHoi4Utilities.focusOverlayGfxFiles` | The mod's `.gfx` files (or folders of them) that define focus overlays, searched after the game's `interface/goals.gfx`. A `focus_overlay_gfx = { "interface/goals_overlays.gfx" }` list in the mod's `.mod` file does the same. |
+| `mdHoi4Utilities.decisionGfxFiles` | The mod's `.gfx` files (or folders of them) that define decision sprites, searched after the game's `interface/decisions.gfx`. A `decision_gfx = { "interface/MD_decisions.gfx" }` list in the mod's `.mod` file does the same. |
 | `mdHoi4Utilities.technologyGfxRoots` | Folders scanned for `.gfx` files used by the technology tree, including country-specific icons. |
 | `mdHoi4Utilities.technologyCountryIcons` | Add a country selector to the technology tree preview and prefer that country's icons. |
 

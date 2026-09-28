@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- [ Decision Previewer ] A mod names the `.gfx` files that define its decision icons in the new Decision GFX files setting, or with a `decision_gfx = { "interface/MD_decisions.gfx" }` list in its `.mod` file. Issue #449.
 - [ Focus Tree Previewer ] A mod names the `.gfx` files that define its focus overlays in the new Focus overlay GFX files setting, or with a `focus_overlay_gfx = { "interface/goals_overlays.gfx" }` list in its `.mod` file, so a submod picks up the overlays of the mod it extends. Issue #448.
 - [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
 - Errors from previews and file loading now appear in the HOI4 Modding output channel, not only in the developer console. Issue #370.
@@ -13,6 +14,7 @@ Unreleased
 
   Bugfixes:
 
+- [ Decision Previewer ] A mod without `interface/MD_decisions.gfx` no longer logs an error for it, and editing a decision `.gfx` file refreshes an open decision preview. Millennium Dawn's decision icons that the GFX index cannot place need that file named in the new setting or the `.mod` file. Issue #449.
 - [ Focus Tree Previewer ] Focus overlays now show in base-game focus trees, which define them in `interface/goals.gfx`, and a mod without `interface/goals_overlays.gfx` no longer logs an error for it on every render. Millennium Dawn's overlays need that file named in the new setting or the `.mod` file. Issue #448.
 - DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.
 - [ GFX ] Sprites whose texture width does not divide evenly by `noofframes` no longer lose pixels at the edge of each frame, and a `noofframes` of 0 or larger than the texture width no longer breaks the preview. Issue #371.
