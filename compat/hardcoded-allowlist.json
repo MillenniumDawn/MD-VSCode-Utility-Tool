@@ -1,15 +1,5 @@
 [
 	{
-		"value": "interface/MD_decisions.gfx",
-		"reason": "Millennium Dawn's decision icons; the base game has only interface/decisions.gfx.",
-		"issue": "#449"
-	},
-	{
-		"value": "gfx/interface/ideas/WIP_idea.dds",
-		"reason": "Millennium Dawn's placeholder idea picture; the base game draws idea_PLACEHOLDER.dds.",
-		"issue": "#450"
-	},
-	{
 		"value": "interface/scripted_gui",
 		"reason": "Default inlay window GFX root, a Millennium Dawn folder the base game does not have.",
 		"issue": "#451"

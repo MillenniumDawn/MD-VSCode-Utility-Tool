@@ -125,22 +125,30 @@ describe('compat runner', () => {
 		this.timeout(60000);
 		let dir: string;
 		beforeEach(async () => { dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'compat-main-')); });
-		afterEach(async () => { await fs.promises.rm(dir, { recursive: true, force: true }); });
+		afterEach(async () => {
+			for (const name of ['b.json', 'summary.md', 'r.md']) {
+				const file = path.join(dir, name);
+				if (fs.existsSync(file)) {
+					await fs.promises.unlink(file);
+				}
+			}
+			await fs.promises.rmdir(dir);
+		});
 
 		it('writes the baseline, the report and the job summary, then passes against that baseline', async () => {
 			const baseline = path.join(dir, 'b.json');
 			const summary = path.join(dir, 'summary.md');
 			const report = path.join(dir, 'r.md');
 			const out: string[] = [];
-			const args = ['--mod', fixture, '--only', 'decision,event', '--baseline', baseline];
+			const args = ['--mod', fixture, '--only', 'technology,event', '--baseline', baseline];
 			assert.strictEqual(await main([...args, '--update-baseline', '--verbose'], {}, s => out.push(s)), 0);
 			const keys: string[] = JSON.parse(fs.readFileSync(baseline, 'utf8'));
-			assert.ok(keys.length > 0 && keys.every(k => k.startsWith('decision|')));
+			assert.ok(keys.length > 0 && keys.every(k => k.startsWith('technology|')));
 			assert.ok(out.some(l => l.startsWith('event events/generic.txt')));
 
 			assert.strictEqual(await main([...args, '--report', report], { GITHUB_STEP_SUMMARY: summary }, () => undefined), 0);
 			assert.match(fs.readFileSync(report, 'utf8'), /### Compat: vanilla-shaped/);
-			assert.match(fs.readFileSync(summary, 'utf8'), /\| decision \| 1 \|/);
+			assert.match(fs.readFileSync(summary, 'utf8'), /\| technology \| 1 \|/);
 
 			fs.writeFileSync(baseline, '[]');
 			assert.strictEqual(await main(args, {}, () => undefined), 1);

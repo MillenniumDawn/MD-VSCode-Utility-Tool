@@ -1,15 +1,5 @@
 [
 	{
-		"problem": "decision|common/decisions/generic.txt|Cannot parse interface/MD_decisions.gfx: UserError: Can't find file interface/MD_decisions.gfx",
-		"issue": "#449",
-		"reason": "The decision preview reads Millennium Dawn's decision icon file in every mod."
-	},
-	{
-		"problem": "decision|common/decisions/generic.txt|UserError: Can't find file interface/MD_decisions.gfx",
-		"issue": "#449",
-		"reason": "The decision preview reads Millennium Dawn's decision icon file in every mod."
-	},
-	{
 		"problem": "technology|common/technologies/infantry.txt|UserError: Can't find countrytechtreeview,countrydoctrineview in .",
 		"reason": "The tech tree is laid out from the game's interface/countrytechtreeview.gui, which this run does not mount. Its message names no file, so it cannot be told apart from a missing mod file."
 	}
