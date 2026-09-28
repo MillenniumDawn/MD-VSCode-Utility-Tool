@@ -188,6 +188,20 @@
 						],
 						"description": "%hoi4modutilities.focusTreeLayout.desc%"
 					},
+					"mdHoi4Utilities.focusTreePrerequisiteLines": {
+						"title": "%hoi4modutilities.focusTreePrerequisiteLines.title%",
+						"type": "string",
+						"default": "available",
+						"enum": [
+							"available",
+							"completed"
+						],
+						"enumDescriptions": [
+							"%hoi4modutilities.focusTreePrerequisiteLines.enum.available%",
+							"%hoi4modutilities.focusTreePrerequisiteLines.enum.completed%"
+						],
+						"description": "%hoi4modutilities.focusTreePrerequisiteLines.desc%"
+					},
 					"mdHoi4Utilities.inlayWindowGfxRoots": {
 						"title": "%hoi4modutilities.inlayWindowGfxRoots.title%",
 						"type": "array",

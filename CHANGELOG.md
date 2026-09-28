@@ -4,6 +4,7 @@ Unreleased
 
 - [ Balance of Power Previewer ] Added a preview for `common/bop` files that draws the game's own balance of power window from `powerbalanceview.gui`, with each balance of power's title and side icons. A slider and step buttons in the toolbar stand in for `add_power_balance_value`: the needle, the bar fill and the active range follow the value the way they do in game, and clicking a range opens it in the file. A file with several balances of power gets a dropdown to pick one, and overlapping or missing ranges are flagged. Issue #434.
 - [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
+- [ Focus Tree Previewer ] A new setting, Focus tree: prerequisite line colour, picks whether prerequisite lines are drawn blue, as for focuses not yet completed, or green, as for completed ones. Issue #443.
 - Errors from previews and file loading now appear in the HOI4 Modding output channel, not only in the developer console. Issue #370.
 - [ Focus Tree ] With the focus tree layout set to `gui`, a focus tree preview now opens centred on the tree's `initial_show_position`, the way the game does, using `national_focus_center` from `nationalfocusview.gui`. Issue #400.
 - [ Focus Tree Previewer ] With the gui focus tree layout, a focus grid whose `format` is `DOWN`, `LEFT` or `RIGHT` now previews the tree growing that way, prerequisite lines and mutually exclusive links included, instead of always top-down. Issue #399.
@@ -15,6 +16,9 @@ Unreleased
 
 - [ GFX ] Sprites defined as `progressBarType` now show, and a `.gfx` file whose last block is never closed, such as the game's own `powerbalanceview.gfx`, is read the way the game reads it instead of losing every sprite in it.
 - [ Decision Previewer ] Clicking an element of a scripted-GUI window in a decision card now opens it in its `.gui` file, instead of jumping to an unrelated spot in the decision file.
+- [ Focus Tree Previewer ] Prerequisite lines are blue again by default, instead of the green the game uses for completed focuses. Issue #443.
+- The "Select working mod" list now marks your current mod when the mod file setting is written in quotes, instead of listing it a second time as a workspace setting. Issue #455.
+- Grayscale (luminance) DDS textures now show at their real brightness instead of almost black. Issue #433.
 - DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.
 - [ GFX ] Sprites whose texture width does not divide evenly by `noofframes` no longer lose pixels at the edge of each frame, and a `noofframes` of 0 or larger than the texture width no longer breaks the preview. Issue #371.
 - When the same mod file appears more than once in the "Select working mod" list, the selected entries now keep a fixed order at the top instead of one that could change between VS Code versions. Issue #374.

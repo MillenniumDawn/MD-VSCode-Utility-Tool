@@ -15,6 +15,8 @@ export interface FeatureFlags {
     readonly useConditionInFocus: Configuration['useConditionInFocus'];
     // Read by the focus tree loader; `?? 'standard'` covers a configuration without the key (the tests' stub).
     readonly focusTreeLayout: Configuration['focusTreeLayout'];
+    // Read by the focus tree content builder; the same `?? 'available'` fallback for the tests' stub.
+    readonly focusTreePrerequisiteLines: Configuration['focusTreePrerequisiteLines'];
     readonly eventTreePreview: Configuration['eventTreePreview'];
     readonly ideaPreview: Configuration['ideaPreview'];
     readonly decisionPreview: Configuration['decisionPreview'];
@@ -39,6 +41,7 @@ function readFlags(): FeatureFlags {
     return {
         useConditionInFocus: config.useConditionInFocus,
         focusTreeLayout: config.focusTreeLayout ?? 'standard',
+        focusTreePrerequisiteLines: config.focusTreePrerequisiteLines ?? 'available',
         eventTreePreview: config.eventTreePreview,
         ideaPreview: config.ideaPreview,
         decisionPreview: config.decisionPreview,

@@ -71,11 +71,12 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // windows scan; gfxIndex changes which icons resolve; localisationIndex and previewLocalisation
     // change every label. inlayWindowGfxRoots had no listener at all, so fixing a missing inlay
     // sprite did nothing until the file was edited or the preview reopened. focusTreeLayout decides the
-    // page's grid and the focus markup.
+    // page's grid and the focus markup, focusTreePrerequisiteLines the frames the lines are drawn from.
     protected override get reloadOnConfigurationChange(): readonly string[] {
         return [
             'useConditionInFocus',
             'focusTreeLayout',
+            'focusTreePrerequisiteLines',
             'sharedFocusIndex',
             'inlayWindowGfxRoots',
             'gfxIndex',
