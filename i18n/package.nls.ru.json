@@ -22,6 +22,8 @@
     "hoi4modutilities.ideaPreview.desc": "Включить предпросмотр идей. Требуется перезагрузка после изменения.",
     "hoi4modutilities.characterPreview.title": "Предпросмотр персонажей",
     "hoi4modutilities.characterPreview.desc": "Включить предпросмотр персонажей. Требуется перезагрузка после изменения.",
+    "hoi4modutilities.bopPreview.title": "Предпросмотр баланса сил",
+    "hoi4modutilities.bopPreview.desc": "Включить предпросмотр баланса сил. Требуется перезагрузка после изменения.",
     "hoi4modutilities.ideaSwapIndex.title": "Индекс замены идей",
     "hoi4modutilities.ideaSwapIndex.desc": "Сканировать common и events на наличие swap_ideas, чтобы предпросмотр идей мог показывать цепочки идей. При первом построении читается много файлов. Требуется перезагрузка после изменения.",
     "hoi4modutilities.sharedFocusIndex.title": "Индекс общих фокусов",

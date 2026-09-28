@@ -1,10 +1,23 @@
 import { ContainerWindowType } from "../../hoiformat/gui";
 import { HOIPartial, toStringAsSymbolIgnoreCase } from "../../hoiformat/schema";
 import { getSpriteByGfxName } from "../image/imagecache";
+import { htmlEscape } from "../escape";
 import { StyleTable, normalizeForStyle } from "../styletable";
 import { ParentInfo, calculateBBox, getHeight, getWidth } from "./common";
 import { RenderContainerWindowOptions, renderContainerWindow } from "./containerwindow";
 import { RenderNodeCommonOptions } from "./nodecommon";
+
+export interface RenderStandaloneWindowOptions {
+	// Drawn in place of the default for any child it returns markup for, at every depth. A preview
+	// uses it for the elements the game fills in from code: a sprite name, a text, a position.
+	onRenderChild?: RenderContainerWindowOptions["onRenderChild"];
+	// The .gui file the window came from. Its elements carry offsets into that file, and without the
+	// file a click on one would jump to those offsets in whatever file the preview is showing.
+	file?: string;
+	// Whether a click on an element opens its definition. On unless a preview turns it off: one
+	// that links only into the file it previews has no use for links into the .gui.
+	enableNavigator?: boolean;
+}
 
 export interface RenderedWindow {
 	html: string;
@@ -24,7 +37,9 @@ export async function renderStandaloneWindow(
 	containerWindow: HOIPartial<ContainerWindowType>,
 	styleTable: StyleTable,
 	gfxFiles: string[],
+	windowOptions: RenderStandaloneWindowOptions = {},
 ): Promise<RenderedWindow> {
+	const enableNavigator = windowOptions.enableNavigator ?? true;
 	const commonOptions: RenderNodeCommonOptions = {
 		getSprite: (sprite: string) => getSpriteByGfxName(sprite, gfxFiles),
 		styleTable,
@@ -57,13 +72,17 @@ export async function renderStandaloneWindow(
 		child,
 		parentInfo,
 	) => {
+		const overridden = await windowOptions.onRenderChild?.(type, child, parentInfo);
+		if (overridden !== undefined) {
+			return overridden;
+		}
 		if (type === "containerwindow") {
 			const childContainerWindow = child as HOIPartial<ContainerWindowType>;
 			return await renderContainerWindow(childContainerWindow, parentInfo, {
 				...commonOptions,
 				classNames:
 					"childcontainerwindow_" + normalizeForStyle(childContainerWindow.name ?? ""),
-				enableNavigator: true,
+				enableNavigator,
 				onRenderChild,
 			});
 		}
@@ -81,13 +100,23 @@ export async function renderStandaloneWindow(
 		orientation: "upper_left",
 	};
 
-	const html = await renderContainerWindow(positionedWindow, parentInfo, {
+	let html = await renderContainerWindow(positionedWindow, parentInfo, {
 		...commonOptions,
 		ignorePosition: false,
-		enableNavigator: true,
+		enableNavigator,
 		onRenderChild,
 	});
 
+	if (windowOptions.file !== undefined) {
+		html = withNavigatorFile(html, windowOptions.file);
+	}
+
 	const [x, y, drawnWidth, drawnHeight] = calculateBBox(positionedWindow, parentInfo);
 	return { html, width: x + drawnWidth, height: y + drawnHeight };
+}
+
+// Names `file` on every element of rendered .gui markup that carries offsets into it, so a click on
+// one opens that file rather than the one the preview shows.
+function withNavigatorFile(html: string, file: string): string {
+	return html.replace(/(\s)start="/g, `$1file="${htmlEscape(file)}" start="`);
 }
