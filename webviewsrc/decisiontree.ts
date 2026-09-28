@@ -89,9 +89,10 @@ let showEffects: boolean = getState().decShowEffects ?? true;
 // is usually after the decisions rather than the tab they sit in.
 let showScriptedGui: boolean = getState().decShowScriptedGui ?? false;
 
-// Off by default, so a file opens the way it always has. The toolbar toggle is the position every
-// tab starts in; the exceptions are the tabs the reader opened or closed on their own with the
-// chevron on the card, stored by category key so they survive an in-place update of the file.
+// Off by default, so a file opens the way it always has. The last of the toolbar's collapse and
+// expand buttons pressed is the position every tab starts in; the exceptions are the tabs the reader
+// opened or closed on their own with the chevron on the card, stored by category key so they
+// survive an in-place update of the file.
 let collapseAll: boolean = getState().decCollapseCategories ?? false;
 let collapseExceptions = new Set<string>(readCollapseExceptions(getState().decCollapseExceptions));
 
@@ -943,6 +944,22 @@ const filterAvailability: Record<DecisionFilter, keyof DecisionToolbarFlags> = {
 // Every toggle rebuilds the canvas, so the rebuild is bound once instead of at each call site.
 const bindToggle = toggleBinder(buildContent);
 
+const collapseButtonIds = ["collapse-all-categories", "expand-all-categories"];
+
+// Folding or opening every tab at once is a fresh start: the tabs opened or closed one by one with
+// their chevron go too.
+function bindCollapseButton(id: string, value: boolean): void {
+	document.getElementById(id)?.addEventListener(
+		"click",
+		tryRun(() => {
+			collapseAll = value;
+			collapseExceptions.clear();
+			setState({ decCollapseCategories: value, decCollapseExceptions: [] });
+			buildContent();
+		}),
+	);
+}
+
 // Owns the filter widget and the guard that tells a selection this module pushed into it from
 // one the reader chose.
 const filterControl = new FilterControl<DecisionFilter>({
@@ -980,12 +997,14 @@ function applyToolbarFlags(): void {
 		false,
 	);
 	// Its neutral position is open: with nothing to fold away there is nothing to collapse.
-	collapseAll = gateToggle(
-		"collapse-categories",
-		flags.hasMissions || flags.hasDecisions,
-		state.decCollapseCategories,
-		false,
-	);
+	const canCollapse = flags.hasMissions || flags.hasDecisions;
+	for (const id of collapseButtonIds) {
+		const button = document.getElementById(id);
+		if (button) {
+			button.style.display = canCollapse ? "" : "none";
+		}
+	}
+	collapseAll = canCollapse ? (state.decCollapseCategories ?? false) : false;
 	collapseExceptions = new Set(readCollapseExceptions(state.decCollapseExceptions));
 	filters = filterControl.gate(
 		(filter) => flags[filterAvailability[filter]],
@@ -1089,12 +1108,8 @@ window.addEventListener(
 			showScriptedGui = value;
 			setState({ decShowScriptedGui: value });
 		});
-		// Flipping every tab at once is a fresh start: the tabs opened or closed one by one go too.
-		bindToggle("collapse-categories", collapseAll, (value) => {
-			collapseAll = value;
-			collapseExceptions.clear();
-			setState({ decCollapseCategories: value, decCollapseExceptions: [] });
-		});
+		bindCollapseButton("collapse-all-categories", true);
+		bindCollapseButton("expand-all-categories", false);
 		filterControl.wire(filters);
 
 		// Before the first buildContent, so the restored query is applied by the first render rather
