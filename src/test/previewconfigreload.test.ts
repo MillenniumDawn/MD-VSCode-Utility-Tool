@@ -158,7 +158,7 @@ describe("previewdef configuration reload", () => {
 			[
 				"decision",
 				decisionPreviewDef,
-				["previewLocalisation", "localisationIndex", "gfxIndex"],
+				["previewLocalisation", "localisationIndex", "gfxIndex", "decisionGfxFiles"],
 			],
 			[
 				"character",

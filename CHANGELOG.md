@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- [ Decision Previewer ] A mod names the `.gfx` files that define its decision icons in the new Decision GFX files setting, or with a `decision_gfx = { "interface/MD_decisions.gfx" }` list in its `.mod` file. Issue #449.
 - [ Focus Tree Previewer ] A mod names the `.gfx` files that define its focus overlays in the new Focus overlay GFX files setting, or with a `focus_overlay_gfx = { "interface/goals_overlays.gfx" }` list in its `.mod` file, so a submod picks up the overlays of the mod it extends. Issue #448.
 - [ Balance of Power Previewer ] Added a preview for `common/bop` files that draws the game's own balance of power window from `powerbalanceview.gui`, with each balance of power's title and side icons. A slider and step buttons in the toolbar stand in for `add_power_balance_value`: the needle, the bar fill and the active range follow the value the way they do in game, and clicking a range opens it in the file. A file with several balances of power gets a dropdown to pick one, and overlapping or missing ranges are flagged. Issue #434.
 - [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
@@ -20,6 +21,7 @@ Unreleased
 
   Bugfixes:
 
+- [ Decision Previewer ] A mod without `interface/MD_decisions.gfx` no longer logs an error for it, and editing a decision `.gfx` file refreshes an open decision preview. Millennium Dawn's decision icons that the GFX index cannot place need that file named in the new setting or the `.mod` file. Issue #449.
 - [ Focus Tree Previewer ] Focus overlays now show in base-game focus trees, which define them in `interface/goals.gfx`, and a mod without `interface/goals_overlays.gfx` no longer logs an error for it on every render. Millennium Dawn's overlays need that file named in the new setting or the `.mod` file. Issue #448.
 - [ Focus Tree Previewer ] Selecting inlay conditions now changes the inlay window's scripted images, such as the leader portrait in China's inlay; the first image was always shown before.
 - [ Focus Tree Previewer ] Inlay windows are drawn where the focus tree places them, instead of a screen height lower when their window is anchored to the bottom, and a ticked inlay now shows outside condition mode instead of staying hidden until its `visible` trigger is met. Issue #436.
