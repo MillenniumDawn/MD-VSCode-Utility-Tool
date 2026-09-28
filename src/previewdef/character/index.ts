@@ -39,9 +39,10 @@ class CharacterPreview extends LoaderPreview<CharactersLoader> {
 
 	// previewLocalisation changes the text in the payload; localisationIndex changes whether
 	// there is any text to show, and so whether the localisation toggle is offered at all;
-	// gfxIndex changes which of the GFX_-named portraits resolve.
+	// gfxIndex changes which of the GFX_-named portraits resolve; characterTraitStructuralKeys
+	// changes which trait keys are drawn as modifier lines.
 	protected override get reloadOnConfigurationChange(): readonly string[] {
-		return ["previewLocalisation", "localisationIndex", "gfxIndex"];
+		return ["previewLocalisation", "localisationIndex", "gfxIndex", "characterTraitStructuralKeys"];
 	}
 }
 

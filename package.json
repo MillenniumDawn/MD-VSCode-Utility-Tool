@@ -217,6 +217,15 @@
 						"default": "",
 						"description": "%hoi4modutilities.ideaPlaceholderIcon.desc%"
 					},
+					"mdHoi4Utilities.characterTraitStructuralKeys": {
+						"title": "%hoi4modutilities.characterTraitStructuralKeys.title%",
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"description": "%hoi4modutilities.characterTraitStructuralKeys.desc%"
+					},
 					"mdHoi4Utilities.technologyGfxRoots": {
 						"title": "%hoi4modutilities.technologyGfxRoots.title%",
 						"type": "array",
