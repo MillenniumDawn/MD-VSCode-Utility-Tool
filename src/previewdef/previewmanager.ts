@@ -5,6 +5,7 @@ import { gfxPreviewDef } from './gfx';
 import { Commands, WebviewType, ContextName } from '../constants';
 import { technologyPreviewDef } from './technology';
 import { matchPathEnd } from '../util/nodecommon';
+import { invalidateFileDiscoveryCache } from '../util/fileloader';
 import { debounceByInput } from '../util/common';
 import { debug, error } from '../util/debug';
 import { PreviewBase } from './previewbase';
@@ -77,6 +78,11 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         disposables.push(vscode.commands.registerCommand(Commands.Preview, this.showPreview, this));
         disposables.push(vscode.workspace.onDidCloseTextDocument(this.onCloseTextDocument, this));
         disposables.push(vscode.workspace.onDidChangeTextDocument(this.onChangeTextDocument, this));
+        disposables.push(vscode.workspace.onDidCreateFiles(this.onFilesChanged, this));
+        disposables.push(vscode.workspace.onDidDeleteFiles(this.onFilesChanged, this));
+        const files = vscode.workspace.createFileSystemWatcher('**/*.txt', false, true, false);
+        disposables.push(files, files.onDidCreate(uri => this.onFileAddedOrRemoved(uri)),
+            files.onDidDelete(uri => this.onFileAddedOrRemoved(uri)));
         disposables.push(vscode.window.onDidChangeActiveTextEditor(this.updateHoi4PreviewContextValue, this));
         disposables.push(vscode.window.registerWebviewPanelSerializer(WebviewType.Preview, this));
         disposables.push(new vscode.Disposable(() => this.refreshActiveEditorContext.cancel()));
@@ -120,6 +126,17 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         this.updatePreviewItemsInSubscription(document.uri);
     }
     
+    private onFilesChanged(e: vscode.FileCreateEvent | vscode.FileDeleteEvent): void {
+        for (const uri of e.files) {
+            this.onFileAddedOrRemoved(uri);
+        }
+    }
+
+    private onFileAddedOrRemoved(uri: vscode.Uri): void {
+        invalidateFileDiscoveryCache();
+        this.updatePreviewItemsInSubscription(uri);
+    }
+
     private onChangeTextDocument(e: vscode.TextDocumentChangeEvent): void {
         const document = e.document;
         const key = document.uri.toString();

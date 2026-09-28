@@ -1,11 +1,13 @@
 import { Node, Token } from "../hoiformat/hoiparser";
 import {
+	getDescriptorCharacterTraitStructuralKeys,
 	listFilesFromModOrHOI4,
 	parseAndResolveHoi4FileCached,
 } from "./fileloader";
 import { childNodes, readModifierPairsFromNode, readScalar } from "../hoiformat/rawblock";
 import { ModifierPair } from "../previewdef/sharedpayload";
 import { debug } from "./debug";
+import { getConfiguration } from "./vsccommon";
 
 /*
  * Turning `traits = { army_chief_planning_3 }` into the modifiers that trait actually grants.
@@ -14,9 +16,9 @@ import { debug } from "./debug";
  * traits it names, and those live in three directories that spell a trait three different ways:
  *
  *   common/country_leader/    politician and advisor traits, wrapped in `leader_traits = { }`.
- *                             Millennium Dawn writes the modifiers FLAT at the trait's top level;
- *                             the base game wraps them in `modifier = { }`. Both forms occur, often
- *                             in the same directory.
+ *                             Modifiers are written FLAT at the trait's top level, by the base
+ *                             game and Millennium Dawn alike; a `modifier = { }` block occurs too,
+ *                             often in the same directory.
  *   common/unit_leader/       commander traits, also wrapped in `leader_traits = { }`, with
  *                             `modifier`, `non_shared_modifier` and the two per-role blocks, plus
  *                             flat skill fields of their own.
@@ -25,12 +27,13 @@ import { debug } from "./debug";
  * Two rules cover all three. The wrapper is found rather than assumed: a file that has a
  * `leader_traits` node contributes its children, and a file that does not contributes its own. And
  * a flat scalar is a modifier unless it is named in `structuralKeys` below -- which is what makes
- * MD's `army_chief_logistics_1 = { sprite = 6  experience_gain_army = 0.05 ... }` produce a
- * modifier line instead of nothing.
+ * `army_chief_logistics_1 = { sprite = 6  experience_gain_army = 0.05 ... }` produce a modifier
+ * line instead of nothing.
  *
  * Where that guesses wrong the symptom is a nonsense line on a card and the fix is one entry in
- * `structuralKeys`. That is the same trade, and the same remedy, as builtinOverrides in
- * util/modifiers.ts.
+ * `structuralKeys`, or, for a key only one mod writes, in the characterTraitStructuralKeys setting
+ * or a `character_trait_structural_keys = { }` list in its .mod file. That is the same trade, and
+ * the same remedy, as builtinOverrides in util/modifiers.ts.
  */
 
 export type TraitSource = "country_leader" | "unit_leader" | "scientist";
@@ -92,9 +95,11 @@ const traitDirectories: { path: string; source: TraitSource }[] = [
 //   grep -rhP "^\t\t[A-Za-z_][A-Za-z0-9_]* *= *[^{ ]" common/unit_leader/*.txt \
 //     | sed -E 's/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*) *=.*/\1/' | sort | uniq -c | sort -rn
 //
-// (one tab shallower for common/scientist_traits, which has no `leader_traits` wrapper). Run over
-// Millennium Dawn that turns up nothing here but the advisor metadata below and the `*_skill*`
-// fields, which have their own home.
+// (the same depth for common/scientist_traits, whose traits sit one level up with no
+// `leader_traits` wrapper, so `^	` rather than `^		`), and common/country_leader likewise. Run
+// over the base game and Millennium Dawn both, it turns up nothing that is not a modifier but the
+// entries below and the `*_skill*` fields, which have their own home. A key only one mod writes
+// belongs in that mod's setting or .mod file rather than here.
 const structuralKeys = new Set([
 	"modifier",
 	"non_shared_modifier",
@@ -143,6 +148,11 @@ const structuralKeys = new Set([
 	"custom_effect_tooltip",
 	"custom_prerequisite_tooltip",
 	"custom_gain_xp_trigger_tooltip",
+	// A localisation key to print, written flat on base-game politician traits as well as inside
+	// their `modifier = { }` blocks.
+	"custom_modifier_tooltip",
+	// How close to the front the base game's cautious and reckless generals keep their units.
+	"leader_default_proximity_offset",
 ]);
 
 // The per-role modifier blocks, in the order a card draws them.
@@ -180,6 +190,12 @@ export interface CharacterTraitsResult {
 export async function loadCharacterTraits(): Promise<CharacterTraitsResult> {
 	const result: CharacterTraits = {};
 	const readFiles: string[] = [];
+	const extraStructuralKeys = new Set(
+		[
+			...(getConfiguration().characterTraitStructuralKeys ?? []),
+			...(await getDescriptorCharacterTraitStructuralKeys()),
+		].map((key) => key.toLowerCase()),
+	);
 
 	for (const directory of traitDirectories) {
 		let files: string[];
@@ -203,7 +219,7 @@ export async function loadCharacterTraits(): Promise<CharacterTraitsResult> {
 			readFiles.push(path);
 			try {
 				const node = await parseAndResolveHoi4FileCached(path);
-				Object.assign(result, readTraitFile(node, directory.source, path));
+				Object.assign(result, readTraitFile(node, directory.source, path, extraStructuralKeys));
 			} catch (e) {
 				// One unparseable file must not cost the preview every other trait.
 				debug(`Failed to read traits from ${path}`, e);
@@ -216,12 +232,13 @@ export async function loadCharacterTraits(): Promise<CharacterTraitsResult> {
 
 /**
  * The traits in one parsed file. Exported so the tests can pin the three wrapper shapes without a
- * workspace.
+ * workspace. `extraStructuralKeys`, lower-cased, are the mod's own additions to `structuralKeys`.
  */
 export function readTraitFile(
 	node: Node,
 	source: TraitSource,
 	file: string,
+	extraStructuralKeys: ReadonlySet<string> = new Set(),
 ): CharacterTraits {
 	const result: CharacterTraits = {};
 
@@ -235,7 +252,7 @@ export function readTraitFile(
 		wrappers.length > 0 ? wrappers.flatMap(childNodes) : childNodes(node);
 
 	for (const traitNode of traitNodes) {
-		const trait = readTrait(traitNode, source, file);
+		const trait = readTrait(traitNode, source, file, extraStructuralKeys);
 		if (trait) {
 			result[trait.id] = trait;
 		}
@@ -248,6 +265,7 @@ function readTrait(
 	node: Node,
 	source: TraitSource,
 	file: string,
+	extraStructuralKeys: ReadonlySet<string>,
 ): CharacterTrait | undefined {
 	const id = node.name;
 	if (!id || !Array.isArray(node.value)) {
@@ -352,7 +370,7 @@ function readTrait(
 			continue;
 		}
 
-		if (structuralKeys.has(name)) {
+		if (structuralKeys.has(name) || extraStructuralKeys.has(name)) {
 			continue;
 		}
 

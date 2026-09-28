@@ -4,7 +4,7 @@ import { countryScope } from "../../hoiformat/scope";
 import { convertNodeToJson, positionSchema, Position } from "../../hoiformat/schema";
 import { localize } from "../../util/i18n";
 import type { FocusInlayGfxOption, FocusInlayImageSlot, FocusTreeInlay, FocusTreeInlayButtonMeta, FocusTreeInlayRef, FocusWarning } from "./schema";
-import { listFilesFromModOrHOI4, parseHoi4FileCached } from "../../util/fileloader";
+import { getDescriptorInlayWindowGfxRoots, listFilesFromModOrHOI4, parseHoi4FileCached } from "../../util/fileloader";
 import { findContainerWindows, listGfxFilesFromConfiguredRoots, listGuiFiles, listGuiGfxFiles } from "../../util/guiwindowindex";
 import { describeParseFailure } from "../../util/indexHalf";
 import { Logger } from "../../util/logger";
@@ -24,6 +24,19 @@ const focusInlayWindowsFolder = "common/focus_inlay_windows";
 // The interface-tree scan these used to do here is shared with the decision preview and now lives in
 // util/guiwindowindex.ts. Re-exported because the focus tree loader and its tests reach them here.
 export { listGuiGfxFiles };
+
+/**
+ * The .gfx files an inlay window's sprites are looked up in, in order: the folders the
+ * inlayWindowGfxRoots setting names, then those the working mod's (and its parent mods')
+ * inlay_window_gfx_roots descriptor lists name, then the whole interface/ folder. Nothing is
+ * configured by default -- interface/scripted_gui is Millennium Dawn's folder, and the base game has none.
+ */
+export async function listInlayWindowGfxFiles(): Promise<string[]> {
+    const candidateFiles = await listGfxFilesFromConfiguredRoots(getConfiguration().inlayWindowGfxRoots ?? [], "mdHoi4Utilities.inlayWindowGfxRoots");
+    candidateFiles.push(...await listGfxFilesFromConfiguredRoots(await getDescriptorInlayWindowGfxRoots(), "inlay_window_gfx_roots in the .mod file"));
+    candidateFiles.push(...await listGuiGfxFiles());
+    return uniq(candidateFiles);
+}
 
 export async function loadFocusInlayWindows(): Promise<ParsedInlayFile> {
     const files = await listFilesFromModOrHOI4(focusInlayWindowsFolder);
@@ -269,11 +282,8 @@ export async function resolveInlayGfxFiles(inlays: FocusTreeInlay[]): Promise<In
     // 2. Parse .gfx files for the rest: user-configured roots first, then the whole interface tree
     //    (where inlay sprites such as inner_circle.gfx / _leader_portraits.gfx live). Stop once
     //    every needed sprite is resolved so we don't parse the entire tree unnecessarily.
-    const candidateFiles = await listGfxFilesFromConfiguredRoots(getConfiguration().inlayWindowGfxRoots ?? [], "mdHoi4Utilities.inlayWindowGfxRoots");
-    candidateFiles.push(...await listGuiGfxFiles());
-
     await scanCandidatesUntilResolved(
-        uniq(candidateFiles),
+        await listInlayWindowGfxFiles(),
         unresolved,
         getGfxSpriteMap,
         (candidateFile, spriteMap) => {

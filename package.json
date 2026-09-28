@@ -58,6 +58,7 @@
 				"mdHoi4Utilities.focusOverlayGfxFiles",
 				"mdHoi4Utilities.decisionGfxFiles",
 				"mdHoi4Utilities.ideaPlaceholderIcon",
+				"mdHoi4Utilities.modifierFormatFiles",
 				"mdHoi4Utilities.technologyGfxRoots",
 				"mdHoi4Utilities.auditor.reportFolder"
 			]
@@ -209,9 +210,7 @@
 					"mdHoi4Utilities.inlayWindowGfxRoots": {
 						"title": "%hoi4modutilities.inlayWindowGfxRoots.title%",
 						"type": "array",
-						"default": [
-							"interface/scripted_gui"
-						],
+						"default": [],
 						"items": {
 							"type": "string"
 						},
@@ -240,6 +239,24 @@
 						"type": "string",
 						"default": "",
 						"description": "%hoi4modutilities.ideaPlaceholderIcon.desc%"
+					},
+					"mdHoi4Utilities.characterTraitStructuralKeys": {
+						"title": "%hoi4modutilities.characterTraitStructuralKeys.title%",
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"description": "%hoi4modutilities.characterTraitStructuralKeys.desc%"
+					},
+					"mdHoi4Utilities.modifierFormatFiles": {
+						"title": "%hoi4modutilities.modifierFormatFiles.title%",
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"description": "%hoi4modutilities.modifierFormatFiles.desc%"
 					},
 					"mdHoi4Utilities.technologyGfxRoots": {
 						"title": "%hoi4modutilities.technologyGfxRoots.title%",
