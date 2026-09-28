@@ -7,16 +7,19 @@ import flatten from "lodash/flatten";
 import { getGfxContainerFiles } from "../../util/gfxindex";
 import { getFlags } from "../../util/featureflags";
 import { findFileByFocusKey } from "../../util/sharedFocusIndex";
-import { focusTitlebarStylesFile, nationalFocusViewGfxFile, goalsOverlaysGfxFile } from "./titlebar";
+import { focusTitlebarStylesFile, nationalFocusViewGfxFile, getFocusOverlayGfxFiles } from "./titlebar";
 import { GuiFileLoader } from "../gui/loader";
-import { buildFocusTreeLayout, FocusTreeLayout, FocusTreeLayoutMode, nationalFocusViewGuiFile } from "./layout";
+import { buildFocusTreeLayout, findFocusShortcutGui, FocusShortcutGui, FocusTreeLayout, FocusTreeLayoutMode, nationalFocusViewGuiFile } from "./layout";
 import { addInlayGfxWarnings, listGuiGfxFiles, loadFocusInlayWindows, resolveInlayGfxFiles, resolveInlayGuiWindows, resolveInlaysForTree } from "./inlay";
 
 export interface FocusTreeLoaderResult {
     focusTrees: FocusTree[];
     gfxFiles: string[];
+    overlayGfxFiles: string[];
     // Only set when the focusTreeLayout setting is `gui`; the preview uses the standard layout otherwise.
     layout?: FocusTreeLayout;
+    // Only set when a tree has shortcuts.
+    shortcutGui?: FocusShortcutGui;
 }
 
 export type ProgressCallback = (message: string, current?: number, total?: number) => void;
@@ -133,26 +136,39 @@ export class FocusTreeLoader extends ContentLoader<FocusTreeLoaderResult> {
 
         this.loadedLayoutMode = getFlags().focusTreeLayout;
         let layout: FocusTreeLayout | undefined = undefined;
+        let shortcutGui: FocusShortcutGui | undefined = undefined;
         let layoutDependencies: string[] = [];
-        if (getFlags().focusTreeLayout === 'gui') {
-            // Loaded through the dependency loaders, so an edit to the gui reloads this tree.
+        const hasShortcuts = focusTrees.some(ft => (ft.shortcuts?.length ?? 0) > 0);
+        if (getFlags().focusTreeLayout === 'gui' || hasShortcuts) {
+            // Loaded through the dependency loaders, so an edit to the gui reloads this tree. The
+            // shortcut buttons are drawn from it whatever the layout setting says.
             const layoutGui = await this.loaderDependencies.loadMultiple([nationalFocusViewGuiFile], session, GuiFileLoader);
-            layout = buildFocusTreeLayout(layoutGui.flatMap(r => r.result.guiFiles).map(g => g.data));
+            const guiFiles = layoutGui.flatMap(r => r.result.guiFiles).map(g => g.data);
+            if (getFlags().focusTreeLayout === 'gui') {
+                layout = buildFocusTreeLayout(guiFiles);
+            }
+            if (hasShortcuts) {
+                shortcutGui = findFocusShortcutGui(guiFiles);
+            }
             layoutDependencies = [nationalFocusViewGuiFile, ...mergeInLoadResult(layoutGui, 'dependencies')];
         }
+
+        const overlayGfxFiles = await getFocusOverlayGfxFiles();
 
         return {
             result: {
                 focusTrees,
                 gfxFiles: uniq([...gfxDependencies, focusesGFX]),
+                overlayGfxFiles,
                 layout,
+                shortcutGui,
             },
             dependencies: uniq([
                 this.file,
                 focusesGFX,
                 focusTitlebarStylesFile,
                 nationalFocusViewGfxFile,
-                goalsOverlaysGfxFile,
+                ...overlayGfxFiles,
                 ...gfxDependencies,
                 ...uniq(focusTrees.flatMap(ft => ft.inlayWindows).map(inlay => inlay.file)),
                 ...inlayGuiFiles,

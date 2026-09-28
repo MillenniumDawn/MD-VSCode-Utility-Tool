@@ -18,6 +18,7 @@ const previewFolders = [
 	"decisions",
 	"characters",
 	"organizations",
+	"bop",
 ];
 
 describe("package.json menu contributions", () => {

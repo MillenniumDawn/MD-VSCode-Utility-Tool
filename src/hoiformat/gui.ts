@@ -36,6 +36,9 @@ export interface GuiTypes {
     containerwindowtype: ContainerWindowType[];
     windowtype: ContainerWindowType[];
     positiontype: PositionType[];
+    // An icon outside any window: a template the game copies from code, like `range_bar` in
+    // powerbalanceview.gui.
+    icontype: IconType[];
 }
 
 /** A named point, like `focus_spacing` in nationalfocusview.gui, that the game reads by name. */
@@ -267,6 +270,10 @@ const guiTypesSchema: SchemaDef<GuiTypes> = {
     },
     positiontype: {
         _innerType: positionTypeSchema,
+        _type: "array",
+    },
+    icontype: {
+        _innerType: iconTypeSchema,
         _type: "array",
     },
 };

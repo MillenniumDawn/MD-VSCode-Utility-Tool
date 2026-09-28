@@ -8,10 +8,12 @@ declare module 'vscode' {
             readonly userDataPath: string;
             readonly useConditionInFocus: boolean;
             readonly focusTreeLayout: 'standard' | 'gui';
+            readonly focusTreePrerequisiteLines: 'available' | 'completed';
             readonly eventTreePreview: boolean;
             readonly ideaPreview: boolean;
             readonly decisionPreview: boolean;
             readonly characterPreview: boolean;
+            readonly bopPreview: boolean;
             readonly ideaSwapIndex: boolean;
             readonly sharedFocusIndex: boolean;
             readonly gfxIndex: boolean;
@@ -21,6 +23,11 @@ declare module 'vscode' {
             readonly previewLocalisation: 'Brazilian Portuguese' | 'English' | 'French' | 'German' | 'Japanese' | 'Polish' | 'Russian' | 'Simplified Chinese' | 'Spanish';
             readonly inlayWindowGfxRoots: string[];
             readonly technologyGfxRoots: string[];
+            readonly focusOverlayGfxFiles: string[];
+            readonly decisionGfxFiles: string[];
+            readonly ideaPlaceholderIcon: string;
+            readonly characterTraitStructuralKeys: string[];
+            readonly modifierFormatFiles: string[];
             readonly technologyCountryIcons: boolean;
             readonly worldMapRetainContextWhenHidden: boolean;
             readonly previewWheel: 'auto' | 'zoom' | 'scroll';

@@ -23,7 +23,7 @@ import {
 	ParseOptions,
 } from "../hoiformat/hoiparser";
 import { localize } from "./i18n";
-import { convertNodeToJson, SchemaDef, HOIPartial } from "../hoiformat/schema";
+import { convertNodeToJson, Enum, SchemaDef, HOIPartial } from "../hoiformat/schema";
 import { error } from "./debug";
 import { getSelectedModFileUri, updateSelectedModFileStatus } from "./modfile";
 import {
@@ -838,6 +838,11 @@ const fileListCache = new PromiseCache<string[]>({
 	maxSize: 300,
 });
 
+export function invalidateFileDiscoveryCache(): void {
+	fileListCache.clear();
+	getFilePathMemo.clear();
+}
+
 export function listFilesFromModOrHOI4(
 	relativePath: string,
 	options?: ListFilesOptions,
@@ -1232,14 +1237,20 @@ function getDlcPaths(installPath: string): Promise<vscode.Uri[] | null> {
 	});
 }
 
-const replacePathsCache = new PromiseCache({
-	factory: getReplacePathsFromModFile,
+const descriptorListsCache = new PromiseCache({
+	factory: getListsFromModFile,
 	expireWhenChange: (key) => getLastModifiedAsync(vscode.Uri.parse(key)),
 	life: 60 * 1000,
 });
 
 interface ModFile {
 	replace_path: string[];
+	focus_overlay_gfx: Enum;
+	decision_gfx: Enum;
+	inlay_window_gfx_roots: Enum;
+	character_trait_structural_keys: Enum;
+	modifier_format_files: Enum;
+	idea_placeholder_icon?: string;
 }
 
 const modListSchema: SchemaDef<ModFile> = {
@@ -1247,7 +1258,23 @@ const modListSchema: SchemaDef<ModFile> = {
 		_innerType: "string",
 		_type: "array",
 	},
+	focus_overlay_gfx: "enum",
+	decision_gfx: "enum",
+	inlay_window_gfx_roots: "enum",
+	character_trait_structural_keys: "enum",
+	modifier_format_files: "enum",
+	idea_placeholder_icon: "string",
 };
+
+interface DescriptorLists {
+	replacePaths: string[];
+	focusOverlayGfx: string[];
+	decisionGfx: string[];
+	inlayWindowGfxRoots: string[];
+	characterTraitStructuralKeys: string[];
+	modifierFormatFiles: string[];
+	ideaPlaceholderIcon: string[];
+}
 
 /**
  * Every `replace_path` in force: the working mod's, plus those of the parent mods it extends. The
@@ -1259,23 +1286,86 @@ const modListSchema: SchemaDef<ModFile> = {
  * Undefined only when the working mod has no readable descriptor, as before; a parent without a
  * `descriptor.mod` is an ordinary checkout and simply contributes nothing.
  */
-async function getReplacePaths(): Promise<string[] | undefined> {
-	const own = await getOwnReplacePaths();
+function getReplacePaths(): Promise<string[] | undefined> {
+	return getDescriptorList("replacePaths");
+}
+
+/**
+ * The `focus_overlay_gfx` files named by the working mod's descriptor and its parent mods'
+ * descriptors: the .gfx files, besides the game's own `interface/goals.gfx`, that define focus
+ * overlay sprites. The game ignores the key; it is how a mod tells the focus tree preview where its
+ * overlays live, so a submod inherits the overlays of the mod it extends.
+ */
+export async function getDescriptorFocusOverlayGfx(): Promise<string[]> {
+	return (await getDescriptorList("focusOverlayGfx")) ?? [];
+}
+
+/**
+ * The `decision_gfx` files named by the working mod's descriptor and its parent mods' descriptors:
+ * the .gfx files, besides the game's own `interface/decisions.gfx`, that define decision sprites.
+ * Like `focus_overlay_gfx`, the game ignores the key; it tells the decision preview where to look.
+ */
+export async function getDescriptorDecisionGfx(): Promise<string[]> {
+	return (await getDescriptorList("decisionGfx")) ?? [];
+}
+
+/**
+ * The `inlay_window_gfx_roots` folders named by the working mod's descriptor and its parent mods'
+ * descriptors: where the focus tree preview looks first for the sprites of focus inlay windows,
+ * before scanning the whole interface/ folder. Like `decision_gfx`, the game ignores the key.
+ */
+export async function getDescriptorInlayWindowGfxRoots(): Promise<string[]> {
+	return (await getDescriptorList("inlayWindowGfxRoots")) ?? [];
+}
+
+/**
+ * The `character_trait_structural_keys` named by the working mod's descriptor and its parent mods'
+ * descriptors: flat keys the mod writes on its traits that describe the trait rather than grant a
+ * modifier, so the character preview leaves them off the trait cards. Like `decision_gfx`, the game
+ * ignores the key.
+ */
+export async function getDescriptorCharacterTraitStructuralKeys(): Promise<string[]> {
+	return (await getDescriptorList("characterTraitStructuralKeys")) ?? [];
+}
+
+/**
+ * The `modifier_format_files` named by the working mod's descriptor and its parent mods'
+ * descriptors: files in the `common/modifier_definitions` syntax that say how the previews show a
+ * modifier the game defines internally, where the built-in formats do not match what the mod needs.
+ * Like `decision_gfx`, the game ignores the key.
+ */
+export async function getDescriptorModifierFormatFiles(): Promise<string[]> {
+	return (await getDescriptorList("modifierFormatFiles")) ?? [];
+}
+
+/**
+ * The `idea_placeholder_icon` images named by the working mod's descriptor, then its parent mods'
+ * descriptors: what the idea preview draws for a picture that does not resolve. Like
+ * `decision_gfx`, the game ignores the key; the preview uses the first of them that exists.
+ */
+export async function getDescriptorIdeaPlaceholderIcon(): Promise<string[]> {
+	return (await getDescriptorList("ideaPlaceholderIcon")) ?? [];
+}
+
+async function getDescriptorList(
+	list: keyof DescriptorLists,
+): Promise<string[] | undefined> {
+	const own = await getOwnDescriptorLists();
 	if (own === undefined) {
 		return undefined;
 	}
 
 	const parents = getParentModUris();
 	if (parents.length === 0) {
-		return own;
+		return own[list];
 	}
 
-	const merged = [...own];
+	const merged = [...own[list]];
 	for (const parent of parents) {
 		const descriptor = vscode.Uri.joinPath(parent, "descriptor.mod");
 		try {
 			if (await isFile(descriptor)) {
-				merged.push(...(await replacePathsCache.get(descriptor.toString())));
+				merged.push(...(await descriptorListsCache.get(descriptor.toString()))[list]);
 			}
 		} catch (e) {
 			error(e);
@@ -1284,12 +1374,12 @@ async function getReplacePaths(): Promise<string[] | undefined> {
 	return merged;
 }
 
-async function getOwnReplacePaths(): Promise<string[] | undefined> {
+async function getOwnDescriptorLists(): Promise<DescriptorLists | undefined> {
 	const modFile = await getSelectedModFileUri();
 
 	try {
 		if (modFile && (await isFile(modFile))) {
-			const result = await replacePathsCache.get(modFile.toString());
+			const result = await descriptorListsCache.get(modFile.toString());
 			updateSelectedModFileStatus(modFile);
 			return result;
 		}
@@ -1301,14 +1391,22 @@ async function getOwnReplacePaths(): Promise<string[] | undefined> {
 	return undefined;
 }
 
-async function getReplacePathsFromModFile(
+async function getListsFromModFile(
 	absolutePath: string,
-): Promise<string[]> {
+): Promise<DescriptorLists> {
 	const content = (await readFile(vscode.Uri.parse(absolutePath))).toString();
 	const node = parseHoi4File(
 		content,
 		localize("infile", "In file {0}:\n", absolutePath),
 	);
 	const modFile = convertNodeToJson<ModFile>(node, modListSchema);
-	return modFile.replace_path.filter((v): v is string => typeof v === "string");
+	return {
+		replacePaths: modFile.replace_path.filter((v): v is string => typeof v === "string"),
+		focusOverlayGfx: modFile.focus_overlay_gfx._values,
+		decisionGfx: modFile.decision_gfx._values,
+		inlayWindowGfxRoots: modFile.inlay_window_gfx_roots._values,
+		characterTraitStructuralKeys: modFile.character_trait_structural_keys._values,
+		modifierFormatFiles: modFile.modifier_format_files._values,
+		ideaPlaceholderIcon: typeof modFile.idea_placeholder_icon === "string" ? [modFile.idea_placeholder_icon] : [],
+	};
 }

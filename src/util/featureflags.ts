@@ -15,10 +15,13 @@ export interface FeatureFlags {
     readonly useConditionInFocus: Configuration['useConditionInFocus'];
     // Read by the focus tree loader; `?? 'standard'` covers a configuration without the key (the tests' stub).
     readonly focusTreeLayout: Configuration['focusTreeLayout'];
+    // Read by the focus tree content builder; the same `?? 'available'` fallback for the tests' stub.
+    readonly focusTreePrerequisiteLines: Configuration['focusTreePrerequisiteLines'];
     readonly eventTreePreview: Configuration['eventTreePreview'];
     readonly ideaPreview: Configuration['ideaPreview'];
     readonly decisionPreview: Configuration['decisionPreview'];
     readonly characterPreview: Configuration['characterPreview'];
+    readonly bopPreview: Configuration['bopPreview'];
     readonly ideaSwapIndex: Configuration['ideaSwapIndex'];
     readonly sharedFocusIndex: Configuration['sharedFocusIndex'];
     readonly gfxIndex: Configuration['gfxIndex'];
@@ -38,10 +41,12 @@ function readFlags(): FeatureFlags {
     return {
         useConditionInFocus: config.useConditionInFocus,
         focusTreeLayout: config.focusTreeLayout ?? 'standard',
+        focusTreePrerequisiteLines: config.focusTreePrerequisiteLines ?? 'available',
         eventTreePreview: config.eventTreePreview,
         ideaPreview: config.ideaPreview,
         decisionPreview: config.decisionPreview,
         characterPreview: config.characterPreview,
+        bopPreview: config.bopPreview,
         ideaSwapIndex: config.ideaSwapIndex,
         sharedFocusIndex: config.sharedFocusIndex,
         gfxIndex: config.gfxIndex,

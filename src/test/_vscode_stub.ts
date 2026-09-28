@@ -127,6 +127,9 @@ function buildStub() {
         onDidCreateFiles: disposable,
         onDidDeleteFiles: disposable,
         onDidRenameFiles: disposable,
+        createFileSystemWatcher: () => ({
+            onDidCreate: disposable, onDidChange: disposable, onDidDelete: disposable, dispose: () => undefined,
+        }),
         textDocuments: [],
         openTextDocument: async () => undefined,
         registerTextDocumentContentProvider: () => disposable(),
@@ -170,6 +173,7 @@ function buildStub() {
         showInformationMessage: async () => undefined,
         showWarningMessage: async () => undefined,
         showQuickPick: async () => undefined,
+        showTextDocument: async () => undefined,
         showOpenDialog: async () => undefined,
         showWorkspaceFolderPick: async () => undefined,
         setStatusBarMessage: () => disposable(),
@@ -221,7 +225,7 @@ function buildStub() {
         workspace,
         window,
         commands,
-        env: {},
+        env: { clipboard: { readText: async () => '', writeText: async () => undefined } },
         FileType,
         ConfigurationTarget,
         ProgressLocation,
@@ -302,6 +306,7 @@ const pristine = {
     onDidChangeConfiguration: stub.workspace.onDidChangeConfiguration,
     onDidChangeWorkspaceFolders: stub.workspace.onDidChangeWorkspaceFolders,
     onDidChangeTextDocument: stub.workspace.onDidChangeTextDocument,
+    createFileSystemWatcher: stub.workspace.createFileSystemWatcher,
     activeTextEditor: stub.window.activeTextEditor as unknown,
     stat: stub.workspace.fs.stat,
     readDirectory: stub.workspace.fs.readDirectory,
@@ -313,11 +318,14 @@ const pristine = {
     textDocuments: stub.workspace.textDocuments as unknown,
     showErrorMessage: stub.window.showErrorMessage,
     showInformationMessage: stub.window.showInformationMessage,
+    showWarningMessage: stub.window.showWarningMessage,
     showWorkspaceFolderPick: stub.window.showWorkspaceFolderPick,
     createWebviewPanel: stub.window.createWebviewPanel,
     registerWebviewPanelSerializer: stub.window.registerWebviewPanelSerializer,
     showOpenDialog: stub.window.showOpenDialog,
     showQuickPick: stub.window.showQuickPick,
+    showTextDocument: stub.window.showTextDocument,
+    clipboardWriteText: stub.env.clipboard.writeText,
     registerCommand: stub.commands.registerCommand,
     withProgress: stub.window.withProgress,
     now: Date.now,
@@ -338,6 +346,7 @@ export interface VscodeStubOverrides {
     onDidChangeWorkspaceFolders?: (handler: any) => { dispose(): void };
     /** Captures the document-change handler a suite's `register()` call installs, to drive it directly. */
     onDidChangeTextDocument?: (handler: any, thisArg?: any) => { dispose(): void };
+    createFileSystemWatcher?: (glob: string, ignoreCreate?: boolean, ignoreChange?: boolean, ignoreDelete?: boolean) => any;
     /** Replaces `window.activeTextEditor`; pass `undefined` explicitly for "no editor". */
     activeTextEditor?: unknown;
     stat?: (uri: any) => Promise<any>;
@@ -351,6 +360,7 @@ export interface VscodeStubOverrides {
     textDocuments?: readonly any[];
     showErrorMessage?: (...args: any[]) => Promise<any>;
     showInformationMessage?: (...args: any[]) => Promise<any>;
+    showWarningMessage?: (...args: any[]) => Promise<any>;
     showWorkspaceFolderPick?: () => Promise<any>;
     createWebviewPanel?: (viewType: string, title: string, showOptions: any, options: any) => any;
     /** Captures the serializer a suite's `register()` call installs, e.g. to drive it directly. */
@@ -359,6 +369,10 @@ export interface VscodeStubOverrides {
     showOpenDialog?: (options?: any) => Promise<any>;
     /** Answers a quick pick, for suites driving a command that asks one. */
     showQuickPick?: (items: any, options?: any) => Promise<any>;
+    /** Captures what a command opens in an editor. */
+    showTextDocument?: (document: any, options?: any) => Promise<any>;
+    /** Captures what reaches `env.clipboard.writeText`. */
+    clipboardWriteText?: (text: string) => Promise<void>;
     /**
      * Captures the handler a suite's `register()` call installs, so a command that is otherwise
      * only reachable through the palette can be invoked directly.
@@ -407,6 +421,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.onDidChangeTextDocument !== undefined) {
         workspace.onDidChangeTextDocument = overrides.onDidChangeTextDocument;
     }
+    if (overrides.createFileSystemWatcher !== undefined) {
+        workspace.createFileSystemWatcher = overrides.createFileSystemWatcher;
+    }
     if ('activeTextEditor' in overrides) {
         window.activeTextEditor = overrides.activeTextEditor;
     }
@@ -440,6 +457,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.showInformationMessage !== undefined) {
         window.showInformationMessage = overrides.showInformationMessage;
     }
+    if (overrides.showWarningMessage !== undefined) {
+        window.showWarningMessage = overrides.showWarningMessage;
+    }
     if (overrides.showWorkspaceFolderPick !== undefined) {
         window.showWorkspaceFolderPick = overrides.showWorkspaceFolderPick;
     }
@@ -454,6 +474,12 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     }
     if (overrides.showQuickPick !== undefined) {
         window.showQuickPick = overrides.showQuickPick;
+    }
+    if (overrides.showTextDocument !== undefined) {
+        window.showTextDocument = overrides.showTextDocument;
+    }
+    if (overrides.clipboardWriteText !== undefined) {
+        (stub.env.clipboard as any).writeText = overrides.clipboardWriteText;
     }
     if (overrides.registerCommand !== undefined) {
         (stub.commands as any).registerCommand = overrides.registerCommand;
@@ -478,6 +504,7 @@ export function restoreVscodeStubs(): void {
     (stub as any)._configurationChanged.dispose();
     workspace.onDidChangeWorkspaceFolders = pristine.onDidChangeWorkspaceFolders;
     workspace.onDidChangeTextDocument = pristine.onDidChangeTextDocument;
+    workspace.createFileSystemWatcher = pristine.createFileSystemWatcher;
     window.activeTextEditor = pristine.activeTextEditor;
     fs.stat = pristine.stat;
     fs.readDirectory = pristine.readDirectory;
@@ -489,11 +516,14 @@ export function restoreVscodeStubs(): void {
     workspace.textDocuments = pristine.textDocuments;
     window.showErrorMessage = pristine.showErrorMessage;
     window.showInformationMessage = pristine.showInformationMessage;
+    window.showWarningMessage = pristine.showWarningMessage;
     window.showWorkspaceFolderPick = pristine.showWorkspaceFolderPick;
     window.createWebviewPanel = pristine.createWebviewPanel;
     window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
     window.showOpenDialog = pristine.showOpenDialog;
     window.showQuickPick = pristine.showQuickPick;
+    window.showTextDocument = pristine.showTextDocument;
+    (stub.env.clipboard as any).writeText = pristine.clipboardWriteText;
     (stub.commands as any).registerCommand = pristine.registerCommand;
     window.withProgress = pristine.withProgress;
     Date.now = pristine.now;

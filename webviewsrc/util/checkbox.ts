@@ -1,5 +1,6 @@
 import { fromEvent } from 'rxjs';
 import { Subscriber } from "./event";
+import { iconClassOf } from "../../src/previewdef/toolbaricons";
 
 const checkboxes: Checkbox[] = [];
 
@@ -64,8 +65,7 @@ export class Checkbox extends Subscriber {
 
         const checkbox = document.createElement('div');
         checkbox.classList.add('checkbox');
-        checkbox.classList.add('codicon');
-        checkbox.classList.add('codicon-check');
+        checkbox.classList.add(...iconClassOf('checkbox').split(' '));
         checkboxContainer.appendChild(checkbox);
 
         // An empty class list still gets the span: the cell keeps its width, so an entry with no

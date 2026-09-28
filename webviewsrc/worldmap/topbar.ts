@@ -11,6 +11,7 @@ import { DivDropdown } from "../util/dropdown";
 import { BehaviorSubject, combineLatest, fromEvent } from "rxjs";
 import { Renderer } from "./renderer";
 import { sendEvent } from "../util/telemetry";
+import { applyIconState } from "../../src/previewdef/toolbaricons";
 
 export type ViewMode =
 	| "province"
@@ -196,6 +197,7 @@ export class TopBar extends Subscriber {
 				} else {
 					warningsContainer.style.display = "none";
 				}
+				applyIconState(showWarnings, "showWarnings", this.warningsVisible, feLocalize);
 			}),
 		);
 	}

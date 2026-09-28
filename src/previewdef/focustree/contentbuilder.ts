@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
-import { FocusTree, Focus } from './schema';
+import { FocusTree, Focus, FocusTreeShortcut } from './schema';
 import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconResolveStats } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
 import { randomString, mapLimit, jsonForScript } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { errorPage, escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
-import { GridBoxType, IconType, ButtonType } from '../../hoiformat/gui';
+import { GridBoxType, IconType, ButtonType, InstantTextBoxType } from '../../hoiformat/gui';
 import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug, error } from '../../util/debug';
@@ -24,8 +24,9 @@ import { registerExclusiveLinkStyles } from "../../util/hoi4gui/exclusivelink";
 import { loadExclusiveLinkImages, nationalFocusViewGfxFile } from "../../util/hoi4gui/exclusivelinkimages";
 import { registerFocusLinkStyles } from "../../util/hoi4gui/focuslink";
 import { loadFocusLinkImages } from "../../util/hoi4gui/focuslinkimages";
-import { FocusItemLayout, FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "./layout";
+import { FocusItemLayout, FocusShortcutGui, FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "./layout";
 import { describeParseFailure } from "../../util/indexHalf";
+import { actionGroupHtml, iconButtonHtml, iconClassOf } from "../toolbaricons";
 import { Logger } from "../../util/logger";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
@@ -41,6 +42,11 @@ export interface FocusTreeUpdatePayload {
     useConditionInFocus: boolean;
     xGridSize: number;
     layout: FocusTreeLayout;
+    // Each tree's shortcut buttons, by tree index and then shortcut index. Kept beside the trees
+    // rather than on them, so the parsed trees stay the ones the partial-update fingerprint was taken from.
+    renderedShortcuts: string[][];
+    // The content of the button that folds the shortcuts away.
+    renderedShortcutToggle: string;
 }
 
 export interface FocusTreePayload extends FocusTreeUpdatePayload {
@@ -89,10 +95,11 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         }, layout.spacing.y);
 
         // The same two passes for the prerequisite lines: the webview draws the same tiles either way.
+        const focusLinkState = getFlags().focusTreePrerequisiteLines;
         const focusLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
-            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
-            : await loadFocusLinkImages();
-        registerFocusLinkStyles(styleTable, focusLinkImages);
+            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles], focusLinkState)
+            : await loadFocusLinkImages(undefined, undefined, focusLinkState);
+        registerFocusLinkStyles(styleTable, focusLinkImages, focusLinkState);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
@@ -101,7 +108,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         }
         let renderedFocusCount = 0;
         await mapLimit(allFocuses, renderConcurrency, async (focus) => {
-            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loader.file, titlebarStyles, layout.item, resolveIcons)).replace(/\s\s+/g, ' ');
+            renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loadResult.result.overlayGfxFiles, loader.file, titlebarStyles, layout.item, resolveIcons)).replace(/\s\s+/g, ' ');
             renderedFocusCount++;
             if (progress) {
                 progress(focusMessage, renderedFocusCount, allFocuses.length);
@@ -144,6 +151,17 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             hasWarnings: focusTrees.some(ft => ft.warnings.length > 0),
         };
 
+        const shortcutGui = loadResult.result.shortcutGui;
+        const renderedShortcuts: string[][] = [];
+        for (const tree of focusTrees) {
+            const items: string[] = [];
+            for (const [index, shortcut] of (tree.shortcuts ?? []).entries()) {
+                items.push((await renderShortcut(shortcut, index, tree, shortcutGui?.item, styleTable, loadResult.result.gfxFiles, resolveIcons)).replace(/\s\s+/g, ' '));
+            }
+            renderedShortcuts.push(items);
+        }
+        const renderedShortcutToggle = await renderShortcutToggle(shortcutGui, styleTable, loadResult.result.gfxFiles);
+
         return {
             focusTrees,
             renderedFocus,
@@ -155,6 +173,8 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             styleTable,
             styleNonce,
             toolbarFlags,
+            renderedShortcuts,
+            renderedShortcutToggle,
         };
     } catch (e) {
         error(e);
@@ -190,6 +210,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
     jsCodes.push('window.focusTrees = ' + jsonForScript(payload.focusTrees));
     jsCodes.push('window.renderedFocus = ' + jsonForScript(payload.renderedFocus));
     jsCodes.push('window.renderedInlayWindows = ' + jsonForScript(payload.renderedInlayWindows));
+    jsCodes.push('window.renderedShortcuts = ' + jsonForScript(payload.renderedShortcuts));
     jsCodes.push('window.gridBox = ' + jsonForScript(payload.gridBox));
     jsCodes.push('window.styleNonce = ' + jsonForScript(payload.styleNonce));
     jsCodes.push('window.useConditionInFocus = ' + jsonForScript(payload.useConditionInFocus));
@@ -204,7 +225,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
     jsCodes.push('window.continuousFocusSize = ' + jsonForScript(payload.layout.continuous));
     jsCodes.push(i18nTableAsScript());
 
-    const baseContent = renderFocusTreeShell(payload.focusTrees, payload.styleTable, payload.toolbarFlags, payload.styleNonce);
+    const baseContent = renderFocusTreeShell(payload.focusTrees, payload.styleTable, payload.toolbarFlags, payload.styleNonce, payload.renderedShortcutToggle);
 
     return html(
         webview,
@@ -243,7 +264,7 @@ export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri
  * toolbar). Focuses and inlays themselves are rendered separately into the payload and
  * injected by the webview, so this is a cheap synchronous step.
  */
-function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, toolbarFlags: ToolbarFlags, styleNonce: string): string {
+function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, toolbarFlags: ToolbarFlags, styleNonce: string, shortcutToggle: string): string {
     // Same reason as registerWarningStyles below: the shell stylesheet is the only one the webview
     // can still attach classes against after a render. See tracestyles.ts.
     registerTraceStyles(styleTable);
@@ -254,6 +275,13 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
     styleTable.raw(`#focustreeplaceholder .focus-search-hit`, `
         outline: 1px solid #E33;
         background: rgba(255, 0, 0, 0.5);
+    `);
+
+    // Set by the webview while the continuous focus box can be dragged.
+    styleTable.raw(`#continuousFocuses.continuous-editable`, `
+        pointer-events: auto;
+        cursor: move;
+        outline: 1px dashed var(--vscode-focusBorder, #007fd4);
     `);
 
     // CSP-nonced <style> element the webview later fills with the resolved focus-icon background CSS.
@@ -284,6 +312,7 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
             ${continuousFocusContent}
         </div>` +
         renderWarningContainer(styleTable) +
+        renderShortcutOverlay(styleTable, shortcutToggle) +
         renderToolBar(focusTrees, styleTable, toolbarFlags)
     );
 }
@@ -377,44 +406,37 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             </div>
         </div>`;
 
+    // A closed dropdown is as wide as its longest option, and a condition can be a whole block of
+    // triggers, so the box is capped and the label kept on the same line as it.
+    const conditionContainerClass = styleTable.style('conditionContainer', () => `white-space:nowrap`);
+    const conditionSelectClass = styleTable.style('conditionSelect', () => `max-width:400px; overflow:hidden;`);
     const conditions = `
-        <div id="condition-container">
+        <div id="condition-container" class="${conditionContainerClass}">
             <label for="conditions" class="${styleTable.style('conditionsLabel', () => `margin-right:5px`)}">${localize('focustree.focusconditions', 'Focus conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
-                <div id="conditions" class="select multiple-select" tabindex="0" role="combobox" class="${styleTable.style('conditionsLabel', () => `max-width:400px`)}">
+                <div id="conditions" class="select multiple-select ${conditionSelectClass}" tabindex="0" role="combobox">
                     <span class="value"></span>
                 </div>
             </div>
         </div>`;
 
     const inlayConditions = `
-        <div id="inlay-condition-container">
+        <div id="inlay-condition-container" class="${conditionContainerClass}">
             <label for="inlay-conditions" class="${styleTable.style('inlayConditionsLabel', () => `margin-right:5px`)}">${localize('focustree.inlayconditions', 'Inlay conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
-                <div id="inlay-conditions" class="select multiple-select" tabindex="0" role="combobox">
+                <div id="inlay-conditions" class="select multiple-select ${conditionSelectClass}" tabindex="0" role="combobox">
                     <span class="value"></span>
                 </div>
             </div>
         </div>`;
     
-    // Both warning buttons share the same gate, so ToolbarFlags.hasWarnings alone still decides
-    // whether the toolbar needs a full reload when a tree gains or loses its first warning.
+    // The warning buttons stay in place, disabled while no tree has a warning.
     const hasNoWarnings = focusTrees.every(ft => ft.warnings.length === 0);
-    const warningsButton = hasNoWarnings ? '' : `
-        <button id="show-warnings" title="${localize('focustree.warnings', 'Toggle warnings')}">
-            <i class="codicon codicon-warning"></i>
-        </button>`;
-
-    const warningMarkersButton = hasNoWarnings ? '' : `
-        <button id="toggle-warning-markers" title="${localize('focustree.warningmarkers', 'Toggle warning markers on the tree')}">
-            <i class="codicon codicon-error"></i>
-        </button>`;
-
-    const hasAllowBranch = focusTrees.some(ft => ft.allowBranchOptions.length > 0);
-    const resetCheckboxesButton = !hasAllowBranch ? '' : `
-        <button id="reset-focus-checkboxes" title="${localize('focustree.resetcheckboxes', 'Reset focus checkboxes')}">
-            <i class="codicon codicon-clear-all"></i>
-        </button>`;
+    const warningsButton = iconButtonHtml('showWarnings', localize, { domId: 'show-warnings', on: false, disabled: hasNoWarnings });
+    const warningMarkersButton = iconButtonHtml('warningMarkers', localize, { domId: 'toggle-warning-markers', on: true, disabled: hasNoWarnings });
+    const resetCheckboxesButton = iconButtonHtml('resetCheckboxes', localize, { domId: 'reset-focus-checkboxes' });
+    const editContinuousButton = iconButtonHtml('editContinuous', localize, { domId: 'edit-continuous-focus' });
+    const copyWarningsButton = iconButtonHtml('copyWarnings', localize, { domId: 'copy-warnings', disabled: hasNoWarnings });
 
     // Shown by the webview only while a prerequisite trace is active, so there is always a visible
     // way out of the dimmed view. Hidden through an inline display rather than the `hidden`
@@ -422,9 +444,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
     const traceStatus = `
         <div id="trace-status-container" style="display:none" class="${styleTable.style('traceStatusContainer', () => `margin-left:10px; align-items:center;`)}">
             <span id="trace-status" class="${styleTable.style('traceStatus', () => `margin-right:5px; opacity:0.8;`)}"></span>
-            <button id="clear-trace" title="${localize('focustree.traceclear', 'Stop tracing prerequisite lines')}">
-                <i class="codicon codicon-close"></i>
-            </button>
+            ${iconButtonHtml('clearTrace', localize, { domId: 'clear-trace' })}
         </div>`;
 
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 52px;`)}">
@@ -436,10 +456,14 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${focusOverlays}
             ${inlayWindowsToggle}
             ${inlayWindows}
-            ${warningsButton}
-            ${warningMarkersButton}
-            ${resetCheckboxesButton}
-            ${traceStatus}
+            ${actionGroupHtml({
+                resetCheckboxes: resetCheckboxesButton,
+                showWarnings: warningsButton,
+                warningMarkers: warningMarkersButton,
+                editContinuous: editContinuousButton,
+                copyWarnings: copyWarningsButton,
+                clearTrace: traceStatus,
+            })}
         </div>
     </div>`;
 }
@@ -509,10 +533,13 @@ async function renderInlayWindow(inlay: FocusTree["inlayWindows"][number], style
         orientation: 'upper_left',
     };
 
+    // The tree's inlay_window position is where the window's top-left goes. Left in place, a root
+    // orientation such as lower_left would anchor the window to the corner of the parent above.
     const content = await renderContainerWindow(
         {
             ...inlay.guiWindow,
             position: { x: toNumberLike(0), y: toNumberLike(0) },
+            orientation: toStringAsSymbolIgnoreCase('upper_left'),
         },
         parentInfo,
         {
@@ -568,10 +595,15 @@ async function renderInlayOverrideChild<T extends keyof RenderChildTypeMap>(
 
     const scale = iconLikeChild.scale ?? 1;
     const gfxClassPlaceholder = `{{inlay_slot_class:${slot.id}}}`;
-    const spriteHtml = renderSprite({ x: 0, y: 0 }, sprite, sprite, 0, scale, {
-        styleTable,
-        classNames: gfxClassPlaceholder,
-    });
+    // The image comes only from the placeholder, which the webview swaps for the option whose
+    // condition is met. A background of this first option here would sit later in the stylesheet
+    // and win over whichever option was chosen; the sprite only sizes the slot.
+    const spriteHtml = `<div class="${gfxClassPlaceholder} ${styleTable.style('positionAbsolute', () => `position: absolute;`)} ${styleTable.oneTimeStyle('inlay-gui-slot-image', () => `
+        left: 0px;
+        top: 0px;
+        width: ${sprite.width * scale}px;
+        height: ${sprite.height * scale}px;
+    `)}"></div>`;
     const textHtml = type === 'button' ? await renderInstantTextBox({
         ...iconLikeChild,
         position: { x: toNumberLike(0), y: toNumberLike(0) },
@@ -599,10 +631,188 @@ async function renderInlayOverrideChild<T extends keyof RenderChildTypeMap>(
         </div>`;
 }
 
+// The shortcut buttons, in the game's lower left corner. Always rendered, so a tree gaining or
+// losing its shortcuts needs no shell reload; the webview fills the list per tree and hides the
+// whole overlay on a tree that has none. Fixed rather than inside the canvas, so zoom leaves it be.
+function renderShortcutOverlay(styleTable: StyleTable, toggle: string): string {
+    styleTable.raw('#shortcut-overlay', `
+        position: fixed;
+        left: 12px;
+        bottom: 12px;
+        z-index: var(--ev-layer-toolbar, 3);
+        flex-direction: column-reverse;
+        align-items: flex-start;
+        user-select: none;
+    `);
+    styleTable.raw('#shortcut-list', `
+        display: flex;
+        flex-direction: column-reverse;
+        max-height: calc(100vh - 110px);
+        overflow-y: auto;
+    `);
+    styleTable.raw('#shortcut-overlay.collapsed #shortcut-list', `display: none;`);
+    styleTable.raw('#shortcut-toggle', `
+        position: relative;
+        padding: 0;
+        margin-top: 2px;
+        border: none;
+        background: none;
+        cursor: pointer;
+    `);
+    styleTable.raw('#shortcut-overlay.collapsed #shortcut-toggle > *', `transform: scaleX(-1);`);
+    const title = escapeAttr(localize('focustree.shortcuts.toggle', 'Show or hide the shortcuts'));
+    return `
+    <div id="shortcut-overlay" style="display:none">
+        <div id="shortcut-list"></div>
+        <button id="shortcut-toggle" title="${title}" aria-label="${title}" aria-expanded="true">${toggle}</button>
+    </div>`;
+}
+
+// The vanilla focus_tree_shortcut_item, for a workspace where no nationalfocusview.gui declares one.
+const fallbackShortcutItem = {
+    size: { width: 190, height: 72 },
+    icon: { x: 37, y: 37, scale: 0.6 },
+    name: { x: 63, y: 6, width: 112, height: 60, fontSize: 14 },
+};
+
+// One shortcut as the game draws it: the item window from nationalfocusview.gui, with the
+// localised shortcut name in its `name` textbox and the target focus's icon in its `focus_button`.
+async function renderShortcut(
+    shortcut: FocusTreeShortcut,
+    index: number,
+    tree: FocusTree,
+    item: FocusShortcutGui['item'],
+    styleTable: StyleTable,
+    gfxFiles: string[],
+    resolveIcons: boolean,
+): Promise<string> {
+    const label = await localiseShortcutName(shortcut.name);
+    const iconName = tree.focuses[shortcut.target]?.icon.find(i => i.icon)?.icon;
+    const image = !resolveIcons ? undefined : iconName ? await getFocusIcon(iconName, gfxFiles) : await getImageByPath(defaultFocusIcon);
+
+    // The picture sits in a class named after the icon, like the focus icons: the structure pass
+    // writes a placeholder under that name and the icon pass pushes the real one over it, so its size
+    // lives there too. Centring by transform keeps the position independent of that size.
+    const icon = (x: number, y: number, scale: number, centered: boolean) => {
+        const pictureClass = styleTable.style(`shortcut-icon-${normalizeForStyle(iconName ?? '-empty')}-${Math.round(scale * 100)}`, () => image ? `
+            width: ${image.width * scale}px;
+            height: ${image.height * scale}px;
+            background-image: url(${image.uri});
+            background-size: ${image.width * scale}px ${image.height * scale}px;
+        ` : `
+            width: ${94 * scale}px;
+            height: ${86 * scale}px;
+            background: rgba(127, 127, 127, 0.35);
+        `);
+        return `<div class="${pictureClass} ${styleTable.oneTimeStyle('shortcut-icon', () => `
+            position: absolute;
+            left: ${x}px;
+            top: ${y}px;
+            ${centered ? 'transform: translate(-50%, -50%);' : ''}
+            pointer-events: none;
+        `)}"></div>`;
+    };
+    // Its own box rather than the shared textbox renderer: that one centres a single line by its
+    // line height, and a shortcut name wraps onto two.
+    const text = (x: number, y: number, width: number, height: number, fontSize: number) =>
+        `<div class="${styleTable.oneTimeStyle('shortcut-name', () => `
+            position: absolute;
+            left: ${x}px;
+            top: ${y}px;
+            width: ${width}px;
+            height: ${height}px;
+            font-size: ${fontSize}px;
+        `)} ${styleTable.style('shortcut-name-common', () => `
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            overflow: hidden;
+            color: white;
+            text-shadow: 0 0 3px black, 0px 0px 5px black;
+            pointer-events: none;
+        `)}">${htmlEscape(label)}</div>`;
+
+    let width: number;
+    let height: number;
+    let content: string;
+    if (item) {
+        const parentInfo: ParentInfo = { size: { width: 1920, height: 1080 }, orientation: 'upper_left' };
+        [, , width, height] = calculateBBox(item, parentInfo);
+        content = await renderContainerWindow(item, parentInfo, {
+            styleTable,
+            ignorePosition: true,
+            // Resolved on both passes, as the inlay windows are: the icon pass only pushes CSS, so
+            // markup the structure pass left out would never appear.
+            getSprite: (sprite) => getSpriteByGfxName(sprite, gfxFiles),
+            onRenderChild: async (type, child, childParent) => {
+                if (type === 'button' && child.name === 'focus_button') {
+                    const button = child as unknown as HOIPartial<ButtonType>;
+                    const [x, y] = calculateBBox({ ...button, size: undefined }, childParent);
+                    return icon(x, y, button.scale ?? 1, !!button.centerposition);
+                }
+                if (type === 'instanttextbox' && child.name === 'name') {
+                    const textbox = child as unknown as HOIPartial<InstantTextBoxType>;
+                    const [x, y, w, h] = calculateBBox({ ...textbox, size: { width: textbox.maxwidth, height: textbox.maxheight } }, childParent);
+                    const fontMatch = /\d+/.exec((textbox.font ?? '').replace('hoi4', ''));
+                    return text(x, y, w, h, Math.ceil(parseInt(fontMatch?.[0] ?? '16') * 0.7));
+                }
+                return undefined;
+            },
+        });
+    } else {
+        const fallback = fallbackShortcutItem;
+        ({ width, height } = fallback.size);
+        content = `<div class="${styleTable.style('shortcut-item-plain', () => `
+                position: absolute;
+                inset: 0;
+                box-sizing: border-box;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+            `)}"></div>` +
+            icon(fallback.icon.x, fallback.icon.y, fallback.icon.scale, true) +
+            text(fallback.name.x, fallback.name.y, fallback.name.width, fallback.name.height, fallback.name.fontSize);
+    }
+
+    return `<div data-shortcut-index="${index}" title="${escapeAttr(shortcut.target)}" class="${styleTable.oneTimeStyle('shortcut-item', () => `
+        position: relative;
+        flex: none;
+        width: ${width}px;
+        height: ${height}px;
+        cursor: pointer;
+    `)}">${content}</div>`;
+}
+
+// The button that folds the shortcuts away: toggle_shortcuts from nationalfocusview.gui, or a
+// chevron when there is none. Its arrow points left, and the webview mirrors it while folded.
+async function renderShortcutToggle(gui: FocusShortcutGui | undefined, styleTable: StyleTable, gfxFiles: string[]): Promise<string> {
+    const spriteName = gui?.toggle?.quadtexturesprite ?? gui?.toggle?.spritetype;
+    const sprite = spriteName ? await getSpriteByGfxName(spriteName, gfxFiles) : undefined;
+    if (!sprite) {
+        return `<i class="${iconClassOf('shortcutToggle')}"></i>`;
+    }
+    return `<div class="${styleTable.oneTimeStyle('shortcut-toggle-sprite', () => `
+        position: relative;
+        width: ${sprite.width}px;
+        height: ${sprite.height}px;
+    `)}">${renderSprite({ x: 0, y: 0 }, sprite, sprite, 0, 1, { styleTable })}</div>`;
+}
+
+// The name as the game shows it on the shortcut button, or the raw key when there is no
+// localisation index or no entry for it.
+async function localiseShortcutName(name: string): Promise<string> {
+    if (!getFlags().localisationIndex) {
+        return name;
+    }
+    return (await getLocalisedTextQuick(name)) || name;
+}
+
 async function renderFocus(
     focus: Focus,
     styleTable: StyleTable,
     gfxFiles: string[],
+    overlayGfxFiles: string[],
     file: string,
     titlebarStyles: Record<string, string>,
     item: FocusItemLayout,
@@ -634,7 +844,7 @@ async function renderFocus(
             display: none;
         `
     );
-    const overlayObject = await getFocusOverlayImage(focus.overlay);
+    const overlayObject = await getFocusOverlayImage(focus.overlay, overlayGfxFiles);
     const overlayClass = styleTable.style('focus-overlay-' + normalizeForStyle(focus.overlay ?? '-empty'), () =>
         overlayObject ? `
             background-image: url(${overlayObject.uri});
