@@ -153,17 +153,17 @@ describe("previewdef configuration reload", () => {
 			[
 				"idea",
 				ideaPreviewDef,
-				["previewLocalisation", "localisationIndex", "gfxIndex", "ideaSwapIndex", "ideaPlaceholderIcon"],
+				["previewLocalisation", "localisationIndex", "gfxIndex", "ideaSwapIndex", "ideaPlaceholderIcon", "modifierFormatFiles"],
 			],
 			[
 				"decision",
 				decisionPreviewDef,
-				["previewLocalisation", "localisationIndex", "gfxIndex", "decisionGfxFiles"],
+				["previewLocalisation", "localisationIndex", "gfxIndex", "decisionGfxFiles", "modifierFormatFiles"],
 			],
 			[
 				"character",
 				characterPreviewDef,
-				["previewLocalisation", "localisationIndex", "gfxIndex", "characterTraitStructuralKeys"],
+				["previewLocalisation", "localisationIndex", "gfxIndex", "characterTraitStructuralKeys", "modifierFormatFiles"],
 			],
 			[
 				"technology",

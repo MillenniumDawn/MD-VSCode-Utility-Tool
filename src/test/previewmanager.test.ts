@@ -148,11 +148,13 @@ describe("previewdef/previewmanager PreviewManager", function () {
 			const first = { name: "first" };
 			const second = { name: "second" };
 
-			manager.addPreviewToSubscription(first, ["common/x.txt", "gfx/"]);
+			manager.addPreviewToSubscription(first, ["common/x.txt", "gfx/", "common/md_formats/*"]);
 			manager.addPreviewToSubscription(second, ["Common/X.txt"]);
 
 			// The two spellings of common/x.txt are one entry, as the match itself ignores case.
-			assert.strictEqual(subscriptions.size, 2);
+			assert.strictEqual(subscriptions.size, 3);
+			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/md_formats/new.txt"), [first]);
+			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/other/new.txt"), []);
 			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/x.txt"), [first, second]);
 			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/gfx/"), [first]);
 			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/y.txt"), []);
@@ -163,6 +165,43 @@ describe("previewdef/previewmanager PreviewManager", function () {
 
 			manager.removePreviewFromSubscription(second);
 			assert.strictEqual(subscriptions.size, 0);
+		});
+
+		it("watches external .txt additions and deletions for dependency refreshes", function () {
+			let created: ((uri: vscode.Uri) => void) | undefined;
+			let deleted: ((uri: vscode.Uri) => void) | undefined;
+			let disposed = false;
+			stubVscode({
+				createFileSystemWatcher: (glob, ignoreCreate, ignoreChange, ignoreDelete) => {
+					assert.strictEqual(glob, '**/*.txt');
+					assert.deepStrictEqual([ignoreCreate, ignoreChange, ignoreDelete], [false, true, false]);
+					return {
+						onDidCreate: (handler: (uri: vscode.Uri) => void) => { created = handler; return { dispose: () => undefined }; },
+						onDidDelete: (handler: (uri: vscode.Uri) => void) => { deleted = handler; return { dispose: () => undefined }; },
+						dispose: () => { disposed = true; },
+					};
+				},
+			});
+			const manager = new PreviewManager() as any;
+			const updated: string[] = [];
+			manager.updatePreviewItemsInSubscription = (uri: vscode.Uri) => updated.push(uri.toString());
+			const subscription = manager.register();
+			const file = vscode.Uri.parse('file:///mod/common/md_formats/new.txt');
+			created!(file);
+			deleted!(file);
+			assert.deepStrictEqual(updated, [file.toString(), file.toString()]);
+			subscription.dispose();
+			assert.strictEqual(disposed, true);
+		});
+
+		it("routes created and deleted dependency files through the refresh path", function () {
+			const manager = new PreviewManager() as any;
+			const updated: string[] = [];
+			manager.updatePreviewItemsInSubscription = (uri: vscode.Uri) => updated.push(uri.toString());
+			const file = vscode.Uri.parse("file:///mod/common/md_formats/new.txt");
+			manager.onFilesChanged({ files: [file] });
+			manager.onFilesChanged({ files: [file] });
+			assert.deepStrictEqual(updated, [file.toString(), file.toString()]);
 		});
 	});
 

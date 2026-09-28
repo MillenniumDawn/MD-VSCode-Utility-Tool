@@ -14,7 +14,11 @@ import { getGfxContainerFiles } from "../../util/gfxindex";
 import { getConfiguration, getLanguageIdInYml } from "../../util/vsccommon";
 import { getDescriptorIdeaPlaceholderIcon, getFilePathFromModOrHOI4 } from "../../util/fileloader";
 import { Logger } from "../../util/logger";
-import { ModifierDefinitions, loadModifierDefinitions } from "../../util/modifiers";
+import {
+	ModifierDefinitions,
+	listModifierDefinitionFiles,
+	loadModifierDefinitions,
+} from "../../util/modifiers";
 import { IdeaSwap, getIdeaSwaps } from "../../util/ideaSwapIndex";
 import { getFlags } from "../../util/featureflags";
 
@@ -130,8 +134,9 @@ export class IdeasLoader extends ContentLoader<IdeasLoaderResult> {
 
 		const ideaIds = merged.categories.flatMap((c) => c.ideas.map((i) => i.id));
 
-		const [modifierDefinitions, swaps, placeholderIcon] = await Promise.all([
+		const [modifierDefinitions, definitionFiles, swaps, placeholderIcon] = await Promise.all([
 			loadModifierDefinitions(),
+			listModifierDefinitionFiles(),
 			getIdeaSwaps(ideaIds),
 			getIdeaPlaceholderIcon(),
 		]);
@@ -145,10 +150,13 @@ export class IdeasLoader extends ContentLoader<IdeasLoaderResult> {
 				swapsUnavailable: !getFlags().ideaSwapIndex,
 				placeholderIcon,
 			},
+			// The modifier definition and format files decide how every modifier line reads, so an edit
+			// to one brings the preview back; renderIdeaFile forces the session for it.
 			dependencies: uniq([
 				this.file,
 				...ideaDependencies,
 				...mergeInLoadResult(ideaDepFiles, "dependencies"),
+				...definitionFiles,
 			]),
 		};
 	}

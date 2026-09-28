@@ -27,6 +27,7 @@ const settings = [
 	"mdHoi4Utilities.decisionGfxFiles",
 	"mdHoi4Utilities.ideaPlaceholderIcon",
 	"mdHoi4Utilities.characterTraitStructuralKeys",
+	"mdHoi4Utilities.modifierFormatFiles",
 	"mdHoi4Utilities.technologyGfxRoots",
 	"mdHoi4Utilities.technologyCountryIcons",
 	"mdHoi4Utilities.enableSupplyArea",
