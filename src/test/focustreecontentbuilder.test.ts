@@ -34,7 +34,9 @@ import {
 	_resetImageWorkerPathForTest,
 } from "../util/image/imagedecoder";
 import { FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "../previewdef/focustree/layout";
-import { focusLinkClass, focusLinkShapes, registerFocusLinkStyles } from "../util/hoi4gui/focuslink";
+import { focusLinkClass, focusLinkFrames, focusLinkShapes, registerFocusLinkStyles } from "../util/hoi4gui/focuslink";
+import { getFlags, refreshFeatureFlags } from "../util/featureflags";
+import { restoreVscodeStubs, stubVscode } from "./_vscode_stub";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
@@ -304,6 +306,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		const cleanHtml = buildFocusTreeHtml(clean!, webview, uri);
 		assert.ok(!cleanHtml.includes('id="show-warnings"'));
 		assert.ok(!cleanHtml.includes('id="toggle-warning-markers"'));
+		assert.ok(!cleanHtml.includes('id="copy-warnings"'));
 
 		const warned = minimalFocusTree();
 		warned.warnings = [{ text: "Focuses a and b overlap.", source: "focus_a" }];
@@ -315,6 +318,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		const warnedHtml = buildFocusTreeHtml(warnedPayload!, webview, uri);
 		assert.ok(warnedHtml.includes('id="show-warnings"'));
 		assert.ok(warnedHtml.includes('id="toggle-warning-markers"'));
+		assert.ok(warnedHtml.includes('id="copy-warnings"'));
 	});
 
 	it("registerWarningStyles emits exactly the exported class names", () => {
@@ -446,6 +450,36 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(css.includes("border-left: none"));
 		assert.ok(css.includes("border-top: none"));
 		assert.ok(!css.includes("#88aaff"));
+	});
+
+	// The strips hold the completed (green) solid and dashed frames first, the available (blue) ones after. Issue #443.
+	it("focusLinkFrames draws the available line from the blue frames and the completed one from the green", () => {
+		assert.deepStrictEqual(focusLinkFrames("available"), { solid: 2, dashed: 3 });
+		assert.deepStrictEqual(focusLinkFrames("completed"), { solid: 0, dashed: 1 });
+	});
+
+	it("registerFocusLinkStyles draws the plain line of a completed focus in green", () => {
+		const styleTable = new StyleTable();
+		registerFocusLinkStyles(styleTable, undefined, "completed");
+		const css = styleTable.toRawCss();
+		assert.ok(css.includes("border-left: 1px solid #68b86f"));
+		assert.ok(css.includes("border-top: 1px dashed #68b86f"));
+		assert.ok(!css.includes("#88aaff"));
+	});
+
+	it("buildFocusTreePayload draws the prerequisite lines in the colour the setting picks", async () => {
+		const before = getFlags();
+		stubVscode({ getConfiguration: () => ({ ...before, focusTreePrerequisiteLines: "completed" }) });
+		try {
+			refreshFeatureFlags();
+			const payload = await buildFocusTreePayload(loaderWithTrees([minimalFocusTree()]), undefined, { resolveIcons: false });
+			assert.ok(payload!.styleTable.toRawCss().includes("border-left: 1px solid #68b86f"));
+		} finally {
+			// Read the flags back from the ones this test found, so the tests after it see them unchanged.
+			stubVscode({ getConfiguration: () => before });
+			refreshFeatureFlags();
+			restoreVscodeStubs();
+		}
 	});
 
 	it("buildFocusTreeHtml hands the webview the prerequisite line tiles", async () => {
