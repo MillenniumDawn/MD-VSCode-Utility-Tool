@@ -9,7 +9,7 @@ Unreleased
 - [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the continuous focus box now takes its size from `continuous_focus_window` in `nationalfocusview.gui` instead of always being 770 by 380. Issue #398.
 - [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the mutually exclusive link now also moves sideways with `exclusive_offset`, `exclusive_offset_left` and the x of `national_focus_exclusive_item` in nationalfocusview.gui. Issue #397.
 - [ Build ] The build now rejects a method that no longer overrides anything and a parameter that is never read, so renaming a shared loader or preview method can no longer leave a stale copy behind unnoticed. Issue #376.
-- [ Focus Tree Previewer ] The focus tree preview's toolbar now lists the tree's `shortcut` blocks in a Shortcuts dropdown, by their localised name; picking one scrolls to its `target` focus, like the shortcut buttons in game. Issue #439.
+- [ Focus Tree Previewer ] The focus tree preview now shows the tree's `shortcut` blocks as the game's shortcut buttons in its lower left corner, with their localised name and the icon of their `target` focus, drawn from `nationalfocusview.gui`; clicking one scrolls to that focus, and the arrow beside them folds them away. Issue #439.
 
   Bugfixes:
 
