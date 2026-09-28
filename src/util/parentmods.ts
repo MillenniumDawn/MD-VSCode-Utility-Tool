@@ -82,7 +82,7 @@ export function getExplicitParentModUris(): vscode.Uri[] {
 // count as the one folder on Windows. Linux keeps case because `/mods/Parent` and `/mods/parent`
 // are distinct folders there.
 function uriKey(uri: vscode.Uri): string {
-	const normalized = uriToFilePathWhenPossible(uri).replace(/\\+/g, "/");
+	const normalized = uriToFilePathWhenPossible(uri).replace(/\\+/g, "/").replace(/\/+$/, "");
 	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 

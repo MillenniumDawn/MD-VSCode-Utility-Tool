@@ -152,6 +152,13 @@ describe('util/parentmods', () => {
             assert.deepStrictEqual(paths, process.platform === 'win32' ? [] : ['d:\\Mods\\MD']);
         });
 
+        it('drops the open workspace folder even when the setting ends in a slash', () => {
+            openWorkspace('D:/mods/md');
+            config = { parentModPaths: ['D:/mods/md/'] };
+
+            assert.deepStrictEqual(getParentModUris().map(u => u.fsPath), []);
+        });
+
         it('drops a resolved dependency that is the open workspace folder', () => {
             openWorkspace('D:/mods/md');
             config = {};
