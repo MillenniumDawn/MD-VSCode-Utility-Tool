@@ -16,6 +16,9 @@ import { ContainerWindowType, GuiFile, IconType, guiFileSchema } from "../../hoi
 import { HOIPartial, convertNodeToJson } from "../../hoiformat/schema";
 import { Logger } from "../../util/logger";
 import { describeParseFailure } from "../../util/indexHalf";
+import { HOIDecision } from "../decision/schema";
+import { decisionSpriteName, getDecisionGfxFiles } from "../decision/loader";
+import { decisionItemWindowName, decisionsFolder, loadCategoryDecisions } from "./decisions";
 
 export interface BopWindowTemplates {
 	// The tick the game puts at every range boundary.
@@ -30,6 +33,10 @@ export interface BopLoaderResult {
 	// The game's balance of power window, from the mod or the game install.
 	window?: ResolvedGuiWindow;
 	templates: BopWindowTemplates;
+	// The decisions of every `decision_category` the file names, keyed by category.
+	decisions: Record<string, HOIDecision[]>;
+	// The row the game draws each of those decisions with.
+	decisionItem?: ResolvedGuiWindow;
 }
 
 export const bopWindowName = "powerbalanceview";
@@ -73,12 +80,25 @@ export class BopLoader extends ContentLoader<BopLoaderResult> {
 			this.file,
 		);
 
-		const window = (await findContainerWindows([bopWindowName]))[bopWindowName];
+		const categories = uniq(
+			bops.bops.map((b) => b.decisionCategory).filter((c): c is string => c !== undefined),
+		);
+		const [windows, decisions, decisionGfxFiles] = await Promise.all([
+			findContainerWindows(categories.length > 0 ? [bopWindowName, decisionItemWindowName] : [bopWindowName]),
+			loadCategoryDecisions(categories),
+			categories.length > 0 ? getDecisionGfxFiles() : Promise.resolve([]),
+		]);
+		const window = windows[bopWindowName];
+		const decisionItem = categories.length > 0 ? windows[decisionItemWindowName] : undefined;
 		const templates = window ? await loadTemplates(window.file) : {};
 
 		const sprites = [
 			...bops.bops.flatMap((b) => b.sides).map((s) => s.icon),
 			...(window ? spritesOf(window.window) : []),
+			...(decisionItem ? spritesOf(decisionItem.window) : []),
+			...Object.values(decisions).flatMap((ds) =>
+				ds.map((d) => (d.icons[0] ? decisionSpriteName(d.icons[0].key) : undefined)),
+			),
 			templates.rangeBar?.spritetype,
 			templates.rangeIndicator?.spritetype,
 			...Object.values(bopFillSprites),
@@ -88,15 +108,23 @@ export class BopLoader extends ContentLoader<BopLoaderResult> {
 		const gfxFiles = uniq([
 			...dependencies.filter((d) => d.type === "gfx").map((d) => d.path),
 			...gfxContainers,
+			...decisionGfxFiles,
 			bopGfxFile,
 		]);
 
 		return {
-			result: { bops, gfxFiles, window, templates },
-			// The window's .gui and the .gfx files its sprites and the side icons come from.
-			// Reporting them subscribes the preview to them; renderBopFile then forces the session on
-			// a dependency change, since this file's own hash has not moved.
-			dependencies: uniq([this.file, ...(window ? [window.file] : []), ...gfxFiles]),
+			result: { bops, gfxFiles, window, templates, decisions, decisionItem },
+			// The window's .gui and the .gfx files its sprites and the side icons come from, and the
+			// decisions folder the listed decisions are read from. Reporting them subscribes the
+			// preview to them; renderBopFile then forces the session on a dependency change, since
+			// this file's own hash has not moved.
+			dependencies: uniq([
+				this.file,
+				...(window ? [window.file] : []),
+				...(decisionItem ? [decisionItem.file] : []),
+				...(categories.length > 0 ? [`${decisionsFolder}/*`] : []),
+				...gfxFiles,
+			]),
 		};
 	}
 

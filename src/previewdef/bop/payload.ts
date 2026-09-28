@@ -41,6 +41,15 @@ export interface BopWindowText {
 	text: LocText;
 }
 
+// A decision of the BoP's `decision_category`, drawn as a row of the window's decision list: the
+// webview writes its name into `.bop-decision[data-index=<i>] .bop-decision-name` and links the row
+// to where the decision is defined.
+export interface BopDecisionView {
+	id: string;
+	name: LocText;
+	nav?: NavTarget;
+}
+
 export interface BopCard {
 	// The BoP id plus its occurrence in the file, so a file that repeats an id keeps both cards.
 	key: string;
@@ -50,6 +59,8 @@ export interface BopCard {
 	// The centre range and the two drawn sides' ranges, sorted by `min`: the bar, left to right.
 	ranges: BopRangeView[];
 	window?: BopWindowView;
+	// In the order the window lists them, which is the order the files define them in.
+	decisions: BopDecisionView[];
 	// Mistakes in the file the reader would otherwise only find in game: overlapping ranges, a
 	// stretch of the bar no range covers, a side that is named but not defined.
 	warnings: string[];

@@ -1,13 +1,15 @@
 import { HOIPartial } from "../../hoiformat/schema";
-import { IconType, InstantTextBoxType } from "../../hoiformat/gui";
+import { ContainerWindowType, GridBoxType, IconType, InstantTextBoxType } from "../../hoiformat/gui";
 import { getSpriteByGfxName } from "../../util/image/imagecache";
 import { StyleTable, normalizeForStyle } from "../../util/styletable";
+import { htmlEscape } from "../../util/escape";
 import { localise } from "../localise";
 import { calculateBBox, ParentInfo } from "../../util/hoi4gui/common";
 import { RenderNodeCommonOptions, renderSprite } from "../../util/hoi4gui/nodecommon";
 import { renderIcon } from "../../util/hoi4gui/icon";
 import { renderInstantTextBox } from "../../util/hoi4gui/instanttextbox";
 import { renderStandaloneWindow } from "../../util/hoi4gui/window";
+import { renderContainerWindow } from "../../util/hoi4gui/containerwindow";
 import { BopLoaderResult, bopFillSprites } from "./loader";
 import { BopWindowText, BopWindowView } from "./payload";
 
@@ -15,9 +17,21 @@ import { BopWindowText, BopWindowView } from "./payload";
 const defaultBarWidth = 360;
 const defaultBarHeight = 16;
 
+// The game's own slot height of `decision_grid`, for a mod whose grid names none.
+const defaultDecisionSlotHeight = 40;
+
 export interface BopWindowInput {
 	leftIcon?: string;
 	rightIcon?: string;
+	// The decisions of the BoP's category, in the order the grid lists them.
+	decisions: BopWindowDecision[];
+}
+
+export interface BopWindowDecision {
+	// The sprite the decision's first icon names.
+	icon?: string;
+	// What the row writes where the game writes the cost.
+	cost?: string;
 }
 
 /**
@@ -55,6 +69,9 @@ export async function renderBopWindow(
 		enableNavigator: false,
 		onRenderChild: async (type, child, parentInfo) => {
 			const name = (child.name ?? "").toLowerCase();
+			if (type === "gridbox" && name === "decision_grid") {
+				return renderDecisionGrid(child as HOIPartial<GridBoxType>, parentInfo, input.decisions, loadResult, options);
+			}
 			if (type === "icon") {
 				const icon = child as HOIPartial<IconType>;
 				switch (name) {
@@ -120,6 +137,96 @@ export async function renderBopWindow(
 		splitterHtml: await template(rangeBar),
 		indicatorHtml: indicator0 !== undefined && indicator1 !== undefined ? [indicator0, indicator1] : undefined,
 	};
+}
+
+// `decision_grid` is filled by the game's code with one `decision_item` per decision of the BoP's
+// category. The rows are drawn here, each in a `.bop-decision` the webview names and links, in a
+// layer that scrolls when there are more rows than the container shows, as the game's does.
+async function renderDecisionGrid(
+	grid: HOIPartial<GridBoxType>,
+	parentInfo: ParentInfo,
+	decisions: BopWindowDecision[],
+	loadResult: BopLoaderResult,
+	options: RenderNodeCommonOptions,
+): Promise<string> {
+	if (decisions.length === 0) {
+		return "";
+	}
+	const [x, y, width] = calculateBBox(grid, parentInfo);
+	const slotWidth = grid.slotsize?.width?._value ?? width;
+	const slotHeight = grid.slotsize?.height?._value ?? defaultDecisionSlotHeight;
+	const slot: ParentInfo = { size: { width: slotWidth, height: slotHeight }, orientation: "upper_left" };
+	const item = loadResult.decisionItem?.window;
+
+	const rows = await Promise.all(
+		decisions.map(async (decision, index) => {
+			const content = item
+				? await renderDecisionItem(item, slot, decision, options)
+				: await renderPlainDecisionRow(slot, decision, options);
+			return `<div class="bop-decision" data-index="${index}" style="position:absolute;left:0;top:${index * slotHeight}px;width:${slotWidth}px;height:${slotHeight}px">${content}</div>`;
+		}),
+	);
+
+	const height = Math.max(parentInfo.size.height - y, slotHeight);
+	return `<div class="bop-decision-grid" style="position:absolute;left:${x}px;top:${y}px;width:${width}px;height:${height}px;overflow-x:hidden;overflow-y:auto"><div style="position:relative;height:${decisions.length * slotHeight}px">${rows.join("")}</div></div>`;
+}
+
+async function renderDecisionItem(
+	item: HOIPartial<ContainerWindowType>,
+	slot: ParentInfo,
+	decision: BopWindowDecision,
+	options: RenderNodeCommonOptions,
+): Promise<string> {
+	return renderContainerWindow(item, slot, {
+		...options,
+		onRenderChild: async (type, child, parentInfo) => {
+			const name = (child.name ?? "").toLowerCase();
+			if (type === "icon") {
+				switch (name) {
+					case "icon":
+						return decision.icon
+							? renderIcon({ ...(child as HOIPartial<IconType>), spritetype: decision.icon }, parentInfo, options)
+							: undefined;
+					// A mission's timer and a targeted decision's flag need a running game.
+					case "btn_progress_good":
+					case "btn_progress_bad":
+					case "target_flag":
+					case "target_flag_frame":
+						return "";
+				}
+			} else if (type === "instanttextbox") {
+				const textbox = child as HOIPartial<InstantTextBoxType>;
+				if (name === "name_text") {
+					return renderInstantTextBox({ ...textbox, text: "" }, parentInfo, {
+						...options,
+						rawText: true,
+						classNames: "bop-decision-name",
+					});
+				}
+				if (name === "cost_and_timer_text") {
+					return renderInstantTextBox({ ...textbox, text: decision.cost ?? "" }, parentInfo, {
+						...options,
+						rawText: true,
+					});
+				}
+			}
+			return undefined;
+		},
+	});
+}
+
+// For a mod and install without `decision_item`: the icon, the name and the cost on one line.
+async function renderPlainDecisionRow(
+	slot: ParentInfo,
+	decision: BopWindowDecision,
+	options: RenderNodeCommonOptions,
+): Promise<string> {
+	const sprite = decision.icon ? await options.getSprite?.(decision.icon, "icon", undefined) : undefined;
+	const image = sprite?.image;
+	const icon = image
+		? `<img class="bop-decision-icon" src="${image.uri}" style="height:${slot.size.height}px">`
+		: "";
+	return `<div class="bop-decision-plain">${icon}<span class="bop-decision-name"></span><span class="bop-decision-cost">${htmlEscape(decision.cost ?? "")}</span></div>`;
 }
 
 // `power_balance_value` names no sprite: the game picks one of four progress bars by which side
