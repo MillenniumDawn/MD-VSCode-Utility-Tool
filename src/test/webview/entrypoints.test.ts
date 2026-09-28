@@ -1,6 +1,8 @@
 import { canvasCalls, postedMessages, resetWebviewState, takePostedMessages } from "./setup";
 import * as assert from "assert";
 import { vscode } from "../../../webviewsrc/util/vscode";
+import { feLocalize } from "../../../webviewsrc/util/i18n";
+import { iconButtonHtml, IconActionId } from "../../previewdef/toolbaricons";
 
 type Listener = (event: Event) => unknown;
 type CapturedListeners = Record<string, Listener[]>;
@@ -90,6 +92,20 @@ function element<K extends keyof HTMLElementTagNameMap>(
 		result.className = className;
 	}
 	return result;
+}
+
+// A toolbar button as the host renders it, icon and state attribute included, so a test can see
+// the webview bring both in line with the state.
+function iconButton(id: IconActionId, domId: string, on?: boolean): HTMLButtonElement {
+	const template = document.createElement("template");
+	template.innerHTML = iconButtonHtml(id, feLocalize, { domId, on });
+	return template.content.firstElementChild as HTMLButtonElement;
+}
+
+function iconName(button: HTMLElement): string | undefined {
+	return Array.from(button.querySelector("i")?.classList ?? [])
+		.find((c) => c.startsWith("codicon-"))
+		?.substring("codicon-".length);
 }
 
 function addSelectOption(
@@ -182,7 +198,7 @@ function installGuiShell(): void {
 	const mainContent = element("div", "mainContent");
 	const visibilityContent = element("div", "toggleVisibilityContent");
 	visibilityContent.append(element("div", "toggleVisibilityContentInner"));
-	const toggle = element("button", "toggleVisibility");
+	const toggle = iconButton("containerWindows", "toggleVisibility", false);
 	const child = element("div", undefined, "childcontainerwindow_Child");
 	container.append(child);
 	document.body.append(
@@ -224,7 +240,7 @@ function installWorldMapShell(): void {
 	const search = element("button", "search");
 	const refresh = element("button", "refresh");
 	const exportButton = element("button", "export");
-	const showWarnings = element("button", "show-warnings");
+	const showWarnings = iconButton("showWarnings", "show-warnings", false);
 	const open = element("button", "open");
 	const warningsContainer = element("div", "warnings-container");
 	const warnings = element("textarea", "warnings");
@@ -556,9 +572,13 @@ describe("webview entrypoints", () => {
 		) as HTMLDivElement;
 		assert.strictEqual(toggle.disabled, false);
 		assert.strictEqual(mainContent.style.marginTop, "40px");
+		assert.strictEqual(toggle.getAttribute("aria-pressed"), "false");
+		assert.strictEqual(iconName(toggle), "eye-closed");
 
 		toggle.dispatchEvent(new Event("click"));
 		assert.strictEqual(mainContent.style.marginTop, "240px");
+		assert.strictEqual(toggle.getAttribute("aria-pressed"), "true");
+		assert.strictEqual(iconName(toggle), "eye");
 		assert.strictEqual(
 			(document.getElementById("toggleVisibilityContent") as HTMLDivElement)
 				.style.display,
@@ -666,6 +686,14 @@ describe("webview entrypoints", () => {
 			assert.ok(
 				canvasCalls(mainCanvas).some((call) => call.method === "drawImage"),
 			);
+
+			// The warning list button says whether the list is open.
+			const showWarnings = document.getElementById("show-warnings") as HTMLButtonElement;
+			assert.strictEqual(showWarnings.getAttribute("aria-pressed"), "false");
+			showWarnings.dispatchEvent(new Event("click"));
+			assert.strictEqual(showWarnings.getAttribute("aria-pressed"), "true");
+			showWarnings.dispatchEvent(new Event("click"));
+			assert.strictEqual(showWarnings.getAttribute("aria-pressed"), "false");
 		} finally {
 			(globalThis as any).requestAnimationFrame = originalRequestAnimationFrame;
 		}

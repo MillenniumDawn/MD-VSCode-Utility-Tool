@@ -42,7 +42,7 @@
     "hoi4modutilities.modFile.desc": "Путь к файлу mod. Этот файл используется для чтения replace_path. По дефолту будет использоваться .mod файл в первой папке вашего workspace. Meant as a workspace setting: set in user settings it applies to every window, so another mod opened on this machine would use the same file. The Select mod file command writes it to the workspace.",
     "hoi4modutilities.preview.title": "Предпросмотр файла HOI4",
     "hoi4modutilities.previewworld.title": "Предпросмотр карты мира",
-    "hoi4modutilities.scanreferences.title": "Найти похожее",
+    "hoi4modutilities.scanreferences.title": "Найти ссылки и добавить их как зависимости",
     "hoi4modutilities.selecthoifolder.title": "Выбрать путь установки HOI4",
     "hoi4modutilities.showindexstatus.title": "Показать состояние индексов",
     "hoi4modutilities.selectmodfile.title": "Выбрать файл мода",

@@ -38,6 +38,7 @@ import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
 import { toNumberLike } from "../src/hoiformat/schema";
 import { feLocalize } from "./util/i18n";
+import { applyIconState } from "../src/previewdef/toolbaricons";
 import { Checkbox } from "./util/checkbox";
 import { vscode } from "./util/vscode";
 
@@ -607,7 +608,7 @@ function setWarningMarkersVisible(visible: boolean) {
 		"toggle-warning-markers",
 	) as HTMLButtonElement | null;
 	if (button) {
-		button.style.opacity = visible ? "" : "0.4";
+		applyIconState(button, "warningMarkers", visible, feLocalize);
 	}
 }
 
@@ -946,11 +947,18 @@ function renderWarningList(focusTree: FocusTree) {
 // fold state is the reader's, kept across reloads like the other toolbar toggles.
 export function bindShortcuts(overlay: HTMLElement, currentTree: () => FocusTree | undefined) {
 	overlay.classList.toggle("collapsed", getState().shortcutsCollapsed ?? false);
+	const toggle = overlay.querySelector("#shortcut-toggle") as HTMLElement | null;
+	if (toggle) {
+		applyIconState(toggle, "shortcutToggle", !overlay.classList.contains("collapsed"), feLocalize);
+	}
 	overlay.addEventListener("click", (e) => {
 		const target = e.target as Element;
 		if (target.closest("#shortcut-toggle")) {
 			const collapsed = !overlay.classList.contains("collapsed");
 			overlay.classList.toggle("collapsed", collapsed);
+			if (toggle) {
+				applyIconState(toggle, "shortcutToggle", !collapsed, feLocalize);
+			}
 			setState({ shortcutsCollapsed: collapsed });
 			return;
 		}
@@ -983,6 +991,10 @@ function hideWarningPanel() {
 	if (container) {
 		container.style.display = "none";
 		document.body.style.overflow = "";
+	}
+	const button = document.getElementById("show-warnings");
+	if (button) {
+		applyIconState(button, "showWarnings", false, feLocalize);
 	}
 }
 
@@ -1586,6 +1598,7 @@ window.addEventListener(
 				const visible = warnings.style.display === "block";
 				document.body.style.overflow = visible ? "" : "hidden";
 				warnings.style.display = visible ? "none" : "block";
+				applyIconState(showWarnings, "showWarnings", !visible, feLocalize);
 			});
 		}
 

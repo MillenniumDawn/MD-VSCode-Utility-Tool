@@ -398,16 +398,16 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(html.includes(`.${warningEntryClass} {`));
 	});
 
-	it("buildFocusTreeHtml shows the warning buttons only when a tree has warnings", async () => {
+	it("buildFocusTreeHtml keeps the warning buttons in place, disabled while no tree has warnings", async () => {
 		const clean = await buildFocusTreePayload(
 			loaderWithTrees([minimalFocusTree()]),
 			undefined,
 			{ resolveIcons: false },
 		);
 		const cleanHtml = buildFocusTreeHtml(clean!, webview, uri);
-		assert.ok(!cleanHtml.includes('id="show-warnings"'));
-		assert.ok(!cleanHtml.includes('id="toggle-warning-markers"'));
-		assert.ok(!cleanHtml.includes('id="copy-warnings"'));
+		assert.match(cleanHtml, /<button id="show-warnings"[^>]* disabled/);
+		assert.match(cleanHtml, /<button id="toggle-warning-markers"[^>]* disabled/);
+		assert.match(cleanHtml, /<button id="copy-warnings"[^>]* disabled/);
 
 		const warned = minimalFocusTree();
 		warned.warnings = [{ text: "Focuses a and b overlap.", source: "focus_a" }];
@@ -417,9 +417,9 @@ describe("previewdef/focustree contentbuilder", () => {
 			{ resolveIcons: false },
 		);
 		const warnedHtml = buildFocusTreeHtml(warnedPayload!, webview, uri);
-		assert.ok(warnedHtml.includes('id="show-warnings"'));
-		assert.ok(warnedHtml.includes('id="toggle-warning-markers"'));
-		assert.ok(warnedHtml.includes('id="copy-warnings"'));
+		assert.doesNotMatch(warnedHtml, /<button id="show-warnings"[^>]* disabled/);
+		assert.doesNotMatch(warnedHtml, /<button id="toggle-warning-markers"[^>]* disabled/);
+		assert.doesNotMatch(warnedHtml, /<button id="copy-warnings"[^>]* disabled/);
 	});
 
 	it("registerWarningStyles emits exactly the exported class names", () => {

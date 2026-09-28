@@ -18,6 +18,7 @@ import { slice, debounceByInput, forceError, jsonForScript } from "../../util/co
 import { openOrCopyHoiFile } from "../../util/previewfileopener";
 import { WorldMapLoader } from "./loader/worldmaploader";
 import { buildWorldMapChangeMessages } from "./worldmapchanges";
+import { renderWorldMapIcons } from "./toolbar";
 import { LoaderSession } from "../../util/loader/loader";
 import { sendByMessage } from "../../util/telemetry";
 
@@ -102,7 +103,7 @@ export class WorldMap {
 	private renderWorldMap(webview: vscode.Webview): string {
 		return html(
 			webview,
-			localizeText(worldmapview),
+			localizeText(renderWorldMapIcons(worldmapview, localize)),
 			[
 				{ content: i18nTableAsScript() },
 				{
