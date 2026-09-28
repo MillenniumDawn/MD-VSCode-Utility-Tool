@@ -8,7 +8,7 @@ Unreleased
 - [ Focus Tree Previewer ] With the gui focus tree layout, a focus grid whose `format` is `DOWN`, `LEFT` or `RIGHT` now previews the tree growing that way, prerequisite lines and mutually exclusive links included, instead of always top-down. Issue #399.
 - [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the continuous focus box now takes its size from `continuous_focus_window` in `nationalfocusview.gui` instead of always being 770 by 380. Issue #398.
 - [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the mutually exclusive link now also moves sideways with `exclusive_offset`, `exclusive_offset_left` and the x of `national_focus_exclusive_item` in nationalfocusview.gui. Issue #397.
-- [ Previews ] Toolbar buttons now sit in a fixed group at the right end of the toolbar, in the same order in every preview. Each icon shows what the button does, toggles look different when on, and tooltips say what a click does. The mod file in the status bar now says "(cannot read)" when it cannot be read. Issue #446.
+- [ Previews ] Toolbar buttons now sit in a fixed group at the right end of the toolbar, in the same order in every preview. Each icon shows what the button does, toggles look different when on, and tooltips say what a click does, or why a greyed-out button cannot be clicked. The mod file in the status bar now says "(cannot read)" when it cannot be read. Issue #446.
 - [ Build ] The build now rejects a method that no longer overrides anything and a parameter that is never read, so renaming a shared loader or preview method can no longer leave a stale copy behind unnoticed. Issue #376.
 
   Bugfixes:
