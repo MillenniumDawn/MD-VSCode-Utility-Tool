@@ -1,0 +1,132 @@
+/*
+ * Balance of power view.
+ *
+ * One BoP at a time, picked in the toolbar the way the MIO preview picks an organisation: the
+ * game's own powerbalanceview window as the host drew it, with the controls that move the value in
+ * the toolbar. What is here positions the parts the game's code fills in -- the bar fill, the
+ * needle, the range ticks -- and styles the controls.
+ */
+
+#boppreviewcontent {
+	position: relative;
+	padding: 12px 16px 32px;
+}
+
+.bop-warning {
+	max-width: 550px;
+	margin: 0 0 6px;
+	padding: 3px 8px;
+	border-left: 3px solid var(--vscode-editorWarning-foreground);
+	font-size: 11px;
+	color: var(--vscode-editorWarning-foreground);
+}
+
+.bop-none {
+	margin: 0 0 10px;
+	font-size: 11px;
+	color: var(--ev-fg-muted);
+}
+
+/* ---------- Game window ---------- */
+
+.bop-gui-frame {
+	position: relative;
+	overflow: hidden;
+}
+
+.bop-gui-window {
+	position: relative;
+}
+
+/* All four progress bars are drawn; the one for the value's side is shown and clipped to the
+   stretch between the centre and the value. */
+.bop-slot-fill {
+	display: none;
+}
+
+.bop-slot-fill.bop-shown {
+	display: block;
+}
+
+.bop-mark {
+	position: absolute;
+	left: 0;
+	top: 0;
+}
+
+.bop-mark-indicator {
+	display: none;
+}
+
+.bop-mark-indicator.bop-shown {
+	display: block;
+}
+
+/* ---------- Toolbar controls ---------- */
+
+.bop-controls {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+}
+
+.bop-slider {
+	width: 180px;
+}
+
+.bop-number {
+	width: 64px;
+}
+
+/* Wider than the toolbar's 20px icon buttons: these carry text. */
+.bop-step,
+.bop-reset {
+	width: auto;
+	height: 22px;
+	padding: 0 8px;
+	border: 1px solid var(--vscode-button-border, transparent);
+	border-radius: 2px;
+	color: var(--vscode-button-secondaryForeground);
+	background: var(--vscode-button-secondaryBackground);
+	font-family: var(--vscode-editor-font-family, monospace);
+	white-space: nowrap;
+}
+
+.bop-step:hover,
+.bop-reset:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* ---------- Range links ---------- */
+
+/* The ranges are the only thing in the window that can be clicked, so they say so on hover with a
+   blue box over the text, or over the tick's sprites. */
+.bop-range-link {
+	position: relative;
+}
+
+.bop-slot-active-range.bop-range-link {
+	position: absolute;
+}
+
+.bop-mark.bop-range-link {
+	position: absolute;
+}
+
+.bop-range-link:hover::after,
+.bop-mark.bop-range-link:hover > div:not(.bop-mark)::after,
+.bop-mark.bop-range-link:hover > .bop-mark.bop-shown > div::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: color-mix(in srgb, var(--vscode-focusBorder, #007fd4) 35%, transparent);
+	pointer-events: none;
+}
+
+.bop-mark.bop-range-link:hover::after {
+	content: none;
+}

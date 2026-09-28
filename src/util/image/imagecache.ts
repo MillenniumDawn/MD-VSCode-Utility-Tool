@@ -303,6 +303,7 @@ async function loadGfxMap(path: string): Promise<GfxMap> {
 		const node = parseHoi4File(
 			gfx,
 			localize("infile", "In file {0}:\n", realPath),
+			{ closeBlocksAtEof: true },
 		);
 		const spriteTypes = getSpriteTypes(node);
 

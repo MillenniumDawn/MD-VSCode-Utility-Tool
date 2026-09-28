@@ -4,6 +4,7 @@ import { ConfigurationKey, Commands } from "../constants";
 import { PromiseCache } from "./cache";
 import { error } from "./debug";
 import { localize } from "./i18n";
+import { statusBarIcon } from "../previewdef/toolbaricons";
 import {
 	clearParentModCache,
 	getParentModUris,
@@ -97,8 +98,11 @@ export function updateSelectedModFileStatus(
 		if (modFile) {
 			const modFileName = basename(modFile, ".mod");
 			modName.command = Commands.SelectModFile;
-			modName.text =
-				(error ? "$(error) " : "$(file-code) ") + modFileName + parentSuffix;
+			// The error icon alone does not say what is wrong, so the text says it too.
+			modName.text = error
+				? statusBarIcon("modFileError") + " " + modFileName + " " +
+					localize("modfile.cannotread", "(cannot read)") + parentSuffix
+				: statusBarIcon("modFile") + " " + modFileName + parentSuffix;
 			modName.tooltip =
 				(error
 					? localize("modfile.errorreading", "Error reading this file: ")
@@ -109,7 +113,7 @@ export function updateSelectedModFileStatus(
 		} else {
 			modName.command = Commands.SelectModFile;
 			modName.text =
-				"$(file-code) " +
+				statusBarIcon("modFile") + " " +
 				localize("modfile.nomodfile", "(No mod descriptor)") +
 				parentSuffix;
 			modName.tooltip =
@@ -163,24 +167,32 @@ export function pickedFirst(
 	a: vscode.QuickPickItem,
 	b: vscode.QuickPickItem,
 ): number {
-	return !!a.picked === !!b.picked ? 0 : a.picked ? -1 : 1;
+	return Boolean(a.picked) === Boolean(b.picked) ? 0 : a.picked ? -1 : 1;
 }
 
 async function selectModFile(): Promise<void> {
 	const conf = getConfiguration();
 	const modFileInspect = conf.inspect<string>("modFile");
+	const globalValue = modFileInspect?.globalValue;
+	const globalUri = fileOrUriStringToUri(globalValue);
+	const globalPath = globalUri ? uriToFilePathWhenPossible(globalUri) : globalValue;
 	const modsList: (vscode.QuickPickItem & { selectModFile?: true })[] =
-		!modFileInspect?.globalValue
+		!globalPath
 			? []
 			: [
 					{
-						label: path.basename(modFileInspect.globalValue, ".mod"),
+						label: path.basename(globalPath, ".mod"),
 						description: localize("modfile.globalsetting", "Global setting"),
-						detail: modFileInspect.globalValue,
+						detail: globalPath,
 					},
 				];
 
-	let selected = conf.modFile.trim();
+	// The setting may be quoted; resolve it the way the rest of the extension does, so it matches
+	// the workspace rows and does not come back as a second "Workspace setting" row.
+	const pathKey = (p: string): string | undefined =>
+		fileOrUriStringToUri(p)?.toString();
+	const selectedUri = fileOrUriStringToUri(conf.modFile);
+	let selected = selectedUri ? uriToFilePathWhenPossible(selectedUri) : "";
 
 	workspaceModFilesCache.clear();
 	if (vscode.workspace.workspaceFolders) {
@@ -207,8 +219,11 @@ async function selectModFile(): Promise<void> {
 		}
 	}
 
+	const selectedKey = pathKey(selected);
 	modsList.forEach((r) =>
-		r.detail === selected ? (r.picked = true) : undefined,
+		r.detail !== undefined && pathKey(r.detail) === selectedKey
+			? (r.picked = true)
+			: undefined,
 	);
 	if (modsList.every((r) => !r.picked) && selected !== "") {
 		modsList.push({
