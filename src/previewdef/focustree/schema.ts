@@ -468,6 +468,17 @@ export function importedPseudoTreesToShow(ownTrees: FocusTree[], imported: Focus
 	);
 }
 
+/**
+ * The trees the preview offers in its tree picker. A file with at least one real `focus_tree` lists
+ * only those: its shared focuses are seen where a tree merges them, not as a `<Shared focuses>` entry
+ * of their own. A file of only shared or joint focuses keeps its pseudo-trees, or it would show
+ * nothing. The loader result keeps every tree, because other files merge from its pseudo-trees.
+ */
+export function focusTreesToDisplay(trees: FocusTree[]): FocusTree[] {
+	const ownTrees = trees.filter((tree) => !tree.isSharedFocues);
+	return ownTrees.length > 0 ? ownTrees : trees;
+}
+
 function getJointFocusTreeId(filePath: string): string {
 	const fileName = path.basename(filePath, path.extname(filePath));
 	const label = localize("focustree.jointfocustree", "<Joint focus tree>");

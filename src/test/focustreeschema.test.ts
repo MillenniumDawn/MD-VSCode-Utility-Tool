@@ -7,6 +7,7 @@ import {
 	getFocusTreeWithFocusFile,
 	FocusTree,
 	importedPseudoTreesToShow,
+	focusTreesToDisplay,
 	FocusWarning,
 } from "../previewdef/focustree/schema";
 import { refreshFeatureFlags } from "../util/featureflags";
@@ -622,6 +623,51 @@ shared_focus = {
 	it("never adds an imported ordinary focus tree", () => {
 		const imported = treesOf(treeWithFocuses(focusBlock("other", 0, 0)))[0];
 		assert.deepStrictEqual(importedPseudoTreesToShow([], [imported]), []);
+	});
+
+	it("offers only a file's own focus trees when it also defines shared focuses", () => {
+		const trees = treesOf(`shared_focus = {
+    id = SH_a
+    focus = { id = sh_a1 x = 0 y = 0 }
+}
+focus_tree = {
+    id = tree_a
+    ${focusBlock("a1", 0, 0)}
+}
+focus_tree = {
+    id = tree_b
+    ${focusBlock("b1", 0, 0)}
+}`);
+		assert.strictEqual(trees.length, 3, "the loader result keeps the shared pseudo-tree");
+		assert.deepStrictEqual(
+			focusTreesToDisplay(trees).map((t) => t.id),
+			["tree_a", "tree_b"],
+		);
+	});
+
+	it("offers a single focus tree alone, without its shared focuses", () => {
+		const trees = treesOf(`shared_focus = {
+    id = SH_a
+    focus = { id = sh_a1 x = 0 y = 0 }
+}
+${treeWithFocuses(focusBlock("m1", 0, 0))}`);
+		assert.deepStrictEqual(
+			focusTreesToDisplay(trees).map((t) => t.id),
+			["test_tree"],
+		);
+	});
+
+	it("still offers the pseudo-trees of a file with only shared and joint focuses", () => {
+		const trees = treesOf(`shared_focus = {
+    id = SH_a
+    focus = { id = sh_a1 x = 0 y = 0 }
+}
+joint_focus = {
+    id = JF_a
+    focus = { id = jf_a1 x = 0 y = 0 }
+}`);
+		assert.strictEqual(trees.length, 2);
+		assert.deepStrictEqual(focusTreesToDisplay(trees), trees);
 	});
 
 	it("does not check a merged shared focus against the tree's own focuses", () => {
