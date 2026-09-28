@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { FocusTree, Focus, FocusTreeShortcut } from './schema';
+import { FocusTree, Focus, FocusTreeShortcut, focusTreesToDisplay } from './schema';
 import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconResolveStats } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
 import { randomString, mapLimit, jsonForScript } from '../../util/common';
@@ -70,7 +70,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         debug('Loader session focus tree', loadedLoaders);
         const tLoaded = Date.now();
 
-        const focusTrees = loadResult.result.focusTrees;
+        const focusTrees = focusTreesToDisplay(loadResult.result.focusTrees);
         if (focusTrees.length === 0) {
             return null;
         }
@@ -197,7 +197,8 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
 export async function loadFocusTreesOnly(loader: FocusTreeLoader): Promise<{ focusTrees: FocusTree[]; layout: FocusTreeLayout } | null> {
     try {
         const r = await loader.load(new LoaderSession(false));
-        return r.result.focusTrees.length ? { focusTrees: r.result.focusTrees, layout: r.result.layout ?? standardFocusTreeLayout } : null;
+        const focusTrees = focusTreesToDisplay(r.result.focusTrees);
+        return focusTrees.length ? { focusTrees, layout: r.result.layout ?? standardFocusTreeLayout } : null;
     } catch (e) {
         Logger.warn(`Focus tree structure check skipped, load failed: ${describeParseFailure(e)}`);
         return null;
