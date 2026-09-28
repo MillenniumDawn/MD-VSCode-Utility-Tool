@@ -13,6 +13,8 @@ const restricted = [
 	"mdHoi4Utilities.userDataPath",
 	"mdHoi4Utilities.inlayWindowGfxRoots",
 	"mdHoi4Utilities.focusOverlayGfxFiles",
+	"mdHoi4Utilities.decisionGfxFiles",
+	"mdHoi4Utilities.ideaPlaceholderIcon",
 	"mdHoi4Utilities.technologyGfxRoots",
 	// Where the focus tree audit writes its report: a hostile repo could point it anywhere.
 	"mdHoi4Utilities.auditor.reportFolder",
