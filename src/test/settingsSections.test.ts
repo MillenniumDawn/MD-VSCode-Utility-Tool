@@ -23,6 +23,7 @@ const settings = [
 	"mdHoi4Utilities.focusTreeLayout",
 	"mdHoi4Utilities.focusTreePrerequisiteLines",
 	"mdHoi4Utilities.inlayWindowGfxRoots",
+	"mdHoi4Utilities.focusOverlayGfxFiles",
 	"mdHoi4Utilities.technologyGfxRoots",
 	"mdHoi4Utilities.technologyCountryIcons",
 	"mdHoi4Utilities.enableSupplyArea",

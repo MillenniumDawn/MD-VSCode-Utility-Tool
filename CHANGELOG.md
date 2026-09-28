@@ -19,6 +19,7 @@ v1.1.40
 - [ Focus Tree Previewer ] A new Auditor section in the settings checks every focus tree file in the mod at once and gives one Markdown report of the warnings per file, ready to paste into a GitHub issue, and the focus tree preview has a button that copies the warnings of the tree on screen. Issue #444.
 - [ Focus Tree Previewer ] A new toolbar toggle lets you drag the continuous focus box into place; dropping it writes the new `continuous_focus_position` into the file, adding the line if the tree has none. Issue #438.
 - [ Focus Tree Previewer ] The focus tree preview now shows the tree's `shortcut` blocks as the game's shortcut buttons in its lower left corner, with their localised name and the icon of their `target` focus, drawn from `nationalfocusview.gui`; clicking one scrolls to that focus, and the arrow beside them folds them away. Issue #439.
+- [ Focus Tree Previewer ] A mod names the `.gfx` files that define its focus overlays in the new Focus overlay GFX files setting, or with a `focus_overlay_gfx = { "interface/goals_overlays.gfx" }` list in its `.mod` file, so a submod picks up the overlays of the mod it extends. Issue #448.
 
   Bugfixes:
 

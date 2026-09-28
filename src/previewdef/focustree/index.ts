@@ -70,7 +70,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
 
     // useConditionInFocus changes what the schema reads and what the tree draws; sharedFocusIndex
     // changes whether shared focuses resolve; inlayWindowGfxRoots changes which .gfx files the inlay
-    // windows scan; gfxIndex changes which icons resolve; localisationIndex and previewLocalisation
+    // windows scan; focusOverlayGfxFiles changes where focus overlays are looked up; gfxIndex changes which icons resolve; localisationIndex and previewLocalisation
     // change every label. inlayWindowGfxRoots had no listener at all, so fixing a missing inlay
     // sprite did nothing until the file was edited or the preview reopened. focusTreeLayout decides the
     // page's grid and the focus markup, focusTreePrerequisiteLines the frames the lines are drawn from.
@@ -81,6 +81,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
             'focusTreePrerequisiteLines',
             'sharedFocusIndex',
             'inlayWindowGfxRoots',
+            'focusOverlayGfxFiles',
             'gfxIndex',
             'localisationIndex',
             'previewLocalisation',
