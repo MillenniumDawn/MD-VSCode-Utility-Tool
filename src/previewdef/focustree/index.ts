@@ -5,6 +5,7 @@ import { UpdateablePreviewBase, LoaderRender, LoaderRenderResult, RenderContentO
 import { PreviewProviderDef } from '../previewmanager';
 import { FocusTreeLoader } from './loader';
 import { FocusTree } from './schema';
+import { copyTreeWarnings } from './warningreport';
 import { getRelativePathInWorkspace, getDocumentByUri, getConfiguration } from '../../util/vsccommon';
 import { localize } from '../../util/i18n';
 import { loadingShellHtml } from '../../util/html';
@@ -12,6 +13,7 @@ import { withTimeout, TimeoutError } from '../../util/common';
 import { error } from '../../util/debug';
 import { getFlags } from '../../util/featureflags';
 import { FocusTreeLayout, focusTreeGridBoxFor } from './layout';
+import { computeContinuousFocusEdit } from './continuousedit';
 import { computeStructuralFingerprint, computeIconSourceFingerprint, computeTreeStructuralFingerprint, computeTreeIconFingerprint } from './fingerprint';
 
 // A render taking longer than this is treated as stuck. The underlying load keeps running
@@ -71,11 +73,12 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // windows scan; focusOverlayGfxFiles changes where focus overlays are looked up; gfxIndex changes which icons resolve; localisationIndex and previewLocalisation
     // change every label. inlayWindowGfxRoots had no listener at all, so fixing a missing inlay
     // sprite did nothing until the file was edited or the preview reopened. focusTreeLayout decides the
-    // page's grid and the focus markup.
+    // page's grid and the focus markup, focusTreePrerequisiteLines the frames the lines are drawn from.
     protected override get reloadOnConfigurationChange(): readonly string[] {
         return [
             'useConditionInFocus',
             'focusTreeLayout',
+            'focusTreePrerequisiteLines',
             'sharedFocusIndex',
             'inlayWindowGfxRoots',
             'focusOverlayGfxFiles',
@@ -104,6 +107,10 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 // (structure, then icons stream in) and both orders would in fact work.
                 this.repostLatestUpdate();
                 this.repushCachedIconStyles();
+            } else if (msg?.command === 'setContinuousFocusPosition') {
+                void this.setContinuousFocusPosition(msg);
+            } else if (msg?.command === 'copyWarnings') {
+                void copyTreeWarnings(msg, getRelativePathInWorkspace(this.uri)).catch(error);
             }
         }));
         // Belt-and-suspenders for bug #36: also restore icons when the panel becomes visible again.
@@ -112,6 +119,32 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 this.repushCachedIconStyles();
             }
         }));
+    }
+
+    // Writes a continuous focus box dropped in the webview back to the previewed document. The
+    // document is left unsaved; the edit re-renders the preview like any other change.
+    private async setContinuousFocusPosition(msg: { file?: unknown; start?: unknown; treeId?: unknown; x?: unknown; y?: unknown }): Promise<void> {
+        const { file, start, treeId, x, y } = msg;
+        if (typeof file !== 'string' || typeof start !== 'number' || typeof treeId !== 'string' || typeof x !== 'number' || typeof y !== 'number'
+            || !Number.isFinite(x) || !Number.isFinite(y) || file !== getRelativePathInWorkspace(this.uri)) {
+            return;
+        }
+
+        try {
+            const document = getDocumentByUri(this.uri) ?? await vscode.workspace.openTextDocument(this.uri);
+            const edit = computeContinuousFocusEdit(document.getText(), start, treeId, x, y);
+            if (!edit) {
+                void vscode.window.showWarningMessage(localize('focustree.continuousstale',
+                    'The focus tree changed since the preview was drawn. Drag the continuous focus box again.'));
+                return;
+            }
+
+            const workspaceEdit = new vscode.WorkspaceEdit();
+            workspaceEdit.replace(document.uri, new vscode.Range(document.positionAt(edit.start), document.positionAt(edit.end)), edit.newText);
+            await vscode.workspace.applyEdit(workspaceEdit);
+        } catch (e) {
+            error(e);
+        }
     }
 
     private repushCachedIconStyles(): void {

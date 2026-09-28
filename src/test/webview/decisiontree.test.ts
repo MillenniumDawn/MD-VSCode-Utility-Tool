@@ -144,7 +144,8 @@ const shellHtml = `
         <input type="checkbox" id="show-conditions">
         <input type="checkbox" id="show-effects">
         <input type="checkbox" id="show-scripted-gui">
-        <input type="checkbox" id="collapse-categories">
+        <button id="collapse-all-categories"></button>
+        <button id="expand-all-categories"></button>
         <div id="dec-filter-container">
             <div class="select-container">
                 <div id="dec-filters" class="select multiple-select" tabindex="0" role="combobox">
@@ -670,11 +671,15 @@ describe("webview/decisiontree rendering", () => {
 		box.value = "";
 		box.dispatchEvent(new Event("keyup"));
 	});
-	it("folds every tab down to its card when the collapse toggle is on, and opens one from its chevron", () => {
+	function press(id: string): void {
+		(document.getElementById(id) as HTMLButtonElement).dispatchEvent(
+			new (window as any).MouseEvent("click", { bubbles: true }),
+		);
+	}
+
+	it("folds every tab down to its card from the collapse button, and opens one from its chevron", () => {
 		const category = "c:POL_state_controlled_economy_category";
-		const toggle = document.getElementById("collapse-categories") as HTMLInputElement;
-		toggle.checked = true;
-		toggle.dispatchEvent(new Event("change"));
+		press("collapse-all-categories");
 
 		assert.strictEqual(
 			document.querySelectorAll('#decisiontreecontent .ev-node[data-id^="d:"]').length,
@@ -704,11 +709,65 @@ describe("webview/decisiontree rendering", () => {
 			"POL_state_controlled_economy_category",
 		]);
 
-		// Flipping the toggle is a fresh start: the tab opened by hand is forgotten with it.
-		toggle.checked = false;
-		toggle.dispatchEvent(new Event("change"));
+		// Expanding every tab is a fresh start: the tab opened by hand is forgotten with it.
+		press("expand-all-categories");
+		assert.strictEqual(storedState().decCollapseCategories, false);
 		assert.deepStrictEqual(storedState().decCollapseExceptions, []);
 		assert.ok(cardFor("d:POL_start_sre"));
+	});
+
+	it("collapses every tab again after a chevron opened one, and a second press changes nothing", () => {
+		const category = "c:POL_state_controlled_economy_category";
+		press("collapse-all-categories");
+		(cardFor(category).querySelector(".dec-collapse") as HTMLButtonElement).dispatchEvent(
+			new (window as any).MouseEvent("click", { bubbles: true }),
+		);
+		assert.ok(cardFor("d:POL_start_sre"), "the chevron opened the tab");
+
+		for (let i = 0; i < 2; i++) {
+			press("collapse-all-categories");
+			assert.ok(cardFor(category).classList.contains("dec-card-collapsed"));
+			assert.strictEqual(
+				document.querySelectorAll('#decisiontreecontent .ev-node[data-id^="d:"]').length,
+				0,
+			);
+			assert.strictEqual(storedState().decCollapseCategories, true);
+			assert.deepStrictEqual(storedState().decCollapseExceptions, []);
+		}
+
+		press("expand-all-categories");
+		assert.ok(cardFor("d:POL_start_sre"));
+	});
+
+	it("hides both buttons and opens every tab for a file with nothing to fold away", () => {
+		const push = (next: DecisionGraphPayload) =>
+			window.dispatchEvent(
+				new (window as any).MessageEvent("message", {
+					data: { type: "updateBody", styleCss: "", data: { decisionGraph: next } },
+				}),
+			);
+		const buttons = ["collapse-all-categories", "expand-all-categories"].map(
+			(id) => document.getElementById(id) as HTMLButtonElement,
+		);
+		press("collapse-all-categories");
+
+		push({
+			...integrationPayload,
+			toolbarFlags: { ...integrationPayload.toolbarFlags!, hasMissions: false, hasDecisions: false },
+		});
+		for (const button of buttons) {
+			assert.strictEqual(button.style.display, "none", `${button.id} must be hidden`);
+		}
+		assert.ok(cardFor("d:POL_start_sre"), "a hidden control must not keep the tabs folded");
+		assert.strictEqual(storedState().decCollapseCategories, true, "the forced value is never stored");
+
+		push(integrationPayload);
+		for (const button of buttons) {
+			assert.notStrictEqual(button.style.display, "none", `${button.id} must be offered`);
+		}
+		assert.ok(cardFor("c:POL_state_controlled_economy_category").classList.contains("dec-card-collapsed"));
+
+		press("expand-all-categories");
 	});
 
 	it("closes one tab from its chevron while the rest stay open", () => {
@@ -722,8 +781,7 @@ describe("webview/decisiontree rendering", () => {
 			document.querySelector('#decisiontreecontent .ev-node[data-id="d:POL_start_sre"]'),
 			null,
 		);
-		const toggle = document.getElementById("collapse-categories") as HTMLInputElement;
-		assert.strictEqual(toggle.checked, false);
+		assert.notStrictEqual(storedState().decCollapseCategories, true);
 
 		(cardFor(category).querySelector(".dec-collapse") as HTMLButtonElement).dispatchEvent(
 			new (window as any).MouseEvent("click", { bubbles: true }),

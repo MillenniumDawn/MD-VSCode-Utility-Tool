@@ -12,11 +12,18 @@ function focus(id: string): Focus {
     };
 }
 
-function updateBody(focusId: string) {
+function updateBody(focusId: string, inlay?: { useConditionInFocus: boolean }) {
     const tree: FocusTree = {
         id: 'test_tree',
         focuses: { [focusId]: focus(focusId) },
-        inlayWindowRefs: [], inlayWindows: [], inlayConditionExprs: [],
+        inlayWindowRefs: [],
+        inlayWindows: inlay ? [{
+            id: 'flag_inlay', file: 'common/focus_inlay_windows/test.txt', token: undefined,
+            internal: true, position: { x: 1800, y: 50 },
+            visible: { scopeName: '', nodeContent: 'has_country_flag = inlay_flag' },
+            scriptedImages: [], scriptedButtons: [], conditionExprs: [],
+        }] : [],
+        inlayConditionExprs: [],
         allowBranchOptions: [], conditionExprs: [],
         isSharedFocues: false, warnings: [],
     };
@@ -25,14 +32,14 @@ function updateBody(focusId: string) {
         data: {
             focusTrees: [tree],
             renderedFocus: { [focusId]: `<div id="focus_${focusId}" class="focus"></div>` },
-            renderedInlayWindows: {},
+            renderedInlayWindows: inlay ? { flag_inlay: '<div id="flag_inlay_root"></div>' } : {},
             gridBox: {
                 position: { x: { _value: 50 }, y: { _value: 50 } },
                 format: { _name: 'up' },
                 size: { width: { _value: 96 } },
                 slotsize: { width: { _value: 96 }, height: { _value: 130 } },
             },
-            useConditionInFocus: false,
+            useConditionInFocus: inlay?.useConditionInFocus ?? false,
             xGridSize: 96,
         },
     };
@@ -65,19 +72,26 @@ describe('webview/focustree rendering', () => {
         await settled();
     }
 
-    let previousBody = '';
+    let previousBody: Node[] = [];
 
     before(() => {
-        previousBody = document.body.innerHTML;
-        document.body.innerHTML = `
-            <div id="continuousFocuses"></div>
-            <div id="focustreecontent"><div id="focustreeplaceholder"></div></div>
-            <div id="inlaywindowplaceholder"></div>
-            <div id="warnings"></div>`;
+        previousBody = [...document.body.childNodes];
+        const continuous = document.createElement('div');
+        continuous.id = 'continuousFocuses';
+        const content = document.createElement('div');
+        content.id = 'focustreecontent';
+        const placeholder = document.createElement('div');
+        placeholder.id = 'focustreeplaceholder';
+        content.append(placeholder);
+        const inlay = document.createElement('div');
+        inlay.id = 'inlaywindowplaceholder';
+        const warnings = document.createElement('div');
+        warnings.id = 'warnings';
+        document.body.replaceChildren(continuous, content, inlay, warnings);
     });
 
     after(() => {
-        document.body.innerHTML = previousBody;
+        document.body.replaceChildren(...previousBody);
     });
 
     // Two updates in quick succession start two builds before either finishes; only the newer one
@@ -103,5 +117,74 @@ describe('webview/focustree rendering', () => {
         assert.strictEqual(writes, 1);
         assert.ok(element.querySelector('#focus_second_focus'), 'expected the newer tree on screen');
         assert.strictEqual(element.querySelector('#focus_first_focus'), null);
+    });
+
+    // An inlay's `visible` trigger can only be met from the inlay conditions dropdown, which exists
+    // only in condition mode. Outside it, ticking the window on is what shows it.
+    describe('inlay window visible trigger', () => {
+        afterEach(() => {
+            delete (window as any).__showInlayWindows;
+        });
+
+        async function renderInlay(useConditionInFocus: boolean): Promise<HTMLElement> {
+            (window as any).__showInlayWindows = true;
+            window.dispatchEvent(new (window as any).MessageEvent('message', { data: updateBody('inlay_focus', { useConditionInFocus }) }));
+            await rendered(document.getElementById('focustreeplaceholder')!);
+            takePostedMessages();
+            return document.getElementById('inlaywindowplaceholder')!;
+        }
+
+        it('shows a ticked inlay outside condition mode even when its visible trigger is unmet', async () => {
+            const placeholder = await renderInlay(false);
+            assert.ok(placeholder.querySelector('#flag_inlay_root'), 'expected the inlay on screen');
+        });
+
+        it('hides the inlay in condition mode until its visible trigger is selected', async () => {
+            const placeholder = await renderInlay(true);
+            assert.strictEqual(placeholder.querySelector('#flag_inlay_root'), null);
+        });
+    });
+
+    // The button is wired by the page's load handler, so the click is only real on a loaded page.
+    // The tree it reads is the one on screen now, not the one the page was loaded with.
+    it('posts the tree on screen and its warnings when the copy button is clicked', async () => {
+        const searchbox = document.createElement('input');
+        searchbox.id = 'searchbox';
+        const copyButton = document.createElement('button');
+        copyButton.id = 'copy-warnings';
+        document.body.append(searchbox, copyButton);
+        // The load restores the scroll position, which jsdom only reports as not implemented.
+        const originalScroll = window.scroll;
+        const originalScrollTo = window.scrollTo;
+        (window as any).scroll = () => undefined;
+        (window as any).scrollTo = () => undefined;
+        try {
+            window.dispatchEvent(new (window as any).Event('load'));
+            for (let i = 0; i < 100 && !takePostedMessages().some(m => m.command === 'ready'); i++) {
+                await settled();
+            }
+
+            const warned = updateBody('warned_focus');
+            warned.data.focusTrees[0].warnings = [{ text: 'Focuses overlap.', source: 'warned_focus' }];
+            window.dispatchEvent(new (window as any).MessageEvent('message', { data: warned }));
+            const element = document.getElementById('focustreeplaceholder')!;
+            for (let i = 0; i < 100 && !element.querySelector('#focus_warned_focus'); i++) {
+                await settled();
+            }
+            takePostedMessages();
+
+            copyButton.click();
+
+            assert.deepStrictEqual(takePostedMessages(), [{
+                command: 'copyWarnings',
+                treeId: 'test_tree',
+                warnings: [{ source: 'warned_focus', text: 'Focuses overlap.' }],
+            }]);
+        } finally {
+            (window as any).scroll = originalScroll;
+            (window as any).scrollTo = originalScrollTo;
+            searchbox.remove();
+            copyButton.remove();
+        }
     });
 });

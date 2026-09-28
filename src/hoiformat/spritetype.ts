@@ -7,6 +7,16 @@ interface SpriteTypes {
     corneredtilespritetype: CorneredTileSpriteTypeDef[];
     frameanimatedspritetype: SpriteTypeDef[];
     textspritetype: SpriteTypeDef[];
+    progressbartype: ProgressBarTypeDef[];
+}
+
+// A progress bar's fill texture is `textureFile1`; `textureFile2` is the empty part, which the game
+// draws where the bar has not reached. Read as a sprite of the fill, which is what a preview can
+// show of it.
+interface ProgressBarTypeDef {
+    name: DetailValue<string>;
+    texturefile1: string;
+    _token: Token | undefined;
 }
 
 interface SpriteTypeDef {
@@ -91,6 +101,16 @@ const spriteTypesSchema: SchemaDef<SpriteTypes> = {
         _innerType: spriteTypeSchema,
         _type: "array",
     },
+    progressbartype: {
+        _innerType: {
+            name: {
+                _innerType: "string",
+                _type: "detailvalue",
+            },
+            texturefile1: "string",
+        },
+        _type: "array",
+    },
 };
 
 const spriteFileSchema: SchemaDef<SpriteFile> = {
@@ -118,6 +138,18 @@ export function getSpriteTypes(node: Node): (SpriteType | CorneredTileSpriteType
             }
         }
         
+        for (const sprite of spritetypes.progressbartype) {
+            const name = sprite.name?._value;
+            if (name && sprite.texturefile1) {
+                result.push({
+                    name,
+                    texturefile: sprite.texturefile1,
+                    noofframes: 1,
+                    token: sprite.name!._startToken,
+                });
+            }
+        }
+
         for (const sprite of spritetypes.corneredtilespritetype) {
             const name = sprite.name?._value;
             const texturefile = sprite.texturefile;

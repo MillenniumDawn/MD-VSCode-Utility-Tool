@@ -18,8 +18,10 @@ const settings = [
 	"mdHoi4Utilities.decisionPreview",
 	"mdHoi4Utilities.ideaPreview",
 	"mdHoi4Utilities.characterPreview",
+	"mdHoi4Utilities.bopPreview",
 	"mdHoi4Utilities.useConditionInFocus",
 	"mdHoi4Utilities.focusTreeLayout",
+	"mdHoi4Utilities.focusTreePrerequisiteLines",
 	"mdHoi4Utilities.inlayWindowGfxRoots",
 	"mdHoi4Utilities.focusOverlayGfxFiles",
 	"mdHoi4Utilities.technologyGfxRoots",
@@ -31,6 +33,8 @@ const settings = [
 	"mdHoi4Utilities.gfxIndex",
 	"mdHoi4Utilities.localisationIndex",
 	"mdHoi4Utilities.imageDecodeWorkers",
+	"mdHoi4Utilities.auditor.reportFolder",
+	"mdHoi4Utilities.auditor.includeVanilla",
 ];
 
 describe("package.json settings sections", () => {
@@ -55,6 +59,27 @@ describe("package.json settings sections", () => {
 			assert.ok(!orders.has(section.order!), `order ${section.order} is used twice`);
 			orders.add(section.order!);
 		}
+	});
+
+	// The settings page has no buttons, so the Auditor's "Check all focus trees" is a command link
+	// in a description. A renamed command leaves the link dead without any other check noticing.
+	it("links only to commands the extension contributes, in every language", () => {
+		const commandIds = new Set<string>(
+			packageJson.contributes.commands.map((c: { command: string }) => c.command),
+		);
+		const root = path.join(__dirname, "..", "..", "..");
+		const nlsFiles = fs.readdirSync(root).filter(f => /^package\.nls(\..+)?\.json$/.test(f));
+		let links = 0;
+		for (const file of nlsFiles) {
+			const strings: Record<string, string> = JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
+			for (const [key, value] of Object.entries(strings)) {
+				for (const match of value.matchAll(/\(command:([A-Za-z0-9_.]+)\)/g)) {
+					links++;
+					assert.ok(commandIds.has(match[1]), `${file} ${key} links to ${match[1]}, which is not contributed`);
+				}
+			}
+		}
+		assert.ok(links >= nlsFiles.length, "expected the Auditor's link in every language");
 	});
 
 	it("contributes every setting exactly once", () => {
