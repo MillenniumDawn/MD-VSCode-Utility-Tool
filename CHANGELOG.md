@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- [ Character Previewer ] A mod names the keys it writes on its character traits that are not modifiers in the new Character trait structural keys setting, or with a `character_trait_structural_keys = { my_key }` list in its `.mod` file, so they stay off the trait cards. Issue #452.
 - [ Focus Tree Previewer ] A mod names the folders holding its focus inlay window sprites in the Focus inlay window GFX roots setting, or with an `inlay_window_gfx_roots = { "interface/scripted_gui" }` list in its `.mod` file. Issue #451.
 - [ Idea Previewer ] A mod names the image drawn for an idea whose `picture` does not resolve in the new Idea placeholder icon setting, or with an `idea_placeholder_icon = "gfx/interface/ideas/WIP_idea.dds"` line in its `.mod` file. Issue #450.
 - [ Decision Previewer ] A mod names the `.gfx` files that define its decision icons in the new Decision GFX files setting, or with a `decision_gfx = { "interface/MD_decisions.gfx" }` list in its `.mod` file. Issue #449.
@@ -23,6 +24,7 @@ Unreleased
 
   Bugfixes:
 
+- [ Character Previewer ] Base-game commander traits such as `trait_cautious` no longer show `leader_default_proximity_offset` as a modifier, and politician traits no longer show a `custom_modifier_tooltip` line. Issue #452.
 - [ Focus Tree Previewer ] Base-game focus trees with inlay windows no longer log a path warning for `interface/scripted_gui`, which only Millennium Dawn has; that folder is no longer the default. Issue #451.
 - [ Idea Previewer ] An idea whose `picture` does not resolve now shows the game's placeholder icon outside Millennium Dawn, instead of no icon. Millennium Dawn's own `WIP_idea.dds` placeholder needs to be named in the new setting or the `.mod` file. Issue #450.
 - [ Decision Previewer ] A mod without `interface/MD_decisions.gfx` no longer logs an error for it, and editing a decision `.gfx` file refreshes an open decision preview. Millennium Dawn's decision icons that the GFX index cannot place need that file named in the new setting or the `.mod` file. Issue #449.
