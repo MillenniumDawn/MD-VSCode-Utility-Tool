@@ -7,7 +7,7 @@ import { localize, i18nTableAsScript } from "../../util/i18n";
 import { StyleTable } from "../../util/styletable";
 import { jsonForScript } from "../../util/common";
 import { buildIdeaPreviewPayload } from "./build";
-import { LoaderRender } from "../loaderpreview";
+import { LoaderRender, RenderContentOptions } from "../loaderpreview";
 
 // Height of the fixed toolbar strip. The roster is offset by it so it never renders underneath.
 // webviewsrc/ideapreview.ts carries the same constant -- the two must move together.
@@ -17,9 +17,12 @@ export async function renderIdeaFile(
 	loader: IdeasLoader,
 	uri: vscode.Uri,
 	webview: vscode.Webview,
+	options?: RenderContentOptions,
 ): Promise<LoaderRender> {
 	try {
-		const session = new LoaderSession(false);
+		// A dependency change can be a modifier definition or format file, not this file, whose
+		// unchanged hash would otherwise hand back the definitions read before the edit.
+		const session = new LoaderSession(options?.dependencyChanged ?? false);
 		const loadResult = await loader.load(session);
 		debug("Loader session idea preview", session.loadedLoaderNames());
 

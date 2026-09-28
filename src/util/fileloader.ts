@@ -838,6 +838,11 @@ const fileListCache = new PromiseCache<string[]>({
 	maxSize: 300,
 });
 
+export function invalidateFileDiscoveryCache(): void {
+	fileListCache.clear();
+	getFilePathMemo.clear();
+}
+
 export function listFilesFromModOrHOI4(
 	relativePath: string,
 	options?: ListFilesOptions,
@@ -1244,6 +1249,7 @@ interface ModFile {
 	decision_gfx: Enum;
 	inlay_window_gfx_roots: Enum;
 	character_trait_structural_keys: Enum;
+	modifier_format_files: Enum;
 	idea_placeholder_icon?: string;
 }
 
@@ -1256,6 +1262,7 @@ const modListSchema: SchemaDef<ModFile> = {
 	decision_gfx: "enum",
 	inlay_window_gfx_roots: "enum",
 	character_trait_structural_keys: "enum",
+	modifier_format_files: "enum",
 	idea_placeholder_icon: "string",
 };
 
@@ -1265,6 +1272,7 @@ interface DescriptorLists {
 	decisionGfx: string[];
 	inlayWindowGfxRoots: string[];
 	characterTraitStructuralKeys: string[];
+	modifierFormatFiles: string[];
 	ideaPlaceholderIcon: string[];
 }
 
@@ -1318,6 +1326,16 @@ export async function getDescriptorInlayWindowGfxRoots(): Promise<string[]> {
  */
 export async function getDescriptorCharacterTraitStructuralKeys(): Promise<string[]> {
 	return (await getDescriptorList("characterTraitStructuralKeys")) ?? [];
+}
+
+/**
+ * The `modifier_format_files` named by the working mod's descriptor and its parent mods'
+ * descriptors: files in the `common/modifier_definitions` syntax that say how the previews show a
+ * modifier the game defines internally, where the built-in formats do not match what the mod needs.
+ * Like `decision_gfx`, the game ignores the key.
+ */
+export async function getDescriptorModifierFormatFiles(): Promise<string[]> {
+	return (await getDescriptorList("modifierFormatFiles")) ?? [];
 }
 
 /**
@@ -1388,6 +1406,7 @@ async function getListsFromModFile(
 		decisionGfx: modFile.decision_gfx._values,
 		inlayWindowGfxRoots: modFile.inlay_window_gfx_roots._values,
 		characterTraitStructuralKeys: modFile.character_trait_structural_keys._values,
+		modifierFormatFiles: modFile.modifier_format_files._values,
 		ideaPlaceholderIcon: typeof modFile.idea_placeholder_icon === "string" ? [modFile.idea_placeholder_icon] : [],
 	};
 }

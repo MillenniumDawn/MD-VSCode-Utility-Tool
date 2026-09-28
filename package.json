@@ -58,6 +58,7 @@
 				"mdHoi4Utilities.focusOverlayGfxFiles",
 				"mdHoi4Utilities.decisionGfxFiles",
 				"mdHoi4Utilities.ideaPlaceholderIcon",
+				"mdHoi4Utilities.modifierFormatFiles",
 				"mdHoi4Utilities.technologyGfxRoots",
 				"mdHoi4Utilities.auditor.reportFolder"
 			]
@@ -247,6 +248,15 @@
 							"type": "string"
 						},
 						"description": "%hoi4modutilities.characterTraitStructuralKeys.desc%"
+					},
+					"mdHoi4Utilities.modifierFormatFiles": {
+						"title": "%hoi4modutilities.modifierFormatFiles.title%",
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"description": "%hoi4modutilities.modifierFormatFiles.desc%"
 					},
 					"mdHoi4Utilities.technologyGfxRoots": {
 						"title": "%hoi4modutilities.technologyGfxRoots.title%",

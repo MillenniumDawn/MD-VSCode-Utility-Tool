@@ -6,6 +6,7 @@ import {
 	formatResearchBonuses,
 	humaniseKey,
 	readModifierDefinitions,
+	readModifierFormats,
 	resolveDefinition,
 	toneFor,
 } from "../util/modifiers";
@@ -202,6 +203,60 @@ describe("previewdef/idea/modifiers tone", () => {
 		const definition = resolveDefinition("middling", definitions);
 		assert.strictEqual(toneFor("middling", 0.2, definition, true), "good");
 		assert.strictEqual(toneFor("middling", -0.2, definition, true), "bad");
+	});
+});
+
+// The exception tables were first chosen from Millennium Dawn only. These are base-game national
+// spirit modifiers, read as the game shows them. Issue #453.
+describe("previewdef/idea/modifiers base-game formats", () => {
+	function line(key: string, value: number): [string, string] {
+		const definition = resolveDefinition(key, {});
+		return [formatModifierValue(value, definition), toneFor(key, value, definition, false)];
+	}
+
+	it("shows the base game's fraction-written modifiers as percentages", () => {
+		assert.deepStrictEqual(line("non_core_manpower", 0.02), ["+2%", "good"]);
+		assert.deepStrictEqual(line("mobilization_speed", 0.2), ["+20%", "good"]);
+		assert.deepStrictEqual(line("command_power_gain_mult", 0.1), ["+10%", "good"]);
+		assert.deepStrictEqual(line("army_org_regain", 0.1), ["+10%", "good"]);
+		assert.deepStrictEqual(line("naval_coordination", 0.25), ["+25%", "good"]);
+	});
+
+	it("colours the base game's lower-is-better modifiers by what they cost", () => {
+		assert.deepStrictEqual(line("send_volunteers_tension", -0.5), ["-50%", "good"]);
+		assert.deepStrictEqual(line("generate_wargoal_tension", -0.25), ["-25%", "good"]);
+		assert.deepStrictEqual(line("license_purchase_cost", -0.3), ["-30%", "good"]);
+		assert.deepStrictEqual(line("subversive_activites_upkeep", -0.5), ["-50%", "good"]);
+		assert.deepStrictEqual(line("resistance_target", 0.1), ["+10%", "bad"]);
+		assert.deepStrictEqual(line("air_night_penalty", -0.05), ["-5%", "good"]);
+		assert.deepStrictEqual(line("political_power_cost", 0.2), ["+0.2", "bad"]);
+	});
+
+	// These read the other way: they work against whoever occupies our states.
+	it("keeps the sign rule for resistance in our own occupied states", () => {
+		assert.deepStrictEqual(line("resistance_target_on_our_occupied_states", 0.25), ["+25%", "good"]);
+		assert.deepStrictEqual(line("enemy_justify_war_goal_time", 0.3), ["+30%", "good"]);
+	});
+
+	it("leaves the flat daily modifiers as plain numbers", () => {
+		assert.deepStrictEqual(line("political_power_gain", 0.1), ["+0.1", "good"]);
+		assert.deepStrictEqual(line("fascism_drift", 0.03), ["+0.03", "good"]);
+		assert.deepStrictEqual(line("command_power_gain", 0.2), ["+0.2", "good"]);
+	});
+});
+
+describe("previewdef/idea/modifiers format files", () => {
+	it("reads only the fields an entry writes", () => {
+		assert.deepStrictEqual(
+			readModifierFormats(parseHoi4File(`
+				political_power_gain = { value_type = percentage }
+				odd = { value_type = furlongs precision = 1 }
+			`)),
+			{
+				political_power_gain: { valueType: "percentage" },
+				odd: { precision: 1 },
+			},
+		);
 	});
 });
 
