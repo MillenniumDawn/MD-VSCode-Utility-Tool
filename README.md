@@ -40,6 +40,11 @@ are drawn as a chain; clicking an arrow opens the file that performs the swap.
 **Characters.** Portraits, roles and, for every trait a character carries, the modifiers it
 grants — advisor, army, navy and political roles side by side.
 
+**Balance of power.** Every balance of power in a `common/bop` file as the game draws it: the
+localised title, both side icons and the bar with each range as its own segment. A slider moves the
+value so you can walk through the ranges and see the modifiers of the active one, and overlapping
+ranges or gaps between them are flagged.
+
 **Technology trees.** The full tree laid out from the mod's own `.gui` files. Optionally choose a
 country and see the tree with that country's own technology icons, the way the game shows it.
 
@@ -98,9 +103,14 @@ The Settings editor lists them under the extension in these sections.
 |---|---|
 | `mdHoi4Utilities.previewLocalisation` | Language of the text shown in previews. |
 | `mdHoi4Utilities.previewWheel` | What a plain mouse wheel does: `scroll` (default), `zoom`, or `auto` (zoom for a mouse, scroll for a trackpad). Ctrl+wheel, the zoom buttons and the +/- keys always zoom. |
-| `mdHoi4Utilities.eventTreePreview`, `decisionPreview`, `ideaPreview`, `characterPreview` | Turn an individual preview on or off. |
+| `mdHoi4Utilities.eventTreePreview`, `decisionPreview`, `ideaPreview`, `characterPreview`, `bopPreview` | Turn an individual preview on or off. |
 | `mdHoi4Utilities.useConditionInFocus` | Show conditions in the focus tree preview. |
-| `mdHoi4Utilities.inlayWindowGfxRoots` | Folders scanned for the `.gfx` files that focus inlay windows use. |
+| `mdHoi4Utilities.inlayWindowGfxRoots` | Folders scanned first for the `.gfx` files that focus inlay windows use, before the whole `interface/` folder. Empty by default. An `inlay_window_gfx_roots = { "interface/scripted_gui" }` list in the mod's `.mod` file does the same. |
+| `mdHoi4Utilities.focusOverlayGfxFiles` | The mod's `.gfx` files (or folders of them) that define focus overlays, searched after the game's `interface/goals.gfx`. A `focus_overlay_gfx = { "interface/goals_overlays.gfx" }` list in the mod's `.mod` file does the same. |
+| `mdHoi4Utilities.decisionGfxFiles` | The mod's `.gfx` files (or folders of them) that define decision sprites, searched after the game's `interface/decisions.gfx`. A `decision_gfx = { "interface/MD_decisions.gfx" }` list in the mod's `.mod` file does the same. |
+| `mdHoi4Utilities.ideaPlaceholderIcon` | The image drawn for an idea whose picture does not resolve, used when the mod's `.mod` file has no `idea_placeholder_icon = "gfx/interface/ideas/WIP_idea.dds"` line. Without either, the game's `gfx/interface/ideas/idea_PLACEHOLDER.dds` is drawn. |
+| `mdHoi4Utilities.characterTraitStructuralKeys` | Keys the mod writes flat on its character traits that are not modifiers, so the character preview leaves them off the trait cards. The base game's own keys are always recognised. A `character_trait_structural_keys = { my_key }` list in the mod's `.mod` file does the same. |
+| `mdHoi4Utilities.modifierFormatFiles` | Files (or folders of them) in the `common/modifier_definitions` syntax that set how the idea, decision and character previews show a modifier the game defines internally, for a mod that needs a different format than the built-in one. Only the fields an entry writes change. Keep them outside `common/modifier_definitions`, which the game loads. A `modifier_format_files = { "common/my_modifier_formats.txt" }` list in the mod's `.mod` file does the same. |
 | `mdHoi4Utilities.technologyGfxRoots` | Folders scanned for `.gfx` files used by the technology tree, including country-specific icons. |
 | `mdHoi4Utilities.technologyCountryIcons` | Add a country selector to the technology tree preview and prefer that country's icons. |
 
@@ -120,6 +130,17 @@ The Settings editor lists them under the extension in these sections.
 | `mdHoi4Utilities.gfxIndex` | Index every sprite definition. Faster icon lookups, more memory. |
 | `mdHoi4Utilities.localisationIndex` | Index localisation so previews show translated text. Uses more memory. |
 | `mdHoi4Utilities.imageDecodeWorkers` | Threads used to decode `.dds` / `.tga` images. More is faster on icon-heavy trees. |
+
+**Auditor**
+
+The **Check all focus trees** link in this section (also **Check All Focus Trees** in the command
+palette) checks every focus tree file for the problems the focus tree preview warns about, and
+lists them per file in one Markdown report you can paste into a GitHub issue.
+
+| Setting | What it does |
+|---|---|
+| `mdHoi4Utilities.auditor.reportFolder` | Folder the report is saved to, as `focus-tree-audit.md`. Relative to the first workspace folder. Empty opens it in an unsaved editor tab. |
+| `mdHoi4Utilities.auditor.includeVanilla` | Also check the game's own focus tree files, not only the mod's. |
 
 Settings that say so in their description need a window reload, or the preview reopened,
 to take effect. **Show Index

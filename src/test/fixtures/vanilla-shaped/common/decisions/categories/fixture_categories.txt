@@ -1,0 +1,6 @@
+fixture_category = {
+	icon = generic_industry
+	allowed = {
+		always = yes
+	}
+}

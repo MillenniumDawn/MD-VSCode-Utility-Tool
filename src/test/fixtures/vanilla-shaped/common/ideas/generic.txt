@@ -1,0 +1,24 @@
+ideas = {
+	country = {
+		fixture_production_idea = {
+			picture = generic_production_bonus
+			allowed_civil_war = {
+				always = yes
+			}
+			modifier = {
+				production_speed_buildings_factor = 0.1
+				stability_factor = -0.05
+			}
+		}
+	}
+
+	economy = {
+		fixture_economy_idea = {
+			picture = generic_goods_red_bonus
+			cost = 150
+			modifier = {
+				consumer_goods_factor = 0.2
+			}
+		}
+	}
+}

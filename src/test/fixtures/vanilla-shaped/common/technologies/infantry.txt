@@ -1,0 +1,35 @@
+technologies = {
+	fixture_infantry_weapons = {
+		enable_equipments = {
+			infantry_equipment_0
+		}
+		path = {
+			leads_to_tech = fixture_infantry_weapons1
+			research_cost_coeff = 1
+		}
+		research_cost = 1.5
+		start_year = 1936
+		folder = {
+			name = infantry_folder
+			position = { x = 0 y = 0 }
+		}
+		categories = {
+			infantry_weapons
+		}
+	}
+
+	fixture_infantry_weapons1 = {
+		enable_equipments = {
+			infantry_equipment_1
+		}
+		research_cost = 1.5
+		start_year = 1939
+		folder = {
+			name = infantry_folder
+			position = { x = 0 y = 2 }
+		}
+		categories = {
+			infantry_weapons
+		}
+	}
+}

@@ -2,8 +2,10 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { clearDlcZipCache, getFilePathFromModOrHOI4 } from "../util/fileloader";
 import {
+	defaultUserDataDirs,
 	findUserDataDir,
 	refreshModDependencies,
+	resetModDependenciesWarningForTest,
 	whenModDependenciesSettled,
 } from "../util/moddependencies";
 import { workspaceModFilesCache } from "../util/modfile";
@@ -32,6 +34,7 @@ describe("util/moddependencies", function () {
 	let config: Record<string, unknown>;
 	let published: number;
 	let events: ParentModsChangeEvent[];
+	let warnings: string[];
 
 	function realPathOf(uri: unknown): string {
 		return String((uri as { fsPath: string }).fsPath);
@@ -79,6 +82,8 @@ describe("util/moddependencies", function () {
 		modFile = nodePath.join(workspaceDir, "descriptor.mod");
 		published = 0;
 		events = [];
+		warnings = [];
+		resetModDependenciesWarningForTest();
 		await write(nodePath.join(workspaceDir, "interface", "subonly.gfx"), "ws");
 		await write(nodePath.join(parentDir, "interface", "shared.gfx"), "parent");
 		await write(nodePath.join(parentDir, "descriptor.mod"), 'name="Parent Mod"\n');
@@ -126,6 +131,10 @@ describe("util/moddependencies", function () {
 				);
 			},
 			readFile: async (uri: unknown) => nodeFs.readFile(realPathOf(uri)),
+			showWarningMessage: async (message: unknown) => {
+				warnings.push(String(message));
+				return undefined;
+			},
 		});
 		onDidChangeParentMods((e) => {
 			published++;
@@ -133,22 +142,35 @@ describe("util/moddependencies", function () {
 		});
 	});
 
+	const oneDriveVariables = ["OneDrive", "OneDriveCommercial", "OneDriveConsumer"];
+
 	/** Points the platform default user data directory somewhere empty for one test. */
 	async function withoutDefaultUserDataDir(body: () => Promise<void>): Promise<void> {
-		const home = { USERPROFILE: process.env.USERPROFILE, HOME: process.env.HOME };
+		const names = ["USERPROFILE", "HOME", ...oneDriveVariables];
+		const saved = names.map((name) => process.env[name]);
 		process.env.USERPROFILE = root;
 		process.env.HOME = root;
+		// A real OneDrive Documents folder on this machine would otherwise be found.
+		for (const name of oneDriveVariables) {
+			delete process.env[name];
+		}
 		try {
 			await body();
 		} finally {
-			process.env.USERPROFILE = home.USERPROFILE;
-			process.env.HOME = home.HOME;
+			names.forEach((name, i) => {
+				if (saved[i] === undefined) {
+					delete process.env[name];
+				} else {
+					process.env[name] = saved[i];
+				}
+			});
 		}
 	}
 
 	afterEach(async function () {
 		restoreVscodeStubs();
 		resetParentModsForTest();
+		resetModDependenciesWarningForTest();
 		workspaceModFilesCache.clear();
 		await clearDlcZipCache();
 		await nodeFs.rm(root, { recursive: true, force: true });
@@ -413,6 +435,93 @@ describe("util/moddependencies", function () {
 			nodePath.resolve(plainCheckout),
 		]);
 		assert.deepStrictEqual(getUnresolvedDependencies(), ["Parent Mod"]);
+	});
+
+	// Leading slashes differ between the stub and a real Uri; the folders are what matter.
+	function pathOf(uri: vscode.Uri): string {
+		return uri.path.replace(/^\/+/, "");
+	}
+
+	it("looks for the user data directory under OneDrive's Documents on Windows", function () {
+		const dirs = defaultUserDataDirs("win32", {
+			USERPROFILE: "C:/Users/me",
+			OneDrive: "C:/Users/me/OneDrive",
+			OneDriveCommercial: "C:/Users/me/OneDrive - Company",
+			OneDriveConsumer: "C:/Users/me/OneDrive",
+		}).map((uri) => pathOf(uri).toLowerCase());
+		assert.deepStrictEqual(dirs, [
+			"c:/users/me/documents/paradox interactive/hearts of iron iv",
+			"c:/users/me/onedrive/documents/paradox interactive/hearts of iron iv",
+			"c:/users/me/onedrive - company/documents/paradox interactive/hearts of iron iv",
+		]);
+	});
+
+	it("keeps the one Linux default and ignores OneDrive elsewhere", function () {
+		const env = { HOME: "/home/me", OneDrive: "/home/me/OneDrive" };
+		assert.deepStrictEqual(
+			defaultUserDataDirs("linux", env).map(pathOf),
+			["home/me/.local/share/Paradox Interactive/Hearts of Iron IV"],
+		);
+		assert.deepStrictEqual(
+			defaultUserDataDirs("darwin", env).map(pathOf),
+			["home/me/Documents/Paradox Interactive/Hearts of Iron IV"],
+		);
+	});
+
+	it("resolves a dependency through a user data directory in OneDrive's Documents", async function () {
+		if (process.platform !== "win32") {
+			this.skip();
+		}
+		const oneDrive = nodePath.join(root, "OneDrive - Company");
+		const oneDriveUserData = nodePath.join(
+			oneDrive,
+			"Documents",
+			"Paradox Interactive",
+			"Hearts of Iron IV",
+		);
+		await write(nodePath.join(oneDriveUserData, "dlc_load.json"), '{"enabled_mods":[]}');
+		await write(
+			nodePath.join(oneDriveUserData, "mod", "ugc_1.mod"),
+			`name="Parent Mod"
+path="${toModPath(parentDir)}"
+`,
+		);
+		await writeOwnModFile(["Parent Mod"]);
+		config.userDataPath = "";
+
+		await withoutDefaultUserDataDir(async () => {
+			process.env.OneDriveCommercial = oneDrive;
+			await refreshModDependencies();
+		});
+
+		assert.deepStrictEqual(resolvedPaths(getParentModUris()), [
+			nodePath.resolve(parentDir),
+		]);
+		assert.deepStrictEqual(warnings, []);
+	});
+
+	it("shows one warning naming userDataPath when no user data directory is found", async function () {
+		await writeOwnModFile(["Parent Mod"]);
+		config.userDataPath = "";
+
+		await withoutDefaultUserDataDir(async () => {
+			await refreshModDependencies();
+			await refreshModDependencies();
+		});
+
+		assert.strictEqual(warnings.length, 1);
+		assert.ok(warnings[0].includes("mdHoi4Utilities.userDataPath"), warnings[0]);
+	});
+
+	it("shows no warning for a .mod without dependencies", async function () {
+		await writeOwnModFile([]);
+		config.userDataPath = "";
+
+		await withoutDefaultUserDataDir(async () => {
+			await refreshModDependencies();
+		});
+
+		assert.deepStrictEqual(warnings, []);
 	});
 
 	it("resolves nothing for a .mod without dependencies", async function () {

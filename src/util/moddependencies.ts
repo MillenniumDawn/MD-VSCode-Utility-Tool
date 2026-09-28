@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { ConfigurationKey } from "../constants";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import { convertNodeToJson, Enum, SchemaDef } from "../hoiformat/schema";
 import { PromiseCache } from "./cache";
@@ -142,33 +143,60 @@ async function findUserDataDirUpwards(
 	}
 }
 
-function defaultUserDataDirs(): vscode.Uri[] {
+// Windows often moves Documents into OneDrive, personal or a business folder such as
+// `OneDrive - <Company>`; these variables name those roots.
+const oneDriveVariables = ["OneDrive", "OneDriveCommercial", "OneDriveConsumer"];
+
+/** Where the launcher keeps its user data directory when nobody moved it, most likely first. */
+export function defaultUserDataDirs(
+	platform: string = typeof process === "undefined" ? "" : process.platform,
+	env: Record<string, string | undefined> = typeof process === "undefined"
+		? {}
+		: process.env,
+): vscode.Uri[] {
 	if (IS_WEB_EXT || typeof process === "undefined") {
 		return [];
 	}
-	const home = process.env.USERPROFILE ?? process.env.HOME;
-	if (!home) {
-		return [];
+	const home = env.USERPROFILE ?? env.HOME;
+	if (platform === "linux") {
+		return home
+			? [
+					vscode.Uri.joinPath(
+						vscode.Uri.file(home),
+						".local",
+						"share",
+						"Paradox Interactive",
+						"Hearts of Iron IV",
+					),
+				]
+			: [];
 	}
-	const homeUri = vscode.Uri.file(home);
-	return process.platform === "linux"
-		? [
-				vscode.Uri.joinPath(
-					homeUri,
-					".local",
-					"share",
-					"Paradox Interactive",
-					"Hearts of Iron IV",
-				),
-			]
-		: [
-				vscode.Uri.joinPath(
-					homeUri,
-					"Documents",
-					"Paradox Interactive",
-					"Hearts of Iron IV",
-				),
-			];
+
+	const documentsParents = home ? [home] : [];
+	if (platform === "win32") {
+		for (const variable of oneDriveVariables) {
+			const value = env[variable];
+			if (value) {
+				documentsParents.push(value);
+			}
+		}
+	}
+	const seen = new Set<string>();
+	const dirs: vscode.Uri[] = [];
+	for (const parent of documentsParents) {
+		const dir = vscode.Uri.joinPath(
+			vscode.Uri.file(parent),
+			"Documents",
+			"Paradox Interactive",
+			"Hearts of Iron IV",
+		);
+		const key = folderKey(dir);
+		if (!seen.has(key)) {
+			seen.add(key);
+			dirs.push(dir);
+		}
+	}
+	return dirs;
 }
 
 /**
@@ -287,6 +315,38 @@ export async function loadModRegistry(
 	return registry;
 }
 
+// Once until a user data directory turns up again: every refresh would otherwise repeat it.
+let warnedNoUserDataDir = false;
+
+function warnNoUserDataDir(): void {
+	if (warnedNoUserDataDir) {
+		return;
+	}
+	warnedNoUserDataDir = true;
+	const openSettings = localize("moddependencies.opensettings", "Open Settings");
+	void Promise.resolve(
+		vscode.window.showWarningMessage(
+			localize(
+				"moddependencies.nouserdatadir",
+				"Can't find the Hearts of Iron IV user data directory, so the mods this .mod depends on can't be found. Set {0} to the folder that holds the launcher's mod folder.",
+				`${ConfigurationKey}.userDataPath`,
+			),
+			openSettings,
+		),
+	).then((choice) => {
+		if (choice === openSettings) {
+			void vscode.commands.executeCommand(
+				"workbench.action.openSettings",
+				`${ConfigurationKey}.userDataPath`,
+			);
+		}
+	});
+}
+
+export function resetModDependenciesWarningForTest(): void {
+	warnedNoUserDataDir = false;
+}
+
 async function resolveDependencies(): Promise<void> {
 	const modFile = await getSelectedModFileUri();
 	const own =
@@ -318,6 +378,9 @@ async function resolveDependencies(): Promise<void> {
 		Logger.warn(
 			"[Parent mods] no Hearts of Iron IV user data directory found; set mdHoi4Utilities.userDataPath to resolve the .mod dependencies",
 		);
+		warnNoUserDataDir();
+	} else {
+		warnedNoUserDataDir = false;
 	}
 	const registry =
 		userDataDir !== undefined

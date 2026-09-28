@@ -5,7 +5,7 @@ import { CharacterTrait, TraitSource, readTraitFile } from "../util/characterTra
 // The blocks below are transcribed from Millennium Dawn's common/country_leader,
 // common/unit_leader and common/scientist_traits. The three directories write a trait three
 // different ways, and between them these cover every shape the loader has to read: the flat
-// modifiers MD writes, the `modifier = { }` block the base game writes, the per-role blocks, the
+// modifiers both MD and the base game write, the `modifier = { }` block, the per-role blocks, the
 // weight blocks that must NOT be read as modifiers, and the file with no `leader_traits` wrapper.
 
 function traitsOf(input: string, source: TraitSource = "country_leader") {
@@ -284,6 +284,74 @@ describe("util/characterTraits metadata and nested blocks", () => {
 		assert.deepStrictEqual(found.skillBonuses, []);
 		assert.deepStrictEqual(found.groups, []);
 		assert.strictEqual(found.traitType, "assignable_trait");
+	});
+
+	it("keeps the base game's leader_default_proximity_offset off the card", () => {
+		// Transcribed from the base game's common/unit_leader/00_traits.txt, which Millennium Dawn
+		// does not write, so an audit of MD alone missed it. Issue #452.
+		const found = trait(
+			`
+            leader_traits = {
+                trait_cautious = {
+                    type = land
+                    trait_type = personality_trait
+                    leader_default_proximity_offset = 1
+                    defense_skill_factor = 1
+                    logistics_skill_factor = 1
+                }
+            }
+        `,
+			"trait_cautious",
+			"unit_leader",
+		);
+
+		assert.deepStrictEqual(found.modifiers, []);
+		assert.deepStrictEqual(found.skillBonuses, [
+			{ key: "defense_skill_factor", value: 1 },
+			{ key: "logistics_skill_factor", value: 1 },
+		]);
+	});
+
+	it("keeps a flat custom_modifier_tooltip off the card", () => {
+		// The base game writes it at the top level of politician traits, not only inside `modifier`.
+		const found = trait(
+			`
+            leader_traits = {
+                silent_workhorse = {
+                    random = no
+                    political_power_factor = 0.15
+                    custom_modifier_tooltip = silent_workhorse_tt
+                }
+            }
+        `,
+			"silent_workhorse",
+		);
+
+		assert.deepStrictEqual(found.modifiers, [
+			{ key: "political_power_factor", value: 0.15 },
+		]);
+	});
+
+	it("keeps the keys a mod names as structural off the card", () => {
+		// What the characterTraitStructuralKeys setting and a character_trait_structural_keys list
+		// in the .mod file feed in, lower-cased.
+		const found = readTraitFile(
+			parseHoi4File(`
+                leader_traits = {
+                    my_trait = {
+                        My_Category = land_doctrine
+                        army_attack_factor = 0.05
+                    }
+                }
+            `),
+			"country_leader",
+			"test.txt",
+			new Set(["my_category"]),
+		)["my_trait"];
+
+		assert.deepStrictEqual(found?.modifiers, [
+			{ key: "army_attack_factor", value: 0.05 },
+		]);
 	});
 
 	it("reads sub_unit_modifiers as one group per sub-unit", () => {

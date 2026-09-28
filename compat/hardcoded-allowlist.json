@@ -1,0 +1,10 @@
+[
+	{
+		"value": "GFX_technology_small_available_item_bg",
+		"reason": "One entry of a fallback list of technology backgrounds; the later entries resolve in the base game."
+	},
+	{
+		"value": "GFX_",
+		"reason": "The sprite namespace prefix country icon names are split on, not a sprite."
+	}
+]

@@ -11,7 +11,9 @@ import { localize } from "../../util/i18n";
 import uniq from "lodash/uniq";
 import flatten from "lodash/flatten";
 import { getGfxContainerFiles } from "../../util/gfxindex";
-import { getLanguageIdInYml } from "../../util/vsccommon";
+import { getConfiguration, getLanguageIdInYml } from "../../util/vsccommon";
+import { getDescriptorDecisionGfx } from "../../util/fileloader";
+import { resolveConfiguredGfxFiles } from "../../util/configuredgfxfiles";
 import {
 	DecisionCategoriesLoader,
 	HOIDecisionCategory,
@@ -25,7 +27,11 @@ import {
 	scriptedGuisFolder,
 } from "./scriptedgui";
 import { ResolvedGuiWindow, findContainerWindows } from "../../util/guiwindowindex";
-import { ModifierDefinitions, loadModifierDefinitions } from "../../util/modifiers";
+import {
+	ModifierDefinitions,
+	listModifierDefinitionFiles,
+	loadModifierDefinitions,
+} from "../../util/modifiers";
 
 export interface DecisionsLoaderResult {
 	decisions: HOIDecisionFile;
@@ -41,10 +47,22 @@ export interface DecisionsLoaderResult {
 	gfxFiles: string[];
 }
 
-// Where the game keeps most decision sprites. Pinned rather than discovered, so a decision whose
-// icon the gfx index cannot place still resolves by scanning these. The vanilla file comes first
-// and Millennium Dawn's own -- which holds the great majority of them -- second.
-const decisionsGFX = ["interface/decisions.gfx", "interface/MD_decisions.gfx"];
+// Where the game keeps its decision sprites, scanned for a decision whose icon the gfx index cannot
+// place. A mod's own decision sprite files are named by the decisionGfxFiles setting or the
+// decision_gfx list in its descriptor, never in code.
+export const vanillaDecisionsGfxFile = "interface/decisions.gfx";
+const decisionGfxSetting = "mdHoi4Utilities.decisionGfxFiles";
+
+/**
+ * The .gfx files decision sprites are looked up in, in order: the game's interface/decisions.gfx,
+ * then what the setting names, then what the working mod's (and its parent mods') descriptors name.
+ */
+export async function getDecisionGfxFiles(): Promise<string[]> {
+	return resolveConfiguredGfxFiles(vanillaDecisionsGfxFile, [
+		...(getConfiguration().decisionGfxFiles ?? []).map((entry) => ({ entry, source: decisionGfxSetting })),
+		...(await getDescriptorDecisionGfx()).map((entry) => ({ entry, source: "decision_gfx in the .mod file" })),
+	]);
+}
 
 // `icon = generic_decision` is drawn from the sprite `GFX_decision_generic_decision`, but
 // `icon = GFX_decision_demobilisation_button` is already a sprite name. The prefix check is
@@ -138,9 +156,11 @@ export class DecisionsLoader extends ContentLoader<DecisionsLoaderResult> {
 				.map((g) => g.windowName)
 				.filter((n): n is string => n !== undefined),
 		);
-		const [guiWindows, modifierDefinitions] = await Promise.all([
+		const [guiWindows, modifierDefinitions, definitionFiles, decisionGfxFiles] = await Promise.all([
 			findContainerWindows(windowNames),
 			loadModifierDefinitions(),
+			listModifierDefinitionFiles(),
+			getDecisionGfxFiles(),
 		]);
 
 		const icons = uniq(
@@ -166,7 +186,7 @@ export class DecisionsLoader extends ContentLoader<DecisionsLoaderResult> {
 				scriptedGuis,
 				guiWindows,
 				modifierDefinitions,
-				gfxFiles: uniq([...gfxDependencies, ...decisionsGFX]),
+				gfxFiles: uniq([...gfxDependencies, ...decisionGfxFiles]),
 			},
 			dependencies: uniq([
 				this.file,
@@ -174,6 +194,9 @@ export class DecisionsLoader extends ContentLoader<DecisionsLoaderResult> {
 				...mergeInLoadResult(decisionDepFiles, "dependencies"),
 				`${decisionCategoriesFolder}/*`,
 				`${scriptedGuisFolder}/*`,
+				...decisionGfxFiles,
+				// How every modifier line reads; renderDecisionFile forces the session on an edit.
+				...definitionFiles,
 			]),
 		};
 	}

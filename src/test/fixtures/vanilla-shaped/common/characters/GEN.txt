@@ -1,0 +1,38 @@
+characters = {
+	GEN_fixture_general = {
+		name = GEN_fixture_general
+		portraits = {
+			army = {
+				large = GFX_portrait_generic_army
+			}
+		}
+		corps_commander = {
+			traits = { organizer }
+			skill = 3
+			attack_skill = 3
+			defense_skill = 2
+			planning_skill = 3
+			logistics_skill = 2
+		}
+	}
+
+	GEN_fixture_leader = {
+		name = GEN_fixture_leader
+		portraits = {
+			civilian = {
+				large = GFX_portrait_generic_leader
+			}
+		}
+		country_leader = {
+			ideology = despotism
+			traits = { }
+			expire = "1965.1.1.1"
+		}
+		advisor = {
+			slot = political_advisor
+			idea_token = GEN_fixture_advisor
+			cost = 150
+			traits = { captain_of_industry }
+		}
+	}
+}

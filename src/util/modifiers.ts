@@ -1,9 +1,17 @@
 import { Node } from "../hoiformat/hoiparser";
-import { listFilesFromModOrHOI4, parseHoi4FileCached } from "./fileloader";
+import uniq from "lodash/uniq";
+import {
+	getDescriptorModifierFormatFiles,
+	getFilePathFromModOrHOI4,
+	listFilesFromModOrHOI4,
+	parseHoi4FileCached,
+} from "./fileloader";
 import { getLocalisedTextQuick } from "./localisationIndex";
 import { getFlags } from "./featureflags";
 import { isSymbolNode } from "../hoiformat/schema";
 import { debug } from "./debug";
+import { Logger } from "./logger";
+import { getConfiguration } from "./vsccommon";
 import { ModifierPair, ModifierLine, ModifierTone } from "../previewdef/sharedpayload";
 
 /*
@@ -24,8 +32,10 @@ import { ModifierPair, ModifierLine, ModifierTone } from "../previewdef/sharedpa
  *
  * So for those this module guesses: a _factor suffix reads as a percentage, everything else as a
  * plain number. That is right for the large majority and wrong for a minority, and there is no way
- * to be exactly right without shipping a copy of a table only Paradox has. Where a known one guesses
- * wrong, add it to builtinOverrides below -- that is what the table is for, and a fix is one line.
+ * to be exactly right without shipping a copy of a table only Paradox has. Where a base-game
+ * modifier guesses wrong, add it to builtinOverrides below -- that is what the table is for, and a fix
+ * is one line. Where only one mod needs a different format, that mod names a format file in the
+ * modifierFormatFiles setting or a `modifier_format_files = { }` list in its .mod file instead.
  */
 
 export interface ModifierDefinition {
@@ -40,9 +50,17 @@ export type ModifierDefinitions = Record<string, ModifierDefinition>;
 const modifierDefinitionsDir = "common/modifier_definitions";
 
 // Game modifiers the _factor rule gets wrong: every one of these is written as a fraction and shown
-// as a percentage, without the suffix that would give it away. Chosen by going through what
-// Millennium Dawn's ideas actually use, most-used first, rather than by transcribing the game's
-// table -- this is the exception list, not a second copy of it.
+// as a percentage, without the suffix that would give it away. Chosen by going through what the base
+// game and Millennium Dawn actually write, rather than by transcribing the game's table -- this is
+// the exception list, not a second copy of it. The audit, run in the game install and in the mod:
+//
+//   grep -rhoE "^[[:space:]]*[a-z_][a-z0-9_]*[[:space:]]*=[[:space:]]*-?[0-9]*\.[0-9]+" \
+//       common/ideas common/country_leader common/unit_leader common/scientist_traits common/decisions \
+//     | sed -E 's/^[[:space:]]*([a-z0-9_]+).*/\1/' | grep -v "_factor$" | sort | uniq -c | sort -rn
+//
+// lists every key written with a fraction; the ones below are those the game shows as a percentage,
+// checked against documentation/modifiers_documentation.md to be modifiers at all. A modifier only
+// one mod needs formatted differently belongs in that mod's format file, not here.
 //
 // Colour is not set here: which direction is good comes from lowerIsBetterKeys and the suffix list
 // below, and a color_type only decides anything when a mod wrote one in common/modifier_definitions.
@@ -60,12 +78,96 @@ const builtinOverrides: Record<string, Partial<ModifierDefinition>> = {
 	foreign_subversive_activites: { valueType: "percentage" },
 	justify_war_goal_time: { valueType: "percentage" },
 	research_sharing_per_country_bonus: { valueType: "percentage" },
+	non_core_manpower: { valueType: "percentage" },
+	mobilization_speed: { valueType: "percentage" },
+	max_surrender_limit_offset: { valueType: "percentage" },
+	weekly_casualties_war_support: { valueType: "percentage" },
+	weekly_bombing_war_support: { valueType: "percentage" },
+	weekly_convoys_war_support: { valueType: "percentage" },
+	consumer_goods_expected_value: { valueType: "percentage" },
+	command_power_gain_mult: { valueType: "percentage" },
+	max_command_power_mult: { valueType: "percentage" },
+	enemy_justify_war_goal_time: { valueType: "percentage" },
+	generate_wargoal_tension: { valueType: "percentage" },
+	join_faction_tension: { valueType: "percentage" },
+	guarantee_tension: { valueType: "percentage" },
+	lend_lease_tension: { valueType: "percentage" },
+	request_lease_tension: { valueType: "percentage" },
+	guarantee_cost: { valueType: "percentage" },
+	license_purchase_cost: { valueType: "percentage" },
+	license_air_purchase_cost: { valueType: "percentage" },
+	license_production_speed: { valueType: "percentage" },
+	license_tech_difference_speed: { valueType: "percentage" },
+	refit_speed: { valueType: "percentage" },
+	refit_ic_cost: { valueType: "percentage" },
+	equipment_conversion_speed: { valueType: "percentage" },
+	land_equipment_upgrade_xp_cost: { valueType: "percentage" },
+	military_industrial_organization_funds_gain: { valueType: "percentage" },
+	military_industrial_organization_research_bonus: { valueType: "percentage" },
+	military_industrial_organization_design_team_assign_cost: { valueType: "percentage" },
+	military_industrial_organization_design_team_change_cost: { valueType: "percentage" },
+	military_industrial_organization_industrial_manufacturer_assign_cost: { valueType: "percentage" },
+	military_industrial_organization_size_up_requirement: { valueType: "percentage" },
+	// Resistance and compliance in the states we occupy and, for the _on_our_occupied_states ones,
+	// in ours that someone else occupies.
+	resistance_target: { valueType: "percentage" },
+	resistance_growth: { valueType: "percentage" },
+	resistance_activity: { valueType: "percentage" },
+	resistance_decay: { valueType: "percentage" },
+	resistance_damage_to_garrison: { valueType: "percentage" },
+	resistance_garrison_penetration_chance: { valueType: "percentage" },
+	compliance_growth: { valueType: "percentage" },
+	resistance_target_on_our_occupied_states: { valueType: "percentage" },
+	resistance_growth_on_our_occupied_states: { valueType: "percentage" },
+	resistance_damage_to_garrison_on_our_occupied_states: { valueType: "percentage" },
+	compliance_growth_on_our_occupied_states: { valueType: "percentage" },
+	// Intelligence.
+	intelligence_agency_defense: { valueType: "percentage" },
+	agency_upgrade_time: { valueType: "percentage" },
+	subversive_activites_upkeep: { valueType: "percentage" },
+	// Land combat and leaders.
+	army_org_regain: { valueType: "percentage" },
+	attrition: { valueType: "percentage" },
+	land_reinforce_rate: { valueType: "percentage" },
+	max_planning: { valueType: "percentage" },
+	coordination_bonus: { valueType: "percentage" },
+	org_loss_when_moving: { valueType: "percentage" },
+	pocket_penalty: { valueType: "percentage" },
+	special_forces_cap: { valueType: "percentage" },
+	supply_node_range: { valueType: "percentage" },
+	critical_receive_chance: { valueType: "percentage" },
+	cas_damage_reduction: { valueType: "percentage" },
+	// Naval.
+	naval_coordination: { valueType: "percentage" },
+	naval_detection: { valueType: "percentage" },
+	naval_hit_chance: { valueType: "percentage" },
+	naval_retreat_chance: { valueType: "percentage" },
+	naval_retreat_speed: { valueType: "percentage" },
+	naval_accidents_chance: { valueType: "percentage" },
+	naval_invasion_penalty: { valueType: "percentage" },
+	naval_invasion_prep_speed: { valueType: "percentage" },
+	screening_efficiency: { valueType: "percentage" },
+	convoy_escort_efficiency: { valueType: "percentage" },
+	convoy_retreat_speed: { valueType: "percentage" },
+	amphibious_invasion: { valueType: "percentage" },
+	shore_bombardment_bonus: { valueType: "percentage" },
+	spotting_chance: { valueType: "percentage" },
+	positioning: { valueType: "percentage" },
+	// Air.
+	air_mission_efficiency: { valueType: "percentage" },
+	air_superiority_efficiency: { valueType: "percentage" },
+	air_intercept_efficiency: { valueType: "percentage" },
+	air_cas_efficiency: { valueType: "percentage" },
+	fighter_sortie_efficiency: { valueType: "percentage" },
+	air_night_penalty: { valueType: "percentage" },
+	air_weather_penalty: { valueType: "percentage" },
 	// Counted in divisions, so the two decimals a fraction would want are noise.
 	send_volunteer_size: { valueType: "number", precision: 0 },
 };
 
 // Modifiers where a smaller number is the better outcome, so the sign alone would colour them
-// backwards. Matched as suffixes against the key.
+// backwards. Matched as suffixes against the key. Audited, like builtinOverrides, over the base
+// game and Millennium Dawn.
 const lowerIsBetterSuffixes = [
 	"_cost_factor",
 	"_cost_modifier",
@@ -73,9 +175,16 @@ const lowerIsBetterSuffixes = [
 	"_damage_factor",
 	"_time_factor",
 	"_price_factor",
+	"_penalty",
 	"_penalty_factor",
 	"_risk",
 	"_drift_defence_factor",
+	"_purchase_cost",
+	"_assign_cost",
+	"_change_cost",
+	"_xp_cost",
+	"_ic_cost",
+	"_upkeep",
 ];
 
 // Modifiers where a smaller number is better and the suffix rule does not reach them.
@@ -89,14 +198,53 @@ const lowerIsBetterKeys = new Set([
 	"justify_war_goal_time",
 	"required_garrison_factor",
 	"weekly_manpower",
+	// Tension our own actions add to the world.
+	"send_volunteers_tension",
+	"generate_wargoal_tension",
+	"join_faction_tension",
+	"guarantee_tension",
+	"lend_lease_tension",
+	"request_lease_tension",
+	"political_power_cost",
+	"guarantee_cost",
+	"agency_upgrade_time",
+	"foreign_subversive_activites",
+	"military_industrial_organization_size_up_requirement",
+	"minimum_training_level",
+	"attrition",
+	"org_loss_when_moving",
+	"critical_receive_chance",
+	"naval_accidents_chance",
+	// Resistance in the states we occupy. The _on_our_occupied_states ones work against whoever
+	// occupies ours, so for them more is better and the sign rule already reads the right way --
+	// except compliance, which helps the occupier.
+	"resistance_target",
+	"resistance_growth",
+	"resistance_activity",
+	"resistance_damage_to_garrison",
+	"resistance_garrison_penetration_chance",
+	"compliance_growth_on_our_occupied_states",
 ]);
 
+const modifierFormatFilesSetting = "mdHoi4Utilities.modifierFormatFiles";
+
 /**
- * The `common/modifier_definitions` files loadModifierDefinitions reads, as paths. Exported so a
- * preview built on them can report them as dependencies and refresh when one is edited; the
- * directory listing is cached, so asking for the list beside the load costs nothing.
+ * Definition files, format files, and configured folders with a wildcard for new files.
+ * Preview dependencies use the wildcard to refresh when a folder gains a format file.
  */
 export async function listModifierDefinitionFiles(): Promise<string[]> {
+	const [definitions, formats, entries] = await Promise.all([
+		listDefinitionDirectoryFiles(), listModifierFormatFiles(), modifierFormatEntries(),
+	]);
+	const folders = entries
+		.filter(({ entry }) => typeof entry === "string")
+		.map(({ entry }) => entry.trim().replace(/\\+/g, "/").replace(/\/+$/, ""))
+		.filter((entry) => entry !== "" && !entry.toLowerCase().endsWith(".txt"))
+		.map((entry) => `${entry}/*`);
+	return uniq([...definitions, ...formats, ...folders]);
+}
+
+async function listDefinitionDirectoryFiles(): Promise<string[]> {
 	try {
 		return (await listFilesFromModOrHOI4(modifierDefinitionsDir))
 			.filter((file) => file.toLowerCase().endsWith(".txt"))
@@ -110,14 +258,65 @@ export async function listModifierDefinitionFiles(): Promise<string[]> {
 }
 
 /**
- * Reads every `common/modifier_definitions` file the mod and the game between them provide. A mod
- * file with the same modifier as the game's wins, because listFilesFromModOrHOI4 lists the mod's
- * copy and the later assignment overwrites.
+ * The mod's format files, in order: what the modifierFormatFiles setting names, then what the
+ * working mod's (and its parent mods') descriptors name in `modifier_format_files`. An entry that is
+ * not a .txt file is a folder scanned for them. An entry that names nothing is reported, naming
+ * where it was configured, and skipped.
+ */
+async function modifierFormatEntries(): Promise<{ entry: string; source: string }[]> {
+	return [
+		...(getConfiguration().modifierFormatFiles ?? []).map((entry) => ({ entry, source: modifierFormatFilesSetting })),
+		...(await getDescriptorModifierFormatFiles()).map((entry) => ({ entry, source: "modifier_format_files in the .mod file" })),
+	];
+}
+
+export async function listModifierFormatFiles(): Promise<string[]> {
+	const configured = await modifierFormatEntries();
+	const files: string[] = [];
+	for (const { entry, source } of configured) {
+		if (typeof entry !== "string" || entry.trim() === "") {
+			continue;
+		}
+		const path = entry.trim().replace(/\\+/g, "/").replace(/\/+$/, "");
+		if (path.toLowerCase().endsWith(".txt")) {
+			if (await getFilePathFromModOrHOI4(path)) {
+				files.push(path);
+			} else {
+				Logger.warn(`${source}: "${entry}" is not in the mod, its parent mods or the game install -- check the path`);
+			}
+			continue;
+		}
+
+		let found: string[] = [];
+		try {
+			found = (await listFilesFromModOrHOI4(path))
+				.filter((file) => file.toLowerCase().endsWith(".txt"))
+				.map((file) => `${path}/${file}`);
+		} catch (e) {
+			debug(`Cannot list modifier format folder ${path}`, e);
+		}
+		if (found.length === 0) {
+			Logger.warn(`${source}: "${entry}" contains no .txt files in the mod, its parent mods or the game install -- check the path`);
+		}
+		files.push(...found);
+	}
+	return uniq(files);
+}
+
+/**
+ * Reads every `common/modifier_definitions` file the mod and the game between them provide, then the
+ * mod's format files. A mod file with the same modifier as the game's wins, because
+ * listFilesFromModOrHOI4 lists the mod's copy and the later assignment overwrites. A format file
+ * entry changes only the fields it writes, over whatever the modifier would otherwise resolve to.
  */
 export async function loadModifierDefinitions(): Promise<ModifierDefinitions> {
 	const result: ModifierDefinitions = {};
+	const [definitionFiles, formatFiles] = await Promise.all([
+		listDefinitionDirectoryFiles(),
+		listModifierFormatFiles(),
+	]);
 
-	for (const path of await listModifierDefinitionFiles()) {
+	for (const path of definitionFiles) {
 		try {
 			const node = await parseHoi4FileCached(path);
 			Object.assign(result, readModifierDefinitions(node));
@@ -127,11 +326,40 @@ export async function loadModifierDefinitions(): Promise<ModifierDefinitions> {
 		}
 	}
 
+	for (const path of formatFiles) {
+		try {
+			const node = await parseHoi4FileCached(path);
+			for (const [key, format] of Object.entries(readModifierFormats(node))) {
+				result[key] = { ...resolveDefinition(key, result), ...format };
+			}
+		} catch (e) {
+			debug(`Failed to read modifier formats from ${path}`, e);
+		}
+	}
+
 	return result;
 }
 
 export function readModifierDefinitions(node: Node): ModifierDefinitions {
 	const result: ModifierDefinitions = {};
+	for (const [key, format] of Object.entries(readModifierFormats(node))) {
+		result[key] = {
+			valueType: "number",
+			precision: 2,
+			colorType: "bad",
+			postfix: "none",
+			...format,
+		};
+	}
+	return result;
+}
+
+/**
+ * The fields each block of a `common/modifier_definitions`-style file writes, and only those: a field
+ * left out, or given a value the game does not accept, is absent rather than defaulted.
+ */
+export function readModifierFormats(node: Node): Record<string, Partial<ModifierDefinition>> {
+	const result: Record<string, Partial<ModifierDefinition>> = {};
 	if (!Array.isArray(node.value)) {
 		return result;
 	}
@@ -141,12 +369,7 @@ export function readModifierDefinitions(node: Node): ModifierDefinitions {
 			continue;
 		}
 
-		const definition: ModifierDefinition = {
-			valueType: "number",
-			precision: 2,
-			colorType: "bad",
-			postfix: "none",
-		};
+		const definition: Partial<ModifierDefinition> = {};
 
 		for (const field of child.value) {
 			const name = field.name?.toLowerCase();

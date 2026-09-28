@@ -140,8 +140,10 @@ describe("previewdef configuration reload", () => {
 				[
 					"useConditionInFocus",
 					"focusTreeLayout",
+					"focusTreePrerequisiteLines",
 					"sharedFocusIndex",
 					"inlayWindowGfxRoots",
+					"focusOverlayGfxFiles",
 					"gfxIndex",
 					"localisationIndex",
 					"previewLocalisation",
@@ -151,17 +153,17 @@ describe("previewdef configuration reload", () => {
 			[
 				"idea",
 				ideaPreviewDef,
-				["previewLocalisation", "localisationIndex", "gfxIndex", "ideaSwapIndex"],
+				["previewLocalisation", "localisationIndex", "gfxIndex", "ideaSwapIndex", "ideaPlaceholderIcon", "modifierFormatFiles"],
 			],
 			[
 				"decision",
 				decisionPreviewDef,
-				["previewLocalisation", "localisationIndex", "gfxIndex"],
+				["previewLocalisation", "localisationIndex", "gfxIndex", "decisionGfxFiles", "modifierFormatFiles"],
 			],
 			[
 				"character",
 				characterPreviewDef,
-				["previewLocalisation", "localisationIndex", "gfxIndex"],
+				["previewLocalisation", "localisationIndex", "gfxIndex", "characterTraitStructuralKeys", "modifierFormatFiles"],
 			],
 			[
 				"technology",

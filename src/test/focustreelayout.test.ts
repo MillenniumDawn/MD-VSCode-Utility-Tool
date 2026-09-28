@@ -235,8 +235,16 @@ guiTypes = {
         assert.deepStrictEqual(link.offset, { x: 3, y: 4 });
         assert.strictEqual(link.sprites.gfx.up_down, 'GFX_md_link_up_down');
         assert.strictEqual(link.sprites.gfx.down_left, 'GFX_md_link_down_left');
-        assert.strictEqual(link.sprites.frame, 2);
-        assert.strictEqual(link.sprites.dashedFrame, 3);
+    });
+
+    // The gui's `frame` is only where the icon starts: the game picks each line's frame by its state,
+    // and the gui's `frame = 1` is the green completed line.
+    it('takes no frame from national_focus_link', () => {
+        for (const frame of ['1', '3']) {
+            const moved = mdGui.replace('spriteType = "GFX_focus_link_up_down" frame = 1', `spriteType = "GFX_focus_link_up_down" frame = ${frame}`);
+            const sprites = buildFocusTreeLayout([parseGui(moved)]).prerequisiteLink.sprites;
+            assert.deepStrictEqual(Object.keys(sprites), ['gfx']);
+        }
     });
 
     it('keeps the standard corner sprites when the line sprite is not named after its shape', () => {
@@ -244,6 +252,5 @@ guiTypes = {
         const sprites = buildFocusTreeLayout([parseGui(moved)]).prerequisiteLink.sprites;
         assert.strictEqual(sprites.gfx.up_down, 'GFX_md_line');
         assert.strictEqual(sprites.gfx.up_right, 'GFX_focus_link_up_right');
-        assert.strictEqual(sprites.frame, 0);
     });
 });
