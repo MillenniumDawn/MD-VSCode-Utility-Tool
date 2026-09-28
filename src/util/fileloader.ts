@@ -1242,6 +1242,7 @@ interface ModFile {
 	replace_path: string[];
 	focus_overlay_gfx: Enum;
 	decision_gfx: Enum;
+	inlay_window_gfx_roots: Enum;
 	idea_placeholder_icon?: string;
 }
 
@@ -1252,6 +1253,7 @@ const modListSchema: SchemaDef<ModFile> = {
 	},
 	focus_overlay_gfx: "enum",
 	decision_gfx: "enum",
+	inlay_window_gfx_roots: "enum",
 	idea_placeholder_icon: "string",
 };
 
@@ -1259,6 +1261,7 @@ interface DescriptorLists {
 	replacePaths: string[];
 	focusOverlayGfx: string[];
 	decisionGfx: string[];
+	inlayWindowGfxRoots: string[];
 	ideaPlaceholderIcon: string[];
 }
 
@@ -1293,6 +1296,15 @@ export async function getDescriptorFocusOverlayGfx(): Promise<string[]> {
  */
 export async function getDescriptorDecisionGfx(): Promise<string[]> {
 	return (await getDescriptorList("decisionGfx")) ?? [];
+}
+
+/**
+ * The `inlay_window_gfx_roots` folders named by the working mod's descriptor and its parent mods'
+ * descriptors: where the focus tree preview looks first for the sprites of focus inlay windows,
+ * before scanning the whole interface/ folder. Like `decision_gfx`, the game ignores the key.
+ */
+export async function getDescriptorInlayWindowGfxRoots(): Promise<string[]> {
+	return (await getDescriptorList("inlayWindowGfxRoots")) ?? [];
 }
 
 /**
@@ -1361,6 +1373,7 @@ async function getListsFromModFile(
 		replacePaths: modFile.replace_path.filter((v): v is string => typeof v === "string"),
 		focusOverlayGfx: modFile.focus_overlay_gfx._values,
 		decisionGfx: modFile.decision_gfx._values,
+		inlayWindowGfxRoots: modFile.inlay_window_gfx_roots._values,
 		ideaPlaceholderIcon: typeof modFile.idea_placeholder_icon === "string" ? [modFile.idea_placeholder_icon] : [],
 	};
 }

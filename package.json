@@ -187,9 +187,7 @@
 					"mdHoi4Utilities.inlayWindowGfxRoots": {
 						"title": "%hoi4modutilities.inlayWindowGfxRoots.title%",
 						"type": "array",
-						"default": [
-							"interface/scripted_gui"
-						],
+						"default": [],
 						"items": {
 							"type": "string"
 						},
