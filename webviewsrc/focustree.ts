@@ -1149,9 +1149,11 @@ function renderInlayWindows(
 	const selectedInlayWindow = focusTree.inlayWindows.find(
 		(inlay) => inlay.id === selectedInlayWindowId,
 	);
+	// Outside condition mode there is no way to meet a `visible` trigger, and ticking the window
+	// on is already the reader asking to see it.
 	if (
 		!selectedInlayWindow ||
-		!applyCondition(selectedInlayWindow.visible, exprs)
+		(useConditionInFocus && !applyCondition(selectedInlayWindow.visible, exprs))
 	) {
 		return "";
 	}
@@ -1500,6 +1502,28 @@ window.addEventListener(
 				const visible = !showWarningMarkers();
 				setState({ showFocusWarningMarkers: visible });
 				setWarningMarkersVisible(visible);
+			});
+		}
+
+		// Copy the selected tree's warnings. The host formats them and writes the clipboard, which a
+		// webview cannot reach reliably on its own.
+		const copyWarnings = document.getElementById(
+			"copy-warnings",
+		) as HTMLButtonElement | null;
+		if (copyWarnings) {
+			copyWarnings.addEventListener("click", () => {
+				const focusTree = focusTrees[selectedFocusTreeIndex];
+				if (focusTree === undefined) {
+					return;
+				}
+				vscode.postMessage({
+					command: "copyWarnings",
+					treeId: focusTree.id,
+					warnings: focusTree.warnings.map((w) => ({
+						source: w.source,
+						text: w.text,
+					})),
+				});
 			});
 		}
 

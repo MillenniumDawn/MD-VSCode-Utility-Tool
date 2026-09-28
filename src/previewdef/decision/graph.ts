@@ -235,7 +235,9 @@ async function buildScriptedGui(
 		return { name, windowName };
 	}
 
-	const rendered = await renderStandaloneWindow(resolved.window, styleTable, loadResult.gfxFiles);
+	const rendered = await renderStandaloneWindow(resolved.window, styleTable, loadResult.gfxFiles, {
+		file: resolved.file,
+	});
 
 	return {
 		name,

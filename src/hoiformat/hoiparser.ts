@@ -200,6 +200,12 @@ export interface ParseOptions {
 	 * tokens substantially lowers peak RAM while parsing many files. Defaults to true.
 	 */
 	keepTokens?: boolean;
+	/**
+	 * When true, a block still open at the end of the file is closed there instead of failing the
+	 * parse. The game reads files this way, and vanilla ships one: interface/powerbalanceview.gfx
+	 * never closes its `spriteTypes`, and failing it lost every balance of power sprite.
+	 */
+	closeBlocksAtEof?: boolean;
 }
 
 export function parseHoi4File(
@@ -209,7 +215,7 @@ export function parseHoi4File(
 ): Node {
 	const keepTokens = options.keepTokens !== false;
 	const tokens = tokenizer(input, errorMessagePrefix);
-	const value = parseBlockContent(tokens, keepTokens);
+	const value = parseBlockContent(tokens, keepTokens, options.closeBlocksAtEof === true);
 
 	if (tokens.peek().type !== "eof") {
 		tokens.throw("File content can't be completely parsed");
@@ -272,7 +278,11 @@ export function resolveScriptVariables(root: Node): Node {
 	return root;
 }
 
-function parseNode(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node {
+function parseNode(
+	tokens: Tokenizer<HOITokenType>,
+	keepTokens: boolean,
+	closeBlocksAtEof: boolean,
+): Node {
 	const name = tokens.next();
 	if (
 		name.type !== "string" &&
@@ -318,6 +328,7 @@ function parseNode(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node {
 	let [value, valueStartToken, valueEndToken] = parseNodeValue(
 		tokens,
 		keepTokens,
+		closeBlocksAtEof,
 	);
 
 	if (value !== null && typeof value === "object" && "name" in value) {
@@ -328,6 +339,7 @@ function parseNode(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node {
 			[value, valueStartToken, valueEndToken] = parseNodeValue(
 				tokens,
 				keepTokens,
+				closeBlocksAtEof,
 			);
 		}
 	}
@@ -354,6 +366,7 @@ function parseNode(tokens: Tokenizer<HOITokenType>, keepTokens: boolean): Node {
 function parseNodeValue(
 	tokens: Tokenizer<HOITokenType>,
 	keepTokens: boolean,
+	closeBlocksAtEof: boolean,
 ): [NodeValue, Token<HOITokenType>, Token<HOITokenType>] {
 	const nextToken = tokens.next();
 	switch (nextToken.type) {
@@ -380,7 +393,10 @@ function parseNodeValue(
 			return [{ name: nextToken.value }, nextToken, nextToken];
 		case "operator":
 			if (nextToken.value === "{") {
-				const result = parseBlockContent(tokens, keepTokens);
+				const result = parseBlockContent(tokens, keepTokens, closeBlocksAtEof);
+				if (closeBlocksAtEof && tokens.peek().type === "eof") {
+					return [result, nextToken, tokens.peek()];
+				}
 				const right = tokens.next();
 				if (right.value !== "}") {
 					tokens.throw("Expect a '}'", true);
@@ -396,6 +412,7 @@ function parseNodeValue(
 function parseBlockContent(
 	tokens: Tokenizer<HOITokenType>,
 	keepTokens: boolean,
+	closeBlocksAtEof: boolean,
 ): Node[] {
 	const nodes: Node[] = [];
 
@@ -405,7 +422,7 @@ function parseBlockContent(
 			break;
 		}
 
-		nodes.push(parseNode(tokens, keepTokens));
+		nodes.push(parseNode(tokens, keepTokens, closeBlocksAtEof));
 	}
 
 	return nodes;

@@ -94,10 +94,11 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         }, layout.spacing.y);
 
         // The same two passes for the prerequisite lines: the webview draws the same tiles either way.
+        const focusLinkState = getFlags().focusTreePrerequisiteLines;
         const focusLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
-            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
-            : await loadFocusLinkImages();
-        registerFocusLinkStyles(styleTable, focusLinkImages);
+            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles], focusLinkState)
+            : await loadFocusLinkImages(undefined, undefined, focusLinkState);
+        registerFocusLinkStyles(styleTable, focusLinkImages, focusLinkState);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
@@ -397,27 +398,31 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             </div>
         </div>`;
 
+    // A closed dropdown is as wide as its longest option, and a condition can be a whole block of
+    // triggers, so the box is capped and the label kept on the same line as it.
+    const conditionContainerClass = styleTable.style('conditionContainer', () => `white-space:nowrap`);
+    const conditionSelectClass = styleTable.style('conditionSelect', () => `max-width:400px; overflow:hidden;`);
     const conditions = `
-        <div id="condition-container">
+        <div id="condition-container" class="${conditionContainerClass}">
             <label for="conditions" class="${styleTable.style('conditionsLabel', () => `margin-right:5px`)}">${localize('focustree.focusconditions', 'Focus conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
-                <div id="conditions" class="select multiple-select" tabindex="0" role="combobox" class="${styleTable.style('conditionsLabel', () => `max-width:400px`)}">
+                <div id="conditions" class="select multiple-select ${conditionSelectClass}" tabindex="0" role="combobox">
                     <span class="value"></span>
                 </div>
             </div>
         </div>`;
 
     const inlayConditions = `
-        <div id="inlay-condition-container">
+        <div id="inlay-condition-container" class="${conditionContainerClass}">
             <label for="inlay-conditions" class="${styleTable.style('inlayConditionsLabel', () => `margin-right:5px`)}">${localize('focustree.inlayconditions', 'Inlay conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
-                <div id="inlay-conditions" class="select multiple-select" tabindex="0" role="combobox">
+                <div id="inlay-conditions" class="select multiple-select ${conditionSelectClass}" tabindex="0" role="combobox">
                     <span class="value"></span>
                 </div>
             </div>
         </div>`;
     
-    // Both warning buttons share the same gate, so ToolbarFlags.hasWarnings alone still decides
+    // The warning buttons share the same gate, so ToolbarFlags.hasWarnings alone still decides
     // whether the toolbar needs a full reload when a tree gains or loses its first warning.
     const hasNoWarnings = focusTrees.every(ft => ft.warnings.length === 0);
     const warningsButton = hasNoWarnings ? '' : `
@@ -428,6 +433,11 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
     const warningMarkersButton = hasNoWarnings ? '' : `
         <button id="toggle-warning-markers" title="${localize('focustree.warningmarkers', 'Toggle warning markers on the tree')}">
             <i class="codicon codicon-error"></i>
+        </button>`;
+
+    const copyWarningsButton = hasNoWarnings ? '' : `
+        <button id="copy-warnings" title="${localize('focustree.copywarnings', 'Copy this focus tree\'s warnings')}">
+            <i class="codicon codicon-copy"></i>
         </button>`;
 
     const hasAllowBranch = focusTrees.some(ft => ft.allowBranchOptions.length > 0);
@@ -458,6 +468,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${inlayWindows}
             ${warningsButton}
             ${warningMarkersButton}
+            ${copyWarningsButton}
             ${resetCheckboxesButton}
             ${traceStatus}
         </div>
@@ -529,10 +540,13 @@ async function renderInlayWindow(inlay: FocusTree["inlayWindows"][number], style
         orientation: 'upper_left',
     };
 
+    // The tree's inlay_window position is where the window's top-left goes. Left in place, a root
+    // orientation such as lower_left would anchor the window to the corner of the parent above.
     const content = await renderContainerWindow(
         {
             ...inlay.guiWindow,
             position: { x: toNumberLike(0), y: toNumberLike(0) },
+            orientation: toStringAsSymbolIgnoreCase('upper_left'),
         },
         parentInfo,
         {
@@ -588,10 +602,15 @@ async function renderInlayOverrideChild<T extends keyof RenderChildTypeMap>(
 
     const scale = iconLikeChild.scale ?? 1;
     const gfxClassPlaceholder = `{{inlay_slot_class:${slot.id}}}`;
-    const spriteHtml = renderSprite({ x: 0, y: 0 }, sprite, sprite, 0, scale, {
-        styleTable,
-        classNames: gfxClassPlaceholder,
-    });
+    // The image comes only from the placeholder, which the webview swaps for the option whose
+    // condition is met. A background of this first option here would sit later in the stylesheet
+    // and win over whichever option was chosen; the sprite only sizes the slot.
+    const spriteHtml = `<div class="${gfxClassPlaceholder} ${styleTable.style('positionAbsolute', () => `position: absolute;`)} ${styleTable.oneTimeStyle('inlay-gui-slot-image', () => `
+        left: 0px;
+        top: 0px;
+        width: ${sprite.width * scale}px;
+        height: ${sprite.height * scale}px;
+    `)}"></div>`;
     const textHtml = type === 'button' ? await renderInstantTextBox({
         ...iconLikeChild,
         position: { x: toNumberLike(0), y: toNumberLike(0) },

@@ -144,8 +144,9 @@ function byName<T extends { name?: string }>(elements: T[] | undefined, name: st
 }
 
 // The gui names one sprite, the vertical run. When it follows the game's `..._up_down` naming the
-// other shapes are its siblings; otherwise only the vertical run is replaced.
-function focusLinkSprites(icon: { spritetype?: string; quadtexturesprite?: string; frame?: number } | undefined): FocusLinkSpriteSpec {
+// other shapes are its siblings; otherwise only the vertical run is replaced. Its `frame` is only
+// the icon's starting frame: the game picks each line's frame by its state.
+function focusLinkSprites(icon: { spritetype?: string; quadtexturesprite?: string } | undefined): FocusLinkSpriteSpec {
     const defaults = defaultFocusLinkSprites;
     const name = icon?.spritetype ?? icon?.quadtexturesprite;
     if (name === undefined) {
@@ -159,8 +160,7 @@ function focusLinkSprites(icon: { spritetype?: string; quadtexturesprite?: strin
             gfx[shape] = `${prefix}_${shape}`;
         }
     }
-    const frame = frameOf(icon, defaults.frame);
-    return { gfx, frame, dashedFrame: frame + 1 };
+    return { gfx };
 }
 
 function shift(standard: number, value: number | undefined, referenceValue: number): number {
