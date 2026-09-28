@@ -227,6 +227,7 @@ function subscribeTracing(): void {
 
 let useConditionInFocus: boolean = (window as any).useConditionInFocus;
 let focusTrees: FocusTree[] = (window as any).focusTrees;
+let renderedShortcuts: string[][] = (window as any).renderedShortcuts ?? [];
 
 let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
 let selectedInlayExprs: ConditionItem[] = getState().selectedInlayExprs ?? [];
@@ -761,7 +762,23 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 		}
 	}
 
+	renderShortcuts(focusTree, renderedShortcuts[selectedFocusTreeIndex]);
 	renderWarningList(focusTree);
+}
+
+// The host renders every button; this only puts the selected tree's into the overlay, and hides
+// the overlay on a tree without shortcuts. Each button carries its index into the tree's shortcuts,
+// since two shortcuts may share a name.
+export function renderShortcuts(focusTree: FocusTree, rendered: string[] = []) {
+	const count = Math.min(focusTree.shortcuts?.length ?? 0, rendered.length);
+	const overlay = document.getElementById("shortcut-overlay") as HTMLDivElement | null;
+	if (overlay) {
+		overlay.style.display = count > 0 ? "flex" : "none";
+	}
+	const list = document.getElementById("shortcut-list");
+	if (list) {
+		list.innerHTML = rendered.slice(0, count).join("");
+	}
 }
 
 // The size is the layout's: continuous_focus_window's in gui mode. The shell is not rebuilt on an
@@ -923,6 +940,26 @@ function renderWarningList(focusTree: FocusTree) {
 		});
 		warnings.appendChild(entry);
 	}
+}
+
+// One listener on the overlay, so the buttons can be replaced per tree without rebinding. The
+// fold state is the reader's, kept across reloads like the other toolbar toggles.
+export function bindShortcuts(overlay: HTMLElement, currentTree: () => FocusTree | undefined) {
+	overlay.classList.toggle("collapsed", getState().shortcutsCollapsed ?? false);
+	overlay.addEventListener("click", (e) => {
+		const target = e.target as Element;
+		if (target.closest("#shortcut-toggle")) {
+			const collapsed = !overlay.classList.contains("collapsed");
+			overlay.classList.toggle("collapsed", collapsed);
+			setState({ shortcutsCollapsed: collapsed });
+			return;
+		}
+		const item = target.closest("[data-shortcut-index]") as HTMLElement | null;
+		const shortcut = item ? currentTree()?.shortcuts?.[Number(item.dataset.shortcutIndex)] : undefined;
+		if (shortcut) {
+			revealFocus(shortcut.target);
+		}
+	});
 }
 
 function revealFocus(focusId: string) {
@@ -1281,6 +1318,12 @@ window.addEventListener("message", tryRun(async (event) => {
 	const data = msg.data ?? {};
 	focusTrees = data.focusTrees;
 	(window as any).focusTrees = data.focusTrees;
+	renderedShortcuts = data.renderedShortcuts ?? [];
+	(window as any).renderedShortcuts = renderedShortcuts;
+	const shortcutToggle = document.getElementById("shortcut-toggle");
+	if (shortcutToggle && data.renderedShortcutToggle !== undefined) {
+		shortcutToggle.innerHTML = data.renderedShortcutToggle;
+	}
 	(window as any).renderedFocus = data.renderedFocus;
 	(window as any).renderedInlayWindows = data.renderedInlayWindows;
 	(window as any).gridBox = data.gridBox;
@@ -1352,6 +1395,11 @@ window.addEventListener(
 				await buildContent();
 				retriggerSearch();
 			}));
+		}
+
+		const shortcutOverlay = document.getElementById("shortcut-overlay");
+		if (shortcutOverlay) {
+			bindShortcuts(shortcutOverlay, () => focusTrees[selectedFocusTreeIndex]);
 		}
 
 		const inlayWindowsElement = document.getElementById(

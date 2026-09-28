@@ -1,5 +1,5 @@
 import { HOIPartial, NumberLike, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { ContainerWindowType, GridBoxType, GuiFile, PositionType } from '../../hoiformat/gui';
+import { ButtonType, ContainerWindowType, GridBoxType, GuiFile, PositionType } from '../../hoiformat/gui';
 import { NumberPosition } from '../../util/common';
 import { getWidth, normalizeNumberLike } from '../../util/hoi4gui/common';
 import { defaultExclusiveLinkSprites, ExclusiveLinkSpriteSpec } from '../../util/hoi4gui/exclusivelink';
@@ -94,6 +94,24 @@ function num(value: NumberLike | undefined): number | undefined {
 
 function point(position: HOIPartial<{ x: NumberLike; y: NumberLike }> | undefined): Partial<NumberPosition> {
     return { x: num(position?.x), y: num(position?.y) };
+}
+
+/**
+ * The pieces of nationalfocusview.gui the shortcut buttons are drawn from: one
+ * `focus_tree_shortcut_item` per shortcut, and the `toggle_shortcuts` button that folds them away.
+ * Either is undefined when no gui file declares it, and the preview then draws its own.
+ */
+export interface FocusShortcutGui {
+    item?: Window;
+    toggle?: HOIPartial<ButtonType>;
+}
+
+export function findFocusShortcutGui(guiFiles: HOIPartial<GuiFile>[]): FocusShortcutGui {
+    const windows = guiFiles.flatMap(f => f.guitypes).flatMap(t => [...t.containerwindowtype, ...t.windowtype]);
+    return {
+        item: findWindow(windows, 'focus_tree_shortcut_item'),
+        toggle: byName(findWindow(windows, 'nationalfocusview')?.buttontype, 'toggle_shortcuts'),
+    };
 }
 
 function findWindow(windows: Window[], name: string): Window | undefined {

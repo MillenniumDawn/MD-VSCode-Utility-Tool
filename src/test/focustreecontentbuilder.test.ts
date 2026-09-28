@@ -157,6 +157,68 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.strictEqual(payload!.toolbarFlags.hasWarnings, false);
 	});
 
+	it("buildFocusTreePayload renders a button per shortcut and the page carries them and the overlay", async () => {
+		const tree = minimalFocusTree({
+			shortcuts: [
+				{ name: "TST_shortcut", target: "focus_a" },
+				{ name: "TST_shortcut", target: "focus_a" },
+				{ name: "<b>TST_escaped</b>", target: "focus_a" },
+			],
+		});
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([tree, minimalFocusTree({ id: "other_tree" })]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		// One list per tree, one button per shortcut, even where two share a name.
+		assert.strictEqual(payload!.renderedShortcuts.length, 2);
+		assert.strictEqual(payload!.renderedShortcuts[1].length, 0);
+		const buttons = payload!.renderedShortcuts[0];
+		assert.strictEqual(buttons.length, 3);
+		assert.ok(buttons[0].includes('data-shortcut-index="0"'));
+		assert.ok(buttons[1].includes('data-shortcut-index="1"'));
+		// Without a localisation index the label is the key itself, escaped.
+		assert.ok(buttons[0].includes("TST_shortcut"));
+		assert.ok(buttons[2].includes("&lt;b&gt;TST_escaped&lt;/b&gt;"));
+		assert.ok(!buttons[2].includes("<b>"));
+		// No nationalfocusview.gui in the load result: the chevron stands in for its toggle.
+		assert.ok(payload!.renderedShortcutToggle.includes("codicon-chevron-left"));
+
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		assert.ok(html.includes("window.renderedShortcuts"));
+		assert.ok(html.includes('id="shortcut-overlay"'));
+		assert.ok(html.includes("codicon-chevron-left"));
+		assert.ok(!html.includes('id="shortcuts"'));
+	});
+
+	it("buildFocusTreePayload draws the shortcut from the gui item window when the load has one", async () => {
+		const item = {
+			name: "focus_tree_shortcut_item",
+			size: { width: { _value: 190 }, height: { _value: 72 } },
+			background: [],
+			containerwindowtype: [], windowtype: [], gridboxtype: [], icontype: [], buttontype: [],
+			instanttextboxtype: [], checkboxtype: [], smoothlistboxtype: [], editboxtype: [], textboxtype: [],
+			scrollbartype: [], listboxtype: [], guibuttontype: [],
+		};
+		(item.instanttextboxtype as any[]).push({ name: "name", maxwidth: { _value: 112 }, maxheight: { _value: 60 }, font: "hoi_20b" });
+		(item.buttontype as any[]).push({ name: "focus_button", position: { x: { _value: 37 }, y: { _value: 37 } }, scale: 0.6, centerposition: true });
+		const tree = minimalFocusTree({ shortcuts: [{ name: "TST_gui_shortcut", target: "focus_a" }] });
+		const payload = await buildFocusTreePayload(
+			{
+				file: "common/national_focus/test.txt",
+				load: async () => ({ result: { focusTrees: [tree], gfxFiles: [], shortcutGui: { item } } }),
+			} as any,
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		const [button] = payload!.renderedShortcuts[0];
+		assert.ok(button.includes("TST_gui_shortcut"));
+		assert.ok(button.includes("st-shortcut-icon-"));
+		assert.ok(!button.includes("st-shortcut-item-plain"));
+	});
+
 	// Millennium Dawn's China and England inlays anchor their window lower_left. The game puts the
 	// window's top-left at the tree's inlay_window position, so the root must not drop a screen height.
 	it("buildFocusTreePayload places an inlay window at its tree position whatever its root orientation", async () => {

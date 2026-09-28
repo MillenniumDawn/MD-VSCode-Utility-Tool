@@ -13,6 +13,7 @@ Unreleased
 - [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the mutually exclusive link now also moves sideways with `exclusive_offset`, `exclusive_offset_left` and the x of `national_focus_exclusive_item` in nationalfocusview.gui. Issue #397.
 - [ Focus Tree Previewer ] A new toolbar toggle lets you drag the continuous focus box into place; dropping it writes the new `continuous_focus_position` into the file, adding the line if the tree has none. Issue #438.
 - [ Build ] The build now rejects a method that no longer overrides anything and a parameter that is never read, so renaming a shared loader or preview method can no longer leave a stale copy behind unnoticed. Issue #376.
+- [ Focus Tree Previewer ] The focus tree preview now shows the tree's `shortcut` blocks as the game's shortcut buttons in its lower left corner, with their localised name and the icon of their `target` focus, drawn from `nationalfocusview.gui`; clicking one scrolls to that focus, and the arrow beside them folds them away. Issue #439.
 - [ Focus Tree Previewer ] A new Auditor section in the settings checks every focus tree file in the mod at once and gives one Markdown report of the warnings per file, ready to paste into a GitHub issue, and the focus tree preview has a button that copies the warnings of the tree on screen. Issue #444.
 - [ Decision Previewer ] The "Collapse categories" checkbox is now two toolbar buttons, Collapse all categories and Expand all categories, and each one also resets any tab opened or closed from its own card. Issue #437.
 
