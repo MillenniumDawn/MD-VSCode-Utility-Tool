@@ -457,6 +457,38 @@ describe("DDS sub-byte pixel decode", () => {
 	});
 });
 
+describe("DDS luminance decode", () => {
+	const DDPF_LUMINANCE = 0x20000;
+	const DDPF_ALPHA_PIXELS = 0x1;
+
+	it("scales an 8-bit luminance pixel to the full 0-255 range", () => {
+		const buf = makeDdsHeader(2, 1, 2, {
+			bitsPerPixel: 8,
+			pixelFormatFlags: DDPF_LUMINANCE,
+		});
+		buf.writeUInt32LE(0xff, 23 * 4); // luminance mask
+		buf[128] = 0x00;
+		buf[129] = 0xff;
+		const rgba = parseDds(buf).images[0]?.getFullRgba();
+		assert.ok(rgba);
+		assert.deepStrictEqual(Array.from(rgba), [0, 0, 0, 255, 255, 255, 255, 255]);
+	});
+
+	it("scales luminance and alpha of a luminance-alpha pixel", () => {
+		const buf = makeDdsHeader(1, 1, 2, {
+			bitsPerPixel: 16,
+			pixelFormatFlags: DDPF_LUMINANCE | DDPF_ALPHA_PIXELS,
+		});
+		buf.writeUInt32LE(0x00ff, 23 * 4); // luminance mask
+		buf.writeUInt32LE(0xff00, 26 * 4); // alpha mask
+		buf[128] = 0x80;
+		buf[129] = 0xff;
+		const rgba = parseDds(buf).images[0]?.getFullRgba();
+		assert.ok(rgba);
+		assert.deepStrictEqual(Array.from(rgba), [128, 128, 128, 255]);
+	});
+});
+
 describe("DDS block-compressed decode", () => {
 	const red: Rgba = [255, 0, 0, 255];
 	const green: Rgba = [0, 255, 0, 255];
