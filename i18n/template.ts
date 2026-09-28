@@ -181,6 +181,8 @@ const table: Partial<typeof __table> = {
     "focustree.resetcheckboxes": "Reset focus checkboxes",
     "focustree.search": "Search: ",
     "focustree.sharedfocuses": "<Shared focuses>",
+    "focustree.shortcuts": "Shortcuts: ",
+    "focustree.shortcuts.placeholder": "Jump to…",
     "focustree.traceclear": "Stop tracing prerequisite lines",
     "focustree.tracehint": "Shift+click: show only this focus's prerequisite lines",
     "focustree.tracing": "Tracing: {0}",

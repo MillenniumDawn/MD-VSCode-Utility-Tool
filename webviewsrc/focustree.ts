@@ -227,6 +227,7 @@ function subscribeTracing(): void {
 
 let useConditionInFocus: boolean = (window as any).useConditionInFocus;
 let focusTrees: FocusTree[] = (window as any).focusTrees;
+let shortcutLabels: Record<string, string> = (window as any).shortcutLabels ?? {};
 
 let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
 let selectedInlayExprs: ConditionItem[] = getState().selectedInlayExprs ?? [];
@@ -761,7 +762,27 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 		}
 	}
 
+	renderShortcuts(focusTree);
 	renderWarningList(focusTree);
+}
+
+// Values are indexes into the tree's shortcuts, since two shortcuts may share a name. The leading
+// placeholder is what the select rests on, so picking the same shortcut twice still fires a change.
+export function renderShortcuts(focusTree: FocusTree, labels: Record<string, string> = shortcutLabels) {
+	const shortcuts = focusTree.shortcuts ?? [];
+	const container = document.getElementById("shortcut-container") as HTMLDivElement | null;
+	if (container) {
+		container.style.display = shortcuts.length > 0 ? "block" : "none";
+	}
+	const select = document.getElementById("shortcuts") as HTMLSelectElement | null;
+	if (select) {
+		select.innerHTML =
+			`<option value="">${escapeAttr(feLocalize("focustree.shortcuts.placeholder", "Jump to…"))}</option>` +
+			shortcuts
+				.map((shortcut, i) => `<option value="${i}">${escapeAttr(labels[shortcut.name] ?? shortcut.name)}</option>`)
+				.join("");
+		select.value = "";
+	}
 }
 
 // The size is the layout's: continuous_focus_window's in gui mode. The shell is not rebuilt on an
@@ -825,6 +846,19 @@ function renderWarningList(focusTree: FocusTree) {
 		});
 		warnings.appendChild(entry);
 	}
+}
+
+export function bindShortcuts(select: HTMLSelectElement, currentTree: () => FocusTree | undefined) {
+	select.addEventListener("change", () => {
+		if (select.value === "") {
+			return;
+		}
+		const shortcut = currentTree()?.shortcuts?.[Number(select.value)];
+		select.value = "";
+		if (shortcut) {
+			revealFocus(shortcut.target);
+		}
+	});
 }
 
 function revealFocus(focusId: string) {
@@ -1181,6 +1215,8 @@ window.addEventListener("message", tryRun(async (event) => {
 	const data = msg.data ?? {};
 	focusTrees = data.focusTrees;
 	(window as any).focusTrees = data.focusTrees;
+	shortcutLabels = data.shortcutLabels ?? {};
+	(window as any).shortcutLabels = shortcutLabels;
 	(window as any).renderedFocus = data.renderedFocus;
 	(window as any).renderedInlayWindows = data.renderedInlayWindows;
 	(window as any).gridBox = data.gridBox;
@@ -1252,6 +1288,11 @@ window.addEventListener(
 				await buildContent();
 				retriggerSearch();
 			}));
+		}
+
+		const shortcutsElement = document.getElementById("shortcuts") as HTMLSelectElement | null;
+		if (shortcutsElement) {
+			bindShortcuts(shortcutsElement, () => focusTrees[selectedFocusTreeIndex]);
 		}
 
 		const inlayWindowsElement = document.getElementById(

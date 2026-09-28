@@ -10,6 +10,9 @@ export interface FocusTreeStructureInput {
     useConditionInFocus: boolean;
     xGridSize: number;
     layout: unknown;
+    // Localised shortcut labels: they sit outside the trees, so a localisation edit that only
+    // renames a shortcut still has to move the fingerprint.
+    shortcutLabels?: Record<string, string>;
     // Structure-only styleTable records: placeholder focus icons plus the (deterministic per
     // identity) titlebar/overlay/inlay sprite CSS and the structural styles.
     styleRecords: Record<string, string>;
@@ -37,6 +40,7 @@ export function computeStructuralFingerprint(input: FocusTreeStructureInput): st
         input.xGridSize,
         input.layout,
         sortedRecordEntries(input.styleRecords),
+        sortedRecordEntries(input.shortcutLabels ?? {}),
     ]);
 }
 

@@ -41,6 +41,9 @@ export interface FocusTreeUpdatePayload {
     useConditionInFocus: boolean;
     xGridSize: number;
     layout: FocusTreeLayout;
+    // Shortcut name -> localised label. Kept beside the trees rather than on them, so the parsed
+    // trees stay the ones the partial-update fingerprint was taken from.
+    shortcutLabels: Record<string, string>;
 }
 
 export interface FocusTreePayload extends FocusTreeUpdatePayload {
@@ -144,6 +147,13 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             hasWarnings: focusTrees.some(ft => ft.warnings.length > 0),
         };
 
+        const shortcutLabels: Record<string, string> = {};
+        for (const shortcut of flatMap(focusTrees, tree => tree.shortcuts ?? [])) {
+            if (shortcutLabels[shortcut.name] === undefined) {
+                shortcutLabels[shortcut.name] = await localiseShortcutName(shortcut.name);
+            }
+        }
+
         return {
             focusTrees,
             renderedFocus,
@@ -155,6 +165,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             styleTable,
             styleNonce,
             toolbarFlags,
+            shortcutLabels,
         };
     } catch (e) {
         error(e);
@@ -190,6 +201,7 @@ export function buildFocusTreeHtml(payload: FocusTreePayload, webview: vscode.We
     jsCodes.push('window.focusTrees = ' + jsonForScript(payload.focusTrees));
     jsCodes.push('window.renderedFocus = ' + jsonForScript(payload.renderedFocus));
     jsCodes.push('window.renderedInlayWindows = ' + jsonForScript(payload.renderedInlayWindows));
+    jsCodes.push('window.shortcutLabels = ' + jsonForScript(payload.shortcutLabels));
     jsCodes.push('window.gridBox = ' + jsonForScript(payload.gridBox));
     jsCodes.push('window.styleNonce = ' + jsonForScript(payload.styleNonce));
     jsCodes.push('window.useConditionInFocus = ' + jsonForScript(payload.useConditionInFocus));
@@ -332,6 +344,16 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             type="text"
         />`;
 
+    // Always rendered, so a tree gaining or losing its shortcuts needs no shell reload; the webview
+    // fills it per tree and hides it on a tree that has none.
+    const shortcuts = `
+        <div id="shortcut-container">
+            <label for="shortcuts" class="${styleTable.style('shortcutsLabel', () => `margin-right:5px`)}">${localize('focustree.shortcuts', 'Shortcuts: ')}</label>
+            <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
+                <select id="shortcuts" class="select multiple-select" tabindex="0" role="combobox"></select>
+            </div>
+        </div>`;
+
     const customTitlebars = !flags.hasCustomTitlebar ? '' : `
         <div class="${styleTable.style('customTitlebarsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
             <label for="show-custom-titlebars">${localize('focustree.customtitlebars', 'Custom titlebars')}</label>
@@ -432,6 +454,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${getFlags().useConditionInFocus ? conditions + inlayConditions : allowbranch}
             ${focuses}
             ${searchbox}
+            ${shortcuts}
             ${customTitlebars}
             ${focusOverlays}
             ${inlayWindowsToggle}
@@ -597,6 +620,15 @@ async function renderInlayOverrideChild<T extends keyof RenderChildTypeMap>(
             ${spriteHtml}
             ${textHtml}
         </div>`;
+}
+
+// The name as the game shows it on the shortcut button, or the raw key when there is no
+// localisation index or no entry for it.
+async function localiseShortcutName(name: string): Promise<string> {
+    if (!getFlags().localisationIndex) {
+        return name;
+    }
+    return (await getLocalisedTextQuick(name)) || name;
 }
 
 async function renderFocus(

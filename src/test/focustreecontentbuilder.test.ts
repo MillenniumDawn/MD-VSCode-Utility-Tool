@@ -151,6 +151,26 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.strictEqual(payload!.toolbarFlags.hasWarnings, false);
 	});
 
+	it("buildFocusTreePayload labels each shortcut and the page carries the labels and the control", async () => {
+		const tree = minimalFocusTree({
+			shortcuts: [
+				{ name: "TST_shortcut", target: "focus_a" },
+				{ name: "TST_shortcut", target: "focus_a" },
+			],
+		});
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([tree, minimalFocusTree({ id: "other_tree" })]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		// Without a localisation index the label is the key itself.
+		assert.deepStrictEqual(payload!.shortcutLabels, { TST_shortcut: "TST_shortcut" });
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		assert.ok(html.includes("window.shortcutLabels"));
+		assert.ok(html.includes('id="shortcuts"'));
+	});
+
 	it("buildFocusTreePayload sets hasWarnings when a tree carries warnings", async () => {
 		const tree = minimalFocusTree();
 		tree.warnings = [{ text: "Focuses a and b overlap.", source: "focus_a" }];
