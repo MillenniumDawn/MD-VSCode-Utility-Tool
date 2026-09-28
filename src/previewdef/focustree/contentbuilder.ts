@@ -256,6 +256,13 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
         background: rgba(255, 0, 0, 0.5);
     `);
 
+    // Set by the webview while the continuous focus box can be dragged.
+    styleTable.raw(`#continuousFocuses.continuous-editable`, `
+        pointer-events: auto;
+        cursor: move;
+        outline: 1px dashed var(--vscode-focusBorder, #007fd4);
+    `);
+
     // CSP-nonced <style> element the webview later fills with the resolved focus-icon background CSS.
     const progressiveIconStyles = `<style id="ft-progressive-icons" nonce="${styleNonce}"></style>`;
     const continuousFocusContent =
@@ -414,6 +421,12 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             <i class="codicon codicon-error"></i>
         </button>`;
 
+    // Always rendered, so a tree gaining or losing its continuous focus box needs no shell reload;
+    // the webview hides it on a tree that has no box to drag.
+    const editContinuousButton = `
+        <button id="edit-continuous-focus" title="${localize('focustree.editcontinuous', 'Drag the continuous focus box to set its position')}">
+            <i class="codicon codicon-move"></i>
+        </button>`;
     const copyWarningsButton = hasNoWarnings ? '' : `
         <button id="copy-warnings" title="${localize('focustree.copywarnings', 'Copy this focus tree\'s warnings')}">
             <i class="codicon codicon-copy"></i>
@@ -447,6 +460,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${inlayWindows}
             ${warningsButton}
             ${warningMarkersButton}
+            ${editContinuousButton}
             ${copyWarningsButton}
             ${resetCheckboxesButton}
             ${traceStatus}

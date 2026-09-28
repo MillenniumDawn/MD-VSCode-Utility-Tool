@@ -17,6 +17,7 @@ v1.1.40
 - [ Balance of Power Previewer ] Added a preview for `common/bop` files that draws the game's own balance of power window from `powerbalanceview.gui`, with each balance of power's title and side icons. A slider and step buttons in the toolbar stand in for `add_power_balance_value`: the needle, the bar fill and the active range follow the value the way they do in game, and clicking a range opens it in the file. A file with several balances of power gets a dropdown to pick one, and overlapping or missing ranges are flagged. Issue #434.
 - [ Decision Previewer ] The "Collapse categories" checkbox is now two toolbar buttons, Collapse all categories and Expand all categories, and each one also resets any tab opened or closed from its own card. Issue #437.
 - [ Focus Tree Previewer ] A new Auditor section in the settings checks every focus tree file in the mod at once and gives one Markdown report of the warnings per file, ready to paste into a GitHub issue, and the focus tree preview has a button that copies the warnings of the tree on screen. Issue #444.
+- [ Focus Tree Previewer ] A new toolbar toggle lets you drag the continuous focus box into place; dropping it writes the new `continuous_focus_position` into the file, adding the line if the tree has none. Issue #438.
 
   Bugfixes:
 
