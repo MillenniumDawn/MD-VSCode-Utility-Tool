@@ -5,6 +5,7 @@ import { UpdateablePreviewBase, LoaderRender, LoaderRenderResult, RenderContentO
 import { PreviewProviderDef } from '../previewmanager';
 import { FocusTreeLoader } from './loader';
 import { FocusTree } from './schema';
+import { copyTreeWarnings } from './warningreport';
 import { getRelativePathInWorkspace, getDocumentByUri, getConfiguration } from '../../util/vsccommon';
 import { localize } from '../../util/i18n';
 import { loadingShellHtml } from '../../util/html';
@@ -71,11 +72,12 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // windows scan; gfxIndex changes which icons resolve; localisationIndex and previewLocalisation
     // change every label. inlayWindowGfxRoots had no listener at all, so fixing a missing inlay
     // sprite did nothing until the file was edited or the preview reopened. focusTreeLayout decides the
-    // page's grid and the focus markup.
+    // page's grid and the focus markup, focusTreePrerequisiteLines the frames the lines are drawn from.
     protected override get reloadOnConfigurationChange(): readonly string[] {
         return [
             'useConditionInFocus',
             'focusTreeLayout',
+            'focusTreePrerequisiteLines',
             'sharedFocusIndex',
             'inlayWindowGfxRoots',
             'gfxIndex',
@@ -103,6 +105,8 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 // (structure, then icons stream in) and both orders would in fact work.
                 this.repostLatestUpdate();
                 this.repushCachedIconStyles();
+            } else if (msg?.command === 'copyWarnings') {
+                void copyTreeWarnings(msg, getRelativePathInWorkspace(this.uri)).catch(error);
             }
         }));
         // Belt-and-suspenders for bug #36: also restore icons when the panel becomes visible again.

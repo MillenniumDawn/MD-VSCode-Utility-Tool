@@ -66,6 +66,12 @@ describe('util/featureflags', () => {
             assert.strictEqual(featureflags.getFlags().focusTreeLayout, 'standard');
         });
 
+        it('defaults focusTreePrerequisiteLines to available when the config does not include it', () => {
+            config = {};
+            featureflags.refreshFeatureFlags();
+            assert.strictEqual(featureflags.getFlags().focusTreePrerequisiteLines, 'available');
+        });
+
         it('leaves flags undefined when the config does not include them', () => {
             config = {};
             featureflags.refreshFeatureFlags();

@@ -170,6 +170,7 @@ function buildStub() {
         showInformationMessage: async () => undefined,
         showWarningMessage: async () => undefined,
         showQuickPick: async () => undefined,
+        showTextDocument: async () => undefined,
         showOpenDialog: async () => undefined,
         showWorkspaceFolderPick: async () => undefined,
         setStatusBarMessage: () => disposable(),
@@ -221,7 +222,7 @@ function buildStub() {
         workspace,
         window,
         commands,
-        env: {},
+        env: { clipboard: { readText: async () => '', writeText: async () => undefined } },
         FileType,
         ConfigurationTarget,
         ProgressLocation,
@@ -313,11 +314,14 @@ const pristine = {
     textDocuments: stub.workspace.textDocuments as unknown,
     showErrorMessage: stub.window.showErrorMessage,
     showInformationMessage: stub.window.showInformationMessage,
+    showWarningMessage: stub.window.showWarningMessage,
     showWorkspaceFolderPick: stub.window.showWorkspaceFolderPick,
     createWebviewPanel: stub.window.createWebviewPanel,
     registerWebviewPanelSerializer: stub.window.registerWebviewPanelSerializer,
     showOpenDialog: stub.window.showOpenDialog,
     showQuickPick: stub.window.showQuickPick,
+    showTextDocument: stub.window.showTextDocument,
+    clipboardWriteText: stub.env.clipboard.writeText,
     registerCommand: stub.commands.registerCommand,
     withProgress: stub.window.withProgress,
     now: Date.now,
@@ -351,6 +355,7 @@ export interface VscodeStubOverrides {
     textDocuments?: readonly any[];
     showErrorMessage?: (...args: any[]) => Promise<any>;
     showInformationMessage?: (...args: any[]) => Promise<any>;
+    showWarningMessage?: (...args: any[]) => Promise<any>;
     showWorkspaceFolderPick?: () => Promise<any>;
     createWebviewPanel?: (viewType: string, title: string, showOptions: any, options: any) => any;
     /** Captures the serializer a suite's `register()` call installs, e.g. to drive it directly. */
@@ -359,6 +364,10 @@ export interface VscodeStubOverrides {
     showOpenDialog?: (options?: any) => Promise<any>;
     /** Answers a quick pick, for suites driving a command that asks one. */
     showQuickPick?: (items: any, options?: any) => Promise<any>;
+    /** Captures what a command opens in an editor. */
+    showTextDocument?: (document: any, options?: any) => Promise<any>;
+    /** Captures what reaches `env.clipboard.writeText`. */
+    clipboardWriteText?: (text: string) => Promise<void>;
     /**
      * Captures the handler a suite's `register()` call installs, so a command that is otherwise
      * only reachable through the palette can be invoked directly.
@@ -440,6 +449,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.showInformationMessage !== undefined) {
         window.showInformationMessage = overrides.showInformationMessage;
     }
+    if (overrides.showWarningMessage !== undefined) {
+        window.showWarningMessage = overrides.showWarningMessage;
+    }
     if (overrides.showWorkspaceFolderPick !== undefined) {
         window.showWorkspaceFolderPick = overrides.showWorkspaceFolderPick;
     }
@@ -454,6 +466,12 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     }
     if (overrides.showQuickPick !== undefined) {
         window.showQuickPick = overrides.showQuickPick;
+    }
+    if (overrides.showTextDocument !== undefined) {
+        window.showTextDocument = overrides.showTextDocument;
+    }
+    if (overrides.clipboardWriteText !== undefined) {
+        (stub.env.clipboard as any).writeText = overrides.clipboardWriteText;
     }
     if (overrides.registerCommand !== undefined) {
         (stub.commands as any).registerCommand = overrides.registerCommand;
@@ -489,11 +507,14 @@ export function restoreVscodeStubs(): void {
     workspace.textDocuments = pristine.textDocuments;
     window.showErrorMessage = pristine.showErrorMessage;
     window.showInformationMessage = pristine.showInformationMessage;
+    window.showWarningMessage = pristine.showWarningMessage;
     window.showWorkspaceFolderPick = pristine.showWorkspaceFolderPick;
     window.createWebviewPanel = pristine.createWebviewPanel;
     window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
     window.showOpenDialog = pristine.showOpenDialog;
     window.showQuickPick = pristine.showQuickPick;
+    window.showTextDocument = pristine.showTextDocument;
+    (stub.env.clipboard as any).writeText = pristine.clipboardWriteText;
     (stub.commands as any).registerCommand = pristine.registerCommand;
     window.withProgress = pristine.withProgress;
     Date.now = pristine.now;

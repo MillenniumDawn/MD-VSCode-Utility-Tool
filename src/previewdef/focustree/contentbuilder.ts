@@ -88,10 +88,11 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         }, layout.spacing.y);
 
         // The same two passes for the prerequisite lines: the webview draws the same tiles either way.
+        const focusLinkState = getFlags().focusTreePrerequisiteLines;
         const focusLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
-            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
-            : await loadFocusLinkImages();
-        registerFocusLinkStyles(styleTable, focusLinkImages);
+            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles], focusLinkState)
+            : await loadFocusLinkImages(undefined, undefined, focusLinkState);
+        registerFocusLinkStyles(styleTable, focusLinkImages, focusLinkState);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
@@ -400,7 +401,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             </div>
         </div>`;
     
-    // Both warning buttons share the same gate, so ToolbarFlags.hasWarnings alone still decides
+    // The warning buttons share the same gate, so ToolbarFlags.hasWarnings alone still decides
     // whether the toolbar needs a full reload when a tree gains or loses its first warning.
     const hasNoWarnings = focusTrees.every(ft => ft.warnings.length === 0);
     const warningsButton = hasNoWarnings ? '' : `
@@ -411,6 +412,11 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
     const warningMarkersButton = hasNoWarnings ? '' : `
         <button id="toggle-warning-markers" title="${localize('focustree.warningmarkers', 'Toggle warning markers on the tree')}">
             <i class="codicon codicon-error"></i>
+        </button>`;
+
+    const copyWarningsButton = hasNoWarnings ? '' : `
+        <button id="copy-warnings" title="${localize('focustree.copywarnings', 'Copy this focus tree\'s warnings')}">
+            <i class="codicon codicon-copy"></i>
         </button>`;
 
     const hasAllowBranch = focusTrees.some(ft => ft.allowBranchOptions.length > 0);
@@ -441,6 +447,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${inlayWindows}
             ${warningsButton}
             ${warningMarkersButton}
+            ${copyWarningsButton}
             ${resetCheckboxesButton}
             ${traceStatus}
         </div>
