@@ -769,3 +769,24 @@ describe("focus tree initial_show_position", () => {
 		assert.strictEqual(tree.initialShowPosition, undefined);
 	});
 });
+
+describe("previewdef/focustree continuousFocusSource", () => {
+	it("points a focus_tree at its own key", () => {
+		const content = `\nfocus_tree = {\n    id = a\n}\nfocus_tree = {\n    id = b\n}`;
+		const trees = treesOf(content);
+		assert.deepStrictEqual(
+			trees.map((t) => t.continuousFocusSource),
+			[
+				{ file: filePath, start: content.indexOf("focus_tree") },
+				{ file: filePath, start: content.lastIndexOf("focus_tree") },
+			],
+		);
+	});
+
+	it("leaves shared and joint focus trees without one", () => {
+		const content = `shared_focus = { id = SH_a x = 0 y = 0 }\njoint_focus = { id = JO_a x = 0 y = 0 }`;
+		const trees = treesOf(content);
+		assert.strictEqual(trees.length, 2);
+		assert.ok(trees.every((t) => t.continuousFocusSource === undefined));
+	});
+});

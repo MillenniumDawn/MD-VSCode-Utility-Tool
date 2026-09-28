@@ -1,4 +1,4 @@
-import { loadEntrypoint } from './setup';
+import { loadEntrypoint, takePostedMessages, resetWebviewState } from './setup';
 import * as assert from 'assert';
 import { FocusTree } from '../../previewdef/focustree/schema';
 
@@ -8,7 +8,7 @@ const focustree = loadEntrypoint(
     () => require('../../../webviewsrc/focustree') as typeof import('../../../webviewsrc/focustree'),
 ).module;
 
-const { placeContinuousFocuses } = focustree;
+const { placeContinuousFocuses, wireContinuousFocusEditing } = focustree;
 
 function tree(x: number | undefined, y: number | undefined): FocusTree {
     return { continuousFocusPositionX: x, continuousFocusPositionY: y } as FocusTree;
@@ -61,5 +61,92 @@ describe('webview/focustree placeContinuousFocuses', () => {
     it('does nothing when the page has no continuous focus box', () => {
         document.body.innerHTML = '';
         assert.doesNotThrow(() => placeContinuousFocuses(tree(50, 1000)));
+    });
+});
+
+describe('webview/focustree continuous focus dragging', () => {
+    const source = { file: 'common/national_focus/test.txt', start: 12 };
+    let box: HTMLElement;
+    let button: HTMLElement;
+    let current: FocusTree;
+
+    function editableTree(x: number, y: number): FocusTree {
+        return { continuousFocusPositionX: x, continuousFocusPositionY: y, continuousFocusSource: source } as FocusTree;
+    }
+
+    function mouse(target: EventTarget, type: string, clientX: number, clientY: number) {
+        target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX, clientY }));
+    }
+
+    function drag(fromX: number, fromY: number, toX: number, toY: number) {
+        mouse(box, 'mousedown', fromX, fromY);
+        mouse(document, 'mousemove', toX, toY);
+        mouse(document, 'mouseup', toX, toY);
+    }
+
+    beforeEach(() => {
+        resetWebviewState();
+        document.body.innerHTML = '<button id="edit-continuous-focus"></button><div id="continuousFocuses"></div>';
+        box = document.getElementById('continuousFocuses')!;
+        button = document.getElementById('edit-continuous-focus')!;
+        current = editableTree(100, 900);
+        wireContinuousFocusEditing(() => current);
+        placeContinuousFocuses(current);
+    });
+
+    afterEach(() => {
+        document.body.innerHTML = '';
+        resetWebviewState();
+    });
+
+    it('posts nothing while the toggle is off', () => {
+        assert.strictEqual(box.classList.contains('continuous-editable'), false);
+        drag(10, 10, 60, 90);
+        assert.deepStrictEqual(takePostedMessages(), []);
+        assert.strictEqual(box.style.left, '41px');
+    });
+
+    it('writes the dropped position back once the toggle is on', () => {
+        button.click();
+        assert.strictEqual(box.classList.contains('continuous-editable'), true);
+        drag(10, 10, 60, 90);
+        assert.deepStrictEqual(takePostedMessages(), [
+            { command: 'setContinuousFocusPosition', file: source.file, start: source.start, x: 150, y: 980 },
+        ]);
+        assert.strictEqual(box.style.left, '91px');
+        assert.strictEqual(box.style.top, '987px');
+    });
+
+    it('divides the pointer movement by the zoom', () => {
+        button.click();
+        const vscodeState = (global as any).acquireVsCodeApi().getState();
+        vscodeState.scale = 0.5;
+        drag(10, 10, 60, 90);
+        const [msg] = takePostedMessages();
+        assert.strictEqual(msg.x, 200);
+        assert.strictEqual(msg.y, 1060);
+    });
+
+    it('treats a press that barely moves as a click', () => {
+        button.click();
+        drag(10, 10, 12, 13);
+        assert.deepStrictEqual(takePostedMessages(), []);
+    });
+
+    it('keeps the pan layer from seeing a press on the box', () => {
+        button.click();
+        let reached = false;
+        document.body.addEventListener('mousedown', () => { reached = true; });
+        mouse(box, 'mousedown', 10, 10);
+        mouse(document, 'mouseup', 10, 10);
+        assert.strictEqual(reached, false);
+    });
+
+    it('hides the toggle on a tree the file does not define', () => {
+        current = { continuousFocusPositionX: 50, continuousFocusPositionY: 1000 } as FocusTree;
+        placeContinuousFocuses(current);
+        assert.strictEqual(button.style.display, 'none');
+        button.click();
+        assert.strictEqual(box.classList.contains('continuous-editable'), false);
     });
 });
