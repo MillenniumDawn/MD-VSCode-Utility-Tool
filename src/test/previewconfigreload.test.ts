@@ -143,6 +143,7 @@ describe("previewdef configuration reload", () => {
 					"focusTreePrerequisiteLines",
 					"sharedFocusIndex",
 					"inlayWindowGfxRoots",
+					"focusOverlayGfxFiles",
 					"gfxIndex",
 					"localisationIndex",
 					"previewLocalisation",

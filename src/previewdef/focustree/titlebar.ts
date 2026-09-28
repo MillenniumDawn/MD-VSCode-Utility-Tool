@@ -1,12 +1,18 @@
 import { convertNodeToJson, SchemaDef } from "../../hoiformat/schema";
 import { getSpriteByGfxName, Image } from "../../util/image/imagecache";
-import { parseHoi4FileCached } from "../../util/fileloader";
+import { getDescriptorFocusOverlayGfx, getFilePathFromModOrHOI4, parseHoi4FileCached } from "../../util/fileloader";
+import { listGfxFilesFromConfiguredRoots } from "../../util/guiwindowindex";
 import { nationalFocusViewGfxFile } from "../../util/hoi4gui/exclusivelinkimages";
 import { describeParseFailure } from "../../util/indexHalf";
 import { Logger } from "../../util/logger";
+import { getConfiguration } from "../../util/vsccommon";
+import uniq from "lodash/uniq";
 
 export const focusTitlebarStylesFile = 'common/national_focus/00_titlebar_styles.txt';
-export const goalsOverlaysGfxFile = 'interface/goals_overlays.gfx';
+// Where the game defines its own focus overlays. A mod's overlay files are named by the
+// focusOverlayGfxFiles setting or the focus_overlay_gfx list in its descriptor, never in code.
+export const vanillaFocusOverlayGfxFile = 'interface/goals.gfx';
+const focusOverlaySetting = 'mdHoi4Utilities.focusOverlayGfxFiles';
 
 // Declared with the exclusive link sprites, which the MIO preview also reads, so both previews name
 // the file once. Re-exported here because the focus tree's loader and content builder have always
@@ -67,11 +73,41 @@ export async function getFocusTitlebarImage(textIcon: string | undefined, titleb
     return sprite?.image;
 }
 
-export async function getFocusOverlayImage(overlay: string | undefined): Promise<Image | undefined> {
+/**
+ * The .gfx files focus overlays are looked up in, in order: the game's interface/goals.gfx, then
+ * what the setting names, then what the working mod's (and its parent mods') descriptors name. An
+ * entry that is not a .gfx file is a folder scanned for them. Only files that exist are returned, so
+ * a mod without a given file never gets a "Cannot parse" error for it; a configured one that is
+ * missing is reported once, naming where it was configured.
+ */
+export async function getFocusOverlayGfxFiles(): Promise<string[]> {
+    const configured: { entry: string, source: string }[] = [
+        ...(getConfiguration().focusOverlayGfxFiles ?? []).map(entry => ({ entry, source: focusOverlaySetting })),
+        ...(await getDescriptorFocusOverlayGfx()).map(entry => ({ entry, source: 'focus_overlay_gfx in the .mod file' })),
+    ];
+
+    const files = await getFilePathFromModOrHOI4(vanillaFocusOverlayGfxFile) ? [vanillaFocusOverlayGfxFile] : [];
+    for (const { entry, source } of configured) {
+        if (typeof entry !== 'string' || entry.trim() === '') {
+            continue;
+        }
+        const path = entry.trim().replace(/\\+/g, '/');
+        if (!path.toLowerCase().endsWith('.gfx')) {
+            files.push(...await listGfxFilesFromConfiguredRoots([path], source));
+        } else if (await getFilePathFromModOrHOI4(path)) {
+            files.push(path);
+        } else {
+            Logger.warn(`${source}: "${entry}" is not in the mod, its parent mods or the game install -- check the path`);
+        }
+    }
+    return uniq(files);
+}
+
+export async function getFocusOverlayImage(overlay: string | undefined, overlayGfxFiles: string[]): Promise<Image | undefined> {
     if (!overlay) {
         return undefined;
     }
 
-    const sprite = await getSpriteByGfxName(overlay, goalsOverlaysGfxFile);
+    const sprite = await getSpriteByGfxName(overlay, overlayGfxFiles);
     return sprite?.image;
 }

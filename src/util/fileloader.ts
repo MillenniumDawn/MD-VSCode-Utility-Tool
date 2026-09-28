@@ -23,7 +23,7 @@ import {
 	ParseOptions,
 } from "../hoiformat/hoiparser";
 import { localize } from "./i18n";
-import { convertNodeToJson, SchemaDef, HOIPartial } from "../hoiformat/schema";
+import { convertNodeToJson, Enum, SchemaDef, HOIPartial } from "../hoiformat/schema";
 import { error } from "./debug";
 import { getSelectedModFileUri, updateSelectedModFileStatus } from "./modfile";
 import {
@@ -1232,14 +1232,15 @@ function getDlcPaths(installPath: string): Promise<vscode.Uri[] | null> {
 	});
 }
 
-const replacePathsCache = new PromiseCache({
-	factory: getReplacePathsFromModFile,
+const descriptorListsCache = new PromiseCache({
+	factory: getListsFromModFile,
 	expireWhenChange: (key) => getLastModifiedAsync(vscode.Uri.parse(key)),
 	life: 60 * 1000,
 });
 
 interface ModFile {
 	replace_path: string[];
+	focus_overlay_gfx: Enum;
 }
 
 const modListSchema: SchemaDef<ModFile> = {
@@ -1247,7 +1248,13 @@ const modListSchema: SchemaDef<ModFile> = {
 		_innerType: "string",
 		_type: "array",
 	},
+	focus_overlay_gfx: "enum",
 };
+
+interface DescriptorLists {
+	replacePaths: string[];
+	focusOverlayGfx: string[];
+}
 
 /**
  * Every `replace_path` in force: the working mod's, plus those of the parent mods it extends. The
@@ -1259,23 +1266,39 @@ const modListSchema: SchemaDef<ModFile> = {
  * Undefined only when the working mod has no readable descriptor, as before; a parent without a
  * `descriptor.mod` is an ordinary checkout and simply contributes nothing.
  */
-async function getReplacePaths(): Promise<string[] | undefined> {
-	const own = await getOwnReplacePaths();
+function getReplacePaths(): Promise<string[] | undefined> {
+	return getDescriptorList("replacePaths");
+}
+
+/**
+ * The `focus_overlay_gfx` files named by the working mod's descriptor and its parent mods'
+ * descriptors: the .gfx files, besides the game's own `interface/goals.gfx`, that define focus
+ * overlay sprites. The game ignores the key; it is how a mod tells the focus tree preview where its
+ * overlays live, so a submod inherits the overlays of the mod it extends.
+ */
+export async function getDescriptorFocusOverlayGfx(): Promise<string[]> {
+	return (await getDescriptorList("focusOverlayGfx")) ?? [];
+}
+
+async function getDescriptorList(
+	list: keyof DescriptorLists,
+): Promise<string[] | undefined> {
+	const own = await getOwnDescriptorLists();
 	if (own === undefined) {
 		return undefined;
 	}
 
 	const parents = getParentModUris();
 	if (parents.length === 0) {
-		return own;
+		return own[list];
 	}
 
-	const merged = [...own];
+	const merged = [...own[list]];
 	for (const parent of parents) {
 		const descriptor = vscode.Uri.joinPath(parent, "descriptor.mod");
 		try {
 			if (await isFile(descriptor)) {
-				merged.push(...(await replacePathsCache.get(descriptor.toString())));
+				merged.push(...(await descriptorListsCache.get(descriptor.toString()))[list]);
 			}
 		} catch (e) {
 			error(e);
@@ -1284,12 +1307,12 @@ async function getReplacePaths(): Promise<string[] | undefined> {
 	return merged;
 }
 
-async function getOwnReplacePaths(): Promise<string[] | undefined> {
+async function getOwnDescriptorLists(): Promise<DescriptorLists | undefined> {
 	const modFile = await getSelectedModFileUri();
 
 	try {
 		if (modFile && (await isFile(modFile))) {
-			const result = await replacePathsCache.get(modFile.toString());
+			const result = await descriptorListsCache.get(modFile.toString());
 			updateSelectedModFileStatus(modFile);
 			return result;
 		}
@@ -1301,14 +1324,17 @@ async function getOwnReplacePaths(): Promise<string[] | undefined> {
 	return undefined;
 }
 
-async function getReplacePathsFromModFile(
+async function getListsFromModFile(
 	absolutePath: string,
-): Promise<string[]> {
+): Promise<DescriptorLists> {
 	const content = (await readFile(vscode.Uri.parse(absolutePath))).toString();
 	const node = parseHoi4File(
 		content,
 		localize("infile", "In file {0}:\n", absolutePath),
 	);
 	const modFile = convertNodeToJson<ModFile>(node, modListSchema);
-	return modFile.replace_path.filter((v): v is string => typeof v === "string");
+	return {
+		replacePaths: modFile.replace_path.filter((v): v is string => typeof v === "string"),
+		focusOverlayGfx: modFile.focus_overlay_gfx._values,
+	};
 }
