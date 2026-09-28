@@ -22,16 +22,19 @@ function button(index: number, label: string): string {
 }
 
 function overlay(): { overlay: HTMLDivElement; list: HTMLDivElement; toggle: HTMLButtonElement } {
-    document.body.innerHTML = `
-        <div id="shortcut-overlay" style="display:none">
-            <div id="shortcut-list"></div>
-            <button id="shortcut-toggle"><i class="codicon"></i></button>
-        </div>`;
-    return {
-        overlay: document.getElementById('shortcut-overlay') as HTMLDivElement,
-        list: document.getElementById('shortcut-list') as HTMLDivElement,
-        toggle: document.getElementById('shortcut-toggle') as HTMLButtonElement,
-    };
+    const overlay = document.createElement('div');
+    overlay.id = 'shortcut-overlay';
+    overlay.style.display = 'none';
+    const list = document.createElement('div');
+    list.id = 'shortcut-list';
+    const toggle = document.createElement('button');
+    toggle.id = 'shortcut-toggle';
+    const icon = document.createElement('i');
+    icon.className = 'codicon';
+    toggle.appendChild(icon);
+    overlay.append(list, toggle);
+    document.body.replaceChildren(overlay);
+    return { overlay, list, toggle };
 }
 
 function focusNode(id: string): { node: HTMLElement; scrolled: () => number } {
@@ -120,10 +123,13 @@ describe('webview/focustree shortcuts', () => {
         const a = focusNode('TST_a');
 
         const initiallyCollapsed = element.classList.contains('collapsed');
+        assert.strictEqual(toggle.getAttribute('aria-expanded'), String(!initiallyCollapsed));
         click(toggle.querySelector('i')!);
         assert.strictEqual(element.classList.contains('collapsed'), !initiallyCollapsed);
+        assert.strictEqual(toggle.getAttribute('aria-expanded'), String(initiallyCollapsed));
         click(toggle);
         assert.strictEqual(element.classList.contains('collapsed'), initiallyCollapsed);
+        assert.strictEqual(toggle.getAttribute('aria-expanded'), String(!initiallyCollapsed));
         assert.strictEqual(a.scrolled(), 0);
     });
 });

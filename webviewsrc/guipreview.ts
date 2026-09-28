@@ -1,5 +1,7 @@
+import { applyIconState } from "../src/previewdef/toolbaricons";
 import { normalizeForStyle } from "../src/util/styletable";
 import { Checkbox } from "./util/checkbox";
+import { feLocalize } from "./util/i18n";
 import {
 	setState,
 	getState,
@@ -144,6 +146,10 @@ function refreshToggleVisibilityContent() {
 	mainContent.style.marginTop = toggleVisibilityContentVisible
 		? "240px"
 		: "40px";
+	const toggle = document.getElementById("toggleVisibility");
+	if (toggle) {
+		applyIconState(toggle, "containerWindows", !!toggleVisibilityContentVisible, feLocalize);
+	}
 }
 
 window.addEventListener(
