@@ -318,6 +318,7 @@ const table: Partial<typeof __table> = {
     "techtree.techfolder": "연구 폴더: ",
     "toolbar.cleartrace": "선행 조건 선 추적 중지 (Esc)",
     "toolbar.containerwindows": "컨테이너 창 표시",
+    "toolbar.nowarnings": "표시할 경고 없음",
     "toolbar.openfile": "편집기에서 파일 열기",
     "toolbar.saveimage": "지도를 이미지로 저장",
     "toolbar.warningmarkers": "계통도에 경고 표시 보기",

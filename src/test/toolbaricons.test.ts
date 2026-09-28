@@ -97,6 +97,7 @@ interface RenderedButton {
 	title: string | undefined;
 	ariaLabel: string | undefined;
 	iconOnly: boolean;
+	disabled: boolean;
 }
 
 function attribute(tag: string, name: string): string | undefined {
@@ -114,6 +115,7 @@ function buttonsIn(html: string): RenderedButton[] {
 			title: attribute(tag, "title"),
 			ariaLabel: attribute(tag, "aria-label"),
 			iconOnly: content.replace(/<i\b[^>]*><\/i>/g, "").trim() === "",
+			disabled: /\sdisabled[\s>]/.test(tag),
 		});
 	}
 	return buttons;
@@ -272,6 +274,18 @@ describe("toolbar icons (issue #446)", () => {
 				if (button.ariaLabel !== button.title) {
 					problems.push(`${where} has aria-label "${button.ariaLabel}" but title "${button.title}". They must match (rule 4).`);
 				}
+				if (button.disabled) {
+					// A disabled button cannot be clicked, so its tooltip says why rather than what a
+					// click does.
+					const a = button.action === undefined ? undefined : actions[button.action as IconActionId];
+					if (a?.disabledTooltipKey === undefined) {
+						problems.push(`${where} is drawn disabled, but ${button.action} has no disabledTooltip. ` +
+							`Add one that says why it cannot be clicked (rule 4).`);
+					} else if (button.title !== a.disabledTooltip) {
+						problems.push(`${where} is disabled but its tooltip is "${button.title}", not its disabledTooltip (rule 4).`);
+					}
+					continue;
+				}
 				const verb = button.title.split(/\s/)[0];
 				if (!tooltipVerbs.includes(verb)) {
 					problems.push(`${where} has the tooltip "${button.title}". Start it with one of ` +
@@ -377,6 +391,12 @@ describe("toolbar icons (issue #446)", () => {
 			}
 		}
 		keys.add("modfile.cannotread");
+		for (const id of actionIds) {
+			const key = actions[id].disabledTooltipKey;
+			if (key !== undefined) {
+				keys.add(key);
+			}
+		}
 		const problems: string[] = [];
 		for (const locale of ["en", "ko", "ru", "zh-cn"]) {
 			const source = fs.readFileSync(path.join(root, "i18n", `${locale}.ts`), "utf8");

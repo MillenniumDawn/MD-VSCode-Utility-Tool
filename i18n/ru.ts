@@ -318,6 +318,7 @@ const table: Partial<typeof __table> = {
     "techtree.techfolder": "Папка с исследованиями: ",
     "toolbar.cleartrace": "Прекратить отслеживание линий требований (Esc)",
     "toolbar.containerwindows": "Показать окна-контейнеры",
+    "toolbar.nowarnings": "Нет предупреждений для показа",
     "toolbar.openfile": "Открыть файл в редакторе",
     "toolbar.saveimage": "Сохранить карту как изображение",
     "toolbar.warningmarkers": "Показать метки предупреждений на дереве",

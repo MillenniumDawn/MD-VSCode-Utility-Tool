@@ -318,6 +318,7 @@ const table: Partial<typeof __table> = {
     "techtree.techfolder": "科技树目录：",
     "toolbar.cleartrace": "停止追踪前置国策连线 (Esc)",
     "toolbar.containerwindows": "显示容器窗口",
+    "toolbar.nowarnings": "没有可显示的警告",
     "toolbar.openfile": "在编辑器中打开文件",
     "toolbar.saveimage": "将地图保存为图像",
     "toolbar.warningmarkers": "在国策树上显示警告标记",

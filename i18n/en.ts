@@ -356,6 +356,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"techtree.techfolder": "Technology folder: ",
 	"toolbar.cleartrace": "Stop tracing prerequisite lines (Esc)",
 	"toolbar.containerwindows": "Show container windows",
+	"toolbar.nowarnings": "No warnings to show",
 	"toolbar.openfile": "Open file in editor",
 	"toolbar.saveimage": "Save map as image",
 	"toolbar.warningmarkers": "Show warning markers on the tree",

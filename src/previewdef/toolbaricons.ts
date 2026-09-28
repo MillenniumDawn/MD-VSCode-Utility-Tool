@@ -38,6 +38,10 @@ export interface IconAction {
 	readonly tooltipOnKey?: LocaleKey;
 	readonly tooltipOn?: string;
 	readonly shortcut?: string;
+	// What a disabled button says instead, so the reader learns why it cannot be clicked. Every
+	// action that is ever rendered disabled has one.
+	readonly disabledTooltipKey?: LocaleKey;
+	readonly disabledTooltip?: string;
 	// Only an action that opens a list of problems may use an alarm icon (warning, error, ...).
 	readonly reportsProblem?: true;
 	// Why a button is not always on screen, for a button that is not.
@@ -83,6 +87,8 @@ export const iconActions = {
 		stateStyle: "pressed",
 		tooltipKey: "toolbar.warnings",
 		tooltip: "Show warning list",
+		disabledTooltipKey: "toolbar.nowarnings",
+		disabledTooltip: "No warnings to show",
 		reportsProblem: true,
 		surfaces: ["focustree", "worldmap"],
 	},
@@ -92,6 +98,8 @@ export const iconActions = {
 		stateStyle: "pressed",
 		tooltipKey: "toolbar.warningmarkers",
 		tooltip: "Show warning markers on the tree",
+		disabledTooltipKey: "toolbar.nowarnings",
+		disabledTooltip: "No warnings to show",
 		surfaces: ["focustree"],
 	},
 	containerWindows: {
@@ -226,7 +234,9 @@ export interface IconButtonOptions {
 export function iconButtonHtml(id: IconActionId, localize: Localizer, options: IconButtonOptions): string {
 	const a = action(id);
 	const on = options.on ?? false;
-	const title = escapeAttribute(tooltipOf(id, localize, on));
+	const title = escapeAttribute(options.disabled && a.disabledTooltipKey !== undefined
+		? localize(a.disabledTooltipKey, a.disabledTooltip ?? "")
+		: tooltipOf(id, localize, on));
 	const state = a.state === undefined ? "" : ` ${a.state}="${on}"`;
 	const disabled = options.disabled ? " disabled" : "";
 	const attributes = options.attributes ? " " + options.attributes : "";
