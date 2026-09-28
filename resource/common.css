@@ -254,8 +254,10 @@ button[disabled]:active {
 }
 
 /* A toggle that is on. More than a change of opacity, so the state reads at a glance -- see
-   pressedStyle in src/previewdef/toolbaricons.ts. */
-button[aria-pressed="true"] {
+   stateStyle in src/previewdef/toolbaricons.ts. A disabled toggle has nothing to switch, so it
+   keeps the plain disabled look whatever its state: the focus tree's marker button is on by
+   default and read as active on a tree with no warnings. */
+button[aria-pressed="true"]:not([disabled]) {
     border-radius: 3px;
     background: var(--vscode-inputOption-activeBackground, rgba(127, 127, 127, 0.3));
     box-shadow: inset 0 0 0 1px var(--vscode-inputOption-activeBorder, currentColor);

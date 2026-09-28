@@ -306,8 +306,8 @@ describe("toolbar icons (issue #446)", () => {
 
 	it("state visible: the pressed style changes more than opacity", () => {
 		const css = fs.readFileSync(path.join(root, "resource/common.css"), "utf8");
-		const rule = /button\[aria-pressed="true"\]\s*\{([^}]*)\}/.exec(css);
-		assert.ok(rule, "common.css needs a button[aria-pressed=\"true\"] rule for toggles with stateStyle \"pressed\" (rule 3).");
+		const rule = /button\[aria-pressed="true"\]:not\(\[disabled\]\)\s*\{([^}]*)\}/.exec(css);
+		assert.ok(rule, "common.css needs a button[aria-pressed=\"true\"]:not([disabled]) rule for toggles with stateStyle \"pressed\" (rule 3).");
 		assert.ok(/background|box-shadow|border/.test(rule[1]),
 			"The pressed style has to change the background or border, not only opacity (rule 3).");
 		assert.ok(/div\.checkbox\.checked\s*\{[^}]*color:/.test(css),
