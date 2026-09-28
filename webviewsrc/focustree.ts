@@ -804,6 +804,104 @@ export function placeContinuousFocuses(focusTree: FocusTree) {
 	} else {
 		continuousFocuses.style.display = "none";
 	}
+	applyContinuousFocusEditing(focusTree);
+}
+
+function continuousFocusEditing(): boolean {
+	return getState().editContinuousFocus === true;
+}
+
+// The box can be dragged only on a tree the file defines itself, and only while the toggle is on.
+function applyContinuousFocusEditing(focusTree: FocusTree | undefined) {
+	const editable =
+		focusTree?.continuousFocusSource !== undefined &&
+		focusTree.continuousFocusPositionX !== undefined &&
+		focusTree.continuousFocusPositionY !== undefined;
+	const button = document.getElementById("edit-continuous-focus");
+	if (button) {
+		button.style.display = editable ? "" : "none";
+		button.style.opacity = continuousFocusEditing() ? "" : "0.4";
+	}
+	document
+		.getElementById("continuousFocuses")
+		?.classList.toggle(
+			"continuous-editable",
+			editable && continuousFocusEditing(),
+		);
+}
+
+// Dragging the continuous focus box: the drop is written back to the file as
+// continuous_focus_position, converted with the inverse of placeContinuousFocuses's offsets.
+export function wireContinuousFocusEditing(
+	getFocusTree: () => FocusTree | undefined,
+) {
+	const button = document.getElementById("edit-continuous-focus");
+	button?.addEventListener("click", () => {
+		setState({ editContinuousFocus: !continuousFocusEditing() });
+		applyContinuousFocusEditing(getFocusTree());
+	});
+
+	const box = document.getElementById("continuousFocuses");
+	if (!box) {
+		return;
+	}
+
+	let drag:
+		| { clientX: number; clientY: number; left: number; top: number; moved: boolean }
+		| undefined;
+	box.addEventListener("mousedown", (e) => {
+		if (e.button !== 0 || !box.classList.contains("continuous-editable")) {
+			return;
+		}
+		// The box is drawn over the pan layer; a press on it moves the box, never the view.
+		e.preventDefault();
+		e.stopImmediatePropagation();
+		drag = {
+			clientX: e.clientX,
+			clientY: e.clientY,
+			left: parseFloat(box.style.left) || 0,
+			top: parseFloat(box.style.top) || 0,
+			moved: false,
+		};
+	});
+
+	document.addEventListener("mousemove", (e) => {
+		if (!drag) {
+			return;
+		}
+		const dx = e.clientX - drag.clientX;
+		const dy = e.clientY - drag.clientY;
+		// A press that stays within a few pixels is a click, not a move.
+		if (!drag.moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) {
+			return;
+		}
+		drag.moved = true;
+		// The canvas is zoomed with a CSS scale, so a screen pixel is 1/scale of a tree pixel.
+		const scale = currentScale();
+		box.style.left = drag.left + dx / scale + "px";
+		box.style.top = drag.top + dy / scale + "px";
+	});
+
+	document.addEventListener("mouseup", () => {
+		const finished = drag;
+		drag = undefined;
+		if (!finished?.moved) {
+			return;
+		}
+		const tree = getFocusTree();
+		if (!tree?.continuousFocusSource) {
+			return;
+		}
+		const source = tree.continuousFocusSource;
+		vscode.postMessage({
+			command: "setContinuousFocusPosition",
+			file: source.file,
+			start: source.start,
+			treeId: tree.id,
+			x: Math.round(parseFloat(box.style.left) + 59),
+			y: Math.round(parseFloat(box.style.top) - 7),
+		});
+	});
 }
 
 // The warnings panel lists one clickable entry per warning: activating it closes the panel and
@@ -1504,6 +1602,8 @@ window.addEventListener(
 				setWarningMarkersVisible(visible);
 			});
 		}
+
+		wireContinuousFocusEditing(() => focusTrees[selectedFocusTreeIndex]);
 
 		// Copy the selected tree's warnings. The host formats them and writes the clipboard, which a
 		// webview cannot reach reliably on its own.
