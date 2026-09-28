@@ -17,6 +17,8 @@ Unreleased
 
   Bugfixes:
 
+- [ Focus Tree Previewer ] Inlay windows are drawn where the focus tree places them, instead of a screen height lower when their window is anchored to the bottom, and a ticked inlay now shows outside condition mode instead of staying hidden until its `visible` trigger is met. Issue #436.
+- [ Focus Tree Previewer ] Ticking "Inlay windows" no longer stretches the toolbar: the inlay conditions dropdown lists only the conditions that change what the inlay shows, and both condition boxes keep a fixed width. Issue #436.
 - [ Parent mods ] A submod's `dependencies` now resolve when Windows keeps Documents in OneDrive, and when the game's user data folder can't be found at all a warning now says so and points at the `userDataPath` setting, instead of the parent mod's icons and text silently going missing. Issue #456.
 - A parent mod path that points at the mod you have open no longer loads that mod a second time, which doubled load times. The mod file and parent mod path settings now say they belong in workspace settings. Issue #454.
 - [ GFX ] Sprites defined as `progressBarType` now show, and a `.gfx` file whose last block is never closed, such as the game's own `powerbalanceview.gfx`, is read the way the game reads it instead of losing every sprite in it.

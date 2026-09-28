@@ -1210,9 +1210,11 @@ function renderInlayWindows(
 	const selectedInlayWindow = focusTree.inlayWindows.find(
 		(inlay) => inlay.id === selectedInlayWindowId,
 	);
+	// Outside condition mode there is no way to meet a `visible` trigger, and ticking the window
+	// on is already the reader asking to see it.
 	if (
 		!selectedInlayWindow ||
-		!applyCondition(selectedInlayWindow.visible, exprs)
+		(useConditionInFocus && !applyCondition(selectedInlayWindow.visible, exprs))
 	) {
 		return "";
 	}
