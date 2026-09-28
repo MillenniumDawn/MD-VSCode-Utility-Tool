@@ -279,6 +279,8 @@ const table: Partial<typeof __table> = {
     "miopreview.warnings.traitAndIncludeCheck2": "Военно-промышленная организация {0} не имеет поля include. Следует использовать trait вместо add_trait, remove_trait или override_trait.",
     "miopreview.warnings.traitConflict": "Более одной черты с ID {0} в военно-промышленной организации {1} в файлах: {2}, {3}.",
     "miopreview.warnings.traitnoid": "Черта, определённая в этом файле, не имеет поля token: {0}.",
+    "moddependencies.nouserdatadir": "Не удалось найти папку пользовательских данных Hearts of Iron IV, поэтому моды, от которых зависит этот .mod, не найдены. Укажите в {0} папку, содержащую папку mod лаунчера.",
+    "moddependencies.opensettings": "Открыть настройки",
     "modfile.clicktoselect": "Нажмите чтобы выбрать файл мода...",
     "modfile.errorreading": "Ошибка при прочтении файла: ",
     "modfile.extends": "Расширяет: {0}",
