@@ -35,6 +35,9 @@ import {
 } from "../util/image/imagedecoder";
 import { FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "../previewdef/focustree/layout";
 import { focusLinkClass, focusLinkShapes, registerFocusLinkStyles } from "../util/hoi4gui/focuslink";
+import { parseHoi4File, resolveScriptVariables } from "../hoiformat/hoiparser";
+import { convertNodeToJson } from "../hoiformat/schema";
+import { GuiFile, guiFileSchema } from "../hoiformat/gui";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
@@ -149,6 +152,41 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(payload!.gridBox);
 		assert.strictEqual(payload!.xGridSize, 96);
 		assert.strictEqual(payload!.toolbarFlags.hasWarnings, false);
+	});
+
+	// Millennium Dawn's China and England inlays anchor their window lower_left. The game puts the
+	// window's top-left at the tree's inlay_window position, so the root must not drop a screen height.
+	it("buildFocusTreePayload places an inlay window at its tree position whatever its root orientation", async () => {
+		const gui = convertNodeToJson<GuiFile>(resolveScriptVariables(parseHoi4File(`guiTypes = {
+			containerWindowType = {
+				name = "lower_left_inlay_window"
+				orientation = lower_left
+				position = { x = 0 y = 0 }
+				size = { width = 600 height = 670 }
+			}
+		}`)), guiFileSchema);
+		const tree = minimalFocusTree({
+			inlayWindows: [{
+				id: "lower_left_inlay",
+				file: "common/focus_inlay_windows/test.txt",
+				token: undefined,
+				windowName: "lower_left_inlay_window",
+				guiWindow: gui.guitypes[0].containerwindowtype[0],
+				internal: true,
+				visible: true,
+				position: { x: 1800, y: 50 },
+				scriptedImages: [],
+				scriptedButtons: [],
+				conditionExprs: [],
+			}],
+		});
+		const payload = await buildFocusTreePayload(loaderWithTrees([tree]), undefined, { resolveIcons: false });
+		assert.ok(payload);
+		assert.ok(payload!.renderedInlayWindows["lower_left_inlay"]);
+
+		const css = payload!.styleTable.toRawCss().replace(/\s+/g, " ");
+		assert.ok(/left: 1800px; top: 50px;/.test(css), "expected the inlay root at the tree position");
+		assert.ok(!/top: 1080px/.test(css), "expected the window not to be anchored to the bottom of the screen");
 	});
 
 	it("buildFocusTreePayload sets hasWarnings when a tree carries warnings", async () => {

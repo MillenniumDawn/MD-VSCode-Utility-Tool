@@ -199,10 +199,9 @@ export function resolveInlaysForTree(
             position: ref.position,
         };
         extractConditionalExprs(resolved.visible, conditionExprs);
+        // Button `available` blocks are left out: nothing in the preview depends on them, and a
+        // custom_override_tooltip there turns into one option wide enough to stretch the toolbar.
         resolved.scriptedImages.forEach(slot => slot.gfxOptions.forEach(option => extractConditionalExprs(option.condition, conditionExprs)));
-        if (resolved.scriptedButtons) {
-            resolved.scriptedButtons.forEach(button => button.available && extractConditionalExprs(button.available, conditionExprs));
-        }
         inlayWindows.push(resolved);
     }
 

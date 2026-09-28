@@ -377,21 +377,25 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             </div>
         </div>`;
 
+    // A closed dropdown is as wide as its longest option, and a condition can be a whole block of
+    // triggers, so the box is capped and the label kept on the same line as it.
+    const conditionContainerClass = styleTable.style('conditionContainer', () => `white-space:nowrap`);
+    const conditionSelectClass = styleTable.style('conditionSelect', () => `max-width:400px; overflow:hidden;`);
     const conditions = `
-        <div id="condition-container">
+        <div id="condition-container" class="${conditionContainerClass}">
             <label for="conditions" class="${styleTable.style('conditionsLabel', () => `margin-right:5px`)}">${localize('focustree.focusconditions', 'Focus conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
-                <div id="conditions" class="select multiple-select" tabindex="0" role="combobox" class="${styleTable.style('conditionsLabel', () => `max-width:400px`)}">
+                <div id="conditions" class="select multiple-select ${conditionSelectClass}" tabindex="0" role="combobox">
                     <span class="value"></span>
                 </div>
             </div>
         </div>`;
 
     const inlayConditions = `
-        <div id="inlay-condition-container">
+        <div id="inlay-condition-container" class="${conditionContainerClass}">
             <label for="inlay-conditions" class="${styleTable.style('inlayConditionsLabel', () => `margin-right:5px`)}">${localize('focustree.inlayconditions', 'Inlay conditions: ')}</label>
             <div class="select-container ${styleTable.style('marginRight10', () => `margin-right:10px`)}">
-                <div id="inlay-conditions" class="select multiple-select" tabindex="0" role="combobox">
+                <div id="inlay-conditions" class="select multiple-select ${conditionSelectClass}" tabindex="0" role="combobox">
                     <span class="value"></span>
                 </div>
             </div>
@@ -509,10 +513,13 @@ async function renderInlayWindow(inlay: FocusTree["inlayWindows"][number], style
         orientation: 'upper_left',
     };
 
+    // The tree's inlay_window position is where the window's top-left goes. Left in place, a root
+    // orientation such as lower_left would anchor the window to the corner of the parent above.
     const content = await renderContainerWindow(
         {
             ...inlay.guiWindow,
             position: { x: toNumberLike(0), y: toNumberLike(0) },
+            orientation: toStringAsSymbolIgnoreCase('upper_left'),
         },
         parentInfo,
         {
