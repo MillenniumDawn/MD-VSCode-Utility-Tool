@@ -1,10 +1,5 @@
 [
 	{
-		"value": "interface/goals_overlays.gfx",
-		"reason": "Millennium Dawn's focus overlay sprites; the base game keeps them in interface/goals.gfx.",
-		"issue": "#448"
-	},
-	{
 		"value": "interface/MD_decisions.gfx",
 		"reason": "Millennium Dawn's decision icons; the base game has only interface/decisions.gfx.",
 		"issue": "#449"
