@@ -26,7 +26,7 @@ Unreleased
 
   Bugfixes:
 
-- [ Focus Tree Previewer ] A file with a single focus tree no longer shows the "Focus tree:" picker just because the tree pulls in `shared_focus` focuses, which are already drawn inside it. Issue #460.
+- [ Focus Tree Previewer ] The "Focus tree:" picker lists only a file's own focus trees and appears only when there is more than one. Shared focuses show inside the country's tree instead of as a separate `<Shared focuses>` entry. Issue #460.
 - [ Focus Tree Previewer ] The mutually exclusive marker now sits on the focus name bars, in the gap between the two focuses, as it does in the game. The `<!>` is drawn in front of its line instead of the line showing through it. Issue #461.
 - [ Idea Previewer ] Base-game modifiers such as `non_core_manpower`, `mobilization_speed` and `command_power_gain_mult` now show as percentages, and ones where less is better, such as `send_volunteers_tension` and `license_purchase_cost`, are coloured the way the game colours them. Issue #453.
 - [ Character Previewer ] Base-game commander traits such as `trait_cautious` no longer show `leader_default_proximity_offset` as a modifier, and politician traits no longer show a `custom_modifier_tooltip` line. Issue #452.
