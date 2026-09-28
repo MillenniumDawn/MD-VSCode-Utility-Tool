@@ -156,7 +156,25 @@ function renderToolBar(styleTable: StyleTable): string {
 		toggle("show-conditions", localize("decisiontree.showconditions", "Show conditions")),
 		toggle("show-effects", localize("decisiontree.showeffects", "Show effects")),
 		toggle("show-scripted-gui", localize("decisiontree.showscriptedgui", "Show custom GUI")),
-		toggle("collapse-categories", localize("decisiontree.collapsecategories", "Collapse categories")),
+	].join("");
+
+	// Actions rather than a toggle: each one also forgets the tabs opened or closed from their own
+	// card, so a checkbox left ticked would say every tab is folded while some of them are open.
+	const iconButton = (id: string, icon: string, text: string) => `
+        <button id="${id}" title="${text}" aria-label="${text}">
+            <i class="codicon codicon-${icon}"></i>
+        </button>`;
+	const collapseButtons = [
+		iconButton(
+			"collapse-all-categories",
+			"collapse-all",
+			localize("decisiontree.collapseallcategories", "Collapse all categories"),
+		),
+		iconButton(
+			"expand-all-categories",
+			"expand-all",
+			localize("decisiontree.expandallcategories", "Expand all categories"),
+		),
 	].join("");
 
 	return `<div class="toolbar-outer ${styleTable.style(
@@ -164,7 +182,7 @@ function renderToolBar(styleTable: StyleTable): string {
 		() => `box-sizing: border-box; height: ${toolbarHeight}px;`,
 	)}">
         <div class="toolbar">
-            ${search}${filters}${toggles}
+            ${search}${filters}${toggles}${collapseButtons}
         </div>
     </div>`;
 }

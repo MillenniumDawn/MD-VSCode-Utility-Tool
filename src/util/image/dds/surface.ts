@@ -452,7 +452,7 @@ function luminanceResultPutter(
 	offset: number,
 	pixel: Float64Array,
 ): void {
-	const value = arrayAt(pixel, 0);
+	const value = arrayAt(pixel, 0) * 255;
 	result[offset] = result[offset + 1] = result[offset + 2] = value;
 	result[offset + 3] = 255;
 }
@@ -462,8 +462,9 @@ function luminanceAlphaResultPutter(
 	offset: number,
 	pixel: Float64Array,
 ): void {
-	result[offset] = result[offset + 1] = result[offset + 2] = arrayAt(pixel, 0);
-	result[offset + 3] = arrayAt(pixel, 1);
+	result[offset] = result[offset + 1] = result[offset + 2] =
+		arrayAt(pixel, 0) * 255;
+	result[offset + 3] = arrayAt(pixel, 1) * 255;
 }
 
 type PixelNormalizer = (value: number, max: number) => number;

@@ -21,6 +21,7 @@ import { mioPreviewDef } from './mio';
 import { ideaPreviewDef } from './idea';
 import { decisionPreviewDef } from './decision';
 import { characterPreviewDef } from './character';
+import { bopPreviewDef } from './bop';
 
 export type PreviewProviderDef = PreviewProviderDefNormal | PreviewProviderDefAlternative;
 
@@ -64,6 +65,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         ideaPreviewDef,
         decisionPreviewDef,
         characterPreviewDef,
+        bopPreviewDef,
     ];
 
     // Keyed by the joined path so previews sharing a dependency share one entry; a Map keyed by
