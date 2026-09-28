@@ -6,6 +6,7 @@ import {
 	extractOrListIds,
 	getFocusTreeWithFocusFile,
 	FocusTree,
+	importedPseudoTreesToShow,
 	FocusWarning,
 } from "../previewdef/focustree/schema";
 import { refreshFeatureFlags } from "../util/featureflags";
@@ -595,6 +596,50 @@ shared_focus = {
 				"Focuses sh_a1 and sh_a2 are less than 2 apart on the same row, so their icons overlap.",
 			],
 		);
+	});
+
+	it("drops an imported shared focus tree whose focuses were merged into the file's tree", () => {
+		const { donor, host } = mergeSharedFocuses(
+			`shared_focus = {
+    id = SH_a
+    focus = { id = sh_a1 x = 0 y = 0 }
+}`,
+			["sh_a1"],
+			focusBlock("m1", 10, 0),
+		);
+		assert.deepStrictEqual(importedPseudoTreesToShow([host], [donor]), []);
+	});
+
+	it("keeps an imported shared focus tree when only some of its focuses were merged", () => {
+		const { donor, host } = mergeSharedFocuses(
+			`shared_focus = {
+    id = SH_a
+    focus = { id = sh_a1 x = 0 y = 0 }
+}
+shared_focus = {
+    id = SH_b
+    focus = { id = sh_b1 x = 0 y = 0 }
+}`,
+			["sh_a1"],
+			focusBlock("m1", 10, 0),
+		);
+		assert.ok(host.focuses["sh_a1"], "the referenced shared focus must be merged");
+		assert.ok(!host.focuses["sh_b1"], "the unreferenced shared focus must not be merged");
+		assert.deepStrictEqual(importedPseudoTreesToShow([host], [donor]), [donor]);
+	});
+
+	it("keeps an imported shared focus tree the file's tree does not merge from", () => {
+		const donor = treesOf(`shared_focus = {
+    id = SH_a
+    focus = { id = sh_a1 x = 0 y = 0 }
+}`)[0];
+		const host = treesOf(treeWithFocuses(focusBlock("m1", 0, 0)))[0];
+		assert.deepStrictEqual(importedPseudoTreesToShow([host], [donor]), [donor]);
+	});
+
+	it("never adds an imported ordinary focus tree", () => {
+		const imported = treesOf(treeWithFocuses(focusBlock("other", 0, 0)))[0];
+		assert.deepStrictEqual(importedPseudoTreesToShow([], [imported]), []);
 	});
 
 	it("does not check a merged shared focus against the tree's own focuses", () => {
