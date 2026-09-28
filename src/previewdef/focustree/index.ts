@@ -118,16 +118,16 @@ class FocusTreePreview extends UpdateablePreviewBase {
 
     // Writes a continuous focus box dropped in the webview back to the previewed document. The
     // document is left unsaved; the edit re-renders the preview like any other change.
-    private async setContinuousFocusPosition(msg: { file?: unknown; start?: unknown; x?: unknown; y?: unknown }): Promise<void> {
-        const { file, start, x, y } = msg;
-        if (typeof file !== 'string' || typeof start !== 'number' || typeof x !== 'number' || typeof y !== 'number'
+    private async setContinuousFocusPosition(msg: { file?: unknown; start?: unknown; treeId?: unknown; x?: unknown; y?: unknown }): Promise<void> {
+        const { file, start, treeId, x, y } = msg;
+        if (typeof file !== 'string' || typeof start !== 'number' || typeof treeId !== 'string' || typeof x !== 'number' || typeof y !== 'number'
             || !Number.isFinite(x) || !Number.isFinite(y) || file !== getRelativePathInWorkspace(this.uri)) {
             return;
         }
 
         try {
             const document = getDocumentByUri(this.uri) ?? await vscode.workspace.openTextDocument(this.uri);
-            const edit = computeContinuousFocusEdit(document.getText(), start, x, y);
+            const edit = computeContinuousFocusEdit(document.getText(), start, treeId, x, y);
             if (!edit) {
                 void vscode.window.showWarningMessage(localize('focustree.continuousstale',
                     'The focus tree changed since the preview was drawn. Drag the continuous focus box again.'));

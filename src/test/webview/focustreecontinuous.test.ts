@@ -19,13 +19,14 @@ describe('webview/focustree placeContinuousFocuses', () => {
     let box: HTMLElement;
 
     beforeEach(() => {
-        document.body.innerHTML = '<div id="continuousFocuses"></div>';
-        box = document.getElementById('continuousFocuses')!;
+        box = document.createElement('div');
+        box.id = 'continuousFocuses';
+        document.body.replaceChildren(box);
         win.continuousFocusSize = { width: 600, height: 300 };
     });
 
     afterEach(() => {
-        document.body.innerHTML = '';
+        document.body.replaceChildren();
         delete win.continuousFocusSize;
     });
 
@@ -59,7 +60,7 @@ describe('webview/focustree placeContinuousFocuses', () => {
     });
 
     it('does nothing when the page has no continuous focus box', () => {
-        document.body.innerHTML = '';
+        document.body.replaceChildren();
         assert.doesNotThrow(() => placeContinuousFocuses(tree(50, 1000)));
     });
 });
@@ -71,7 +72,7 @@ describe('webview/focustree continuous focus dragging', () => {
     let current: FocusTree;
 
     function editableTree(x: number, y: number): FocusTree {
-        return { continuousFocusPositionX: x, continuousFocusPositionY: y, continuousFocusSource: source } as FocusTree;
+        return { id: 'test_tree', continuousFocusPositionX: x, continuousFocusPositionY: y, continuousFocusSource: source } as FocusTree;
     }
 
     function mouse(target: EventTarget, type: string, clientX: number, clientY: number) {
@@ -86,16 +87,18 @@ describe('webview/focustree continuous focus dragging', () => {
 
     beforeEach(() => {
         resetWebviewState();
-        document.body.innerHTML = '<button id="edit-continuous-focus"></button><div id="continuousFocuses"></div>';
-        box = document.getElementById('continuousFocuses')!;
-        button = document.getElementById('edit-continuous-focus')!;
+        button = document.createElement('button');
+        button.id = 'edit-continuous-focus';
+        box = document.createElement('div');
+        box.id = 'continuousFocuses';
+        document.body.replaceChildren(button, box);
         current = editableTree(100, 900);
         wireContinuousFocusEditing(() => current);
         placeContinuousFocuses(current);
     });
 
     afterEach(() => {
-        document.body.innerHTML = '';
+        document.body.replaceChildren();
         resetWebviewState();
     });
 
@@ -111,7 +114,7 @@ describe('webview/focustree continuous focus dragging', () => {
         assert.strictEqual(box.classList.contains('continuous-editable'), true);
         drag(10, 10, 60, 90);
         assert.deepStrictEqual(takePostedMessages(), [
-            { command: 'setContinuousFocusPosition', file: source.file, start: source.start, x: 150, y: 980 },
+            { command: 'setContinuousFocusPosition', file: source.file, start: source.start, treeId: 'test_tree', x: 150, y: 980 },
         ]);
         assert.strictEqual(box.style.left, '91px');
         assert.strictEqual(box.style.top, '987px');

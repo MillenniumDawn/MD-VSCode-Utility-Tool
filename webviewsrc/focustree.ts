@@ -871,14 +871,16 @@ export function wireContinuousFocusEditing(
 		if (!finished?.moved) {
 			return;
 		}
-		const source = getFocusTree()?.continuousFocusSource;
-		if (!source) {
+		const tree = getFocusTree();
+		if (!tree?.continuousFocusSource) {
 			return;
 		}
+		const source = tree.continuousFocusSource;
 		vscode.postMessage({
 			command: "setContinuousFocusPosition",
 			file: source.file,
 			start: source.start,
+			treeId: tree.id,
 			x: Math.round(parseFloat(box.style.left) + 59),
 			y: Math.round(parseFloat(box.style.top) - 7),
 		});
