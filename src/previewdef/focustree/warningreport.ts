@@ -192,15 +192,14 @@ export async function buildFocusTreeAuditReport(
 		if (progress.token.isCancellationRequested) {
 			return undefined;
 		}
-		const [buffer] = await readFileFromModOrHOI4(filePath, options);
-		progress.report(++done, files.length);
 		try {
+			const [buffer] = await readFileFromModOrHOI4(filePath, options);
 			const node = parseHoi4File(buffer.toString());
 			return { path: filePath, file: convertFocusFileNodeToJson(node, {}) };
 		} catch (e) {
-			// A file that does not parse is what a modder most needs to hear about, so it is
-			// reported rather than dropped.
 			return { path: filePath, parseError: e instanceof Error ? e.message : String(e) };
+		} finally {
+			progress.report(++done, files.length);
 		}
 	});
 

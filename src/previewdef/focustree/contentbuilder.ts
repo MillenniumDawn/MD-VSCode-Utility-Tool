@@ -89,10 +89,11 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         }, layout.spacing.y);
 
         // The same two passes for the prerequisite lines: the webview draws the same tiles either way.
+        const focusLinkState = getFlags().focusTreePrerequisiteLines;
         const focusLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
-            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
-            : await loadFocusLinkImages();
-        registerFocusLinkStyles(styleTable, focusLinkImages);
+            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles], focusLinkState)
+            : await loadFocusLinkImages(undefined, undefined, focusLinkState);
+        registerFocusLinkStyles(styleTable, focusLinkImages, focusLinkState);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');

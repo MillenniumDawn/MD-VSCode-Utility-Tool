@@ -220,6 +220,7 @@ const webviewJsConfig = {
     ideapreview: './webviewsrc/ideapreview.ts',
     decisiontree: './webviewsrc/decisiontree.ts',
     characterpreview: './webviewsrc/characterpreview.ts',
+    boppreview: './webviewsrc/boppreview.ts',
   },
   
   output: {

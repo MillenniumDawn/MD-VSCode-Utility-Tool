@@ -300,6 +300,25 @@ describe("previewdef/focustree warning report", () => {
 			assert.deepStrictEqual(shown, [opened[0]]);
 		});
 
+		it("reports an unreadable focus file without losing the others", async function () {
+			configure({});
+			stubVscode({
+				readFile: async (uri: unknown) => {
+					const file = realPathOf(uri);
+					if (file.endsWith("mod_tree.txt")) {
+						throw new Error("permission denied");
+					}
+					return nodeFs.readFile(file);
+				},
+			});
+			await auditFocusTrees();
+
+			assert.deepStrictEqual(errors, []);
+			const report = opened[0].content!;
+			assert.ok(report.includes("## common/national_focus/mod_tree.txt\n\n- Could not parse this file: permission denied"), report);
+			assert.ok(report.includes("## common/national_focus/broken.txt"), report);
+		});
+
 		it("checks the game's focus files too when asked to", async function () {
 			configure({ "auditor.includeVanilla": true });
 			await auditFocusTrees();
