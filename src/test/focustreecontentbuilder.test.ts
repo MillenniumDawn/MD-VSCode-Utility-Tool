@@ -422,6 +422,36 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(fallback.toRawCss().includes("background-image: none"));
 	});
 
+	// Issue #461: the focus tree's link runs across the name bars, so it has to sit above them, and
+	// its line must stop at the mid icon, whose see-through gaps otherwise show the line behind the `!`.
+	it("registerExclusiveLinkStyles lifts the focus tree's link and gaps its line under the mid icon", () => {
+		const image = (name: string) =>
+			({ uri: `data:image/png;base64,${name}`, width: 32, height: 32 }) as any;
+		const images = { line: image("line"), left: image("left"), mid: image("mid"), right: image("right") };
+		const focusTree = new StyleTable();
+		registerExclusiveLinkStyles(focusTree, images, 96, { startX: 48, endX: -48, y: 33 }, 130, {
+			zIndex: 4,
+			gapUnderMid: true,
+			clampToCentre: true,
+		});
+		const css = focusTree.toRawCss();
+		assert.ok(css.includes("z-index: 4"));
+		assert.ok(css.includes("transparent calc(50% - 16px), transparent calc(50% + 16px)"));
+		assert.ok(css.includes("left: min(96px, calc(50% - 0px))"));
+		assert.ok(css.includes("left: min(80px, calc(50% - 16px))"));
+		assert.ok(css.includes("right: min(80px, calc(50% - 16px))"));
+		assert.ok(css.includes("top: 17px"));
+
+		// The MIO tree passes no options and keeps its link as it was.
+		const mio = new StyleTable();
+		registerExclusiveLinkStyles(mio, images, 87);
+		const mioCss = mio.toRawCss();
+		assert.ok(!mioCss.includes("z-index"));
+		assert.ok(!mioCss.includes("linear-gradient"));
+		assert.ok(!mioCss.includes("min("));
+		assert.ok(mioCss.includes("left: 27.5px"));
+	});
+
 	it("registerFocusLinkStyles draws the plain prerequisite line without textures", () => {
 		const styleTable = new StyleTable();
 		registerFocusLinkStyles(styleTable, undefined);

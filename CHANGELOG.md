@@ -12,6 +12,7 @@ Unreleased
 
   Bugfixes:
 
+- [ Focus Tree Previewer ] The mutually exclusive marker now sits on the focus name bars, in the gap between the two focuses, as it does in the game. The `<!>` is drawn in front of its line instead of the line showing through it. Issue #461.
 - Grayscale (luminance) DDS textures now show at their real brightness instead of almost black. Issue #433.
 - DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.
 - [ GFX ] Sprites whose texture width does not divide evenly by `noofframes` no longer lose pixels at the edge of each frame, and a `noofframes` of 0 or larger than the texture width no longer breaks the preview. Issue #371.
