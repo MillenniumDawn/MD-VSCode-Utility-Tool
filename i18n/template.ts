@@ -291,6 +291,8 @@ const table: Partial<typeof __table> = {
     "miopreview.warnings.traitAndIncludeCheck2": "Military industrial organization {0} doesn't have include property. It should use trait instead of add_trait, remove_trait or override_trait.",
     "miopreview.warnings.traitConflict": "There're more than one trait with ID {0} in military industrial organization {1} in files: {2}, {3}.",
     "miopreview.warnings.traitnoid": "A trait defined in this file don't have token property: {0}.",
+    "moddependencies.nouserdatadir": "Can't find the Hearts of Iron IV user data directory, so the mods this .mod depends on can't be found. Set {0} to the folder that holds the launcher's mod folder.",
+    "moddependencies.opensettings": "Open Settings",
     "modfile.clicktoselect": "Click to select a mod file...",
     "modfile.errorreading": "Error reading this file: ",
     "modfile.extends": "Extends: {0}",
