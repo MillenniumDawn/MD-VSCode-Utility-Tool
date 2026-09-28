@@ -34,6 +34,7 @@ v1.1.40
 - The "Select working mod" list now marks your current mod when the mod file setting is written in quotes, instead of listing it a second time as a workspace setting. Issue #455.
 - [ GFX ] Sprites defined as `progressBarType` now show, and a `.gfx` file whose last block is never closed, such as the game's own `powerbalanceview.gfx`, is read the way the game reads it instead of losing every sprite in it.
 - [ Decision Previewer ] Clicking an element of a scripted-GUI window in a decision card now opens it in its `.gui` file, instead of jumping to an unrelated spot in the decision file.
+- A parent mod path that points at the mod you have open no longer loads that mod a second time, which doubled load times. The mod file and parent mod path settings now say they belong in workspace settings. Issue #454.
 
 v1.1.39
 

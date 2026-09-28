@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { localize } from "./i18n";
+import { Logger } from "./logger";
 import {
 	fileOrUriStringToUri,
 	getConfiguration,
@@ -81,28 +82,53 @@ export function getExplicitParentModUris(): vscode.Uri[] {
 // count as the one folder on Windows. Linux keeps case because `/mods/Parent` and `/mods/parent`
 // are distinct folders there.
 function uriKey(uri: vscode.Uri): string {
-	const normalized = uriToFilePathWhenPossible(uri).replace(/\\+/g, "/");
+	const normalized = uriToFilePathWhenPossible(uri).replace(/\\+/g, "/").replace(/\/+$/, "");
 	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
+
+// The workspace folders already skipped as parents, so the warning is written once per folder
+// rather than on every rebuild of the list.
+const reportedWorkspaceParents = new Set<string>();
 
 /**
  * Every parent in search order: the setting's entries first, so an explicit folder wins over the
  * one the launcher's registry knows for the same mod, then the resolved dependencies that are not
  * already listed. Until the first resolution lands this is the setting alone.
+ *
+ * A parent that is also a workspace folder is left out: a user-level `parentModPaths` naming a mod
+ * makes that mod its own parent when it is opened, and every index would walk it twice.
  */
 export function getParentModUris(): vscode.Uri[] {
 	if (parentModsContainer.current !== null) {
 		return parentModsContainer.current;
 	}
 
-	const uris = getExplicitParentModUris();
-	const seen = new Set(uris.map(uriKey));
-	for (const resolved of parentModsContainer.resolved) {
-		const key = uriKey(resolved);
-		if (!seen.has(key)) {
-			seen.add(key);
-			uris.push(resolved);
+	const workspaceKeys = new Set(
+		(vscode.workspace.workspaceFolders ?? []).map((folder) =>
+			uriKey(folder.uri),
+		),
+	);
+	const uris: vscode.Uri[] = [];
+	const seen = new Set<string>();
+	for (const candidate of [
+		...getExplicitParentModUris(),
+		...parentModsContainer.resolved,
+	]) {
+		const key = uriKey(candidate);
+		if (seen.has(key)) {
+			continue;
 		}
+		seen.add(key);
+		if (workspaceKeys.has(key)) {
+			if (!reportedWorkspaceParents.has(key)) {
+				reportedWorkspaceParents.add(key);
+				Logger.warn(
+					`[Parent mods] ${uriToFilePathWhenPossible(candidate)} is a workspace folder; it is not loaded a second time as a parent mod`,
+				);
+			}
+			continue;
+		}
+		uris.push(candidate);
 	}
 
 	return (parentModsContainer.current = uris);
@@ -178,6 +204,7 @@ export function resetParentModsForTest(): void {
 	parentModsContainer.unresolved = [];
 	parentModsContainer.lastPublished = { folders: [], unresolved: [] };
 	listeners.clear();
+	reportedWorkspaceParents.clear();
 }
 
 // A wrong parent path fails silently everywhere else: lookups fall through to vanilla and the
