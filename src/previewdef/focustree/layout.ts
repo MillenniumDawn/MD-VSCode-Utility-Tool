@@ -63,7 +63,11 @@ export const standardFocusTreeLayout: FocusTreeLayout = {
         textOffsetX: 0,
         textTop: 85,
     },
-    exclusive: { offsetY: 0, startX: 0, endX: 0, sprites: defaultExclusiveLinkSprites },
+    // Where the game draws the link: through the middle of the name bar, across the gap between the
+    // two bars. The icons' centre sits 28px under the top of `bg` (exclusive item y 28 + exclusive_offset
+    // y 24 + half the 32px icon - bg y 40), so 70 + 28 - 65 below the slot centre. The ends sit 80px out
+    // from the 164px bar's centre, which is the standard 32px icon inset plus 48.
+    exclusive: { offsetY: 33, startX: 48, endX: -48, sprites: defaultExclusiveLinkSprites },
     prerequisiteLink: { size: 16, offset: { x: 0, y: 0 }, sprites: defaultFocusLinkSprites },
     continuous: { width: 770, height: 380 },
 };
@@ -229,15 +233,15 @@ export function buildFocusTreeLayout(guiFiles: HOIPartial<GuiFile>[]): FocusTree
     const exclusiveItem = findWindow(windows, 'national_focus_exclusive_item');
     const exclusiveOffset = positions['exclusive_offset'] ?? {};
     const exclusiveItemPosition = point(exclusiveItem?.position);
-    const exclusiveOffsetY = shift(0, exclusiveOffset.y, reference.exclusiveOffset.y) +
+    const exclusiveOffsetY = shift(standard.exclusive.offsetY, exclusiveOffset.y, reference.exclusiveOffset.y) +
         shift(0, exclusiveItemPosition.y, reference.exclusiveItem.y);
     // The game has no documented rule for this, so it is read off its own numbers: against a 165px
     // focus centred at x=80, the link starts at the left focus plus `exclusive_offset.x` and ends at
     // the right focus plus `exclusive_offset_left.x`, both moved by the exclusive item's own x.
     // `exclusive_positioning` is not read.
     const exclusiveItemShiftX = shift(0, exclusiveItemPosition.x, reference.exclusiveItem.x);
-    const exclusiveStartX = shift(0, exclusiveOffset.x, reference.exclusiveOffset.x) + exclusiveItemShiftX;
-    const exclusiveEndX = shift(0, positions['exclusive_offset_left']?.x, reference.exclusiveOffsetLeftX) + exclusiveItemShiftX;
+    const exclusiveStartX = shift(standard.exclusive.startX, exclusiveOffset.x, reference.exclusiveOffset.x) + exclusiveItemShiftX;
+    const exclusiveEndX = shift(standard.exclusive.endX, positions['exclusive_offset_left']?.x, reference.exclusiveOffsetLeftX) + exclusiveItemShiftX;
     const exclusiveIcon = (iconName: string) => byName(exclusiveItem?.icontype, iconName);
     const line = exclusiveIcon('link1');
     const left = exclusiveIcon('left');

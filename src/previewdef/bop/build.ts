@@ -5,7 +5,8 @@ import { StyleTable } from "../../util/styletable";
 import { localize } from "../../util/i18n";
 import { HOIBop, HOIBopRange } from "./schema";
 import { BopLoaderResult, bopWindowName } from "./loader";
-import { BopCard, BopPreviewPayload, BopRangeView } from "./payload";
+import { BopCard, BopDecisionView, BopPreviewPayload, BopRangeView } from "./payload";
+import { decisionSpriteName } from "../decision/loader";
 import { renderBopWindow } from "./window";
 
 // Two range bounds this close are the same number written differently (0.1 against 0.10000001).
@@ -26,6 +27,7 @@ export async function buildBopPreviewPayload(
 			(c) =>
 				c.title.text !== c.title.key ||
 				c.ranges.some((r) => r.name.text !== r.name.key) ||
+				c.decisions.some((d) => d.name.text !== d.name.key) ||
 				(c.window?.texts ?? []).some((t) => t.text.text !== t.text.key),
 		),
 	};
@@ -64,8 +66,34 @@ async function buildCard(
 	}
 	warnings.push(...coverageWarnings(ranges));
 
+	const categoryDecisions = bop.decisionCategory ? (loadResult.decisions[bop.decisionCategory] ?? []) : [];
+	if (bop.decisionCategory && categoryDecisions.length === 0) {
+		warnings.push(
+			localize(
+				"boppreview.nodecisions",
+				"No decision in common/decisions is in decision_category {0}.",
+				bop.decisionCategory,
+			),
+		);
+	}
+	const decisions: BopDecisionView[] = await Promise.all(
+		categoryDecisions.map(async (d) => ({
+			id: d.id,
+			name: await localise(d.nameKey),
+			nav: navOf(d.token, d.file),
+		})),
+	);
+	const windowDecisions = await Promise.all(
+		categoryDecisions.map(async (d) => ({
+			icon: d.icons[0] ? decisionSpriteName(d.icons[0].key) : undefined,
+			cost: d.customCostText !== undefined
+				? (await localise(d.customCostText)).text
+				: d.cost !== undefined ? String(d.cost) : undefined,
+		})),
+	);
+
 	const window = await renderBopWindow(
-		{ leftIcon: leftSide?.icon, rightIcon: rightSide?.icon },
+		{ leftIcon: leftSide?.icon, rightIcon: rightSide?.icon, decisions: windowDecisions },
 		loadResult,
 		styleTable,
 	);
@@ -92,6 +120,7 @@ async function buildCard(
 		initialValue: bop.initialValue,
 		ranges,
 		window,
+		decisions,
 		warnings,
 	};
 }
