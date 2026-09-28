@@ -27,7 +27,11 @@ import {
 	scriptedGuisFolder,
 } from "./scriptedgui";
 import { ResolvedGuiWindow, findContainerWindows } from "../../util/guiwindowindex";
-import { ModifierDefinitions, loadModifierDefinitions } from "../../util/modifiers";
+import {
+	ModifierDefinitions,
+	listModifierDefinitionFiles,
+	loadModifierDefinitions,
+} from "../../util/modifiers";
 
 export interface DecisionsLoaderResult {
 	decisions: HOIDecisionFile;
@@ -152,9 +156,10 @@ export class DecisionsLoader extends ContentLoader<DecisionsLoaderResult> {
 				.map((g) => g.windowName)
 				.filter((n): n is string => n !== undefined),
 		);
-		const [guiWindows, modifierDefinitions, decisionGfxFiles] = await Promise.all([
+		const [guiWindows, modifierDefinitions, definitionFiles, decisionGfxFiles] = await Promise.all([
 			findContainerWindows(windowNames),
 			loadModifierDefinitions(),
+			listModifierDefinitionFiles(),
 			getDecisionGfxFiles(),
 		]);
 
@@ -190,6 +195,8 @@ export class DecisionsLoader extends ContentLoader<DecisionsLoaderResult> {
 				`${decisionCategoriesFolder}/*`,
 				`${scriptedGuisFolder}/*`,
 				...decisionGfxFiles,
+				// How every modifier line reads; renderDecisionFile forces the session on an edit.
+				...definitionFiles,
 			]),
 		};
 	}

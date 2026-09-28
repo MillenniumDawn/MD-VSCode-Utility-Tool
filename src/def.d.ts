@@ -25,6 +25,7 @@ declare module 'vscode' {
             readonly decisionGfxFiles: string[];
             readonly ideaPlaceholderIcon: string;
             readonly characterTraitStructuralKeys: string[];
+            readonly modifierFormatFiles: string[];
             readonly technologyCountryIcons: boolean;
             readonly worldMapRetainContextWhenHidden: boolean;
             readonly previewWheel: 'auto' | 'zoom' | 'scroll';
