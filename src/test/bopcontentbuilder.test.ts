@@ -127,6 +127,7 @@ function loaderFor(
 	sessions: LoaderSession[] = [],
 	withWindow = true,
 	decisions: Record<string, HOIDecision[]> = romDecisions(),
+	withDecisionItem = true,
 ) {
 	return {
 		load: async (session: LoaderSession) => {
@@ -134,7 +135,7 @@ function loaderFor(
 			const result: BopLoaderResult = {
 				bops: getBopsFromFile(parseHoi4File(source), "common/bop/test.txt"),
 				gfxFiles: [],
-				...(withWindow ? { ...bopWindow(), decisionItem: decisionItem() } : { templates: {} }),
+				...(withWindow ? { ...bopWindow(), decisionItem: withDecisionItem ? decisionItem() : undefined } : { templates: {} }),
 				decisions,
 			};
 			return { result };
@@ -237,6 +238,15 @@ a = { left_side = l right_side = missing side = { id = l } }`));
 		assert.ok(html.includes("bop-decision-name"));
 		assert.ok(/>\s*50\s*</.test(html));
 		assert.ok(!html.includes("999"));
+	});
+
+	it("draws plain decision rows when no decision_item window is found", async () => {
+		const rendered = await renderBopFile(loaderFor(rom, [], true, romDecisions(), false), uri, webview);
+		const [card] = payloadOf(rendered as LoaderRenderResult).cards;
+		const html = card.window!.html;
+		assert.strictEqual(html.match(/class="bop-decision-plain"/g)?.length, 2);
+		assert.strictEqual(html.match(/class="bop-decision-name"/g)?.length, 2);
+		assert.ok(html.includes(`<span class="bop-decision-cost">50</span>`));
 	});
 
 	it("warns when no decision is in its decision_category", async () => {
