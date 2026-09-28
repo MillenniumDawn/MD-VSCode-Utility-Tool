@@ -227,6 +227,7 @@ function subscribeTracing(): void {
 
 let useConditionInFocus: boolean = (window as any).useConditionInFocus;
 let focusTrees: FocusTree[] = (window as any).focusTrees;
+let renderedShortcuts: string[][] = (window as any).renderedShortcuts ?? [];
 
 let selectedExprs: ConditionItem[] = getState().selectedExprs ?? [];
 let selectedInlayExprs: ConditionItem[] = getState().selectedInlayExprs ?? [];
@@ -761,7 +762,23 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 		}
 	}
 
+	renderShortcuts(focusTree, renderedShortcuts[selectedFocusTreeIndex]);
 	renderWarningList(focusTree);
+}
+
+// The host renders every button; this only puts the selected tree's into the overlay, and hides
+// the overlay on a tree without shortcuts. Each button carries its index into the tree's shortcuts,
+// since two shortcuts may share a name.
+export function renderShortcuts(focusTree: FocusTree, rendered: string[] = []) {
+	const count = Math.min(focusTree.shortcuts?.length ?? 0, rendered.length);
+	const overlay = document.getElementById("shortcut-overlay") as HTMLDivElement | null;
+	if (overlay) {
+		overlay.style.display = count > 0 ? "flex" : "none";
+	}
+	const list = document.getElementById("shortcut-list");
+	if (list) {
+		list.innerHTML = rendered.slice(0, count).join("");
+	}
 }
 
 // The size is the layout's: continuous_focus_window's in gui mode. The shell is not rebuilt on an
@@ -787,6 +804,104 @@ export function placeContinuousFocuses(focusTree: FocusTree) {
 	} else {
 		continuousFocuses.style.display = "none";
 	}
+	applyContinuousFocusEditing(focusTree);
+}
+
+function continuousFocusEditing(): boolean {
+	return getState().editContinuousFocus === true;
+}
+
+// The box can be dragged only on a tree the file defines itself, and only while the toggle is on.
+function applyContinuousFocusEditing(focusTree: FocusTree | undefined) {
+	const editable =
+		focusTree?.continuousFocusSource !== undefined &&
+		focusTree.continuousFocusPositionX !== undefined &&
+		focusTree.continuousFocusPositionY !== undefined;
+	const button = document.getElementById("edit-continuous-focus");
+	if (button) {
+		button.style.display = editable ? "" : "none";
+		button.style.opacity = continuousFocusEditing() ? "" : "0.4";
+	}
+	document
+		.getElementById("continuousFocuses")
+		?.classList.toggle(
+			"continuous-editable",
+			editable && continuousFocusEditing(),
+		);
+}
+
+// Dragging the continuous focus box: the drop is written back to the file as
+// continuous_focus_position, converted with the inverse of placeContinuousFocuses's offsets.
+export function wireContinuousFocusEditing(
+	getFocusTree: () => FocusTree | undefined,
+) {
+	const button = document.getElementById("edit-continuous-focus");
+	button?.addEventListener("click", () => {
+		setState({ editContinuousFocus: !continuousFocusEditing() });
+		applyContinuousFocusEditing(getFocusTree());
+	});
+
+	const box = document.getElementById("continuousFocuses");
+	if (!box) {
+		return;
+	}
+
+	let drag:
+		| { clientX: number; clientY: number; left: number; top: number; moved: boolean }
+		| undefined;
+	box.addEventListener("mousedown", (e) => {
+		if (e.button !== 0 || !box.classList.contains("continuous-editable")) {
+			return;
+		}
+		// The box is drawn over the pan layer; a press on it moves the box, never the view.
+		e.preventDefault();
+		e.stopImmediatePropagation();
+		drag = {
+			clientX: e.clientX,
+			clientY: e.clientY,
+			left: parseFloat(box.style.left) || 0,
+			top: parseFloat(box.style.top) || 0,
+			moved: false,
+		};
+	});
+
+	document.addEventListener("mousemove", (e) => {
+		if (!drag) {
+			return;
+		}
+		const dx = e.clientX - drag.clientX;
+		const dy = e.clientY - drag.clientY;
+		// A press that stays within a few pixels is a click, not a move.
+		if (!drag.moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) {
+			return;
+		}
+		drag.moved = true;
+		// The canvas is zoomed with a CSS scale, so a screen pixel is 1/scale of a tree pixel.
+		const scale = currentScale();
+		box.style.left = drag.left + dx / scale + "px";
+		box.style.top = drag.top + dy / scale + "px";
+	});
+
+	document.addEventListener("mouseup", () => {
+		const finished = drag;
+		drag = undefined;
+		if (!finished?.moved) {
+			return;
+		}
+		const tree = getFocusTree();
+		if (!tree?.continuousFocusSource) {
+			return;
+		}
+		const source = tree.continuousFocusSource;
+		vscode.postMessage({
+			command: "setContinuousFocusPosition",
+			file: source.file,
+			start: source.start,
+			treeId: tree.id,
+			x: Math.round(parseFloat(box.style.left) + 59),
+			y: Math.round(parseFloat(box.style.top) - 7),
+		});
+	});
 }
 
 // The warnings panel lists one clickable entry per warning: activating it closes the panel and
@@ -825,6 +940,26 @@ function renderWarningList(focusTree: FocusTree) {
 		});
 		warnings.appendChild(entry);
 	}
+}
+
+// One listener on the overlay, so the buttons can be replaced per tree without rebinding. The
+// fold state is the reader's, kept across reloads like the other toolbar toggles.
+export function bindShortcuts(overlay: HTMLElement, currentTree: () => FocusTree | undefined) {
+	overlay.classList.toggle("collapsed", getState().shortcutsCollapsed ?? false);
+	overlay.addEventListener("click", (e) => {
+		const target = e.target as Element;
+		if (target.closest("#shortcut-toggle")) {
+			const collapsed = !overlay.classList.contains("collapsed");
+			overlay.classList.toggle("collapsed", collapsed);
+			setState({ shortcutsCollapsed: collapsed });
+			return;
+		}
+		const item = target.closest("[data-shortcut-index]") as HTMLElement | null;
+		const shortcut = item ? currentTree()?.shortcuts?.[Number(item.dataset.shortcutIndex)] : undefined;
+		if (shortcut) {
+			revealFocus(shortcut.target);
+		}
+	});
 }
 
 function revealFocus(focusId: string) {
@@ -1112,9 +1247,11 @@ function renderInlayWindows(
 	const selectedInlayWindow = focusTree.inlayWindows.find(
 		(inlay) => inlay.id === selectedInlayWindowId,
 	);
+	// Outside condition mode there is no way to meet a `visible` trigger, and ticking the window
+	// on is already the reader asking to see it.
 	if (
 		!selectedInlayWindow ||
-		!applyCondition(selectedInlayWindow.visible, exprs)
+		(useConditionInFocus && !applyCondition(selectedInlayWindow.visible, exprs))
 	) {
 		return "";
 	}
@@ -1181,6 +1318,12 @@ window.addEventListener("message", tryRun(async (event) => {
 	const data = msg.data ?? {};
 	focusTrees = data.focusTrees;
 	(window as any).focusTrees = data.focusTrees;
+	renderedShortcuts = data.renderedShortcuts ?? [];
+	(window as any).renderedShortcuts = renderedShortcuts;
+	const shortcutToggle = document.getElementById("shortcut-toggle");
+	if (shortcutToggle && data.renderedShortcutToggle !== undefined) {
+		shortcutToggle.innerHTML = data.renderedShortcutToggle;
+	}
 	(window as any).renderedFocus = data.renderedFocus;
 	(window as any).renderedInlayWindows = data.renderedInlayWindows;
 	(window as any).gridBox = data.gridBox;
@@ -1252,6 +1395,11 @@ window.addEventListener(
 				await buildContent();
 				retriggerSearch();
 			}));
+		}
+
+		const shortcutOverlay = document.getElementById("shortcut-overlay");
+		if (shortcutOverlay) {
+			bindShortcuts(shortcutOverlay, () => focusTrees[selectedFocusTreeIndex]);
 		}
 
 		const inlayWindowsElement = document.getElementById(
@@ -1452,6 +1600,30 @@ window.addEventListener(
 				const visible = !showWarningMarkers();
 				setState({ showFocusWarningMarkers: visible });
 				setWarningMarkersVisible(visible);
+			});
+		}
+
+		wireContinuousFocusEditing(() => focusTrees[selectedFocusTreeIndex]);
+
+		// Copy the selected tree's warnings. The host formats them and writes the clipboard, which a
+		// webview cannot reach reliably on its own.
+		const copyWarnings = document.getElementById(
+			"copy-warnings",
+		) as HTMLButtonElement | null;
+		if (copyWarnings) {
+			copyWarnings.addEventListener("click", () => {
+				const focusTree = focusTrees[selectedFocusTreeIndex];
+				if (focusTree === undefined) {
+					return;
+				}
+				vscode.postMessage({
+					command: "copyWarnings",
+					treeId: focusTree.id,
+					warnings: focusTree.warnings.map((w) => ({
+						source: w.source,
+						text: w.text,
+					})),
+				});
 			});
 		}
 

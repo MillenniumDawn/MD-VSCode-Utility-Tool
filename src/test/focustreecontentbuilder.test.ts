@@ -1,3 +1,4 @@
+/// <reference types="mocha" />
 import * as assert from "assert";
 import * as path from "path";
 import * as vscode from "vscode";
@@ -34,7 +35,12 @@ import {
 	_resetImageWorkerPathForTest,
 } from "../util/image/imagedecoder";
 import { FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "../previewdef/focustree/layout";
-import { focusLinkClass, focusLinkShapes, registerFocusLinkStyles } from "../util/hoi4gui/focuslink";
+import { focusLinkClass, focusLinkFrames, focusLinkShapes, registerFocusLinkStyles } from "../util/hoi4gui/focuslink";
+import { parseHoi4File, resolveScriptVariables } from "../hoiformat/hoiparser";
+import { convertNodeToJson } from "../hoiformat/schema";
+import { GuiFile, guiFileSchema } from "../hoiformat/gui";
+import { getFlags, refreshFeatureFlags } from "../util/featureflags";
+import { restoreVscodeStubs, stubVscode } from "./_vscode_stub";
 
 const webview = {
 	asWebviewUri: (u: unknown) => u,
@@ -149,6 +155,103 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(payload!.gridBox);
 		assert.strictEqual(payload!.xGridSize, 96);
 		assert.strictEqual(payload!.toolbarFlags.hasWarnings, false);
+	});
+
+	it("buildFocusTreePayload renders a button per shortcut and the page carries them and the overlay", async () => {
+		const tree = minimalFocusTree({
+			shortcuts: [
+				{ name: "TST_shortcut", target: "focus_a" },
+				{ name: "TST_shortcut", target: "focus_a" },
+				{ name: "<b>TST_escaped</b>", target: "focus_a" },
+			],
+		});
+		const payload = await buildFocusTreePayload(
+			loaderWithTrees([tree, minimalFocusTree({ id: "other_tree" })]),
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		// One list per tree, one button per shortcut, even where two share a name.
+		assert.strictEqual(payload!.renderedShortcuts.length, 2);
+		assert.strictEqual(payload!.renderedShortcuts[1].length, 0);
+		const buttons = payload!.renderedShortcuts[0];
+		assert.strictEqual(buttons.length, 3);
+		assert.ok(buttons[0].includes('data-shortcut-index="0"'));
+		assert.ok(buttons[1].includes('data-shortcut-index="1"'));
+		// Without a localisation index the label is the key itself, escaped.
+		assert.ok(buttons[0].includes("TST_shortcut"));
+		assert.ok(buttons[2].includes("&lt;b&gt;TST_escaped&lt;/b&gt;"));
+		assert.ok(!buttons[2].includes("<b>"));
+		// No nationalfocusview.gui in the load result: the chevron stands in for its toggle.
+		assert.ok(payload!.renderedShortcutToggle.includes("codicon-chevron-left"));
+
+		const html = buildFocusTreeHtml(payload!, webview, uri);
+		assert.ok(html.includes("window.renderedShortcuts"));
+		assert.ok(html.includes('id="shortcut-overlay"'));
+		assert.ok(html.includes("codicon-chevron-left"));
+		assert.ok(!html.includes('id="shortcuts"'));
+	});
+
+	it("buildFocusTreePayload draws the shortcut from the gui item window when the load has one", async () => {
+		const item = {
+			name: "focus_tree_shortcut_item",
+			size: { width: { _value: 190 }, height: { _value: 72 } },
+			background: [],
+			containerwindowtype: [], windowtype: [], gridboxtype: [], icontype: [], buttontype: [],
+			instanttextboxtype: [], checkboxtype: [], smoothlistboxtype: [], editboxtype: [], textboxtype: [],
+			scrollbartype: [], listboxtype: [], guibuttontype: [],
+		};
+		(item.instanttextboxtype as any[]).push({ name: "name", maxwidth: { _value: 112 }, maxheight: { _value: 60 }, font: "hoi_20b" });
+		(item.buttontype as any[]).push({ name: "focus_button", position: { x: { _value: 37 }, y: { _value: 37 } }, scale: 0.6, centerposition: true });
+		const tree = minimalFocusTree({ shortcuts: [{ name: "TST_gui_shortcut", target: "focus_a" }] });
+		const payload = await buildFocusTreePayload(
+			{
+				file: "common/national_focus/test.txt",
+				load: async () => ({ result: { focusTrees: [tree], gfxFiles: [], shortcutGui: { item } } }),
+			} as any,
+			undefined,
+			{ resolveIcons: false },
+		);
+		assert.ok(payload);
+		const [button] = payload!.renderedShortcuts[0];
+		assert.ok(button.includes("TST_gui_shortcut"));
+		assert.ok(button.includes("st-shortcut-icon-"));
+		assert.ok(!button.includes("st-shortcut-item-plain"));
+	});
+
+	// Millennium Dawn's China and England inlays anchor their window lower_left. The game puts the
+	// window's top-left at the tree's inlay_window position, so the root must not drop a screen height.
+	it("buildFocusTreePayload places an inlay window at its tree position whatever its root orientation", async () => {
+		const gui = convertNodeToJson<GuiFile>(resolveScriptVariables(parseHoi4File(`guiTypes = {
+			containerWindowType = {
+				name = "lower_left_inlay_window"
+				orientation = lower_left
+				position = { x = 0 y = 0 }
+				size = { width = 600 height = 670 }
+			}
+		}`)), guiFileSchema);
+		const tree = minimalFocusTree({
+			inlayWindows: [{
+				id: "lower_left_inlay",
+				file: "common/focus_inlay_windows/test.txt",
+				token: undefined,
+				windowName: "lower_left_inlay_window",
+				guiWindow: gui.guitypes[0].containerwindowtype[0],
+				internal: true,
+				visible: true,
+				position: { x: 1800, y: 50 },
+				scriptedImages: [],
+				scriptedButtons: [],
+				conditionExprs: [],
+			}],
+		});
+		const payload = await buildFocusTreePayload(loaderWithTrees([tree]), undefined, { resolveIcons: false });
+		assert.ok(payload);
+		assert.ok(payload!.renderedInlayWindows["lower_left_inlay"]);
+
+		const css = payload!.styleTable.toRawCss().replace(/\s+/g, " ");
+		assert.ok(/left: 1800px; top: 50px;/.test(css), "expected the inlay root at the tree position");
+		assert.ok(!/top: 1080px/.test(css), "expected the window not to be anchored to the bottom of the screen");
 	});
 
 	it("buildFocusTreePayload sets hasWarnings when a tree carries warnings", async () => {
@@ -304,6 +407,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		const cleanHtml = buildFocusTreeHtml(clean!, webview, uri);
 		assert.ok(!cleanHtml.includes('id="show-warnings"'));
 		assert.ok(!cleanHtml.includes('id="toggle-warning-markers"'));
+		assert.ok(!cleanHtml.includes('id="copy-warnings"'));
 
 		const warned = minimalFocusTree();
 		warned.warnings = [{ text: "Focuses a and b overlap.", source: "focus_a" }];
@@ -315,6 +419,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		const warnedHtml = buildFocusTreeHtml(warnedPayload!, webview, uri);
 		assert.ok(warnedHtml.includes('id="show-warnings"'));
 		assert.ok(warnedHtml.includes('id="toggle-warning-markers"'));
+		assert.ok(warnedHtml.includes('id="copy-warnings"'));
 	});
 
 	it("registerWarningStyles emits exactly the exported class names", () => {
@@ -446,6 +551,36 @@ describe("previewdef/focustree contentbuilder", () => {
 		assert.ok(css.includes("border-left: none"));
 		assert.ok(css.includes("border-top: none"));
 		assert.ok(!css.includes("#88aaff"));
+	});
+
+	// The strips hold the completed (green) solid and dashed frames first, the available (blue) ones after. Issue #443.
+	it("focusLinkFrames draws the available line from the blue frames and the completed one from the green", () => {
+		assert.deepStrictEqual(focusLinkFrames("available"), { solid: 2, dashed: 3 });
+		assert.deepStrictEqual(focusLinkFrames("completed"), { solid: 0, dashed: 1 });
+	});
+
+	it("registerFocusLinkStyles draws the plain line of a completed focus in green", () => {
+		const styleTable = new StyleTable();
+		registerFocusLinkStyles(styleTable, undefined, "completed");
+		const css = styleTable.toRawCss();
+		assert.ok(css.includes("border-left: 1px solid #68b86f"));
+		assert.ok(css.includes("border-top: 1px dashed #68b86f"));
+		assert.ok(!css.includes("#88aaff"));
+	});
+
+	it("buildFocusTreePayload draws the prerequisite lines in the colour the setting picks", async () => {
+		const before = getFlags();
+		stubVscode({ getConfiguration: () => ({ ...before, focusTreePrerequisiteLines: "completed" }) });
+		try {
+			refreshFeatureFlags();
+			const payload = await buildFocusTreePayload(loaderWithTrees([minimalFocusTree()]), undefined, { resolveIcons: false });
+			assert.ok(payload!.styleTable.toRawCss().includes("border-left: 1px solid #68b86f"));
+		} finally {
+			// Read the flags back from the ones this test found, so the tests after it see them unchanged.
+			stubVscode({ getConfiguration: () => before });
+			refreshFeatureFlags();
+			restoreVscodeStubs();
+		}
 	});
 
 	it("buildFocusTreeHtml hands the webview the prerequisite line tiles", async () => {

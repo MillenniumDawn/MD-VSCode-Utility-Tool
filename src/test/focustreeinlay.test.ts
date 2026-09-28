@@ -55,6 +55,33 @@ describe("previewdef/focustree inlay resolveInlaysForTree", () => {
 		assert.strictEqual(warnings[0].source, "missing_inlay");
 	});
 
+	// Nothing in the preview reads a button's `available`, and a custom_override_tooltip there made
+	// one dropdown option wide enough to stretch the toolbar.
+	it("offers visible and scripted image conditions but not button available ones", () => {
+		const withConditions: FocusTreeInlay = {
+			...inlay("cond_inlay", "c.txt"),
+			visible: { scopeName: "", nodeContent: "has_country_flag = shown" },
+			scriptedImages: [{
+				id: "slot", file: "c.txt", token: undefined,
+				gfxOptions: [
+					{ gfxName: "GFX_a", condition: { scopeName: "", nodeContent: "check_variable = { slot = 1 }" }, file: "c.txt", token: undefined },
+					{ gfxName: "GFX_empty", condition: true, file: "c.txt", token: undefined },
+				],
+			}],
+			scriptedButtons: [{
+				id: "btn", file: "c.txt", token: undefined,
+				available: { scopeName: "", nodeContent: "custom_override_tooltip = { tooltip = tt }" },
+			}],
+		};
+
+		const { inlayConditionExprs } = resolveInlaysForTree([ref("cond_inlay", 0, 0)], [withConditions]);
+
+		assert.deepStrictEqual(inlayConditionExprs.map(e => e.nodeContent), [
+			"has_country_flag = shown",
+			"check_variable = { slot = 1 }",
+		]);
+	});
+
 	it("resolves a duplicated inlay id to the first occurrence", () => {
 		const first = inlay("dup_inlay", "first.txt");
 		const second = inlay("dup_inlay", "second.txt");
