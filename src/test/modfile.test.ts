@@ -169,7 +169,7 @@ describe('util/modfile picker', () => {
     const modPath = uriToFilePathWhenPossible(vscode.Uri.joinPath(folder, 'my_mod.mod'));
     let registration: vscode.Disposable;
 
-    async function pickerRows(modFile: string): Promise<vscode.QuickPickItem[]> {
+    async function pickerRows(modFile: string, globalValue?: string): Promise<vscode.QuickPickItem[]> {
         const handlers: Record<string, (...args: any[]) => any> = {};
         let rows: vscode.QuickPickItem[] = [];
         stubVscode({
@@ -185,7 +185,7 @@ describe('util/modfile picker', () => {
                 modFile,
                 parentModPaths: [],
                 update: () => Promise.resolve(),
-                inspect: () => undefined,
+                inspect: () => globalValue ? { globalValue } : undefined,
             }),
         });
         registration = registerModFile();
@@ -212,5 +212,14 @@ describe('util/modfile picker', () => {
 
         const setting = rows.filter(r => r.description === 'Workspace setting');
         assert.deepStrictEqual(setting.map(r => [r.label, r.detail, r.picked]), [['other', elsewhere, true]]);
+    });
+
+    it('shows a quoted global setting with an unquoted name and path', async () => {
+        const elsewhere = uriToFilePathWhenPossible(vscode.Uri.file('/mods/other/other.mod'));
+        const rows = await pickerRows(`"${elsewhere}"`, `"${elsewhere}"`);
+
+        const setting = rows.filter(r => r.description === 'Global setting');
+        assert.deepStrictEqual(setting.map(r => [r.label, r.detail, r.picked]), [['other', elsewhere, true]]);
+        assert.strictEqual(rows.filter(r => r.description === 'Workspace setting').length, 0);
     });
 });

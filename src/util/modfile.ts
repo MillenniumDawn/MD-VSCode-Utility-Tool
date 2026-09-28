@@ -163,20 +163,23 @@ export function pickedFirst(
 	a: vscode.QuickPickItem,
 	b: vscode.QuickPickItem,
 ): number {
-	return !!a.picked === !!b.picked ? 0 : a.picked ? -1 : 1;
+	return Boolean(a.picked) === Boolean(b.picked) ? 0 : a.picked ? -1 : 1;
 }
 
 async function selectModFile(): Promise<void> {
 	const conf = getConfiguration();
 	const modFileInspect = conf.inspect<string>("modFile");
+	const globalValue = modFileInspect?.globalValue;
+	const globalUri = fileOrUriStringToUri(globalValue);
+	const globalPath = globalUri ? uriToFilePathWhenPossible(globalUri) : globalValue;
 	const modsList: (vscode.QuickPickItem & { selectModFile?: true })[] =
-		!modFileInspect?.globalValue
+		!globalPath
 			? []
 			: [
 					{
-						label: path.basename(modFileInspect.globalValue, ".mod"),
+						label: path.basename(globalPath, ".mod"),
 						description: localize("modfile.globalsetting", "Global setting"),
-						detail: modFileInspect.globalValue,
+						detail: globalPath,
 					},
 				];
 
