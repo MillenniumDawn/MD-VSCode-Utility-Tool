@@ -4,6 +4,7 @@ import { ConfigurationKey, Commands } from "../constants";
 import { PromiseCache } from "./cache";
 import { error } from "./debug";
 import { localize } from "./i18n";
+import { statusBarIcon } from "../previewdef/toolbaricons";
 import {
 	clearParentModCache,
 	getParentModUris,
@@ -97,8 +98,11 @@ export function updateSelectedModFileStatus(
 		if (modFile) {
 			const modFileName = basename(modFile, ".mod");
 			modName.command = Commands.SelectModFile;
-			modName.text =
-				(error ? "$(error) " : "$(file-code) ") + modFileName + parentSuffix;
+			// The error icon alone does not say what is wrong, so the text says it too.
+			modName.text = error
+				? statusBarIcon("modFileError") + " " + modFileName + " " +
+					localize("modfile.cannotread", "(cannot read)") + parentSuffix
+				: statusBarIcon("modFile") + " " + modFileName + parentSuffix;
 			modName.tooltip =
 				(error
 					? localize("modfile.errorreading", "Error reading this file: ")
@@ -109,7 +113,7 @@ export function updateSelectedModFileStatus(
 		} else {
 			modName.command = Commands.SelectModFile;
 			modName.text =
-				"$(file-code) " +
+				statusBarIcon("modFile") + " " +
 				localize("modfile.nomodfile", "(No mod descriptor)") +
 				parentSuffix;
 			modName.tooltip =

@@ -10,6 +10,7 @@ import { localize } from '../../util/i18n';
 import { LoaderSession } from '../../util/loader/loader';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { GuiFileLoader, GuiFileLoaderResult } from "./loader";
+import { actionGroupHtml, iconButtonHtml } from "../toolbaricons";
 
 export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
     try {
@@ -85,9 +86,12 @@ function renderTopBar(folders: string[], styleTable: StyleTable): string {
     return `<div
     class="${styleTable.oneTimeStyle('folderSelectorBar', () => `
         position: fixed;
+        display: flex;
+        align-items: flex-start;
+        box-sizing: content-box;
         padding-top: 9px;
         padding-left: 20px;
-        width: 100%;
+        width: calc(100% - 20px);
         height: 30px;
         top: 0;
         left: 0;
@@ -107,12 +111,10 @@ function renderTopBar(folders: string[], styleTable: StyleTable): string {
                 ${folders.map(folder => `<option value="containerwindow_${escapeAttr(folder)}">${htmlEscape(folder)}</option>`)}
             </select>
         </div>
-        <button id="refresh" title="${localize('common.topbar.refresh.title', 'Refresh')}">
-            <i class="codicon codicon-refresh"></i>
-        </button>
-        <button id="toggleVisibility" title="${localize('guipreview.topbar.toggleVisibility.title', 'Show or Hide Container Windows')}">
-            <i class="codicon codicon-eye"></i>
-        </button>
+        ${actionGroupHtml({
+            refresh: iconButtonHtml('refresh', localize, { domId: 'refresh' }),
+            containerWindows: iconButtonHtml('containerWindows', localize, { domId: 'toggleVisibility', on: false }),
+        })}
     </div>
     <div
     id="toggleVisibilityContent"

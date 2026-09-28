@@ -1,6 +1,8 @@
 import { takePostedMessages, loadEntrypoint, useEntrypoint, resetWebviewState } from './setup';
 import * as assert from 'assert';
 import { Focus, FocusTree } from '../../previewdef/focustree/schema';
+import { iconButtonHtml } from '../../previewdef/toolbaricons';
+import { feLocalize } from '../../../webviewsrc/util/i18n';
 
 function focus(id: string): Focus {
     return {
@@ -103,5 +105,72 @@ describe('webview/focustree rendering', () => {
         assert.strictEqual(writes, 1);
         assert.ok(element.querySelector('#focus_second_focus'), 'expected the newer tree on screen');
         assert.strictEqual(element.querySelector('#focus_first_focus'), null);
+    });
+});
+
+describe('webview/focustree rendering toolbar toggles', () => {
+    useEntrypoint(listeners);
+
+    const settled = () => new Promise(resolve => setTimeout(resolve, 0));
+    let previousBody = '';
+    let previousTrees: unknown;
+
+    before(async () => {
+        previousBody = document.body.innerHTML;
+        previousTrees = (window as any).focusTrees;
+        (window as any).focusTrees = [updateBody('first_focus').data.focusTrees[0]];
+        document.body.innerHTML = `
+            <div class="toolbar-outer"><div class="toolbar">
+                <input id="searchbox" type="text"/>
+                ${iconButtonHtml('showWarnings', feLocalize, { domId: 'show-warnings', on: false })}
+                ${iconButtonHtml('warningMarkers', feLocalize, { domId: 'toggle-warning-markers', on: true })}
+            </div></div>
+            <div id="continuousFocuses"></div>
+            <div id="focustreecontent"><div id="focustreeplaceholder"></div></div>
+            <div id="inlaywindowplaceholder"></div>
+            <div id="warnings-container" style="display:none"><div id="warnings"></div></div>`;
+        window.dispatchEvent(new (window as any).Event('load'));
+        for (let i = 0; i < 20; i++) {
+            await settled();
+        }
+        takePostedMessages();
+    });
+
+    after(() => {
+        document.body.innerHTML = previousBody;
+        (window as any).focusTrees = previousTrees;
+    });
+
+    function icon(button: HTMLElement): string | undefined {
+        return Array.from(button.querySelector('i')?.classList ?? []).find(c => c.startsWith('codicon-'));
+    }
+
+    it('marks the warning list button pressed while the list is open', () => {
+        const button = document.getElementById('show-warnings')!;
+        const container = document.getElementById('warnings-container')!;
+        assert.strictEqual(button.getAttribute('aria-pressed'), 'false');
+
+        button.dispatchEvent(new (window as any).Event('click'));
+        assert.strictEqual(container.style.display, 'block');
+        assert.strictEqual(button.getAttribute('aria-pressed'), 'true');
+
+        button.dispatchEvent(new (window as any).Event('click'));
+        assert.strictEqual(container.style.display, 'none');
+        assert.strictEqual(button.getAttribute('aria-pressed'), 'false');
+    });
+
+    it('swaps the warning marker icon and pressed state instead of dimming the button', () => {
+        const button = document.getElementById('toggle-warning-markers')!;
+        assert.strictEqual(button.getAttribute('aria-pressed'), 'true');
+        assert.strictEqual(icon(button), 'codicon-circle-large-filled');
+
+        button.dispatchEvent(new (window as any).Event('click'));
+        assert.strictEqual(button.getAttribute('aria-pressed'), 'false');
+        assert.strictEqual(icon(button), 'codicon-circle-large-outline');
+        assert.strictEqual(button.style.opacity, '');
+
+        button.dispatchEvent(new (window as any).Event('click'));
+        assert.strictEqual(button.getAttribute('aria-pressed'), 'true');
+        assert.strictEqual(icon(button), 'codicon-circle-large-filled');
     });
 });

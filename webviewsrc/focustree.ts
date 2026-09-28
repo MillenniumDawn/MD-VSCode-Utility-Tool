@@ -38,6 +38,7 @@ import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
 import { toNumberLike } from "../src/hoiformat/schema";
 import { feLocalize } from "./util/i18n";
+import { applyIconState } from "../src/previewdef/toolbaricons";
 import { Checkbox } from "./util/checkbox";
 import { vscode } from "./util/vscode";
 
@@ -606,7 +607,7 @@ function setWarningMarkersVisible(visible: boolean) {
 		"toggle-warning-markers",
 	) as HTMLButtonElement | null;
 	if (button) {
-		button.style.opacity = visible ? "" : "0.4";
+		applyIconState(button, "warningMarkers", visible, feLocalize);
 	}
 }
 
@@ -848,6 +849,10 @@ function hideWarningPanel() {
 	if (container) {
 		container.style.display = "none";
 		document.body.style.overflow = "";
+	}
+	const button = document.getElementById("show-warnings");
+	if (button) {
+		applyIconState(button, "showWarnings", false, feLocalize);
 	}
 }
 
@@ -1438,6 +1443,7 @@ window.addEventListener(
 				const visible = warnings.style.display === "block";
 				document.body.style.overflow = visible ? "" : "hidden";
 				warnings.style.display = visible ? "none" : "block";
+				applyIconState(showWarnings, "showWarnings", !visible, feLocalize);
 			});
 		}
 

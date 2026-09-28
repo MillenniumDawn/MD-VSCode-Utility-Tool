@@ -26,6 +26,7 @@ import { registerFocusLinkStyles } from "../../util/hoi4gui/focuslink";
 import { loadFocusLinkImages } from "../../util/hoi4gui/focuslinkimages";
 import { FocusItemLayout, FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "./layout";
 import { describeParseFailure } from "../../util/indexHalf";
+import { actionGroupHtml, iconButtonHtml } from "../toolbaricons";
 import { Logger } from "../../util/logger";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
@@ -397,24 +398,13 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             </div>
         </div>`;
     
-    // Both warning buttons share the same gate, so ToolbarFlags.hasWarnings alone still decides
-    // whether the toolbar needs a full reload when a tree gains or loses its first warning.
+    // The warning buttons are always drawn, and disabled while no tree has a warning, so the action
+    // group never shifts. ToolbarFlags.hasWarnings still decides whether the toolbar needs a full
+    // reload when a tree gains or loses its first warning, which is what flips them.
     const hasNoWarnings = focusTrees.every(ft => ft.warnings.length === 0);
-    const warningsButton = hasNoWarnings ? '' : `
-        <button id="show-warnings" title="${localize('focustree.warnings', 'Toggle warnings')}">
-            <i class="codicon codicon-warning"></i>
-        </button>`;
-
-    const warningMarkersButton = hasNoWarnings ? '' : `
-        <button id="toggle-warning-markers" title="${localize('focustree.warningmarkers', 'Toggle warning markers on the tree')}">
-            <i class="codicon codicon-error"></i>
-        </button>`;
-
-    const hasAllowBranch = focusTrees.some(ft => ft.allowBranchOptions.length > 0);
-    const resetCheckboxesButton = !hasAllowBranch ? '' : `
-        <button id="reset-focus-checkboxes" title="${localize('focustree.resetcheckboxes', 'Reset focus checkboxes')}">
-            <i class="codicon codicon-clear-all"></i>
-        </button>`;
+    const warningsButton = iconButtonHtml('showWarnings', localize, { domId: 'show-warnings', on: false, disabled: hasNoWarnings });
+    const warningMarkersButton = iconButtonHtml('warningMarkers', localize, { domId: 'toggle-warning-markers', on: true, disabled: hasNoWarnings });
+    const resetCheckboxesButton = iconButtonHtml('resetCheckboxes', localize, { domId: 'reset-focus-checkboxes' });
 
     // Shown by the webview only while a prerequisite trace is active, so there is always a visible
     // way out of the dimmed view. Hidden through an inline display rather than the `hidden`
@@ -422,9 +412,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
     const traceStatus = `
         <div id="trace-status-container" style="display:none" class="${styleTable.style('traceStatusContainer', () => `margin-left:10px; align-items:center;`)}">
             <span id="trace-status" class="${styleTable.style('traceStatus', () => `margin-right:5px; opacity:0.8;`)}"></span>
-            <button id="clear-trace" title="${localize('focustree.traceclear', 'Stop tracing prerequisite lines')}">
-                <i class="codicon codicon-close"></i>
-            </button>
+            ${iconButtonHtml('clearTrace', localize, { domId: 'clear-trace' })}
         </div>`;
 
     return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 52px;`)}">
@@ -436,10 +424,12 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${focusOverlays}
             ${inlayWindowsToggle}
             ${inlayWindows}
-            ${warningsButton}
-            ${warningMarkersButton}
-            ${resetCheckboxesButton}
-            ${traceStatus}
+            ${actionGroupHtml({
+                resetCheckboxes: resetCheckboxesButton,
+                showWarnings: warningsButton,
+                warningMarkers: warningMarkersButton,
+                clearTrace: traceStatus,
+            })}
         </div>
     </div>`;
 }

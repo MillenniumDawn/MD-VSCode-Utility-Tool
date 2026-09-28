@@ -11,6 +11,7 @@ import { SearchBox } from "./util/searchbox";
 import { applyNav, badge } from "./util/card";
 import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
+import { applyIconState } from "../src/previewdef/toolbaricons";
 import { wireUpdateBody } from "./util/updatebody";
 import {
 	DecisionGraphCategoryNode,
@@ -573,13 +574,9 @@ function buildCollapseButton(categoryKey: string, collapsed: boolean): HTMLButto
 	const button = document.createElement("button");
 	button.className = "dec-collapse";
 	button.type = "button";
-	button.setAttribute("aria-expanded", String(!collapsed));
-	button.title = collapsed
-		? feLocalize("decisiontree.expand", "Expand this category")
-		: feLocalize("decisiontree.collapse", "Collapse this category");
 	const icon = document.createElement("i");
-	icon.className = "codicon " + (collapsed ? "codicon-chevron-right" : "codicon-chevron-down");
 	button.appendChild(icon);
+	applyIconState(button, "collapseCategory", !collapsed, feLocalize);
 
 	button.addEventListener(
 		"click",

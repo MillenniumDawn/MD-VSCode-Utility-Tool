@@ -253,6 +253,29 @@ button[disabled]:active {
     transform: none;
 }
 
+/* A toggle that is on. More than a change of opacity, so the state reads at a glance -- see
+   pressedStyle in src/previewdef/toolbaricons.ts. */
+button[aria-pressed="true"] {
+    border-radius: 3px;
+    background: var(--vscode-inputOption-activeBackground, rgba(127, 127, 127, 0.3));
+    box-shadow: inset 0 0 0 1px var(--vscode-inputOption-activeBorder, currentColor);
+    color: var(--vscode-inputOption-activeForeground, inherit);
+}
+
+/* The icon buttons of a toolbar, pinned to its right end in one fixed order, so a button is in
+   the same place whichever boxes the preview has in front of it. Sticky, so it stays in view
+   when the boxes scroll the strip sideways. */
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    padding: 0 12px 0 10px;
+    position: sticky;
+    right: 0;
+    background: var(--vscode-editor-background);
+}
+
 /* The zoom overlay enableZoom appends to <body>. It floats over the canvas rather than sitting in
    the toolbar so it is in the same corner in every preview and costs the strip no width.
 
