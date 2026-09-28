@@ -12,6 +12,7 @@ Unreleased
 
   Bugfixes:
 
+- [ Focus Tree Previewer ] Selecting inlay conditions now changes the inlay window's scripted images, such as the leader portrait in China's inlay; the first image was always shown before.
 - [ Focus Tree Previewer ] Inlay windows are drawn where the focus tree places them, instead of a screen height lower when their window is anchored to the bottom, and a ticked inlay now shows outside condition mode instead of staying hidden until its `visible` trigger is met. Issue #436.
 - [ Focus Tree Previewer ] Ticking "Inlay windows" no longer stretches the toolbar: the inlay conditions dropdown lists only the conditions that change what the inlay shows, and both condition boxes keep a fixed width. Issue #436.
 - DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.
@@ -25,10 +26,6 @@ Unreleased
 - A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
 - [ GUI ] Showing or hiding a container window no longer affects a sibling whose name starts with the same text, such as `battle` and `battleplan`. Issue #363.
 
->>>>>>> origin/main
->>>>>>> origin/main
->>>>>>> origin/main
->>>>>>> origin/main
 
 v1.1.39
 

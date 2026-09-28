@@ -17,7 +17,6 @@ import { getFocusTitlebarImage, getFocusOverlayImage, loadFocusTitlebarStyles } 
 import { renderContainerWindow, RenderChildTypeMap } from "../../util/hoi4gui/containerwindow";
 import { calculateBBox, ParentInfo } from "../../util/hoi4gui/common";
 import { renderInstantTextBox } from "../../util/hoi4gui/instanttextbox";
-import { renderSprite } from "../../util/hoi4gui/nodecommon";
 import { registerWarningStyles, warningListClass } from "./warningstyles";
 import { registerTraceStyles } from "./tracestyles";
 import { registerExclusiveLinkStyles } from "../../util/hoi4gui/exclusivelink";
@@ -575,10 +574,15 @@ async function renderInlayOverrideChild<T extends keyof RenderChildTypeMap>(
 
     const scale = iconLikeChild.scale ?? 1;
     const gfxClassPlaceholder = `{{inlay_slot_class:${slot.id}}}`;
-    const spriteHtml = renderSprite({ x: 0, y: 0 }, sprite, sprite, 0, scale, {
-        styleTable,
-        classNames: gfxClassPlaceholder,
-    });
+    // The image comes only from the placeholder, which the webview swaps for the option whose
+    // condition is met. A background of this first option here would sit later in the stylesheet
+    // and win over whichever option was chosen; the sprite only sizes the slot.
+    const spriteHtml = `<div class="${gfxClassPlaceholder} ${styleTable.style('positionAbsolute', () => `position: absolute;`)} ${styleTable.oneTimeStyle('inlay-gui-slot-image', () => `
+        left: 0px;
+        top: 0px;
+        width: ${sprite.width * scale}px;
+        height: ${sprite.height * scale}px;
+    `)}"></div>`;
     const textHtml = type === 'button' ? await renderInstantTextBox({
         ...iconLikeChild,
         position: { x: toNumberLike(0), y: toNumberLike(0) },
