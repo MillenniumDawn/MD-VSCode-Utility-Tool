@@ -7,6 +7,7 @@ import {
     registerModFile,
     updateSelectedModFileStatus,
 } from '../util/modfile';
+import { uriToFilePathWhenPossible } from '../util/vsccommon';
 import { clearParentModCache, resetParentModsForTest, setResolvedDependencies } from '../util/parentmods';
 import { fireConfigurationChange, stubVscode, restoreVscodeStubs } from './_vscode_stub';
 
@@ -158,5 +159,58 @@ describe('util/modfile pickedFirst', () => {
     it('keeps picked rows first in their original order', () => {
         const rows = [item('x'), item('p1', true), item('y', false), item('p2', true)];
         assert.deepStrictEqual(rows.sort(pickedFirst).map(r => r.label), ['p1', 'p2', 'x', 'y']);
+    });
+});
+
+// A quoted modFile setting resolves fine everywhere else, so the picker has to treat it as the same
+// mod rather than as an unknown one it appends a second time. Issue #455.
+describe('util/modfile picker', () => {
+    const folder = vscode.Uri.file('/ws/my_mod');
+    const modPath = uriToFilePathWhenPossible(vscode.Uri.joinPath(folder, 'my_mod.mod'));
+    let registration: vscode.Disposable;
+
+    async function pickerRows(modFile: string): Promise<vscode.QuickPickItem[]> {
+        const handlers: Record<string, (...args: any[]) => any> = {};
+        let rows: vscode.QuickPickItem[] = [];
+        stubVscode({
+            registerCommand: (command, handler) => {
+                handlers[command] = handler;
+                return { dispose: () => undefined };
+            },
+            workspaceFolders: [{ uri: folder }],
+            readDirectory: async () => [['my_mod.mod', 1]],
+            showQuickPick: async (items: any) => { rows = items; return undefined; },
+            getConfiguration: () => ({
+                get: () => undefined,
+                modFile,
+                parentModPaths: [],
+                update: () => Promise.resolve(),
+                inspect: () => undefined,
+            }),
+        });
+        registration = registerModFile();
+        await handlers['mdhoi4utilities.selectmodfile']!();
+        return rows;
+    }
+
+    afterEach(() => {
+        registration?.dispose();
+        restoreVscodeStubs();
+    });
+
+    it('marks the workspace mod named by a quoted setting and lists it once', async () => {
+        const rows = await pickerRows(`"${modPath}"`);
+
+        const mods = rows.filter(r => r.detail !== undefined);
+        assert.deepStrictEqual(mods.map(r => r.detail), [modPath]);
+        assert.strictEqual(mods[0]!.picked, true);
+    });
+
+    it('shows a quoted setting outside the workspace without its quotes', async () => {
+        const elsewhere = uriToFilePathWhenPossible(vscode.Uri.file('/mods/other/other.mod'));
+        const rows = await pickerRows(`'${elsewhere}'`);
+
+        const setting = rows.filter(r => r.description === 'Workspace setting');
+        assert.deepStrictEqual(setting.map(r => [r.label, r.detail, r.picked]), [['other', elsewhere, true]]);
     });
 });

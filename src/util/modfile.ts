@@ -180,7 +180,12 @@ async function selectModFile(): Promise<void> {
 					},
 				];
 
-	let selected = conf.modFile.trim();
+	// The setting may be quoted; resolve it the way the rest of the extension does, so it matches
+	// the workspace rows and does not come back as a second "Workspace setting" row.
+	const pathKey = (p: string): string | undefined =>
+		fileOrUriStringToUri(p)?.toString();
+	const selectedUri = fileOrUriStringToUri(conf.modFile);
+	let selected = selectedUri ? uriToFilePathWhenPossible(selectedUri) : "";
 
 	workspaceModFilesCache.clear();
 	if (vscode.workspace.workspaceFolders) {
@@ -207,8 +212,11 @@ async function selectModFile(): Promise<void> {
 		}
 	}
 
+	const selectedKey = pathKey(selected);
 	modsList.forEach((r) =>
-		r.detail === selected ? (r.picked = true) : undefined,
+		r.detail !== undefined && pathKey(r.detail) === selectedKey
+			? (r.picked = true)
+			: undefined,
 	);
 	if (modsList.every((r) => !r.picked) && selected !== "") {
 		modsList.push({
