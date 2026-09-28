@@ -1455,6 +1455,28 @@ window.addEventListener(
 			});
 		}
 
+		// Copy the selected tree's warnings. The host formats them and writes the clipboard, which a
+		// webview cannot reach reliably on its own.
+		const copyWarnings = document.getElementById(
+			"copy-warnings",
+		) as HTMLButtonElement | null;
+		if (copyWarnings) {
+			copyWarnings.addEventListener("click", () => {
+				const focusTree = focusTrees[selectedFocusTreeIndex];
+				if (focusTree === undefined) {
+					return;
+				}
+				vscode.postMessage({
+					command: "copyWarnings",
+					treeId: focusTree.id,
+					warnings: focusTree.warnings.map((w) => ({
+						source: w.source,
+						text: w.text,
+					})),
+				});
+			});
+		}
+
 		// Reset focus-completion checkboxes
 		const resetFocusCheckboxes = document.getElementById(
 			"reset-focus-checkboxes",

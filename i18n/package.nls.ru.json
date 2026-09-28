@@ -70,5 +70,11 @@
     "hoi4modutilities.section.gameAndMod": "Игра и мод",
     "hoi4modutilities.section.previews": "Предпросмотр",
     "hoi4modutilities.section.worldMap": "Карта мира",
-    "hoi4modutilities.section.indexes": "Индексы и производительность"
+    "hoi4modutilities.section.indexes": "Индексы и производительность",
+    "hoi4modutilities.auditfocustrees.title": "Проверить все деревья фокусов",
+    "hoi4modutilities.auditor.reportFolder.title": "Аудитор: папка отчёта",
+    "hoi4modutilities.auditor.reportFolder.desc": "[Проверить все деревья фокусов](command:mdhoi4utilities.auditfocustrees): проверяет каждый файл деревьев фокусов на те же проблемы, о которых предупреждает предпросмотр дерева фокусов, и перечисляет их по файлам в одном отчёте Markdown, который можно вставить в issue на GitHub.\n\nПапка, в которую отчёт сохраняется как focus-tree-audit.md. Относительный путь отсчитывается от первой папки рабочей области. Оставьте пустым, чтобы открыть отчёт в несохранённой вкладке редактора.",
+    "hoi4modutilities.auditor.includeVanilla.title": "Аудитор: включить базовую игру",
+    "hoi4modutilities.auditor.includeVanilla.desc": "Проверять также файлы деревьев фокусов самой Hearts of Iron IV, а не только мода.",
+    "hoi4modutilities.section.auditor": "Аудитор"
 }
