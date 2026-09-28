@@ -39,4 +39,26 @@ describe("util/hoi4gui/window", () => {
 		assert.strictEqual(rendered.width, 400);
 		assert.strictEqual(rendered.height, 200);
 	});
+
+	it("draws what onRenderChild returns in place of a child, and the default for the rest", async () => {
+		const window = windowAt();
+		window.icontype = [
+			{ name: "slot", _index: 0, _token: { start: 10, end: 12 } },
+			{ name: "plain", _index: 1, _token: { start: 13, end: 15 } },
+		];
+		const seen: string[] = [];
+		const rendered = await renderStandaloneWindow(window, new StyleTable(), [], {
+			onRenderChild: async (type, child) => {
+				seen.push(`${type}:${child.name}`);
+				return child.name === "slot" ? "<i>slot</i>" : undefined;
+			},
+		});
+		assert.deepStrictEqual(seen.sort(), ["icon:plain", "icon:slot"]);
+		assert.ok(rendered.html.includes("<i>slot</i>"));
+	});
+
+	it("names the .gui file on every element that carries offsets into it", async () => {
+		const rendered = await renderStandaloneWindow(windowAt(), new StyleTable(), [], { file: "interface/a.gui" });
+		assert.ok(/file="interface\/a\.gui" start="0"/.test(rendered.html));
+	});
 });

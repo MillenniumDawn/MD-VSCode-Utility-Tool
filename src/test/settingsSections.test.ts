@@ -18,6 +18,7 @@ const settings = [
 	"mdHoi4Utilities.decisionPreview",
 	"mdHoi4Utilities.ideaPreview",
 	"mdHoi4Utilities.characterPreview",
+	"mdHoi4Utilities.bopPreview",
 	"mdHoi4Utilities.useConditionInFocus",
 	"mdHoi4Utilities.focusTreeLayout",
 	"mdHoi4Utilities.focusTreePrerequisiteLines",

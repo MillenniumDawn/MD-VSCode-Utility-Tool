@@ -40,6 +40,11 @@ are drawn as a chain; clicking an arrow opens the file that performs the swap.
 **Characters.** Portraits, roles and, for every trait a character carries, the modifiers it
 grants — advisor, army, navy and political roles side by side.
 
+**Balance of power.** Every balance of power in a `common/bop` file as the game draws it: the
+localised title, both side icons and the bar with each range as its own segment. A slider moves the
+value so you can walk through the ranges and see the modifiers of the active one, and overlapping
+ranges or gaps between them are flagged.
+
 **Technology trees.** The full tree laid out from the mod's own `.gui` files. Optionally choose a
 country and see the tree with that country's own technology icons, the way the game shows it.
 
@@ -98,7 +103,7 @@ The Settings editor lists them under the extension in these sections.
 |---|---|
 | `mdHoi4Utilities.previewLocalisation` | Language of the text shown in previews. |
 | `mdHoi4Utilities.previewWheel` | What a plain mouse wheel does: `scroll` (default), `zoom`, or `auto` (zoom for a mouse, scroll for a trackpad). Ctrl+wheel, the zoom buttons and the +/- keys always zoom. |
-| `mdHoi4Utilities.eventTreePreview`, `decisionPreview`, `ideaPreview`, `characterPreview` | Turn an individual preview on or off. |
+| `mdHoi4Utilities.eventTreePreview`, `decisionPreview`, `ideaPreview`, `characterPreview`, `bopPreview` | Turn an individual preview on or off. |
 | `mdHoi4Utilities.useConditionInFocus` | Show conditions in the focus tree preview. |
 | `mdHoi4Utilities.inlayWindowGfxRoots` | Folders scanned for the `.gfx` files that focus inlay windows use. |
 | `mdHoi4Utilities.technologyGfxRoots` | Folders scanned for `.gfx` files used by the technology tree, including country-specific icons. |

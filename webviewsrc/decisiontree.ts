@@ -12,6 +12,7 @@ import { applyNav, badge } from "./util/card";
 import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { wireUpdateBody } from "./util/updatebody";
+import { buildGuiFrame } from "./util/guiframe";
 import {
 	DecisionGraphCategoryNode,
 	DecisionGraphDecisionNode,
@@ -561,7 +562,7 @@ function buildCategoryCard(node: DecisionGraphCategoryNode): HTMLDivElement {
 	}
 
 	if (showScriptedGui && node.scriptedGui?.html) {
-		card.appendChild(buildGuiFrame(node.scriptedGui.html));
+		card.appendChild(buildGuiFrame(node.scriptedGui.html, guiPreviewWidth, "dec-gui-frame"));
 	}
 
 	return card;
@@ -601,28 +602,6 @@ function buildCollapseButton(categoryKey: string, collapsed: boolean): HTMLButto
 		}
 	});
 	return button;
-}
-
-// The window is rendered by the host at the size the game draws it, which is far wider than a card,
-// so it is scaled down into a fixed frame. A transform rather than a zoom, so the sprites inside
-// keep their own positioning.
-function buildGuiFrame(html: string): HTMLDivElement {
-	const frame = document.createElement("div");
-	frame.className = "dec-gui-frame";
-	frame.innerHTML = html;
-
-	const inner = frame.firstElementChild as HTMLElement | null;
-	const width = parseInt(inner?.style.width ?? "0", 10);
-	const height = parseInt(inner?.style.height ?? "0", 10);
-	if (inner && width > 0) {
-		const scale = Math.min(1, guiPreviewWidth / width);
-		inner.style.transform = `scale(${scale})`;
-		inner.style.transformOrigin = "top left";
-		frame.style.width = Math.round(width * scale) + "px";
-		frame.style.height = Math.round(height * scale) + "px";
-	}
-
-	return frame;
 }
 
 function buildDecisionCard(node: DecisionGraphDecisionNode): HTMLDivElement {

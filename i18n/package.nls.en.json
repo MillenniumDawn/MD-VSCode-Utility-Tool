@@ -22,6 +22,8 @@
     "hoi4modutilities.ideaPreview.desc": "Enable the idea preview feature. Reloading is required after changing this.",
     "hoi4modutilities.characterPreview.title": "Character Preview",
     "hoi4modutilities.characterPreview.desc": "Enable the character preview feature. Reloading is required after changing this.",
+    "hoi4modutilities.bopPreview.title": "Balance of Power Preview",
+    "hoi4modutilities.bopPreview.desc": "Enable the balance of power preview feature. Reloading is required after changing this.",
     "hoi4modutilities.ideaSwapIndex.title": "Idea Swap Index",
     "hoi4modutilities.ideaSwapIndex.desc": "Scan common and events for swap_ideas so the idea preview can show idea chains. Reads a lot of files the first time it is built. Reloading is required after changing this.",
     "hoi4modutilities.sharedFocusIndex.title": "Shared Focus Index",
