@@ -20,6 +20,10 @@ const windowHtml = `<div class="bop-gui-window" style="width:550px;height:600px"
 	</div>
 	<div class="bop-slot-marks"></div>
 	<div class="bop-slot-needle"><div class="needle-sprite"></div></div>
+	<div class="bop-decision-grid">
+		<div class="bop-decision" data-index="0"><div class="bop-decision-name"></div></div>
+		<div class="bop-decision" data-index="1"><div class="bop-decision-name"></div></div>
+	</div>
 </div></div>`;
 
 // Millennium Dawn's Romanian BoP, with localisation.
@@ -49,6 +53,14 @@ const payload: BopPreviewPayload = {
 				splitterHtml: `<div class="splitter-sprite"></div>`,
 				indicatorHtml: [`<div class="indicator-0"></div>`, `<div class="indicator-1"></div>`],
 			},
+			decisions: [
+				{
+					id: "ROM_rally_the_base",
+					name: { key: "ROM_rally_the_base", text: "Rally the Base" },
+					nav: { start: 40, end: 58, file: "common/decisions/ROM.txt" },
+				},
+				{ id: "ROM_court_the_army", name: { key: "ROM_court_the_army", text: "Court the Army" } },
+			],
 			warnings: ["Icon x of side people_right_side was not found."],
 		},
 		// A second BoP in the same file, whose window could not be found.
@@ -58,6 +70,13 @@ const payload: BopPreviewPayload = {
 			title: { key: "rom_second", text: "Second Balance" },
 			initialValue: -0.5,
 			ranges: [range("second_all", -1, 1, { name: { key: "second_all", text: "Everything" } })],
+			decisions: [
+				{
+					id: "ROM_second_decision",
+					name: { key: "ROM_second_decision", text: "Second Decision" },
+					nav: { start: 5, end: 24, file: "common/decisions/ROM.txt" },
+				},
+			],
 			warnings: ["The powerbalanceview window was not found."],
 		},
 	],
@@ -162,6 +181,30 @@ describe("webview/boppreview rendering", () => {
 		assert.strictEqual(slot("title").textContent, "Vadim's Struggle");
 	});
 
+	it("names the decision rows, following the localisation toggle", () => {
+		const names = () =>
+			Array.from(card().querySelectorAll(".bop-decision-name")).map((n) => n.textContent);
+		assert.deepStrictEqual(names(), ["Rally the Base", "Court the Army"]);
+		const toggle = input("show-localisation");
+		toggle.checked = false;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+		assert.deepStrictEqual(names(), ["ROM_rally_the_base", "ROM_court_the_army"]);
+		toggle.checked = true;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+	});
+
+	it("opens a decision in its decisions file when its row is clicked", () => {
+		takePostedMessages();
+		const rows = Array.from(card().querySelectorAll<HTMLElement>(".bop-decision"));
+		(rows[0].querySelector(".bop-decision-name") as HTMLElement).click();
+		rows[1].click();
+		const posted = takePostedMessages();
+		assert.deepStrictEqual(
+			posted.filter((m) => m.command === "navigate").map((m) => [m.start, m.end, m.file]),
+			[[40, 58, "common/decisions/ROM.txt"]],
+		);
+	});
+
 	it("puts a tick on every inner range boundary", () => {
 		const marks = Array.from(slot("marks").children) as HTMLElement[];
 		assert.deepStrictEqual(
@@ -246,6 +289,15 @@ describe("webview/boppreview rendering", () => {
 		assert.strictEqual(input("bop-number").value, "-0.5");
 		assert.strictEqual(card().querySelector(".bop-gui-frame"), null);
 		assert.strictEqual(card().querySelector(".bop-none")?.textContent, "Everything");
+		// Without the window, the decisions are a plain list that still links.
+		const listed = card().querySelector<HTMLElement>(".bop-decision-list .bop-decision")!;
+		assert.strictEqual(listed.textContent, "Second Decision");
+		takePostedMessages();
+		listed.click();
+		assert.deepStrictEqual(
+			takePostedMessages().filter((m) => m.command === "navigate").map((m) => m.file),
+			["common/decisions/ROM.txt"],
+		);
 
 		select.value = "vadim_people_balance";
 		select.dispatchEvent(new (window as any).Event("change"));

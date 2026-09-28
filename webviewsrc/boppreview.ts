@@ -298,10 +298,12 @@ function buildContent(): void {
 				element.textContent = textFor(text);
 			}
 		}
+		fillDecisions(frame, card);
 	} else {
 		shown.fallback = document.createElement("div");
 		shown.fallback.className = "bop-none";
 		content.appendChild(shown.fallback);
+		content.appendChild(decisionList(card));
 	}
 
 	// Under the window, where they do not push it down the page.
@@ -313,6 +315,37 @@ function buildContent(): void {
 	}
 
 	setValue(shown.value, 0);
+}
+
+// Names the rows the host drew in the window's decision list, and makes each open its decision.
+function fillDecisions(frame: HTMLElement, card: BopCard): void {
+	for (const row of Array.from(frame.querySelectorAll<HTMLElement>(".bop-decision"))) {
+		const decision = card.decisions[parseInt(row.dataset.index ?? "", 10)];
+		if (!decision) {
+			continue;
+		}
+		const name = row.querySelector<HTMLElement>(".bop-decision-name");
+		if (name) {
+			name.textContent = textFor(decision.name);
+		}
+		row.title = decision.id;
+		applyNav(row, decision.nav, true);
+	}
+}
+
+// Without the game's window, the category's decisions as a plain list of links.
+function decisionList(card: BopCard): HTMLElement {
+	const list = document.createElement("div");
+	list.className = "bop-decision-list";
+	for (const decision of card.decisions) {
+		const row = document.createElement("div");
+		row.className = "bop-decision";
+		row.textContent = textFor(decision.name);
+		row.title = decision.id;
+		applyNav(row, decision.nav, true);
+		list.appendChild(row);
+	}
+	return list;
 }
 
 // The toolbar's controls live outside #boppreviewcontent, so they are bound once, here, and always
