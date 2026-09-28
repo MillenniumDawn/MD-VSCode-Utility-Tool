@@ -72,19 +72,26 @@ describe('webview/focustree rendering', () => {
         await settled();
     }
 
-    let previousBody = '';
+    let previousBody: Node[] = [];
 
     before(() => {
-        previousBody = document.body.innerHTML;
-        document.body.innerHTML = `
-            <div id="continuousFocuses"></div>
-            <div id="focustreecontent"><div id="focustreeplaceholder"></div></div>
-            <div id="inlaywindowplaceholder"></div>
-            <div id="warnings"></div>`;
+        previousBody = [...document.body.childNodes];
+        const continuous = document.createElement('div');
+        continuous.id = 'continuousFocuses';
+        const content = document.createElement('div');
+        content.id = 'focustreecontent';
+        const placeholder = document.createElement('div');
+        placeholder.id = 'focustreeplaceholder';
+        content.append(placeholder);
+        const inlay = document.createElement('div');
+        inlay.id = 'inlaywindowplaceholder';
+        const warnings = document.createElement('div');
+        warnings.id = 'warnings';
+        document.body.replaceChildren(continuous, content, inlay, warnings);
     });
 
     after(() => {
-        document.body.innerHTML = previousBody;
+        document.body.replaceChildren(...previousBody);
     });
 
     // Two updates in quick succession start two builds before either finishes; only the newer one
@@ -136,5 +143,48 @@ describe('webview/focustree rendering', () => {
             const placeholder = await renderInlay(true);
             assert.strictEqual(placeholder.querySelector('#flag_inlay_root'), null);
         });
+    });
+
+    // The button is wired by the page's load handler, so the click is only real on a loaded page.
+    // The tree it reads is the one on screen now, not the one the page was loaded with.
+    it('posts the tree on screen and its warnings when the copy button is clicked', async () => {
+        const searchbox = document.createElement('input');
+        searchbox.id = 'searchbox';
+        const copyButton = document.createElement('button');
+        copyButton.id = 'copy-warnings';
+        document.body.append(searchbox, copyButton);
+        // The load restores the scroll position, which jsdom only reports as not implemented.
+        const originalScroll = window.scroll;
+        const originalScrollTo = window.scrollTo;
+        (window as any).scroll = () => undefined;
+        (window as any).scrollTo = () => undefined;
+        try {
+            window.dispatchEvent(new (window as any).Event('load'));
+            for (let i = 0; i < 100 && !takePostedMessages().some(m => m.command === 'ready'); i++) {
+                await settled();
+            }
+
+            const warned = updateBody('warned_focus');
+            warned.data.focusTrees[0].warnings = [{ text: 'Focuses overlap.', source: 'warned_focus' }];
+            window.dispatchEvent(new (window as any).MessageEvent('message', { data: warned }));
+            const element = document.getElementById('focustreeplaceholder')!;
+            for (let i = 0; i < 100 && !element.querySelector('#focus_warned_focus'); i++) {
+                await settled();
+            }
+            takePostedMessages();
+
+            copyButton.click();
+
+            assert.deepStrictEqual(takePostedMessages(), [{
+                command: 'copyWarnings',
+                treeId: 'test_tree',
+                warnings: [{ source: 'warned_focus', text: 'Focuses overlap.' }],
+            }]);
+        } finally {
+            (window as any).scroll = originalScroll;
+            (window as any).scrollTo = originalScrollTo;
+            searchbox.remove();
+            copyButton.remove();
+        }
     });
 });

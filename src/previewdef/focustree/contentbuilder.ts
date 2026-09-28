@@ -402,7 +402,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             </div>
         </div>`;
     
-    // Both warning buttons share the same gate, so ToolbarFlags.hasWarnings alone still decides
+    // The warning buttons share the same gate, so ToolbarFlags.hasWarnings alone still decides
     // whether the toolbar needs a full reload when a tree gains or loses its first warning.
     const hasNoWarnings = focusTrees.every(ft => ft.warnings.length === 0);
     const warningsButton = hasNoWarnings ? '' : `
@@ -413,6 +413,11 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
     const warningMarkersButton = hasNoWarnings ? '' : `
         <button id="toggle-warning-markers" title="${localize('focustree.warningmarkers', 'Toggle warning markers on the tree')}">
             <i class="codicon codicon-error"></i>
+        </button>`;
+
+    const copyWarningsButton = hasNoWarnings ? '' : `
+        <button id="copy-warnings" title="${localize('focustree.copywarnings', 'Copy this focus tree\'s warnings')}">
+            <i class="codicon codicon-copy"></i>
         </button>`;
 
     const hasAllowBranch = focusTrees.some(ft => ft.allowBranchOptions.length > 0);
@@ -443,6 +448,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${inlayWindows}
             ${warningsButton}
             ${warningMarkersButton}
+            ${copyWarningsButton}
             ${resetCheckboxesButton}
             ${traceStatus}
         </div>

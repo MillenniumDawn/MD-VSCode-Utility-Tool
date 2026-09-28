@@ -345,6 +345,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		const cleanHtml = buildFocusTreeHtml(clean!, webview, uri);
 		assert.ok(!cleanHtml.includes('id="show-warnings"'));
 		assert.ok(!cleanHtml.includes('id="toggle-warning-markers"'));
+		assert.ok(!cleanHtml.includes('id="copy-warnings"'));
 
 		const warned = minimalFocusTree();
 		warned.warnings = [{ text: "Focuses a and b overlap.", source: "focus_a" }];
@@ -356,6 +357,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		const warnedHtml = buildFocusTreeHtml(warnedPayload!, webview, uri);
 		assert.ok(warnedHtml.includes('id="show-warnings"'));
 		assert.ok(warnedHtml.includes('id="toggle-warning-markers"'));
+		assert.ok(warnedHtml.includes('id="copy-warnings"'));
 	});
 
 	it("registerWarningStyles emits exactly the exported class names", () => {
