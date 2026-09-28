@@ -15,6 +15,7 @@ v1.1.40
 - [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
 - [ Focus Tree Previewer ] A new setting, Focus tree: prerequisite line colour, picks whether prerequisite lines are drawn blue, as for focuses not yet completed, or green, as for completed ones. Issue #443.
 - [ Balance of Power Previewer ] Added a preview for `common/bop` files that draws the game's own balance of power window from `powerbalanceview.gui`, with each balance of power's title and side icons. A slider and step buttons in the toolbar stand in for `add_power_balance_value`: the needle, the bar fill and the active range follow the value the way they do in game, and clicking a range opens it in the file. A file with several balances of power gets a dropdown to pick one, and overlapping or missing ranges are flagged. Issue #434.
+- [ Decision Previewer ] The "Collapse categories" checkbox is now two toolbar buttons, Collapse all categories and Expand all categories, and each one also resets any tab opened or closed from its own card. Issue #437.
 
   Bugfixes:
 
