@@ -55,6 +55,21 @@ export interface ExclusiveLinkOffset {
     y?: number;
 }
 
+/**
+ * How the focus tree draws the link beyond the standard layout; the MIO tree takes none of it.
+ *
+ * `gapUnderMid` stops the line at the mid icon's edges: the icon is partly transparent between its
+ * arrows and the `!`, so a line running on under it shows through, where the game's does not.
+ * `zIndex` lifts the link above the nodes, which it needs once it runs across the focus name bars.
+ * `clampToCentre` keeps the icons on screen, centred, when the ends are set further in than half the
+ * link is long, which the focus tree's ends are for a pair closer together than its name bars are wide.
+ */
+export interface ExclusiveLinkOptions {
+    gapUnderMid?: boolean;
+    zIndex?: number;
+    clampToCentre?: boolean;
+}
+
 export interface ExclusiveLinkImages {
     line: Image;
     left: Image;
@@ -97,6 +112,9 @@ export function exclusiveLinkInsets(slotWidth: number, iconWidth: number): { ico
  * the right. `y` moves only the horizontal link: a vertical one it would slide
  * along its own length.
  *
+ * `options` is what the focus tree adds on top; see `ExclusiveLinkOptions`. None of it touches the
+ * vertical link.
+ *
  * `exclusiveLinkVerticalClass` is the same link for a tree grown sideways (`LEFT` or `RIGHT`), whose
  * pairs share a column. It draws the same horizontal strips, rotated a quarter turn onto the 1px
  * wide connection; the element is a size container so the strips can take its height as their length.
@@ -108,9 +126,18 @@ export function registerExclusiveLinkStyles(
     slotWidth: number,
     offset: ExclusiveLinkOffset = {},
     slotHeight: number = slotWidth,
+    options: ExclusiveLinkOptions = {},
 ): void {
     const { startX = 0, endX = 0, y: offsetY = 0 } = offset;
     const px = (value: number) => value === 0 ? '0' : value + 'px';
+    // An inset of at most half the link less `half`, so the two ends meet in the middle rather than cross.
+    const inset = (value: number, half: number) => options.clampToCentre ? `min(${value}px, calc(50% - ${half}px))` : `${value}px`;
+
+    if (options.zIndex !== undefined) {
+        styleTable.raw(`.${exclusiveLinkClass}`, `
+            z-index: ${options.zIndex};
+        `);
+    }
 
     // Both layers are taller than the 1px connection element they hang off, on purpose.
     styleTable.style('focus-exclusive-link', () => `
@@ -150,6 +177,7 @@ export function registerExclusiveLinkStyles(
             height: 0;
             border-top: 1px solid red;
             background-image: none;
+            mask-image: none;
         `);
         styleTable.raw(`.${exclusiveLinkClass}::after`, `
             content: none;
@@ -160,12 +188,16 @@ export function registerExclusiveLinkStyles(
 
     const { line, left, mid, right } = images;
     const { iconInset, lineInset } = exclusiveLinkInsets(slotWidth, left.width);
+    const midHalf = mid.width / 2;
+    const lineMask = options.gapUnderMid
+        ? `linear-gradient(to right, #000 calc(50% - ${midHalf}px), transparent calc(50% - ${midHalf}px), transparent calc(50% + ${midHalf}px), #000 calc(50% + ${midHalf}px))`
+        : 'none';
 
     styleTable.raw(`.${exclusiveLinkClass}::before`, `
         content: '';
         position: absolute;
-        left: ${lineInset + startX}px;
-        right: ${lineInset - endX}px;
+        left: ${inset(lineInset + startX, 0)};
+        right: ${inset(lineInset - endX, 0)};
         top: ${offsetY - line.height / 2}px;
         height: ${line.height}px;
         border-top: none;
@@ -173,6 +205,7 @@ export function registerExclusiveLinkStyles(
         background-repeat: repeat-x;
         background-position: left center;
         background-size: ${line.width}px ${line.height}px;
+        mask-image: ${lineMask};
     `);
 
     // The three icons ride on one element as three background layers: left arrow, mid icon, right
@@ -180,8 +213,8 @@ export function registerExclusiveLinkStyles(
     styleTable.raw(`.${exclusiveLinkClass}::after`, `
         content: '';
         position: absolute;
-        left: ${iconInset + startX}px;
-        right: ${iconInset - endX}px;
+        left: ${inset(iconInset + startX, left.width / 2)};
+        right: ${inset(iconInset - endX, right.width / 2)};
         top: ${offsetY - left.height / 2}px;
         height: ${left.height}px;
         background-image: url(${left.uri}), url(${mid.uri}), url(${right.uri});

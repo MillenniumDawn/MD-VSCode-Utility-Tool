@@ -26,6 +26,7 @@ Unreleased
 
   Bugfixes:
 
+- [ Focus Tree Previewer ] The mutually exclusive marker now sits on the focus name bars, in the gap between the two focuses, as it does in the game. The `<!>` is drawn in front of its line instead of the line showing through it. Issue #461.
 - [ Idea Previewer ] Base-game modifiers such as `non_core_manpower`, `mobilization_speed` and `command_power_gain_mult` now show as percentages, and ones where less is better, such as `send_volunteers_tension` and `license_purchase_cost`, are coloured the way the game colours them. Issue #453.
 - [ Character Previewer ] Base-game commander traits such as `trait_cautious` no longer show `leader_default_proximity_offset` as a modifier, and politician traits no longer show a `custom_modifier_tooltip` line. Issue #452.
 - [ Focus Tree Previewer ] Base-game focus trees with inlay windows no longer log a path warning for `interface/scripted_gui`, which only Millennium Dawn has; that folder is no longer the default. Issue #451.
