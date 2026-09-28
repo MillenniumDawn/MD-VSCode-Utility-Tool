@@ -289,6 +289,8 @@ const table: Partial<typeof __table> = {
     "miopreview.warnings.traitAndIncludeCheck2": "军工机构{0}没有include字段，应当使用trait，而不是add_trait，remove_trait或者override_trait。",
     "miopreview.warnings.traitConflict": "在这个文件中，军工机构{1}有多个特质的id字段为{0}：{2}，{3}。",
     "miopreview.warnings.traitnoid": "在这个文件中有特质没有token字段：{0}。",
+    "moddependencies.nouserdatadir": "找不到 Hearts of Iron IV 用户数据目录，因此无法找到此 .mod 依赖的模组。请将 {0} 设置为包含启动器 mod 文件夹的目录。",
+    "moddependencies.opensettings": "打开设置",
     "modfile.clicktoselect": "点击选择模组文件……",
     "modfile.errorreading": "读取文件出错：",
     "modfile.extends": "扩展自：{0}",
