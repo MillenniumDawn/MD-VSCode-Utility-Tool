@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- [ Idea Previewer ] A mod names the image drawn for an idea whose `picture` does not resolve in the new Idea placeholder icon setting, or with an `idea_placeholder_icon = "gfx/interface/ideas/WIP_idea.dds"` line in its `.mod` file. Issue #450.
 - [ Decision Previewer ] A mod names the `.gfx` files that define its decision icons in the new Decision GFX files setting, or with a `decision_gfx = { "interface/MD_decisions.gfx" }` list in its `.mod` file. Issue #449.
 - [ Focus Tree Previewer ] A mod names the `.gfx` files that define its focus overlays in the new Focus overlay GFX files setting, or with a `focus_overlay_gfx = { "interface/goals_overlays.gfx" }` list in its `.mod` file, so a submod picks up the overlays of the mod it extends. Issue #448.
 - [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
@@ -14,6 +15,7 @@ Unreleased
 
   Bugfixes:
 
+- [ Idea Previewer ] An idea whose `picture` does not resolve now shows the game's placeholder icon outside Millennium Dawn, instead of no icon. Millennium Dawn's own `WIP_idea.dds` placeholder needs to be named in the new setting or the `.mod` file. Issue #450.
 - [ Decision Previewer ] A mod without `interface/MD_decisions.gfx` no longer logs an error for it, and editing a decision `.gfx` file refreshes an open decision preview. Millennium Dawn's decision icons that the GFX index cannot place need that file named in the new setting or the `.mod` file. Issue #449.
 - [ Focus Tree Previewer ] Focus overlays now show in base-game focus trees, which define them in `interface/goals.gfx`, and a mod without `interface/goals_overlays.gfx` no longer logs an error for it on every render. Millennium Dawn's overlays need that file named in the new setting or the `.mod` file. Issue #448.
 - DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.

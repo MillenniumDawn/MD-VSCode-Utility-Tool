@@ -17,10 +17,6 @@ import {
 	NavTarget,
 } from "./payload";
 
-// What an idea with no picture, or a picture nothing resolves, is drawn with. The game ships this
-// placeholder for exactly this case.
-const defaultIdeaIcon = "gfx/interface/ideas/WIP_idea.dds";
-
 export async function buildIdeaPreviewPayload(
 	loadResult: IdeasLoaderResult,
 	styleTable: StyleTable,
@@ -126,7 +122,8 @@ async function buildIcon(
 		ideaSpriteName(idea.picture),
 		loadResult.gfxFiles,
 	);
-	const image = sprite?.image ?? (await getImageByPath(defaultIdeaIcon));
+	const image = sprite?.image ??
+		(loadResult.placeholderIcon ? await getImageByPath(loadResult.placeholderIcon) : undefined);
 	if (!image) {
 		return undefined;
 	}

@@ -56,6 +56,7 @@
 				"mdHoi4Utilities.inlayWindowGfxRoots",
 				"mdHoi4Utilities.focusOverlayGfxFiles",
 				"mdHoi4Utilities.decisionGfxFiles",
+				"mdHoi4Utilities.ideaPlaceholderIcon",
 				"mdHoi4Utilities.technologyGfxRoots"
 			]
 		}
@@ -211,6 +212,12 @@
 							"type": "string"
 						},
 						"description": "%hoi4modutilities.decisionGfxFiles.desc%"
+					},
+					"mdHoi4Utilities.ideaPlaceholderIcon": {
+						"title": "%hoi4modutilities.ideaPlaceholderIcon.title%",
+						"type": "string",
+						"default": "",
+						"description": "%hoi4modutilities.ideaPlaceholderIcon.desc%"
 					},
 					"mdHoi4Utilities.technologyGfxRoots": {
 						"title": "%hoi4modutilities.technologyGfxRoots.title%",

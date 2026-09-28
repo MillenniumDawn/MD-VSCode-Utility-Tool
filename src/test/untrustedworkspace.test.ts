@@ -14,6 +14,7 @@ const restricted = [
 	"mdHoi4Utilities.inlayWindowGfxRoots",
 	"mdHoi4Utilities.focusOverlayGfxFiles",
 	"mdHoi4Utilities.decisionGfxFiles",
+	"mdHoi4Utilities.ideaPlaceholderIcon",
 	"mdHoi4Utilities.technologyGfxRoots",
 ];
 
