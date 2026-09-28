@@ -51,7 +51,7 @@ type FileloaderModule = {
 const fileloader = require("../util/fileloader") as FileloaderModule;
 const parentPaths = ["/parent-one", "/parent-two"];
 const WORKSPACE_FOLDER = {
-	uri: { path: "/ws", scheme: "file", toString: () => "file:///ws" },
+	uri: { path: "/ws", fsPath: "/ws", scheme: "file", toString: () => "file:///ws" },
 } as unknown as vscode.WorkspaceFolder;
 
 type IndexKind = "gfx" | "localisation" | "focus" | "swap";
