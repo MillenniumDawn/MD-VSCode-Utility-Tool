@@ -163,7 +163,7 @@ describe("previewdef configuration reload", () => {
 			[
 				"character",
 				characterPreviewDef,
-				["previewLocalisation", "localisationIndex", "gfxIndex"],
+				["previewLocalisation", "localisationIndex", "gfxIndex", "characterTraitStructuralKeys"],
 			],
 			[
 				"technology",

@@ -1243,6 +1243,7 @@ interface ModFile {
 	focus_overlay_gfx: Enum;
 	decision_gfx: Enum;
 	inlay_window_gfx_roots: Enum;
+	character_trait_structural_keys: Enum;
 	idea_placeholder_icon?: string;
 }
 
@@ -1254,6 +1255,7 @@ const modListSchema: SchemaDef<ModFile> = {
 	focus_overlay_gfx: "enum",
 	decision_gfx: "enum",
 	inlay_window_gfx_roots: "enum",
+	character_trait_structural_keys: "enum",
 	idea_placeholder_icon: "string",
 };
 
@@ -1262,6 +1264,7 @@ interface DescriptorLists {
 	focusOverlayGfx: string[];
 	decisionGfx: string[];
 	inlayWindowGfxRoots: string[];
+	characterTraitStructuralKeys: string[];
 	ideaPlaceholderIcon: string[];
 }
 
@@ -1305,6 +1308,16 @@ export async function getDescriptorDecisionGfx(): Promise<string[]> {
  */
 export async function getDescriptorInlayWindowGfxRoots(): Promise<string[]> {
 	return (await getDescriptorList("inlayWindowGfxRoots")) ?? [];
+}
+
+/**
+ * The `character_trait_structural_keys` named by the working mod's descriptor and its parent mods'
+ * descriptors: flat keys the mod writes on its traits that describe the trait rather than grant a
+ * modifier, so the character preview leaves them off the trait cards. Like `decision_gfx`, the game
+ * ignores the key.
+ */
+export async function getDescriptorCharacterTraitStructuralKeys(): Promise<string[]> {
+	return (await getDescriptorList("characterTraitStructuralKeys")) ?? [];
 }
 
 /**
@@ -1374,6 +1387,7 @@ async function getListsFromModFile(
 		focusOverlayGfx: modFile.focus_overlay_gfx._values,
 		decisionGfx: modFile.decision_gfx._values,
 		inlayWindowGfxRoots: modFile.inlay_window_gfx_roots._values,
+		characterTraitStructuralKeys: modFile.character_trait_structural_keys._values,
 		ideaPlaceholderIcon: typeof modFile.idea_placeholder_icon === "string" ? [modFile.idea_placeholder_icon] : [],
 	};
 }

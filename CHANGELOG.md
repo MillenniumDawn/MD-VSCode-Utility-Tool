@@ -24,6 +24,7 @@ v1.1.40
 - [ Decision Previewer ] A mod names the `.gfx` files that define its decision icons in the new Decision GFX files setting, or with a `decision_gfx = { "interface/MD_decisions.gfx" }` list in its `.mod` file. Issue #449.
 - [ Idea Previewer ] A mod names the image drawn for an idea whose `picture` does not resolve in the new Idea placeholder icon setting, or with an `idea_placeholder_icon = "gfx/interface/ideas/WIP_idea.dds"` line in its `.mod` file. Issue #450.
 - [ Focus Tree Previewer ] A mod names the folders holding its focus inlay window sprites in the Focus inlay window GFX roots setting, or with an `inlay_window_gfx_roots = { "interface/scripted_gui" }` list in its `.mod` file. Issue #451.
+- [ Character Previewer ] A mod names the keys it writes on its character traits that are not modifiers in the new Character trait structural keys setting, or with a `character_trait_structural_keys = { my_key }` list in its `.mod` file, so they stay off the trait cards. Issue #452.
 
   Bugfixes:
 
