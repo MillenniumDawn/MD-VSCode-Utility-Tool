@@ -345,6 +345,8 @@ class FocusTreePreview extends UpdateablePreviewBase {
                     useConditionInFocus: structure.useConditionInFocus,
                     xGridSize: structure.xGridSize,
                     layout: structure.layout,
+                    renderedShortcuts: structure.renderedShortcuts,
+                    renderedShortcutToggle: structure.renderedShortcutToggle,
                 },
             },
             fingerprint: computeStructuralFingerprint({
@@ -355,6 +357,8 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 useConditionInFocus: structure.useConditionInFocus,
                 xGridSize: structure.xGridSize,
                 layout: structure.layout,
+                renderedShortcuts: structure.renderedShortcuts,
+                renderedShortcutToggle: structure.renderedShortcutToggle,
                 styleRecords,
             }),
             shellFingerprint: JSON.stringify(structure.toolbarFlags),

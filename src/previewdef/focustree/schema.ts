@@ -43,7 +43,14 @@ export interface FocusTree {
 	continuousFocusSource?: { file: string; start: number };
 	// Where the game opens the tree: a focus, or a grid position when no focus is named.
 	initialShowPosition?: { focus?: string; x: number; y: number };
+	// The tree's shortcut blocks, in file order. Pseudo-trees have none.
+	shortcuts?: FocusTreeShortcut[];
 	warnings: FocusWarning[];
+}
+
+export interface FocusTreeShortcut {
+	name: string;
+	target: string;
 }
 
 interface FocusIconWithCondition {
@@ -138,7 +145,13 @@ interface FocusTreeDef {
 	continuous_focus_position: Position;
 	initial_show_position: InitialShowPositionDef;
 	inlay_window: Raw[];
+	shortcut: ShortcutDef[];
 	_token: Token;
+}
+
+interface ShortcutDef {
+	name: string;
+	target: string;
 }
 
 interface InitialShowPositionDef extends Position {
@@ -262,6 +275,13 @@ const focusTreeSchema: SchemaDef<FocusTreeDef> = {
 	},
 	inlay_window: {
 		_innerType: "raw",
+		_type: "array",
+	},
+	shortcut: {
+		_innerType: {
+			name: "string",
+			target: "string",
+		},
 		_type: "array",
 	},
 };
@@ -418,6 +438,9 @@ export function getFocusTreeWithFocusFile(
 						},
 					}
 				: {}),
+			shortcuts: focusTree.shortcut
+				.filter((v): v is ShortcutDef => !!v?.name && !!v.target)
+				.map((v) => ({ name: v.name, target: v.target })),
 			conditionExprs,
 			isSharedFocues: false,
 			warnings,
