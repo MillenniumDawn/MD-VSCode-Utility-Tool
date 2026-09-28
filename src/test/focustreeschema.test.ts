@@ -610,6 +610,24 @@ shared_focus = {
 		assert.deepStrictEqual(importedPseudoTreesToShow([host], [donor]), []);
 	});
 
+	it("keeps an imported shared focus tree when only some of its focuses were merged", () => {
+		const { donor, host } = mergeSharedFocuses(
+			`shared_focus = {
+    id = SH_a
+    focus = { id = sh_a1 x = 0 y = 0 }
+}
+shared_focus = {
+    id = SH_b
+    focus = { id = sh_b1 x = 0 y = 0 }
+}`,
+			["sh_a1"],
+			focusBlock("m1", 10, 0),
+		);
+		assert.ok(host.focuses["sh_a1"], "the referenced shared focus must be merged");
+		assert.ok(!host.focuses["sh_b1"], "the unreferenced shared focus must not be merged");
+		assert.deepStrictEqual(importedPseudoTreesToShow([host], [donor]), [donor]);
+	});
+
 	it("keeps an imported shared focus tree the file's tree does not merge from", () => {
 		const donor = treesOf(`shared_focus = {
     id = SH_a

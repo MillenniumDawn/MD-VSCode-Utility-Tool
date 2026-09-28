@@ -452,9 +452,11 @@ export function getFocusTreeWithFocusFile(
 
 /**
  * The shared/joint pseudo-trees of dependency files that get their own entry next to this file's
- * trees. One whose focuses were already merged into a tree of this file (a `shared_focus`
+ * trees. One whose focuses were all already merged into a tree of this file (a `shared_focus`
  * reference with useConditionInFocus on) is left out: it would only repeat those focuses, and as a
- * second entry it made the tree picker appear for a file with a single focus tree.
+ * second entry it made the tree picker appear for a file with a single focus tree. A shared focus
+ * file can hold independent shared focuses, so one with any focus still unmerged keeps its entry,
+ * or that focus could not be reached at all.
  */
 export function importedPseudoTreesToShow(ownTrees: FocusTree[], imported: FocusTree[]): FocusTree[] {
 	const merged = new Set<string>();
@@ -464,7 +466,7 @@ export function importedPseudoTreesToShow(ownTrees: FocusTree[], imported: Focus
 		}
 	}
 	return imported.filter(
-		(tree) => tree.isSharedFocues && !Object.keys(tree.focuses).some((id) => merged.has(id)),
+		(tree) => tree.isSharedFocues && Object.keys(tree.focuses).some((id) => !merged.has(id)),
 	);
 }
 
