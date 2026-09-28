@@ -194,6 +194,7 @@ const table: Partial<typeof __table> = {
     "focustree.resetcheckboxes": "Сбросить флажки фокусов",
     "focustree.search": "Поиск: ",
     "focustree.sharedfocuses": "<Общие фокусы>",
+    "focustree.shortcuts.toggle": "Показать или скрыть ярлыки",
     "focustree.traceclear": "Прекратить отслеживание линий требований",
     "focustree.tracehint": "Shift+клик: показать только линии требований этого фокуса",
     "focustree.tracing": "Отслеживание: {0}",

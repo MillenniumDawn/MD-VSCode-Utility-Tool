@@ -770,6 +770,45 @@ describe("focus tree initial_show_position", () => {
 	});
 });
 
+describe("focus tree shortcuts", () => {
+	it("reads the shortcuts in file order, ignoring the zoom and the trigger", () => {
+		const [tree] = treesOf(`focus_tree = {
+    id = test_tree
+    shortcut = {
+        name = TST_first_shortcut
+        target = TST_b
+        scroll_wheel_factor = 0.80
+    }
+    shortcut = {
+        name = "TST_second_shortcut"
+        target = TST_a
+        scroll_wheel_factor = 0.80
+        trigger = { has_country_flag = TST_flag }
+    }
+    ${focusBlock("TST_a", 0, 0)}
+    ${focusBlock("TST_b", 1, 0)}
+}`);
+		assert.deepStrictEqual(tree.shortcuts, [
+			{ name: "TST_first_shortcut", target: "TST_b" },
+			{ name: "TST_second_shortcut", target: "TST_a" },
+		]);
+	});
+
+	it("skips a shortcut without a target", () => {
+		const [tree] = treesOf(`focus_tree = {
+    id = test_tree
+    shortcut = { name = TST_broken }
+    ${focusBlock("TST_a", 0, 0)}
+}`);
+		assert.deepStrictEqual(tree.shortcuts, []);
+	});
+
+	it("gives a tree without shortcuts none", () => {
+		const [tree] = treesOf(treeWithFocuses(focusBlock("TST_a", 0, 0)));
+		assert.deepStrictEqual(tree.shortcuts, []);
+	});
+});
+
 describe("previewdef/focustree continuousFocusSource", () => {
 	it("points a focus_tree at its own key", () => {
 		const content = `\nfocus_tree = {\n    id = a\n}\nfocus_tree = {\n    id = b\n}`;
