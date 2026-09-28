@@ -18,6 +18,7 @@ import {
 	extractConditionValues,
 	extractConditionValue,
 	extractConditionalExprs,
+	applyCondition,
 } from "../../hoiformat/condition";
 import { countryScope } from "../../hoiformat/scope";
 import { getFlags } from "../../util/featureflags";
@@ -943,6 +944,10 @@ function runLayoutValidation(
  * into it instead of only its own. The two sets are never compared against each other: a merged
  * focus is placed by offset blocks that pick a position per country, and this check ignores those,
  * so a cross-boundary pair reads as a collision that the game never draws.
+ *
+ * Two focuses that allow_branch never shows at the same time are not checked for overlap either:
+ * a pair of alternatives gated on `has_country_flag = X` and `NOT = { has_country_flag = X }` is
+ * routinely drawn on one spot, and only one of them is ever on screen.
  */
 function validateFocusLayout(
 	focuses: Record<string, Focus>,
@@ -1001,6 +1006,24 @@ function validateFocusLayoutOfFile(
 	const reportedPairs = new Set<string>();
 	const pairKey = (a: string, b: string) =>
 		a < b ? `${a}\u0001${b}` : `${b}\u0001${a}`;
+
+	// Two focuses overlap on screen only when the game can show both at once. Visibility follows
+	// the preview's own model (calculateFocusAllowed in the webview): a focus with allow_branch is
+	// shown when its condition holds, and a focus below one is shown when every prerequisite group
+	// has a shown option. Every true/false combination of the allow_branch conditions involved is
+	// tried; treating them as independent covers more cases than the game can reach, so a pair is
+	// only excused when no combination shows both.
+	const visibleTogetherCache = new Map<string, boolean>();
+	const canBeVisibleTogether = (a: string, b: string): boolean => {
+		const key = pairKey(a, b);
+		const cached = visibleTogetherCache.get(key);
+		if (cached !== undefined) {
+			return cached;
+		}
+		const result = computeVisibleTogether(focuses, a, b);
+		visibleTogetherCache.set(key, result);
+		return result;
+	};
 
 	for (const { focus, position } of entries) {
 		// An OR-group prerequisite is satisfied by completing any one of its focuses, so it is
@@ -1095,7 +1118,16 @@ function validateFocusLayoutOfFile(
 			stack.push(focus.id);
 		}
 	}
-	for (const stack of stacks.values()) {
+	for (const fullStack of stacks.values()) {
+		// Only the members the game can show alongside another member of the stack overlap.
+		const stack =
+			fullStack.length > 1
+				? fullStack.filter((id) =>
+						fullStack.some(
+							(other) => other !== id && canBeVisibleTogether(id, other),
+						),
+					)
+				: fullStack;
 		const first = stack[0];
 		if (stack.length > 1 && first !== undefined) {
 			warnings.push({
@@ -1128,7 +1160,10 @@ function validateFocusLayoutOfFile(
 			) {
 				continue;
 			}
-			if (Math.abs(entryA.position.x - entryB.position.x) < 2) {
+			if (
+				Math.abs(entryA.position.x - entryB.position.x) < 2 &&
+				canBeVisibleTogether(entryA.focus.id, entryB.focus.id)
+			) {
 				warnings.push({
 					text: localize(
 						"focustree.warnings.overlap",
@@ -1142,6 +1177,78 @@ function validateFocusLayoutOfFile(
 			}
 		}
 	}
+}
+
+// Past this many distinct allow_branch conditions the pair is assumed visible together (it keeps
+// its warning) rather than trying every one of 2^n combinations.
+const maxAllowBranchConditions = 12;
+
+function computeVisibleTogether(
+	focuses: Record<string, Focus>,
+	a: string,
+	b: string,
+): boolean {
+	const roots = uniq([
+		...(focuses[a]?.inAllowBranch ?? []),
+		...(focuses[b]?.inAllowBranch ?? []),
+	]);
+	if (roots.length === 0) {
+		return true;
+	}
+
+	const conditions: ConditionItem[] = [];
+	for (const root of roots) {
+		const allowBranch = focuses[root]?.allowBranch;
+		if (allowBranch !== undefined) {
+			extractConditionalExprs(allowBranch, conditions);
+		}
+	}
+	if (conditions.length > maxAllowBranchConditions) {
+		return true;
+	}
+
+	for (let mask = 0; mask < 1 << conditions.length; mask++) {
+		const trueExprs = conditions.filter((_, i) => (mask & (1 << i)) !== 0);
+		const isHidden = hiddenByAllowBranch(focuses, trueExprs);
+		if (!isHidden(a) && !isHidden(b)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * The webview's calculateFocusAllowed as a lookup: a focus with allow_branch is hidden when its
+ * condition fails, and any other focus is hidden when one of its prerequisite groups has every
+ * option hidden. A prerequisite outside the tree, or a cycle, hides nothing.
+ */
+function hiddenByAllowBranch(
+	focuses: Record<string, Focus>,
+	trueExprs: ConditionItem[],
+): (id: string) => boolean {
+	const memo = new Map<string, boolean>();
+	const inProgress = new Set<string>();
+	const isHidden = (id: string): boolean => {
+		const cached = memo.get(id);
+		if (cached !== undefined) {
+			return cached;
+		}
+		const focus = focuses[id];
+		if (focus === undefined || inProgress.has(id)) {
+			return false;
+		}
+		inProgress.add(id);
+		const hidden = focus.hasAllowBranch
+			? focus.allowBranch !== undefined &&
+				!applyCondition(focus.allowBranch, trueExprs)
+			: focus.prerequisite.some(
+					(group) => group.length > 0 && group.every(isHidden),
+				);
+		inProgress.delete(id);
+		memo.set(id, hidden);
+		return hidden;
+	};
+	return isHidden;
 }
 
 function validateRelativePositionId(

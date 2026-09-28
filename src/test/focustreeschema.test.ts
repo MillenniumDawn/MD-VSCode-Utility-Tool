@@ -399,6 +399,96 @@ describe("previewdef/focustree layout warnings", () => {
 		);
 	});
 
+	// Alternatives gated on one flag and on its negation are never on screen together, so the mod
+	// draws them, and everything below them, on the same spots.
+	const flagSet = "allow_branch = { has_country_flag = split_happened }";
+	const flagUnset =
+		"allow_branch = { NOT = { has_country_flag = split_happened } }";
+
+	it("reports no overlap for focuses whose allow_branch conditions contradict", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_a", 0, 0, flagSet),
+			focusBlock("focus_b", 0, 0, flagUnset),
+		);
+		assert.deepStrictEqual(warningTexts(content), []);
+	});
+
+	it("reports no overlap for the branches below contradicting allow_branch focuses", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_root", 0, 0),
+			focusBlock(
+				"focus_a",
+				6,
+				1,
+				`relative_position_id = focus_root prerequisite = { focus = focus_root } ${flagSet}`,
+			),
+			focusBlock(
+				"focus_b",
+				6,
+				1,
+				`relative_position_id = focus_root prerequisite = { focus = focus_root } ${flagUnset}`,
+			),
+			focusBlock(
+				"focus_a_child",
+				0,
+				1,
+				"relative_position_id = focus_a prerequisite = { focus = focus_a }",
+			),
+			focusBlock(
+				"focus_b_child",
+				0,
+				1,
+				"relative_position_id = focus_b prerequisite = { focus = focus_b }",
+			),
+			focusBlock(
+				"focus_a_grandchild",
+				-2,
+				1,
+				"relative_position_id = focus_a_child prerequisite = { focus = focus_a_child }",
+			),
+			focusBlock(
+				"focus_b_grandchild",
+				-1,
+				1,
+				"relative_position_id = focus_b_child prerequisite = { focus = focus_b_child }",
+			),
+		);
+		assert.deepStrictEqual(warningTexts(content), []);
+	});
+
+	it("still warns when the allow_branch conditions can both hold", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_a", 0, 0, "allow_branch = { has_country_flag = f }"),
+			focusBlock("focus_b", 0, 0, "allow_branch = { has_country_flag = g }"),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Focuses focus_a, focus_b share the same position, so their icons overlap.",
+		]);
+	});
+
+	it("keeps a stack member without allow_branch that overlaps both alternatives", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_a", 0, 0, flagSet),
+			focusBlock("focus_b", 0, 0, flagUnset),
+			focusBlock("focus_c", 0, 0),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Focuses focus_a, focus_b, focus_c share the same position, so their icons overlap.",
+		]);
+	});
+
+	it("drops only the alternatives from a stack when nothing else shares their spot", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_a", 0, 0, flagSet),
+			focusBlock("focus_b", 0, 0, flagUnset),
+			focusBlock("focus_c", 1, 0),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Focuses focus_a and focus_c are less than 2 apart on the same row, so their icons overlap.",
+			"Focuses focus_b and focus_c are less than 2 apart on the same row, so their icons overlap.",
+		]);
+	});
+
 	it("still warns for a focus one apart from a same-position stack", () => {
 		const content = treeWithFocuses(
 			focusBlock("focus_a", 0, 0),
