@@ -120,7 +120,9 @@ export async function getGfxContainerFiles(
 	);
 }
 
-const GFX_CACHE_VERSION = 2;
+// 4: progressBarType sprites are indexed, and a .gfx left open at its end is read as the game reads
+// it (vanilla powerbalanceview.gfx), so a cache written before either is missing sprites.
+const GFX_CACHE_VERSION = 4;
 
 /**
  * One .gfx file, as one line of the cache: the sprites the index resolves to it, and -- in the
@@ -303,7 +305,7 @@ async function fillGfxItems(
 			parseHoi4File(
 				fileBuffer.toString(),
 				localize("infile", "In file {0}:\n", filePath),
-				{ keepTokens: false },
+				{ keepTokens: false, closeBlocksAtEof: true },
 			),
 		);
 		const spriteNames: string[] = [];
