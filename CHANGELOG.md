@@ -28,6 +28,7 @@ v1.1.40
 - [ GFX ] Sprites whose texture width does not divide evenly by `noofframes` no longer lose pixels at the edge of each frame, and a `noofframes` of 0 or larger than the texture width no longer breaks the preview. Issue #371.
 - DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.
 - Grayscale (luminance) DDS textures now show at their real brightness instead of almost black. Issue #433.
+- The "Select working mod" list now marks your current mod when the mod file setting is written in quotes, instead of listing it a second time as a workspace setting. Issue #455.
 
 v1.1.39
 
