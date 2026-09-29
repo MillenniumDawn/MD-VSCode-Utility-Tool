@@ -255,40 +255,45 @@ jobs:
         # into JS source is compiled, not read.
         higher=$(OURS="$ours" THEIRS="$theirs" node -p "require('./scripts/bump-version').higherVersion(process.env.OURS, process.env.THEIRS)")
 
+        # The changelog is rebuilt from main's rather than merged with it: main's Unreleased section
+        # is taken as it stands under the version heading, and this branch adds only the bullets
+        # main never had -- the seeded ones. Telling those apart needs this branch's changelog and
+        # main's as it was when this branch last caught up, which is the merge base; both are read
+        # before the merge moves either.
+        git show origin/main:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
+        git show "$(git merge-base HEAD origin/main):CHANGELOG.md" > "$RUNNER_TEMP/previous-main-changelog.md"
+        cp CHANGELOG.md "$RUNNER_TEMP/release-changelog.md"
+        rebuild_changelog() {
+          node scripts/merge-changelog.js --main "$RUNNER_TEMP/main-changelog.md" \
+            --previous-main "$RUNNER_TEMP/previous-main-changelog.md" \
+            --release "$RUNNER_TEMP/release-changelog.md" --version "$higher" >/dev/null
+        }
+
         if ! git merge --no-edit origin/main; then
-          # A branch that wrote its own changelog section on main collides with the section this
-          # pull request is collecting, and a branch that also bumped the version collides in
-          # package.json as well. Both are worth resolving here rather than asking for a hand
-          # merge: keep this branch's changelog, which may have been reworded, take the higher
-          # version, and carry over the bullets main has that this branch does not.
+          # A branch that wrote under Unreleased on main collides with the section this pull request
+          # promoted, and a branch that also bumped the version collides in package.json as well.
+          # Both are resolved here rather than left for a hand merge.
           conflicts=$(git diff --name-only --diff-filter=U | sort)
           if printf '%s\n' "$conflicts" | grep -qvE '^(CHANGELOG\.md|package\.json)$'; then
             git merge --abort || true
             gh pr comment "$PR" --body "\`main\` moved on and this branch no longer merges cleanly. Resolve the conflict here and the next push to \`main\` will pick up from there."
             exit 0
           fi
-          # Only the paths that actually conflicted -- `checkout --ours/--theirs` fails on a path
-          # git merged cleanly. The changelog is ours, because it may have been reworded here.
-          # package.json is main's: the only thing this branch ever changed in it is the version,
-          # and merge-changelog.js writes the higher one back below, whereas taking ours wholesale
-          # would silently drop whatever a branch on main added to it -- a new command, a setting,
-          # a dependency.
+          # Only the paths that actually conflicted -- `checkout --theirs` fails on a path git
+          # merged cleanly. Both are main's: the changelog is rebuilt from main's just below, and
+          # the only thing this branch ever changed in package.json is the version, which the
+          # rebuild writes back, whereas taking ours wholesale would silently drop whatever a branch
+          # on main added to it -- a new command, a setting, a dependency.
           for conflict in $conflicts; do
-            if [ "$conflict" = "package.json" ]; then
-              git checkout --theirs -- "$conflict"
-            else
-              git checkout --ours -- "$conflict"
-            fi
+            git checkout --theirs -- "$conflict"
           done
-          git show origin/main:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
-          node scripts/merge-changelog.js --theirs "$RUNNER_TEMP/main-changelog.md" --version "$higher" >/dev/null
+          rebuild_changelog
           git add package.json CHANGELOG.md
           git commit --no-edit
-        elif [ "$ours" != "$theirs" ]; then
-          # No conflict, but main carried a version this branch did not have. The merge took
-          # main's package.json wholesale, so put the higher of the two back and move the section
-          # heading with it.
-          node scripts/bump-version.js --set-version "$higher" >/dev/null
+        else
+          # No conflict, but the rebuild still runs: a clean merge is not a changelog main wrote,
+          # and main may carry a version this branch did not have, which it puts back.
+          rebuild_changelog
         fi
 
         # The pull request body lists what is already covered, so a bullet reworded by hand is
@@ -309,8 +314,8 @@ jobs:
         fi
         git diff --cached --quiet || git commit -m "Catch up with main"
         # The push comes before the body is updated on purpose. If the API fails between the two,
-        # the next merge writes these bullets once more and the changelog union drops the ones
-        # that repeat a sentence or an issue number -- a duplicate that slips past that is visible
+        # the next merge writes these bullets once more and the append drops the ones that
+        # repeat a sentence already there -- a duplicate that slips past that is visible
         # in the pull request and one edit away. The other order would record pull requests as
         # covered whose bullets never landed, and nothing would ever write them again.
         git push origin "HEAD:$RELEASE_BRANCH"
