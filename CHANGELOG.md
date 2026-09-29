@@ -50,12 +50,9 @@ v1.1.40
 - [ Parent mods ] A submod's `dependencies` now resolve when Windows keeps Documents in OneDrive, and when the game's user data folder can't be found at all a warning now says so and points at the `userDataPath` setting, instead of the parent mod's icons and text silently going missing. Issue #456.
 - [ Focus Tree Previewer ] Inlay windows are drawn where the focus tree places them, instead of a screen height lower when their window is anchored to the bottom, and a ticked inlay now shows outside condition mode instead of staying hidden until its `visible` trigger is met. Issue #436.
 - [ Focus Tree Previewer ] Selecting inlay conditions now changes the inlay window's scripted images, such as the leader portrait in China's inlay; the first image was always shown before.
-- [ Focus Tree ] Selecting inlay conditions now changes the inlay window's scripted images.
 - [ Focus Tree Previewer ] The mutually exclusive marker now sits on the focus name bars, in the gap between the two focuses, as it does in the game. The `<!>` is drawn in front of its line instead of the line showing through it. Issue #461.
 - [ Focus Tree Previewer ] A file with a single focus tree no longer shows the "Focus tree:" picker just because the tree pulls in `shared_focus` focuses, which are already drawn inside it. Issue #460.
-- [ Focus Tree ] List only a file's own focus trees in the focus tree picker.
 - [ Focus Tree Previewer ] Focuses drawn on the same spot, or too close on one row, no longer get an overlap warning when their `allow_branch` conditions mean only one of them can ever be shown, such as alternatives gated on `has_country_flag = X` and `NOT = { has_country_flag = X }`, along with everything below them.
-- [ Focus Tree ] Skip focus overlap warnings when allow_branch never shows both focuses.
 
 v1.1.39
 
