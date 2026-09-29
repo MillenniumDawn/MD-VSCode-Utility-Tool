@@ -55,6 +55,7 @@ v1.1.40
 - [ Focus Tree Previewer ] A file with a single focus tree no longer shows the "Focus tree:" picker just because the tree pulls in `shared_focus` focuses, which are already drawn inside it. Issue #460.
 - [ Focus Tree ] List only a file's own focus trees in the focus tree picker.
 - [ Focus Tree Previewer ] Focuses drawn on the same spot, or too close on one row, no longer get an overlap warning when their `allow_branch` conditions mean only one of them can ever be shown, such as alternatives gated on `has_country_flag = X` and `NOT = { has_country_flag = X }`, along with everything below them.
+- [ Focus Tree ] Skip focus overlap warnings when allow_branch never shows both focuses.
 
 v1.1.39
 
