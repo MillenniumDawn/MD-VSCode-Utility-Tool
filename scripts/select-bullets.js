@@ -3,13 +3,16 @@
 //   node scripts/select-bullets.js --bullets-file bullets.json --output fresh.json \
 //       --skip 114 --covered 109,110
 //
-// .github/workflows/release.yml drops two kinds of bullet before touching CHANGELOG.md:
+// .github/workflows/release.yml drops three kinds of bullet before touching CHANGELOG.md:
 //
 //   --skip     the pull request that carried a hand-written version bump. It already wrote its own
 //              changelog section on main, so seeding a second bullet from its title would repeat it.
 //   --covered  every pull request the open release pull request has already written a bullet for,
 //              read from its body. This is what stops a bullet reworded by hand from being rewritten
 //              on the next merge.
+//
+// A pull request that changed CHANGELOG.md itself is dropped as well: it wrote its own bullet on
+// main, and the release pull request takes main's section as it stands.
 //
 // bullets[i], pullRequests[i] and entries[i] describe the same pull request, so all three are
 // filtered together. Bullets past the end of pullRequests came from a commit with no pull request
@@ -31,7 +34,7 @@ function select(found, options) {
 		.map((_, index) => index)
 		.filter((index) => {
 			const number = String(pullRequests[index]);
-			return number !== skip && !covered.has(number);
+			return number !== skip && !covered.has(number) && !entries[index]?.wroteChangelog;
 		});
 
 	return {

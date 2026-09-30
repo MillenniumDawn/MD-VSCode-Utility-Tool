@@ -22,14 +22,18 @@ Releasing happens after the merge, on its own:
    request that shipped without writing its own bullet gets one seeded from its title:
    the `[ Component ]` prefix comes from the files it touched, the
    `Functionality:` / `Bugfixes:` split from its `enhancement` / `bug` labels, and the
-   wording from a model called through OpenRouter, prompted with the style below. A seeded
-   bullet is dropped when a hand-written one already covers the same change, matched on the
-   sentence and on the `Issue #NN` trailer.
+   wording from a model called through OpenRouter, prompted with the style below. "Without
+   writing its own bullet" means the pull request did not change `CHANGELOG.md`; nothing is
+   matched on sentences or issue numbers.
 3. **It stays open and updates itself.** Every later merge into `main` is merged into it
    and adds its bullets, so five merges in an afternoon become one release, not five.
-   A bullet is written once and never rewritten, so editing one there is safe.
-4. Whoever merges it reads the bullets and fixes anything that reads wrong. Merging it
-   publishes the extension.
+   Its section is rebuilt from `main`'s `Unreleased` each time: every hand-written bullet
+   exactly as it stands on `main`, in `main`'s order, followed by the seeded ones.
+4. Whoever merges it reads the bullets and fixes anything that reads wrong: a seeded bullet
+   on the release branch, where it is kept from then on, and a hand-written one on `main`,
+   which the release pull request follows at its next update. A hand-written bullet edited
+   on the release branch is not kept apart from `main`'s copy, so it ends up in the release twice.
+   Merging it publishes the extension.
 
 The wording is drafted, not authoritative — read it before merging. Everything degrades
 to the pull request title if the model is unreachable, so a release never waits on it.
@@ -57,11 +61,13 @@ with `GITHUB_TOKEN` starts none, which is why the release used to be the one thi
 tested. The release pull request now runs the test and version checks against its own
 merge commit, like any other branch.
 
-When the release pull request's changelog conflicts with `main` — a branch that wrote its
-own section while it was open — the two are combined rather than left for a hand merge.
-The release pull request's wording always wins, and only bullets it does not already
-carry come across, matched on the sentence and on the issue number so a reworded bullet
-and the raw title it came from are not both kept.
+The release pull request's changelog is never merged with `main`'s; it is rebuilt from it
+on every update, conflict or not. `main`'s `Unreleased` section is taken as it stands and
+given the version heading, and the release branch adds only the bullets `main` never had:
+those in neither `main`'s section now nor the one it had when the release branch last
+caught up (the merge base). That is the seeded bullets and any fix made to them on the
+release branch. Combining the two copies used to drop a `main` bullet whenever the release
+branch already had one for the same issue, which lost nine of them from v1.1.40.
 
 A branch that does bump `package.json` no longer ships the moment it is merged: the
 release pull request takes that version over and publishes it from there, so the batching

@@ -4,55 +4,62 @@ v1.1.40
 
   Functionality:
 
-- [ World Map ] Share one skeleton between the state, supply area and strategic region loaders. Issue #375.
-- [ Build ] The build now rejects a method that no longer overrides anything and a parameter that is never read, so renaming a shared loader or preview method can no longer leave a stale copy behind unnoticed. Issue #376.
-- Read feature flags through an accessor instead of mutable exports. Issue #377.
-- [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the mutually exclusive link now also moves sideways with `exclusive_offset`, `exclusive_offset_left` and the x of `national_focus_exclusive_item` in nationalfocusview.gui. Issue #397.
-- [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the continuous focus box now takes its size from `continuous_focus_window` in `nationalfocusview.gui` instead of always being 770 by 380. Issue #398.
-- [ Focus Tree Previewer ] With the gui focus tree layout, a focus grid whose `format` is `DOWN`, `LEFT` or `RIGHT` now previews the tree growing that way, prerequisite lines and mutually exclusive links included, instead of always top-down. Issue #399.
-- [ Focus Tree ] With the focus tree layout set to `gui`, a focus tree preview now opens centred on the tree's `initial_show_position`, the way the game does, using `national_focus_center` from `nationalfocusview.gui`. Issue #400.
-- Errors from previews and file loading now appear in the HOI4 Modding output channel, not only in the developer console. Issue #370.
-- [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
-- [ Focus Tree Previewer ] A new setting, Focus tree: prerequisite line colour, picks whether prerequisite lines are drawn blue, as for focuses not yet completed, or green, as for completed ones. Issue #443.
 - [ Balance of Power Previewer ] Added a preview for `common/bop` files that draws the game's own balance of power window from `powerbalanceview.gui`, with each balance of power's title and side icons. A slider and step buttons in the toolbar stand in for `add_power_balance_value`: the needle, the bar fill and the active range follow the value the way they do in game, and clicking a range opens it in the file. A file with several balances of power gets a dropdown to pick one, and overlapping or missing ranges are flagged. Issue #434.
-- [ Decision Previewer ] The "Collapse categories" checkbox is now two toolbar buttons, Collapse all categories and Expand all categories, and each one also resets any tab opened or closed from its own card. Issue #437.
-- [ Focus Tree Previewer ] A new Auditor section in the settings checks every focus tree file in the mod at once and gives one Markdown report of the warnings per file, ready to paste into a GitHub issue, and the focus tree preview has a button that copies the warnings of the tree on screen. Issue #444.
-- [ Focus Tree Previewer ] A new toolbar toggle lets you drag the continuous focus box into place; dropping it writes the new `continuous_focus_position` into the file, adding the line if the tree has none. Issue #438.
+- [ Balance of Power Previewer ] The balance of power window now lists the decisions of its `decision_category` the way the game does, each with its icon, name and cost, and clicking one opens it in its decisions file. A category with no decisions is flagged. Issue #442.
 - [ Focus Tree Previewer ] The focus tree preview now shows the tree's `shortcut` blocks as the game's shortcut buttons in its lower left corner, with their localised name and the icon of their `target` focus, drawn from `nationalfocusview.gui`; clicking one scrolls to that focus, and the arrow beside them folds them away. Issue #439.
-- [ Focus Tree Previewer ] A mod names the `.gfx` files that define its focus overlays in the new Focus overlay GFX files setting, or with a `focus_overlay_gfx = { "interface/goals_overlays.gfx" }` list in its `.mod` file, so a submod picks up the overlays of the mod it extends. Issue #448.
+- [ Focus Tree Previewer ] Prerequisite lines are drawn with the game's own focus link textures, dashed for alternative prerequisites, instead of thin blue lines. With the `gui` focus tree layout the texture and its position come from `nationalfocusview.gui`. Issue #396.
+- [ Focus Tree Previewer ] A new toolbar toggle lets you drag the continuous focus box into place; dropping it writes the new `continuous_focus_position` into the file, adding the line if the tree has none. Issue #438.
+- [ Focus Tree Previewer ] A new Auditor section in the settings checks every focus tree file in the mod at once and gives one Markdown report of the warnings per file, ready to paste into a GitHub issue, and the focus tree preview has a button that copies the warnings of the tree on screen. Issue #444.
 - [ Previews ] Toolbar buttons now sit in a fixed group at the right end of the toolbar, in the same order in every preview. Each icon shows what the button does, toggles look different when on, and tooltips say what a click does, or why a greyed-out button cannot be clicked. The mod file in the status bar now says "(cannot read)" when it cannot be read. Issue #446.
+- [ Decision Previewer ] The "Collapse categories" checkbox is now two toolbar buttons, Collapse all categories and Expand all categories, and each one also resets any tab opened or closed from its own card. Issue #437.
+- Errors from previews and file loading now appear in the HOI4 Modding output channel, not only in the developer console. Issue #370.
+- [ Focus Tree Previewer ] With the gui focus tree layout, a focus grid whose `format` is `DOWN`, `LEFT` or `RIGHT` now previews the tree growing that way, prerequisite lines and mutually exclusive links included, instead of always top-down. Issue #399.
+- [ Focus Tree Previewer ] With the focus tree layout set to `gui`, a focus tree preview now opens centred on the tree's `initial_show_position`, the way the game does, using `national_focus_center` from `nationalfocusview.gui`. Issue #400.
+- [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the continuous focus box now takes its size from `continuous_focus_window` in `nationalfocusview.gui` instead of always being 770 by 380. Issue #398.
+- [ Focus Tree Previewer ] With the focus tree layout set to `gui`, the mutually exclusive link now also moves sideways with `exclusive_offset`, `exclusive_offset_left` and the x of `national_focus_exclusive_item` in nationalfocusview.gui. Issue #397.
+- [ Focus Tree Previewer ] A new setting, Focus tree: prerequisite line colour, picks whether prerequisite lines are drawn blue, as for focuses not yet completed, or green, as for completed ones. Blue is the default. Issue #443.
+- [ Idea Previewer ] A mod sets how a game modifier is shown in its ideas, decisions and character traits with files named in the new Modifier format files setting, or with a `modifier_format_files = { "common/my_modifier_formats.txt" }` list in its `.mod` file, written like `common/modifier_definitions`. Issue #453.
+- [ Focus Tree Previewer ] A mod names the `.gfx` files that define its focus overlays in the new Focus overlay GFX files setting, or with a `focus_overlay_gfx = { "interface/goals_overlays.gfx" }` list in its `.mod` file, so a submod picks up the overlays of the mod it extends. Issue #448.
 - [ Decision Previewer ] A mod names the `.gfx` files that define its decision icons in the new Decision GFX files setting, or with a `decision_gfx = { "interface/MD_decisions.gfx" }` list in its `.mod` file. Issue #449.
 - [ Idea Previewer ] A mod names the image drawn for an idea whose `picture` does not resolve in the new Idea placeholder icon setting, or with an `idea_placeholder_icon = "gfx/interface/ideas/WIP_idea.dds"` line in its `.mod` file. Issue #450.
 - [ Focus Tree Previewer ] A mod names the folders holding its focus inlay window sprites in the Focus inlay window GFX roots setting, or with an `inlay_window_gfx_roots = { "interface/scripted_gui" }` list in its `.mod` file. Issue #451.
 - [ Character Previewer ] A mod names the keys it writes on its character traits that are not modifiers in the new Character trait structural keys setting, or with a `character_trait_structural_keys = { my_key }` list in its `.mod` file, so they stay off the trait cards. Issue #452.
-- [ Idea Previewer ] A mod sets how a game modifier is shown in its ideas, decisions and character traits with files named in the new Modifier format files setting, or with a `modifier_format_files = { "common/my_modifier_formats.txt" }` list in its `.mod` file, written like `common/modifier_definitions`. Issue #453.
+- [ Build ] The build now rejects a method that no longer overrides anything and a parameter that is never read, so renaming a shared loader or preview method can no longer leave a stale copy behind unnoticed. Issue #376.
+- [ World Map ] Share one skeleton between the state, supply area and strategic region loaders. Issue #375.
+- Read feature flags through an accessor instead of mutable exports. Issue #377.
 - Check the extension against the base game's layout and real mods in CI. Issue #457.
-- [ Balance of Power Previewer ] The balance of power window now lists the decisions of its `decision_category` the way the game does, each with its icon, name and cost, and clicking one opens it in its decisions file. A category with no decisions is flagged. Issue #442.
 
   Bugfixes:
 
-- When the same mod file appears more than once in the "Select working mod" list, the selected entries now keep a fixed order at the top instead of one that could change between VS Code versions. Issue #374.
-- [ DDS ] BC7-compressed DDS textures are now identified as BC7 instead of BC6H, so the error shown for them names the right format. Issue #373.
-- [ Decision Previewer ] A scripted-GUI window placed away from the top-left corner is no longer cut off on its right and bottom edges in its decision card. Issue #365.
-- Icons and buttons that share a sprite but are drawn at different scales now each show their background at the right size, instead of all taking the size of the first one drawn. Issue #366.
-- [ Focus Tree Previewer ] [ MIO Preview ] Changing several options in quick succession no longer leaves an older version of the tree on screen; the latest change always wins. Issue #367.
-- Previews no longer re-check unchanged files over and over while one preview loads, which made opening large previews slower than needed. Issue #368.
-- A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
-- [ GUI ] Showing or hiding a container window no longer affects a sibling whose name starts with the same text, such as `battle` and `battleplan`. Issue #363.
-- DDS textures using the DX10 pixel format alongside extra flags now open correctly. Previously they were misread because the DX10 header was skipped, causing pixel data to be read too early. Issue #364.
-- [ GFX ] Sprites whose texture width does not divide evenly by `noofframes` no longer lose pixels at the edge of each frame, and a `noofframes` of 0 or larger than the texture width no longer breaks the preview. Issue #371.
-- DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.
-- Grayscale (luminance) DDS textures now show at their real brightness instead of almost black. Issue #433.
-- The "Select working mod" list now marks your current mod when the mod file setting is written in quotes, instead of listing it a second time as a workspace setting. Issue #455.
-- [ GFX ] Sprites defined as `progressBarType` now show, and a `.gfx` file whose last block is never closed, such as the game's own `powerbalanceview.gfx`, is read the way the game reads it instead of losing every sprite in it.
-- [ Decision Previewer ] Clicking an element of a scripted-GUI window in a decision card now opens it in its `.gui` file, instead of jumping to an unrelated spot in the decision file.
 - A parent mod path that points at the mod you have open no longer loads that mod a second time, which doubled load times. The mod file and parent mod path settings now say they belong in workspace settings. Issue #454.
 - [ Parent mods ] A submod's `dependencies` now resolve when Windows keeps Documents in OneDrive, and when the game's user data folder can't be found at all a warning now says so and points at the `userDataPath` setting, instead of the parent mod's icons and text silently going missing. Issue #456.
-- [ Focus Tree Previewer ] Inlay windows are drawn where the focus tree places them, instead of a screen height lower when their window is anchored to the bottom, and a ticked inlay now shows outside condition mode instead of staying hidden until its `visible` trigger is met. Issue #436.
-- [ Focus Tree Previewer ] Selecting inlay conditions now changes the inlay window's scripted images, such as the leader portrait in China's inlay; the first image was always shown before.
-- [ Focus Tree Previewer ] The mutually exclusive marker now sits on the focus name bars, in the gap between the two focuses, as it does in the game. The `<!>` is drawn in front of its line instead of the line showing through it. Issue #461.
-- [ Focus Tree Previewer ] A file with a single focus tree no longer shows the "Focus tree:" picker just because the tree pulls in `shared_focus` focuses, which are already drawn inside it. Issue #460.
+- A preview no longer keeps showing an older version of the file when an edit arrives while the previous one is still loading. Issue #369.
+- [ Focus Tree Previewer ] [ MIO Preview ] Changing several options in quick succession no longer leaves an older version of the tree on screen; the latest change always wins. Issue #367.
+- Previews no longer re-check unchanged files over and over while one preview loads, which made opening large previews slower than needed. Issue #368.
 - [ Focus Tree Previewer ] Focuses drawn on the same spot, or too close on one row, no longer get an overlap warning when their `allow_branch` conditions mean only one of them can ever be shown, such as alternatives gated on `has_country_flag = X` and `NOT = { has_country_flag = X }`, along with everything below them.
+- [ Focus Tree Previewer ] The "Focus tree:" picker lists only a file's own focus trees and appears only when there is more than one. Shared focuses show inside the country's tree instead of as a separate `<Shared focuses>` entry. Issue #460.
+- [ Focus Tree Previewer ] The mutually exclusive marker now sits on the focus name bars, in the gap between the two focuses, as it does in the game. The `<!>` is drawn in front of its line instead of the line showing through it. Issue #461.
+- [ Focus Tree Previewer ] Inlay windows are drawn where the focus tree places them, instead of a screen height lower when their window is anchored to the bottom, and a ticked inlay now shows outside condition mode instead of staying hidden until its `visible` trigger is met. Issue #436.
+- [ Focus Tree Previewer ] Ticking "Inlay windows" no longer stretches the toolbar: the inlay conditions dropdown lists only the conditions that change what the inlay shows, and both condition boxes keep a fixed width. Issue #436.
+- [ Focus Tree Previewer ] Selecting inlay conditions now changes the inlay window's scripted images, such as the leader portrait in China's inlay; the first image was always shown before.
+- [ Focus Tree Previewer ] Focus overlays now show in base-game focus trees, which define them in `interface/goals.gfx`, and a mod without `interface/goals_overlays.gfx` no longer logs an error for it on every render. Millennium Dawn's overlays need that file named in the new setting or the `.mod` file. Issue #448.
+- [ Idea Previewer ] An idea whose `picture` does not resolve now shows the game's placeholder icon outside Millennium Dawn, instead of no icon. Millennium Dawn's own `WIP_idea.dds` placeholder needs to be named in the new setting or the `.mod` file. Issue #450.
+- [ Idea Previewer ] Base-game modifiers such as `non_core_manpower`, `mobilization_speed` and `command_power_gain_mult` now show as percentages, and ones where less is better, such as `send_volunteers_tension` and `license_purchase_cost`, are coloured the way the game colours them. Issue #453.
+- [ Character Previewer ] Base-game commander traits such as `trait_cautious` no longer show `leader_default_proximity_offset` as a modifier, and politician traits no longer show a `custom_modifier_tooltip` line. Issue #452.
+- [ Decision Previewer ] A mod without `interface/MD_decisions.gfx` no longer logs an error for it, and editing a decision `.gfx` file refreshes an open decision preview. Millennium Dawn's decision icons that the GFX index cannot place need that file named in the new setting or the `.mod` file. Issue #449.
+- [ Focus Tree Previewer ] Base-game focus trees with inlay windows no longer log a path warning for `interface/scripted_gui`, which only Millennium Dawn has; that folder is no longer the default. Issue #451.
+- [ GFX ] Sprites defined as `progressBarType` now show, and a `.gfx` file whose last block is never closed, such as the game's own `powerbalanceview.gfx`, is read the way the game reads it instead of losing every sprite in it.
+- [ Decision Previewer ] Clicking an element of a scripted-GUI window in a decision card now opens it in its `.gui` file, instead of jumping to an unrelated spot in the decision file.
+- [ Decision Previewer ] A scripted-GUI window placed away from the top-left corner is no longer cut off on its right and bottom edges in its decision card. Issue #365.
+- Icons and buttons that share a sprite but are drawn at different scales now each show their background at the right size, instead of all taking the size of the first one drawn. Issue #366.
+- [ GUI ] Showing or hiding a container window no longer affects a sibling whose name starts with the same text, such as `battle` and `battleplan`. Issue #363.
+- The "Select working mod" list now marks your current mod when the mod file setting is written in quotes, instead of listing it a second time as a workspace setting. Issue #455.
+- When the same mod file appears more than once in the "Select working mod" list, the selected entries now keep a fixed order at the top instead of one that could change between VS Code versions. Issue #374.
+- [ GFX ] Sprites whose texture width does not divide evenly by `noofframes` no longer lose pixels at the edge of each frame, and a `noofframes` of 0 or larger than the texture width no longer breaks the preview. Issue #371.
+- DDS textures using the DX10 pixel format alongside extra flags now open correctly. Previously they were misread because the DX10 header was skipped, causing pixel data to be read too early. Issue #364.
+- DDS textures with fewer than 8 bits per pixel, such as a 4-bit alpha mask, now show every pixel instead of repeating half of them. Issue #372.
+- Grayscale (luminance) DDS textures now show at their real brightness instead of almost black. Issue #433.
+- [ DDS ] BC7-compressed DDS textures are now identified as BC7 instead of BC6H, so the error shown for them names the right format. Issue #373.
 
 v1.1.39
 

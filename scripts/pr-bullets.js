@@ -62,7 +62,15 @@ function bulletsFromPullRequests(pullRequests) {
 		const component = componentForFiles(pr.files);
 		const section = sectionForPullRequest(pr);
 		bullets.push(withComponent(bulletFor(pr.title, issue), component));
-		entries.push({ number, title: String(pr.title ?? '').trim(), body: pr.body ?? '', component, section, issue });
+		entries.push({
+			number,
+			title: String(pr.title ?? '').trim(),
+			body: pr.body ?? '',
+			component,
+			section,
+			issue,
+			wroteChangelog: wroteChangelog(pr),
+		});
 	}
 
 	return { bullets, pullRequests: numbers, entries };
@@ -73,6 +81,13 @@ function bulletsFromPullRequests(pullRequests) {
 // whoever merges the release pull request to delete every time.
 function isDependencyBump(pullRequest) {
 	return String(pullRequest?.user?.login ?? '').toLowerCase() === 'dependabot[bot]';
+}
+
+// A pull request that changed CHANGELOG.md wrote its own bullet, so none is seeded from its title.
+// Asking the files rather than matching sentences or issue numbers is what keeps a seeded bullet
+// from standing next to the one the branch wrote (Issue #498).
+function wroteChangelog(pullRequest) {
+	return (pullRequest?.files ?? []).some((file) => String(file ?? '').replace(/^\.\//, '') === 'CHANGELOG.md');
 }
 
 // "- Title." becomes "- [ Focus Tree ] Title." A bullet that already carries a prefix keeps it.
@@ -243,4 +258,5 @@ module.exports = {
 	parseArgs,
 	pullRequestsForCommit,
 	withComponent,
+	wroteChangelog,
 };

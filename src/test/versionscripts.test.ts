@@ -213,11 +213,29 @@ describe('scripts/bump-version', function () {
                 'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Collected.\n- Another change.\n');
         });
 
-        it('drops a seeded bullet for a change a hand-written one already carries', function () {
+        it('drops a bullet that says the same under another prefix', function () {
             const written = 'v1.1.24\n\n  Functionality:\n\n- [ MIO ] The grid toggle sticks. Issue #62.\n';
             assert.strictEqual(
-                bumpVersion.appendBullets(written, '1.1.24', ['- Remember the show grid toggle. Issue #62.']),
+                bumpVersion.appendBullets(written, '1.1.24', ['- The grid toggle sticks. Issue #62.']),
                 written);
+        });
+
+        it('keeps a bullet that only shares an issue number with one already there', function () {
+            // One pull request often writes the setting it added and the fix behind it for one issue.
+            const written = 'v1.1.24\n\n  Functionality:\n\n- [ MIO ] A new setting. Issue #62.\n';
+            assert.strictEqual(
+                bumpVersion.appendBullets(written, '1.1.24', [{ text: '- [ MIO ] The fix. Issue #62.', section: 'Bugfixes' }]),
+                'v1.1.24\n\n  Functionality:\n\n- [ MIO ] A new setting. Issue #62.\n\n  Bugfixes:\n\n- [ MIO ] The fix. Issue #62.\n');
+        });
+
+        it('gives an empty promoted section its subsection headings', function () {
+            const promoted = 'Unreleased\n\nv1.1.24\n\nv1.1.23\n\n- Shipped.\n';
+            assert.strictEqual(
+                bumpVersion.appendBullets(promoted, '1.1.24', [
+                    { text: '- A fix.', section: 'Bugfixes' },
+                    { text: '- A feature.', section: 'Functionality' },
+                ]),
+                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- A feature.\n\n  Bugfixes:\n\n- A fix.\n\nv1.1.23\n\n- Shipped.\n');
         });
     });
 
@@ -270,52 +288,73 @@ describe('scripts/bump-version', function () {
         });
     });
 
-    describe('combineChangelogs', function () {
-        const ours = 'v1.1.24\n\n  Functionality:\n\n- [ Focus Tree ] The red line is gone. Issue #62.\n';
-
-        it('keeps our wording and adds only what main also says', function () {
-            const theirs = 'v1.1.24\n\n  Functionality:\n\n- Stop drawing the red line. Issue #62.\n'
-                + '\n  Bugfixes:\n\n- Something else entirely.\n';
-
-            assert.strictEqual(
-                bumpVersion.combineChangelogs(ours, theirs, '1.1.24'),
-                'v1.1.24\n\n  Functionality:\n\n- [ Focus Tree ] The red line is gone. Issue #62.\n'
-                + '\n  Bugfixes:\n\n- Something else entirely.\n');
+    describe('unreleasedEntries', function () {
+        it('reads the bullets under Unreleased on main', function () {
+            assert.deepStrictEqual(
+                bumpVersion.unreleasedEntries('Unreleased\n\n  Bugfixes:\n\n- Mine.\n\nv1.1.23\n\n- Shipped.\n'),
+                [{ text: '- Mine.', section: 'Bugfixes' }]);
         });
 
-        it('never repeats a change main worded differently', function () {
-            const theirs = 'v1.1.24\n\n  Functionality:\n\n- The red line is gone.\n';
-            assert.strictEqual(bumpVersion.combineChangelogs(ours, theirs, '1.1.24'), ours);
+        it('reads nothing from an empty Unreleased, not the release below it', function () {
+            assert.deepStrictEqual(bumpVersion.unreleasedEntries('Unreleased\n\nv1.1.23\n\n- Shipped.\n'), []);
+        });
+    });
+
+    describe('rebuildChangelog', function () {
+        const shipped = '\nv1.1.23\n\n  Bugfixes:\n\n- Shipped.\n';
+        // What main said when the release branch last caught up, and the release branch built from it
+        // with one bullet seeded from the title of a pull request that wrote none.
+        const previousMain = 'Unreleased\n\n  Functionality:\n\n- [ MIO ] A new setting. Issue #62.\n' + shipped;
+        const release = 'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- [ MIO ] A new setting. Issue #62.\n'
+            + '- [ GFX ] Seeded from a title.\n' + shipped;
+
+        it('takes main\'s section as it stands and keeps the seeded bullet', function () {
+            const main = 'Unreleased\n\n  Functionality:\n\n- [ MIO ] A new setting. Issue #62.\n'
+                + '\n  Bugfixes:\n\n- [ MIO ] The fix behind it. Issue #62.\n' + shipped;
+
+            assert.strictEqual(
+                bumpVersion.rebuildChangelog(main, release, previousMain, '1.1.24'),
+                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- [ MIO ] A new setting. Issue #62.\n'
+                + '- [ GFX ] Seeded from a title.\n'
+                + '\n  Bugfixes:\n\n- [ MIO ] The fix behind it. Issue #62.\n' + shipped);
         });
 
-        it('renames the heading to the version the release goes out as', function () {
+        it('follows main when a bullet is reworded, reordered or removed there', function () {
+            const previous = 'Unreleased\n\n  Functionality:\n\n- One.\n- Two.\n- Three.\n' + shipped;
+            const onRelease = 'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- One.\n- Two.\n- Three.\n' + shipped;
+            const main = 'Unreleased\n\n  Functionality:\n\n- Three.\n- One, reworded.\n' + shipped;
+
             assert.strictEqual(
-                bumpVersion.combineChangelogs(ours, '', '1.1.25'),
-                ours.replace('v1.1.24', 'v1.1.25'));
+                bumpVersion.rebuildChangelog(main, onRelease, previous, '1.1.24'),
+                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Three.\n- One, reworded.\n' + shipped);
         });
 
-        it('takes what main wrote under Unreleased into the section we promoted', function () {
-            const promoted = 'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- [ MIO ] Ours. Issue #62.\n';
-            const onMain = 'Unreleased\n\n  Functionality:\n\n- Ours worded rawly. Issue #62.\n'
-                + '\n  Bugfixes:\n\n- Theirs alone.\n\nv1.1.23\n';
-
-            assert.strictEqual(
-                bumpVersion.combineChangelogs(promoted, onMain, '1.1.24'),
-                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- [ MIO ] Ours. Issue #62.\n'
-                + '\n  Bugfixes:\n\n- Theirs alone.\n');
+        it('keeps a seeded bullet fixed by hand on the release branch', function () {
+            const fixed = release.replace('- [ GFX ] Seeded from a title.', '- [ GFX ] Reworded by hand.');
+            assert.ok(bumpVersion.rebuildChangelog(previousMain, fixed, previousMain, '1.1.24')
+                .includes('- [ GFX ] Reworded by hand.\n'));
         });
 
-        it('promotes an Unreleased heading rather than overwriting it', function () {
-            assert.strictEqual(
-                bumpVersion.combineChangelogs('Unreleased\n\n  Functionality:\n\n- Ours.\n', '', '1.1.24'),
-                'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Ours.\n');
+        it('gives the same changelog when run again on its own output', function () {
+            const main = previousMain.replace('\n' + shipped, '\n- Written since.\n' + shipped);
+            const once = bumpVersion.rebuildChangelog(main, release, previousMain, '1.1.24');
+            assert.strictEqual(bumpVersion.rebuildChangelog(main, once, main, '1.1.24'), once);
         });
 
-        it('takes everything when we have nothing yet', function () {
+        it('never renames the shipped section below an empty Unreleased', function () {
+            const main = 'Unreleased\n' + shipped;
+            const onRelease = 'Unreleased\n\nv1.1.24\n\n  Bugfixes:\n\n- Seeded.\n' + shipped;
+
             assert.strictEqual(
-                bumpVersion.combineChangelogs('v1.1.24\n\n  Functionality:\n\n- Ours.\n',
-                    'v1.1.24\n\n  Bugfixes:\n\n- Theirs.\n', '1.1.24'),
-                'v1.1.24\n\n  Functionality:\n\n- Ours.\n\n  Bugfixes:\n\n- Theirs.\n');
+                bumpVersion.rebuildChangelog(main, onRelease, main, '1.1.24'),
+                'Unreleased\n\nv1.1.24\n\n  Bugfixes:\n\n- Seeded.\n' + shipped);
+        });
+
+        it('moves a heading a branch bumped by hand to the version the release goes out as', function () {
+            const main = 'v1.1.25\n\n  Functionality:\n\n- Bumped by hand.\n' + shipped;
+            assert.strictEqual(
+                bumpVersion.rebuildChangelog(main, '', '', '1.1.26'),
+                'v1.1.26\n\n  Functionality:\n\n- Bumped by hand.\n' + shipped);
         });
     });
 
@@ -1562,7 +1601,19 @@ describe('scripts/pr-bullets', function () {
                 component: undefined,
                 section: 'Functionality',
                 issue: 12,
+                wroteChangelog: false,
             }]);
+        });
+
+        it('says which pull requests wrote their own changelog bullet', function () {
+            const result = prBullets.bulletsFromPullRequests([
+                { number: 1, title: 'Wrote one', body: '', files: ['src/previewdef/mio/loader.ts', 'CHANGELOG.md'] },
+                { number: 2, title: 'Wrote none', body: '', files: ['src/previewdef/mio/loader.ts'] },
+                { number: 3, title: 'No file list', body: '' },
+            ]);
+
+            assert.deepStrictEqual(result.entries.map((entry: { wroteChangelog: boolean }) => entry.wroteChangelog),
+                [true, false, false]);
         });
     });
 
@@ -1707,12 +1758,12 @@ describe('scripts/changelog-bullets', function () {
                 []);
         });
 
-        it('treats the same issue number as the same change', function () {
+        it('keeps a different change that shares an issue number', function () {
             assert.deepStrictEqual(
                 changelogBullets.newBullets(
-                    ['- [ MIO ] A careful rewording of what happened. Issue #99.'],
-                    ['- Always log focus parse failures. Issue #99.']),
-                []);
+                    ['- [ MIO ] A new setting. Issue #99.'],
+                    ['- [ MIO ] The fix that motivated it. Issue #99.']),
+                ['- [ MIO ] The fix that motivated it. Issue #99.']);
         });
 
         it('does not add the same bullet twice from one side', function () {
@@ -1747,6 +1798,16 @@ describe('scripts/select-bullets', function () {
         const result = selectBullets.select(found, { covered: '11, 13' });
         assert.deepStrictEqual(result.pullRequests, [12]);
         assert.deepStrictEqual(result.bullets, ['- Two.', '- From a bare commit.']);
+    });
+
+    it('drops a pull request that wrote its own bullet in CHANGELOG.md', function () {
+        const wrote = {
+            ...found,
+            entries: found.entries.map((entry) => ({ ...entry, wroteChangelog: entry.number === 11 })),
+        };
+        const result = selectBullets.select(wrote, {});
+        assert.deepStrictEqual(result.pullRequests, [12, 13]);
+        assert.deepStrictEqual(result.bullets, ['- Two.', '- Three.', '- From a bare commit.']);
     });
 
     it('keeps the bullets that belong to no pull request', function () {
@@ -1868,45 +1929,55 @@ describe('scripts/merge-changelog', function () {
         fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    it('keeps our reworded bullet and carries over what only main has', function () {
-        fs.writeFileSync(path.join(dir, 'CHANGELOG.md'),
-            'v1.1.24\n\n  Functionality:\n\n- [ Focus Tree ] The red line is gone. Issue #62.\n');
-        const theirs = path.join(dir, 'main-changelog.md');
-        fs.writeFileSync(theirs,
-            'v1.1.25\n\n  Functionality:\n\n- Stop drawing the red line. Issue #62.\n'
-            + '\n  Bugfixes:\n\n- A fix only main knows about.\n');
+    function write(name: string, text: string): string {
+        const file = path.join(dir, name);
+        fs.writeFileSync(file, text);
+        return file;
+    }
 
-        const result = mergeChangelog.run({ cwd: dir, theirs, version: '1.1.25' });
+    it('rebuilds the changelog from main\'s and keeps what only the release branch seeded', function () {
+        const previousMain = write('previous-main.md', 'Unreleased\n\n  Functionality:\n\n- A setting. Issue #62.\n');
+        const release = write('release.md',
+            'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- A setting. Issue #62.\n- Seeded from a title.\n');
+        const main = write('main.md', 'Unreleased\n\n  Functionality:\n\n- A setting. Issue #62.\n'
+            + '\n  Bugfixes:\n\n- The fix behind it. Issue #62.\n');
+        // What the conflicted merge left behind; the rebuild does not read it.
+        fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), '<<<<<<< HEAD\n');
+
+        const result = mergeChangelog.run({ cwd: dir, main, previousMain, release, version: '1.1.25' });
 
         assert.strictEqual(result.version, '1.1.25');
         assert.strictEqual(result.changed, true);
         assert.strictEqual(fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'),
-            'v1.1.25\n\n  Functionality:\n\n- [ Focus Tree ] The red line is gone. Issue #62.\n'
-            + '\n  Bugfixes:\n\n- A fix only main knows about.\n');
+            'Unreleased\n\nv1.1.25\n\n  Functionality:\n\n- A setting. Issue #62.\n- Seeded from a title.\n'
+            + '\n  Bugfixes:\n\n- The fix behind it. Issue #62.\n');
         assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).version, '1.1.25');
     });
 
-    it('changes nothing when main says nothing new', function () {
-        const ours = 'v1.1.24\n\n  Functionality:\n\n- Already said. Issue #7.\n';
-        fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), ours);
-        const theirs = path.join(dir, 'main-changelog.md');
-        fs.writeFileSync(theirs, 'v1.1.24\n\n  Functionality:\n\n- Worded differently. Issue #7.\n');
+    it('changes nothing when the release branch already says what main says', function () {
+        const main = write('main.md', 'Unreleased\n\n  Functionality:\n\n- Already said. Issue #7.\n');
+        const current = 'Unreleased\n\nv1.1.24\n\n  Functionality:\n\n- Already said. Issue #7.\n';
+        fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), current);
+        const release = write('release.md', current);
 
-        const result = mergeChangelog.run({ cwd: dir, theirs, version: '1.1.24' });
+        const result = mergeChangelog.run({ cwd: dir, main, previousMain: main, release, version: '1.1.24' });
 
         assert.strictEqual(result.changed, false);
-        assert.strictEqual(fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'), ours);
+        assert.strictEqual(fs.readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8'), current);
     });
 
     it('takes the version from package.json when none is passed', function () {
-        fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), 'v1.1.24\n\n  Functionality:\n\n- Ours.\n');
-        assert.strictEqual(mergeChangelog.run({ cwd: dir, theirs: '' }).version, '1.1.24');
+        const main = write('main.md', 'Unreleased\n\n  Functionality:\n\n- Ours.\n');
+        assert.strictEqual(mergeChangelog.run({ cwd: dir, main }).version, '1.1.24');
     });
 
     describe('parseArgs', function () {
         it('reads the flags the workflow passes', function () {
-            const options = mergeChangelog.parseArgs(['--theirs', 'main.md', '--version', '1.1.25']);
-            assert.strictEqual(options.theirs, 'main.md');
+            const options = mergeChangelog.parseArgs(['--main', 'main.md', '--previous-main', 'base.md',
+                '--release', 'release.md', '--version', '1.1.25']);
+            assert.strictEqual(options.main, 'main.md');
+            assert.strictEqual(options.previousMain, 'base.md');
+            assert.strictEqual(options.release, 'release.md');
             assert.strictEqual(options.version, '1.1.25');
         });
     });

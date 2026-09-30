@@ -238,11 +238,21 @@ function promoteUnreleased(existing, version) {
 }
 
 // The bullets of the section a changelog is collecting into, each with the subsection heading it
-// sits under. Used to carry the bullets a branch wrote on main over into the release pull request
-// when the two changelogs conflict, without moving a bugfix into Functionality on the way.
+// sits under, so a bullet carried from one changelog into another keeps its subsection.
 function topSectionEntries(changelogText) {
 	const lines = String(changelogText ?? '').split(/\r?\n/);
-	const section = collectingSection(lines);
+	return sectionEntries(lines, collectingSection(lines));
+}
+
+// What branches have written for the next release on main: the bullets under its top heading, and
+// nothing when that heading is an empty Unreleased. collectingSection would step over an empty one
+// to the section below it, which on main is the release that already shipped.
+function unreleasedEntries(changelogText) {
+	const lines = String(changelogText ?? '').split(/\r?\n/);
+	return sectionEntries(lines, topSection(lines));
+}
+
+function sectionEntries(lines, section) {
 	if (!section) {
 		return [];
 	}
@@ -268,32 +278,39 @@ function topSectionBullets(changelogText) {
 	return topSectionEntries(changelogText).map((entry) => entry.text);
 }
 
-// The release pull request's changelog wins, and the other side contributes only what it does not
-// already say. Called when a merge from main conflicts in CHANGELOG.md: ours may have been reworded
-// by hand, so it is never rewritten, but a bullet main carries for a change ours has no line for
-// would otherwise be lost.
-function combineChangelogs(oursText, theirsText, version) {
-	const ours = topSectionEntries(oursText);
-	const theirs = topSectionEntries(theirsText);
+// The release pull request's changelog, rebuilt from main's every time the release branch catches
+// up with it. Main's Unreleased section is what the branches wrote, so it is taken as it stands --
+// every line, in main's order -- and only given the version heading. Nothing main says is merged,
+// matched or dropped here; merging the release branch's copy with main's is what lost bullets
+// (Issue #498).
+//
+// The release branch contributes only what main never had: the bullets seeded from the titles of
+// pull requests that wrote none, and whatever someone fixed by hand on the release branch. Those
+// are its bullets that were in neither main's section when it last caught up (`previousMainText`)
+// nor main's section now. A bullet main has since reworded, reordered or removed follows main,
+// because its old line is in the previous copy.
+function rebuildChangelog(mainText, releaseText, previousMainText, version) {
+	const said = new Set([
+		...unreleasedEntries(previousMainText),
+		...unreleasedEntries(mainText),
+	].map((entry) => entry.text));
+	const carried = topSectionEntries(releaseText).filter((entry) => !said.has(entry.text));
 
-	const fresh = new Set(newBullets(ours.map((entry) => entry.text), theirs.map((entry) => entry.text)));
-	const missing = theirs.filter((entry) => fresh.has(entry.text));
-
-	// The heading has to agree with the version the release is going out as before anything is
-	// appended, or appendBullets sees a different version and starts a whole new section. An
-	// Unreleased heading is promoted rather than overwritten, so the empty one it leaves behind is
-	// still there for the branches that merge after this.
-	const lines = String(oursText ?? '').split(/\r?\n/);
-	const top = collectingSection(lines);
-	if (top?.unreleased && version) {
-		return appendBullets(promoteUnreleased(oursText, version), version, missing);
-	}
-	if (top && version && top.version !== version) {
+	// An Unreleased heading is promoted rather than overwritten, so the empty one it leaves behind is
+	// there for the branches that merge after this. A version heading is one a branch bumped by
+	// hand, and is moved to the version the release goes out as.
+	const text = String(mainText ?? '');
+	const lines = text.split(/\r?\n/);
+	const top = topSection(lines);
+	let base = text;
+	if (top?.unreleased) {
+		base = promoteUnreleased(text, version);
+	} else if (top && top.version !== version) {
 		lines[top.start] = `v${version}`;
+		base = lines.join('\n');
 	}
-	const renamed = lines.join('\n');
 
-	return missing.length === 0 ? renamed : appendBullets(renamed, top ? version ?? top.version : version, missing);
+	return appendBullets(base, version, carried);
 }
 
 // Where each "  Functionality:" / "  Bugfixes:" heading sits inside a section, and how far its
@@ -339,7 +356,14 @@ function insertBySection(section, grouped) {
 		}
 
 		if (ranges.length === 0) {
-			section.splice(lastContent(section, 1, section.length) + 1, 0, ...wanted);
+			const last = lastContent(section, 1, section.length);
+			if (last >= 1) {
+				section.splice(last + 1, 0, ...wanted);
+				continue;
+			}
+			// Nothing under the heading at all, such as the section a release promotes from an empty
+			// Unreleased: there is no shape to keep, so it gets its subsection heading.
+			section.splice(1, section.length - 1, '', `  ${name}:`, '', ...wanted, '');
 			continue;
 		}
 
@@ -375,9 +399,8 @@ function appendBullets(existing, version, bullets) {
 	}
 
 	const section = lines.slice(top.start, top.end);
-	// The same union the changelog merge uses, rather than a line-for-line comparison: a bullet a
-	// branch wrote by hand under Unreleased and the bullet seeded from that pull request's title are
-	// the same change worded twice, and share an "Issue #NN." trailer even when nothing else matches.
+	// A sentence match rather than a line-for-line comparison, so a seeded bullet that says what a
+	// line already there says under another prefix is not added a second time.
 	const already = section.map((line) => line.trim()).filter((line) => line.startsWith('- '));
 	const fresh = new Set(newBullets(already, requested.map(normalizeBullet).filter(Boolean)));
 
@@ -619,7 +642,6 @@ module.exports = {
 	bulletFor,
 	changelogSection,
 	collectingSection,
-	combineChangelogs,
 	compareVersions,
 	higherVersion,
 	issueFromBody,
@@ -630,11 +652,13 @@ module.exports = {
 	promoteUnreleased,
 	readBulletsFile,
 	readVersion,
+	rebuildChangelog,
 	sections,
 	setVersion,
 	stableMinor,
 	topSectionBullets,
 	topSectionEntries,
+	unreleasedEntries,
 	unreleasedHeading,
 	versionHeadingPattern,
 	writeVersion,
