@@ -82,6 +82,7 @@
     "hoi4modutilities.section.worldMap": "World map",
     "hoi4modutilities.section.indexes": "Indexes and performance",
     "hoi4modutilities.auditfocustrees.title": "Check All Focus Trees",
+    "hoi4modutilities.addinternationalsystem.title": "Add International Systems Tab",
     "hoi4modutilities.auditor.reportFolder.title": "Auditor: report folder",
     "hoi4modutilities.auditor.reportFolder.desc": "[Check all focus trees](command:mdhoi4utilities.auditfocustrees): checks every focus tree file for the problems the focus tree preview warns about, and lists them per file in one Markdown report you can paste into a GitHub issue.\n\nThe folder the report is saved to, as focus-tree-audit.md. A relative path starts at the first workspace folder. Leave it empty to open the report in an unsaved editor tab instead.",
     "hoi4modutilities.auditor.includeVanilla.title": "Auditor: include the base game",

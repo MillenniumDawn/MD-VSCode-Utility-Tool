@@ -6,5 +6,9 @@
 	{
 		"value": "GFX_",
 		"reason": "The sprite namespace prefix country icon names are split on, not a sprite."
+	},
+	{
+		"value": "interface/MD_countrymissilesview.gui",
+		"reason": "Millennium Dawn's International Systems screen. The Add International Systems Tab command reads it only after finding the mod's own scaffolder in the workspace."
 	}
 ]

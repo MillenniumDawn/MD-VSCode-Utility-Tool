@@ -2,6 +2,7 @@ Unreleased
 
   Functionality:
 
+- [ International Systems ] New command **Add International Systems Tab** adds a tab to Millennium Dawn's International Systems screen. It asks for the tab's key, name, tooltip and place in the strip, runs the mod's own scaffolder, and opens the new tab's window, script and localisation files. Desktop VS Code only.
 - [ Balance of Power Previewer ] Added a preview for `common/bop` files that draws the game's own balance of power window from `powerbalanceview.gui`, with each balance of power's title and side icons. A slider and step buttons in the toolbar stand in for `add_power_balance_value`: the needle, the bar fill and the active range follow the value the way they do in game, and clicking a range opens it in the file. A file with several balances of power gets a dropdown to pick one, and overlapping or missing ranges are flagged. Issue #434.
 - [ Balance of Power Previewer ] The balance of power window now lists the decisions of its `decision_category` the way the game does, each with its icon, name and cost, and clicking one opens it in its decisions file. A category with no decisions is flagged. Issue #442.
 - [ Focus Tree Previewer ] The focus tree preview now shows the tree's `shortcut` blocks as the game's shortcut buttons in its lower left corner, with their localised name and the icon of their `target` focus, drawn from `nationalfocusview.gui`; clicking one scrolls to that focus, and the arrow beside them folds them away. Issue #439.

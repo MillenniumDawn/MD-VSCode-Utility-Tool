@@ -18,6 +18,7 @@ import { registerFeatureFlags } from "./util/featureflags";
 import { registerIndexStatusCommand } from "./util/indexBuild";
 import { disposeImageDecodeWorkers } from "./util/image/imagedecoder";
 import { registerAuditFocusTreesCommand } from "./previewdef/focustree/warningreport";
+import { registerAddInternationalSystemCommand } from "./util/internationalsystem";
 
 export function activate(context: vscode.ExtensionContext) {
     let locale: string | undefined = context.extension?.packageJSON?.locale;
@@ -49,6 +50,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(registerIdeaSwapIndex());
     context.subscriptions.push(registerIndexStatusCommand());
     context.subscriptions.push(registerAuditFocusTreesCommand());
+    context.subscriptions.push(registerAddInternationalSystemCommand());
     context.subscriptions.push({ dispose: disposeImageDecodeWorkers });
 
     setVscodeContext(ContextName.Hoi4MULoaded, true);

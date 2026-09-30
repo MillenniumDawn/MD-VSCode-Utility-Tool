@@ -387,6 +387,11 @@
 				"command": "mdhoi4utilities.auditfocustrees",
 				"title": "%hoi4modutilities.auditfocustrees.title%",
 				"category": "%hoi4modutilities.category%"
+			},
+			{
+				"command": "mdhoi4utilities.addinternationalsystem",
+				"title": "%hoi4modutilities.addinternationalsystem.title%",
+				"category": "%hoi4modutilities.category%"
 			}
 		],
 		"customEditors": [
@@ -467,6 +472,10 @@
 				},
 				{
 					"command": "mdhoi4utilities.auditfocustrees"
+				},
+				{
+					"command": "mdhoi4utilities.addinternationalsystem",
+					"when": "!isWeb"
 				}
 			]
 		}

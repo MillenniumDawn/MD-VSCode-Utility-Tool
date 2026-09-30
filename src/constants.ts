@@ -23,6 +23,7 @@ export namespace Commands {
     export const SelectHoiFolder = 'mdhoi4utilities.selecthoifolder';
     export const ShowIndexStatus = 'mdhoi4utilities.showindexstatus';
     export const AuditFocusTrees = 'mdhoi4utilities.auditfocustrees';
+    export const AddInternationalSystem = 'mdhoi4utilities.addinternationalsystem';
 }
 
 export namespace WebviewType {

@@ -82,6 +82,7 @@
     "hoi4modutilities.section.worldMap": "세계 지도",
     "hoi4modutilities.section.indexes": "인덱스 및 성능",
     "hoi4modutilities.auditfocustrees.title": "모든 중점 계통도 검사",
+    "hoi4modutilities.addinternationalsystem.title": "국제 체계 탭 추가",
     "hoi4modutilities.auditor.reportFolder.title": "검사기: 보고서 폴더",
     "hoi4modutilities.auditor.reportFolder.desc": "[모든 중점 계통도 검사](command:mdhoi4utilities.auditfocustrees): 중점 계통도 미리보기가 경고하는 문제를 모든 중점 계통도 파일에서 검사하고, 파일별로 정리한 Markdown 보고서 하나로 보여 줍니다. GitHub 이슈에 그대로 붙여 넣을 수 있습니다.\n\n보고서를 focus-tree-audit.md로 저장할 폴더입니다. 상대 경로는 첫 번째 작업 영역 폴더를 기준으로 합니다. 비워 두면 저장하지 않은 편집기 탭에 보고서를 엽니다.",
     "hoi4modutilities.auditor.includeVanilla.title": "검사기: 기본 게임 포함",

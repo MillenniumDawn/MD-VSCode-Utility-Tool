@@ -82,6 +82,7 @@
     "hoi4modutilities.section.worldMap": "世界地图",
     "hoi4modutilities.section.indexes": "索引与性能",
     "hoi4modutilities.auditfocustrees.title": "检查所有国策树",
+    "hoi4modutilities.addinternationalsystem.title": "添加国际体系标签页",
     "hoi4modutilities.auditor.reportFolder.title": "检查器：报告文件夹",
     "hoi4modutilities.auditor.reportFolder.desc": "[检查所有国策树](command:mdhoi4utilities.auditfocustrees)：按国策树预览所警告的问题检查每个国策树文件，并按文件列在一份 Markdown 报告中，可直接粘贴到 GitHub issue。\n\n报告以 focus-tree-audit.md 保存到的文件夹。相对路径以第一个工作区文件夹为起点。留空则在未保存的编辑器标签页中打开报告。",
     "hoi4modutilities.auditor.includeVanilla.title": "检查器：包含原版游戏",
