@@ -173,6 +173,7 @@ function buildStub() {
         showInformationMessage: async () => undefined,
         showWarningMessage: async () => undefined,
         showQuickPick: async () => undefined,
+        showInputBox: async () => undefined,
         showTextDocument: async () => undefined,
         showOpenDialog: async () => undefined,
         showWorkspaceFolderPick: async () => undefined,
@@ -324,6 +325,7 @@ const pristine = {
     registerWebviewPanelSerializer: stub.window.registerWebviewPanelSerializer,
     showOpenDialog: stub.window.showOpenDialog,
     showQuickPick: stub.window.showQuickPick,
+    showInputBox: stub.window.showInputBox,
     showTextDocument: stub.window.showTextDocument,
     clipboardWriteText: stub.env.clipboard.writeText,
     registerCommand: stub.commands.registerCommand,
@@ -369,6 +371,8 @@ export interface VscodeStubOverrides {
     showOpenDialog?: (options?: any) => Promise<any>;
     /** Answers a quick pick, for suites driving a command that asks one. */
     showQuickPick?: (items: any, options?: any) => Promise<any>;
+    /** Answers an input box, for suites driving a command that asks for text. */
+    showInputBox?: (options?: any) => Promise<any>;
     /** Captures what a command opens in an editor. */
     showTextDocument?: (document: any, options?: any) => Promise<any>;
     /** Captures what reaches `env.clipboard.writeText`. */
@@ -475,6 +479,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.showQuickPick !== undefined) {
         window.showQuickPick = overrides.showQuickPick;
     }
+    if (overrides.showInputBox !== undefined) {
+        window.showInputBox = overrides.showInputBox;
+    }
     if (overrides.showTextDocument !== undefined) {
         window.showTextDocument = overrides.showTextDocument;
     }
@@ -522,6 +529,7 @@ export function restoreVscodeStubs(): void {
     window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
     window.showOpenDialog = pristine.showOpenDialog;
     window.showQuickPick = pristine.showQuickPick;
+    window.showInputBox = pristine.showInputBox;
     window.showTextDocument = pristine.showTextDocument;
     (stub.env.clipboard as any).writeText = pristine.clipboardWriteText;
     (stub.commands as any).registerCommand = pristine.registerCommand;
