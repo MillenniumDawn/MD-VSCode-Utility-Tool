@@ -1,6 +1,6 @@
 // Turns what a pull request touched into the two things a changelog bullet needs before anyone
 // reads it: the "[ Component ]" prefix and whether it belongs under Functionality or Bugfixes.
-// Also holds the union used when the release pull request's changelog conflicts with main's.
+// Also holds the match that keeps a bullet from being added twice to the same section.
 //
 // Everything here is pure -- no git, no network, no filesystem -- so scripts/pr-bullets.js and
 // .github/workflows/release.yml can call it and src/test/versionscripts.test.ts can test it
@@ -165,36 +165,26 @@ function bulletKey(bullet) {
 		.trim();
 }
 
-function issueOf(bullet) {
-	const match = issuePattern.exec(String(bullet ?? ''));
-	return match ? match[1] : undefined;
-}
-
 // Bullets from `theirs` that `ours` does not already say, in their original order.
 //
-// Three ways to be a duplicate, because the same change can be worded three ways by the time it
-// gets here: the identical line, the same sentence under a different prefix or trailer, and the
-// same issue number. The last one is what stops main's raw title reappearing next to the release
-// pull request's reworded version of it.
+// Two ways to be a duplicate: the identical line, and the same sentence under a different prefix or
+// trailer. Sharing an issue number is not one of them. A pull request often writes two bullets for
+// one issue -- the setting it added and the fix that motivated it -- and matching on the number
+// threw the second one away (Issue #498).
 function newBullets(ours, theirs) {
 	const lines = new Set((ours ?? []).map((bullet) => String(bullet ?? '').trim()));
 	const keys = new Set((ours ?? []).map(bulletKey).filter(Boolean));
-	const issues = new Set((ours ?? []).map(issueOf).filter(Boolean));
 
 	const fresh = [];
 	for (const bullet of theirs ?? []) {
 		const text = String(bullet ?? '').trim();
 		const key = bulletKey(text);
-		const issue = issueOf(text);
-		if (!text || lines.has(text) || (key && keys.has(key)) || (issue && issues.has(issue))) {
+		if (!text || lines.has(text) || (key && keys.has(key))) {
 			continue;
 		}
 		lines.add(text);
 		if (key) {
 			keys.add(key);
-		}
-		if (issue) {
-			issues.add(issue);
 		}
 		fresh.push(text);
 	}
@@ -208,7 +198,6 @@ module.exports = {
 	componentRules,
 	componentTokens,
 	ignored,
-	issueOf,
 	labelFor,
 	newBullets,
 	releaseScripts,

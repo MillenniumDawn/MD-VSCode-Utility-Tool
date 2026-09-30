@@ -280,7 +280,19 @@ describe('.github/workflows', function () {
             assert.ok(refresh, 'no catch-up merge step');
             assert.doesNotMatch(refresh.run ?? '', /git checkout --ours -- \$conflicts/);
             assert.match(refresh.run ?? '', /git checkout --theirs -- "\$conflict"/);
-            assert.match(refresh.run ?? '', /merge-changelog\.js --theirs .* --version "\$higher"/);
+            assert.match(refresh.run ?? '', /merge-changelog\.js --main [\s\S]* --version "\$higher"/);
+        });
+
+        it('rebuilds the release changelog from main\'s on every catch-up, conflict or not', function () {
+            // Keeping the release branch's copy and merging main into it dropped main's bullets that
+            // shared an issue number with one already there (Issue #498).
+            const refresh = runsIn(workflow, 'release-pull-request', 'git merge --no-edit origin/main');
+            const run = refresh?.run ?? '';
+            assert.match(run, /git show "\$\(git merge-base HEAD origin\/main\):CHANGELOG\.md" > "\$RUNNER_TEMP\/previous-main-changelog\.md"/);
+            assert.ok(run.indexOf('previous-main-changelog.md') < run.indexOf('git merge --no-edit origin/main'),
+                'the merge base has to be read before the merge moves it');
+            assert.doesNotMatch(run, /git checkout --ours/);
+            assert.strictEqual(run.match(/^\s*rebuild_changelog$/gm)?.length, 2, 'both merge outcomes rebuild the changelog');
         });
 
         it('skips the pre-release on the push that is a release', function () {
