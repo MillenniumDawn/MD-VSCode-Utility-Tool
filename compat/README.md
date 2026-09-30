@@ -20,6 +20,8 @@ Issues #448–#453 were names like that.
     allowlist. A failure names the file and line.
   - An allowlist entry that nothing uses any more fails too, so the pull request that fixes one
     removes it.
+  - Both checks skip `src/modtools/packs/`. A mod's own pack is the one place its names belong,
+    and it only runs while that mod is open; see `src/modtools/README.md`.
   - `vanillashaped.test.ts` runs every preview over the fixture mod with no game mounted.
   - `compatmods.test.ts` checks `mods.json`, and fails if a listed mod's id or repository appears
     in `src/`, `webviewsrc/` or `.github/`.

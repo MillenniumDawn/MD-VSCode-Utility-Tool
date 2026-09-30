@@ -13,6 +13,7 @@ export namespace ContextName {
     export const ShouldShowHoi4Preview = 'shouldShowMdHoi4Preview';
     export const Hoi4PreviewType = 'mdHoi4PreviewType';
     export const Hoi4MULoaded = 'mdHoi4MULoaded';
+    export const ModToolsAvailable = 'mdHoi4ModToolsAvailable';
 }
 
 export namespace Commands {
@@ -23,6 +24,7 @@ export namespace Commands {
     export const SelectHoiFolder = 'mdhoi4utilities.selecthoifolder';
     export const ShowIndexStatus = 'mdhoi4utilities.showindexstatus';
     export const AuditFocusTrees = 'mdhoi4utilities.auditfocustrees';
+    export const RunModTool = 'mdhoi4utilities.runmodtool';
 }
 
 export namespace WebviewType {

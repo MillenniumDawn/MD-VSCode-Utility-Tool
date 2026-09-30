@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- [ Mod Tools ] Mods can now ship tools of their own, run with the new Run Mod Tool command. They are off until you turn them on under Settings > Mod tools, only appear while their mod is open, and each mod gets its own settings page to choose which of its tools are shown. Mod tools are maintained by their mods, not by this extension: when one fails, the error says which mod team to report it to.
+
 v1.1.40
 
   Functionality:
