@@ -2,7 +2,7 @@ Unreleased
 
   Functionality:
 
-- [ International Systems ] New command **Add International Systems Tab** adds a tab to Millennium Dawn's International Systems screen. It asks for the tab's key, name, tooltip and place in the strip, runs the mod's own scaffolder, and opens the new tab's window, script and localisation files. Desktop VS Code only.
+- [ International Systems ] New command **Add International Systems Tab** opens a panel for adding a tab to Millennium Dawn's International Systems screen: fill in the tab's key, name, tooltip and place in the strip, pick one of the premade icons or any image, and see the finished tab strip drawn before anything is written. It runs the mod's own scaffolder and opens the new tab's files. Off by default: turn on **Millennium Dawn: International Systems Tabs** in the settings. Desktop VS Code only.
 
 v1.1.40
 

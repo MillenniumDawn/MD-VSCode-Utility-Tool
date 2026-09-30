@@ -24,6 +24,8 @@
     "hoi4modutilities.characterPreview.desc": "Включить предпросмотр персонажей. Требуется перезагрузка после изменения.",
     "hoi4modutilities.bopPreview.title": "Предпросмотр баланса сил",
     "hoi4modutilities.bopPreview.desc": "Включить предпросмотр баланса сил. Требуется перезагрузка после изменения.",
+    "hoi4modutilities.millenniumDawnInternationalSystems.title": "Millennium Dawn: International Systems Tabs",
+    "hoi4modutilities.millenniumDawnInternationalSystems.desc": "Enable the Add International Systems Tab command, which adds a tab to Millennium Dawn's International Systems screen with its own mod tool. It only works in a Millennium Dawn checkout, so it is off by default.",
     "hoi4modutilities.ideaSwapIndex.title": "Индекс замены идей",
     "hoi4modutilities.ideaSwapIndex.desc": "Сканировать common и events на наличие swap_ideas, чтобы предпросмотр идей мог показывать цепочки идей. При первом построении читается много файлов. Требуется перезагрузка после изменения.",
     "hoi4modutilities.sharedFocusIndex.title": "Индекс общих фокусов",

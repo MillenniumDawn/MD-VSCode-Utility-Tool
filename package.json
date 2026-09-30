@@ -173,6 +173,12 @@
 						"default": true,
 						"description": "%hoi4modutilities.bopPreview.desc%"
 					},
+					"mdHoi4Utilities.millenniumDawnInternationalSystems": {
+						"title": "%hoi4modutilities.millenniumDawnInternationalSystems.title%",
+						"type": "boolean",
+						"default": false,
+						"description": "%hoi4modutilities.millenniumDawnInternationalSystems.desc%"
+					},
 					"mdHoi4Utilities.useConditionInFocus": {
 						"title": "%hoi4modutilities.useConditionInFocus.title%",
 						"type": "boolean",
@@ -475,7 +481,7 @@
 				},
 				{
 					"command": "mdhoi4utilities.addinternationalsystem",
-					"when": "!isWeb"
+					"when": "!isWeb && config.mdHoi4Utilities.millenniumDawnInternationalSystems"
 				}
 			]
 		}
