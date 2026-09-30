@@ -39,7 +39,12 @@ const settings = [
 	"mdHoi4Utilities.imageDecodeWorkers",
 	"mdHoi4Utilities.auditor.reportFolder",
 	"mdHoi4Utilities.auditor.includeVanilla",
+	"mdHoi4Utilities.modTools.enabled",
 ];
+
+// A mod pack's own settings, mdHoi4Utilities.modTools.<pack>.<tool>, are pinned against the pack
+// registry by modtoolssettings.test.ts instead, so adding a pack does not mean editing this list.
+const isModPackSetting = (key: string) => /^mdHoi4Utilities\.modTools\.[^.]+\.[^.]+$/.test(key);
 
 describe("package.json settings sections", () => {
 	const packageJson = JSON.parse(
@@ -87,7 +92,7 @@ describe("package.json settings sections", () => {
 	});
 
 	it("contributes every setting exactly once", () => {
-		const contributed = sections.flatMap(section => Object.keys(section.properties));
+		const contributed = sections.flatMap(section => Object.keys(section.properties)).filter(key => !isModPackSetting(key));
 		assert.deepStrictEqual([...contributed].sort(), [...settings].sort());
 	});
 });

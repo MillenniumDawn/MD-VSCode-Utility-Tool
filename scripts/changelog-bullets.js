@@ -45,6 +45,7 @@ const componentTokens = new Map([
 	['GFX', ['gfx']],
 	['GUI', ['gui', 'guipreview']],
 	['Decision', ['decision', 'decisiontree']],
+	['Mod Tools', ['modtools']],
 ]);
 
 function segments(file) {

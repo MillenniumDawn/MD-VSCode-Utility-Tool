@@ -1687,6 +1687,11 @@ describe('scripts/changelog-bullets', function () {
             assert.strictEqual(changelogBullets.labelFor('webviewsrc/worldmap/renderer.ts'), 'World Map');
         });
 
+        it('reads the mod tools host and every pack under it as Mod Tools', function () {
+            assert.strictEqual(changelogBullets.labelFor('src/modtools/host.ts'), 'Mod Tools');
+            assert.strictEqual(changelogBullets.labelFor('src/modtools/packs/somemod/tool.ts'), 'Mod Tools');
+        });
+
         it('reads a test file by its own path, not by the name of what it tests', function () {
             assert.strictEqual(changelogBullets.labelFor('src/test/eventcontentbuilder.test.ts'), 'Testing');
         });

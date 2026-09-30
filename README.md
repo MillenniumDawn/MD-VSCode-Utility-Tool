@@ -142,6 +142,17 @@ lists them per file in one Markdown report you can paste into a GitHub issue.
 | `mdHoi4Utilities.auditor.reportFolder` | Folder the report is saved to, as `focus-tree-audit.md`. Relative to the first workspace folder. Empty opens it in an unsaved editor tab. |
 | `mdHoi4Utilities.auditor.includeVanilla` | Also check the game's own focus tree files, not only the mod's. |
 
+**Mod tools**
+
+Some mods ship tools of their own with the extension, run with **Run Mod Tool...** in the command
+palette. They are off until you turn on `mdHoi4Utilities.modTools.enabled`, and a mod's tools only
+appear while that mod is open. Each mod that has tools gets its own **Mod tools: _mod name_**
+section in the settings, with a switch per tool.
+
+> **Mod tools are not supported by this extension.** They are written and maintained by the mods
+> themselves. When one fails, the error names the mod team and links to their issue tracker:
+> report it there, not here.
+
 Settings that say so in their description need a window reload, or the preview reopened,
 to take effect. **Show Index
 Status** in the command palette tells you what the indexes are doing.

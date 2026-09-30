@@ -123,6 +123,8 @@ function buildStub() {
         onDidChangeTextDocument: disposable,
         onDidCloseTextDocument: disposable,
         onDidChangeWorkspaceFolders: disposable,
+        onDidGrantWorkspaceTrust: disposable,
+        isTrusted: true,
         onDidSaveTextDocument: disposable,
         onDidCreateFiles: disposable,
         onDidDeleteFiles: disposable,
@@ -225,12 +227,13 @@ function buildStub() {
         workspace,
         window,
         commands,
-        env: { clipboard: { readText: async () => '', writeText: async () => undefined } },
+        env: { clipboard: { readText: async () => '', writeText: async () => undefined }, openExternal: async () => true },
         FileType,
         ConfigurationTarget,
         ProgressLocation,
         StatusBarAlignment,
         ViewColumn,
+        QuickPickItemKind: { Separator: -1, Default: 0 },
         Position,
         Range,
         Disposable: DisposableStub,
@@ -326,6 +329,7 @@ const pristine = {
     showQuickPick: stub.window.showQuickPick,
     showTextDocument: stub.window.showTextDocument,
     clipboardWriteText: stub.env.clipboard.writeText,
+    openExternal: stub.env.openExternal,
     registerCommand: stub.commands.registerCommand,
     withProgress: stub.window.withProgress,
     now: Date.now,
@@ -373,6 +377,8 @@ export interface VscodeStubOverrides {
     showTextDocument?: (document: any, options?: any) => Promise<any>;
     /** Captures what reaches `env.clipboard.writeText`. */
     clipboardWriteText?: (text: string) => Promise<void>;
+    /** Captures what a command opens in the browser. */
+    openExternal?: (uri: any) => Promise<boolean>;
     /**
      * Captures the handler a suite's `register()` call installs, so a command that is otherwise
      * only reachable through the palette can be invoked directly.
@@ -481,6 +487,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.clipboardWriteText !== undefined) {
         (stub.env.clipboard as any).writeText = overrides.clipboardWriteText;
     }
+    if (overrides.openExternal !== undefined) {
+        (stub.env as any).openExternal = overrides.openExternal;
+    }
     if (overrides.registerCommand !== undefined) {
         (stub.commands as any).registerCommand = overrides.registerCommand;
     }
@@ -524,6 +533,7 @@ export function restoreVscodeStubs(): void {
     window.showQuickPick = pristine.showQuickPick;
     window.showTextDocument = pristine.showTextDocument;
     (stub.env.clipboard as any).writeText = pristine.clipboardWriteText;
+    (stub.env as any).openExternal = pristine.openExternal;
     (stub.commands as any).registerCommand = pristine.registerCommand;
     window.withProgress = pristine.withProgress;
     Date.now = pristine.now;

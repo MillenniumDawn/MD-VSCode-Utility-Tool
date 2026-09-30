@@ -31,6 +31,7 @@ declare module 'vscode' {
             readonly technologyCountryIcons: boolean;
             readonly worldMapRetainContextWhenHidden: boolean;
             readonly previewWheel: 'auto' | 'zoom' | 'scroll';
+            readonly modTools: { readonly enabled: boolean };
         };
     }
 }

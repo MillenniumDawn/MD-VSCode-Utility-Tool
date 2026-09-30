@@ -9,6 +9,8 @@ body:
       value: |
         Report it here when the extension shows you something wrong, or refuses to show you anything.
 
+        A problem with a tool from **Run Mod Tool...** belongs to the mod that maintains it, not here: its error message names the mod team and links to their issue tracker.
+
   - type: dropdown
     id: utility
     attributes:
