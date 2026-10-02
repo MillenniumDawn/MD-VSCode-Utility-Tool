@@ -23,3 +23,15 @@ export async function localise(key: string): Promise<LocText> {
 export async function localiseText(key: string): Promise<string> {
 	return (await localise(key)).text;
 }
+
+export async function localiseLabel(key: string, order: "key-first" | "text-first"): Promise<string> {
+	if (!getFlags().localisationIndex) {
+		return key;
+	}
+	const text = await getLocalisedTextQuick(key);
+	return order === "key-first" ? `(${key}) ${text}` : `${text} (${key})`;
+}
+
+export async function localiseOptionalText(key: string, prefix = ""): Promise<string> {
+	return getFlags().localisationIndex ? prefix + ((await getLocalisedTextQuick(key)) ?? "") : "";
+}

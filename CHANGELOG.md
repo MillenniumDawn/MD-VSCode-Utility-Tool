@@ -1,5 +1,11 @@
 Unreleased
 
+  Bugfixes:
+
+- [ Event Previewer ] [ MIO Preview ] Editing a file used by an open preview now refreshes it instead of showing cached content. Issue #490.
+- [ Previews ] Filtering or collapsing a chain no longer forgets decisions or events already hidden along its arrows. Issue #492.
+- [ World Map ] Supply nodes with leading spaces or tabs now load at the correct province and level. Issue #494.
+
 v1.1.40
 
   Functionality:

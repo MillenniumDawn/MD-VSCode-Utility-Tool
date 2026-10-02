@@ -1,5 +1,5 @@
 import { HOIEvents, getEvents } from "./schema";
-import { ContentLoader, Dependency, LoadResultOD, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
+import { Dependency, LoadResultOD, LoaderSession, mergeInLoadResult } from "../../util/loader/loader";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
 import uniq from "lodash/uniq";
@@ -7,7 +7,7 @@ import uniqBy from "lodash/uniqBy";
 import flatten from "lodash/flatten";
 import { YamlLoader } from "../../util/loader/yaml";
 import { getGfxContainerFiles } from "../../util/gfxindex";
-import { getLanguageIdInYml } from "../../util/vsccommon";
+import { LanguageAwareContentLoader } from "../languageloader";
 
 export interface EventsLoaderResult {
     events: HOIEvents;
@@ -18,20 +18,9 @@ export interface EventsLoaderResult {
 
 const eventsGFX = 'interface/eventpictures.gfx';
 
-export class EventsLoader extends ContentLoader<EventsLoaderResult> {
-    private languageKey: string = '';
+export class EventsLoader extends LanguageAwareContentLoader<EventsLoaderResult> {
 
-    public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
-        return await super.shouldReloadImpl(session) || this.languageKey !== getLanguageIdInYml();
-    }
-
-    protected async postLoad(content: string | undefined, dependencies: Dependency[], error: unknown, session: LoaderSession): Promise<LoadResultOD<EventsLoaderResult>> {
-        if (error || (content === undefined)) {
-            throw error;
-        }
-
-        this.languageKey = getLanguageIdInYml();
-
+    protected async loadContent(content: string, dependencies: Dependency[], session: LoaderSession): Promise<LoadResultOD<EventsLoaderResult>> {
         const eventsDependencies = dependencies.filter(d => d.type === 'event').map(d => d.path);
         const eventsDepFiles = await this.loaderDependencies.loadMultiple(eventsDependencies, session, EventsLoader);
 

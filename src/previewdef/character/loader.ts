@@ -1,6 +1,5 @@
 import { HOICharacterFile, getCharactersFromFile } from "./schema";
 import {
-	ContentLoader,
 	Dependency,
 	LoadResultOD,
 	LoaderSession,
@@ -9,7 +8,7 @@ import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
 import uniq from "lodash/uniq";
 import { getGfxContainerFiles } from "../../util/gfxindex";
-import { getLanguageIdInYml } from "../../util/vsccommon";
+import { LanguageAwareContentLoader } from "../languageloader";
 import {
 	ModifierDefinitions,
 	listModifierDefinitionFiles,
@@ -60,30 +59,15 @@ export function traitIconSprite(
 	return undefined;
 }
 
-export class CharactersLoader extends ContentLoader<CharactersLoaderResult> {
-	private languageKey: string = "";
+export class CharactersLoader extends LanguageAwareContentLoader<CharactersLoaderResult> {
 
-	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
-		return (
-			(await super.shouldReloadImpl(session)) ||
-			this.languageKey !== getLanguageIdInYml()
-		);
-	}
-
-	protected async postLoad(
-		content: string | undefined,
+	protected async loadContent(
+		content: string,
 		dependencies: Dependency[],
-		error: unknown,
 		// A characters file has no dependent characters file to pull in, so nothing here loads
 		// through the session the way the idea loader's `#!idea:` dependencies do.
 		_session: LoaderSession,
 	): Promise<LoadResultOD<CharactersLoaderResult>> {
-		if (error || content === undefined) {
-			throw error;
-		}
-
-		this.languageKey = getLanguageIdInYml();
-
 		const characters = getCharactersFromFile(
 			parseHoi4File(content, localize("infile", "In file {0}:\n", this.file)),
 			this.file,

@@ -1,5 +1,5 @@
 import { CustomMap, SchemaDef } from "../../../hoiformat/schema";
-import { FileLoader, LoadResultOD, FolderLoader, mergeInLoadResult } from "./common";
+import { FileLoader, LoadResultOD, FolderLoader, mergeByNameWithDuplicateWarning } from "./common";
 import { MapLoaderExtra, Resource } from "../definitions";
 import { readFileFromModOrHOI4AsJson } from "../../../util/fileloader";
 import { LoadResult, LoaderSession } from '../../../util/loader/loader';
@@ -31,23 +31,12 @@ export class ResourceDefinitionLoader extends FolderLoader<Resource[], Resource[
     }
     
     protected mergeLoadedFiles(fileResults: LoadResult<Resource[], MapLoaderExtra>[], _session: LoaderSession): Promise<LoadResult<Resource[], MapLoaderExtra>> {
-        const results =  mergeInLoadResult(fileResults, 'result');
-        const resourceMap: Record<string, Resource> = {};
-        const warnings = mergeInLoadResult(fileResults, 'warnings');
-
-        for (const resource of results) {
-            const existingResource = resourceMap[resource.name];
-            if (existingResource) {
-                warnings.push({
-                    source: [],
-                    text: localize('worldmap.warnings.resourcedefinedtwice', 'Resource {0} is defined in two files: {1}, {2}.',
-                        resource.name, resource.file, existingResource.file),
-                    relatedFiles: [resource.file, existingResource.file],
-                });
-            } else {
-                resourceMap[resource.name] = resource;
-            }
-        }
+        const { result: resourceMap, warnings } = mergeByNameWithDuplicateWarning(fileResults, 'first', (resource, existingResource) => ({
+            source: [],
+            text: localize('worldmap.warnings.resourcedefinedtwice', 'Resource {0} is defined in two files: {1}, {2}.',
+                resource.name, resource.file, existingResource.file),
+            relatedFiles: [resource.file, existingResource.file],
+        }));
 
         return Promise.resolve({
             result: Object.values(resourceMap),

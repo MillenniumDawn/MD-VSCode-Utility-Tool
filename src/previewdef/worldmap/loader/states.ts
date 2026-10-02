@@ -19,6 +19,7 @@ import {
 	LoadResult,
 	FolderLoader,
 	mergeInLoadResult,
+	mergeByNameWithDuplicateWarning,
 	convertColor,
 } from "./common";
 import {
@@ -246,27 +247,15 @@ class StateCategoriesLoader extends FolderLoader<
 	protected async mergeLoadedFiles(
 		fileResults: LoadResult<StateCategory[]>[],
 	): Promise<LoadResult<Record<string, StateCategory>>> {
-		const warnings = mergeInLoadResult(fileResults, "warnings");
-		const categories: Record<string, StateCategory> = {};
-
-		fileResults.forEach((result) =>
-			result.result.forEach((category) => {
-				const existingCategory = categories[category.name];
-				if (existingCategory) {
-					warnings.push({
-						source: [{ type: "statecategory", name: category.name }],
-						relatedFiles: [category.file, existingCategory.file],
-						text: localize(
-							"worldmap.warnings.statecategoryconflict",
-							'There\'re multiple state categories have name "{0}".',
-							category.name,
-						),
-					});
-				}
-
-				categories[category.name] = category;
-			}),
-		);
+		const { result: categories, warnings } = mergeByNameWithDuplicateWarning(fileResults, "last", (category, existingCategory) => ({
+			source: [{ type: "statecategory", name: category.name }],
+			relatedFiles: [category.file, existingCategory.file],
+			text: localize(
+				"worldmap.warnings.statecategoryconflict",
+				'There\'re multiple state categories have name "{0}".',
+				category.name,
+			),
+		}));
 
 		return {
 			result: categories,

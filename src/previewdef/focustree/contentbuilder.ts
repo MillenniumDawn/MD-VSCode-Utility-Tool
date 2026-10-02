@@ -28,6 +28,8 @@ import { FocusItemLayout, FocusShortcutGui, FocusTreeLayout, focusTreeGridBoxFor
 import { describeParseFailure } from "../../util/indexHalf";
 import { actionGroupHtml, iconButtonHtml, iconClassOf } from "../toolbaricons";
 import { Logger } from "../../util/logger";
+import { TOOLBAR_HEIGHT, toolbarWrapper } from "../toolbarparts";
+import { spriteIconStyle } from "../iconstyle";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
 
@@ -313,7 +315,7 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
             left:0;
             top:0;
         `)}"></div>` +
-        `<div id="focustreecontent" class="${styleTable.oneTimeStyle('focustreecontent', () => `top:52px;left:-20px;position:relative`)}">
+        `<div id="focustreecontent" class="${styleTable.oneTimeStyle('focustreecontent', () => `top:${TOOLBAR_HEIGHT}px;left:-20px;position:relative`)}">
             <div id="focustreeplaceholder"></div>
             <div id="inlaywindowplaceholder"></div>
             ${continuousFocusContent}
@@ -342,7 +344,7 @@ function renderWarningContainer(styleTable: StyleTable) {
         position: fixed;
         top: 0;
         left: 0;
-        padding-top: 52px;
+        padding-top: ${TOOLBAR_HEIGHT}px;
         background: var(--vscode-editor-background);
         box-sizing: border-box;
         display: none;
@@ -454,9 +456,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             ${iconButtonHtml('clearTrace', localize, { domId: 'clear-trace' })}
         </div>`;
 
-    return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: 52px;`)}">
-        <div class="toolbar">
-            ${getFlags().useConditionInFocus ? conditions + inlayConditions : allowbranch}
+    return toolbarWrapper(styleTable, () => `${getFlags().useConditionInFocus ? conditions + inlayConditions : allowbranch}
             ${focuses}
             ${searchbox}
             ${customTitlebars}
@@ -470,9 +470,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
                 editContinuous: editContinuousButton,
                 copyWarnings: copyWarningsButton,
                 clearTrace: traceStatus,
-            })}
-        </div>
-    </div>`;
+            })}`);
 }
 
 function getInlayGfxStyleKey(gfxName: string, gfxFile: string | undefined) {
@@ -513,14 +511,10 @@ async function prepareInlayGfxStyles(focusTrees: FocusTree[], styleTable: StyleT
                         continue;
                     }
 
-                    styleTable.style(key, () => `
-                        width: ${Math.min(frame.width, 144)}px;
-                        height: ${Math.min(frame.height, 144)}px;
-                        background-image: url(${frame.uri});
-                        background-repeat: no-repeat;
-                        background-position: center;
-                        background-size: contain;
-                    `);
+                    spriteIconStyle(styleTable, 'inlay-gfx-', (option.gfxFile ?? 'missing') + '-' + option.gfxName, frame, {
+                        width: Math.min(frame.width, 144),
+                        height: Math.min(frame.height, 144),
+                    });
                 }
             }
         }
@@ -593,7 +587,7 @@ async function renderInlayOverrideChild<T extends keyof RenderChildTypeMap>(
         return undefined;
     }
 
-    const iconLikeChild = child as unknown as IconType & ButtonType;
+    const iconLikeChild = child as HOIPartial<IconType & ButtonType>;
     let [x, y] = calculateBBox(iconLikeChild, parentInfo);
     if (iconLikeChild.centerposition) {
         x -= sprite.width / 2;
@@ -754,12 +748,12 @@ async function renderShortcut(
             getSprite: (sprite) => getSpriteByGfxName(sprite, gfxFiles),
             onRenderChild: async (type, child, childParent) => {
                 if (type === 'button' && child.name === 'focus_button') {
-                    const button = child as unknown as HOIPartial<ButtonType>;
+                    const button = child as HOIPartial<ButtonType>;
                     const [x, y] = calculateBBox({ ...button, size: undefined }, childParent);
                     return icon(x, y, button.scale ?? 1, !!button.centerposition);
                 }
                 if (type === 'instanttextbox' && child.name === 'name') {
-                    const textbox = child as unknown as HOIPartial<InstantTextBoxType>;
+                    const textbox = child as HOIPartial<InstantTextBoxType>;
                     const [x, y, w, h] = calculateBBox({ ...textbox, size: { width: textbox.maxwidth, height: textbox.maxheight } }, childParent);
                     const fontMatch = /\d+/.exec((textbox.font ?? '').replace('hoi4', ''));
                     return text(x, y, w, h, Math.ceil(parseInt(fontMatch?.[0] ?? '16') * 0.7));

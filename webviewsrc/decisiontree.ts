@@ -1,11 +1,9 @@
 import {
 	tryRun,
-	subscribeNavigators,
 	enableZoom,
 	initCommon,
 	getState,
 	setState,
-	panning$,
 } from "./util/common";
 import { SearchBox } from "./util/searchbox";
 import { applyNav, badge } from "./util/card";
@@ -14,6 +12,7 @@ import { feLocalize } from "./util/i18n";
 import { applyIconState } from "../src/previewdef/toolbaricons";
 import { wireUpdateBody } from "./util/updatebody";
 import { buildGuiFrame } from "./util/guiframe";
+import { bridgeOverRemoved, skippedBySource } from "./util/graphbridge";
 import {
 	DecisionGraphCategoryNode,
 	DecisionGraphDecisionNode,
@@ -26,14 +25,12 @@ import { conditionPanel, conditionToLabel } from "./util/conditiontree";
 import {
 	EffectTooltipOptions,
 	TooltipSection,
-	wireEffectTooltip,
 } from "./util/hovertooltip";
 import {
 	IsolationHandle,
-	RenderedEdge,
 	RenderedNode,
-	renderGraph,
-	wireIsolation,
+	renderGraphInto,
+	clearGraphHoverOnPan,
 } from "./util/graphview";
 
 initCommon();
@@ -362,58 +359,7 @@ function bridgeEdges(
 		}
 	}
 
-	// What a removed decision reaches depends only on that decision, not on which edge led to it,
-	// so the walk from each one is done once however many kept decisions call it.
-	const bridgeCache = new Map<string, { to: string; skipped: string[] }[]>();
-	const bridgesFrom = (start: string): { to: string; skipped: string[] }[] => {
-		const cached = bridgeCache.get(start);
-		if (cached !== undefined) {
-			return cached;
-		}
-		// Breadth first from the removed decision, collecting what it reaches that survived. Each
-		// survivor is reached over the shortest run of removed decisions, and its arrow names only
-		// those, not everything else the walk passed through on other branches.
-		const bridges: { to: string; skipped: string[] }[] = [];
-		const parent = new Map<string, string | undefined>([[start, undefined]]);
-		const queue = [start];
-		while (queue.length > 0) {
-			const current = queue.shift();
-			if (current === undefined) {
-				continue;
-			}
-			for (const next of outgoing.get(current) ?? []) {
-				if (parent.has(next.to)) {
-					continue;
-				}
-				parent.set(next.to, current);
-				if (!removed.has(next.to)) {
-					const skipped: string[] = [];
-					for (let at: string | undefined = current; at !== undefined; at = parent.get(at)) {
-						skipped.unshift(at);
-					}
-					bridges.push({ to: next.to, skipped });
-				} else {
-					queue.push(next.to);
-				}
-			}
-		}
-		bridgeCache.set(start, bridges);
-		return bridges;
-	};
-
-	const result: DecisionGraphEdge[] = [];
-	for (const edge of edges) {
-		if (edge.structural || !removed.has(edge.to)) {
-			result.push(edge);
-			continue;
-		}
-		// An edge bridged once already -- by a filter, before a collapse -- keeps what it skipped.
-		for (const bridge of bridgesFrom(edge.to)) {
-			result.push({ ...edge, to: bridge.to, skipped: [...(edge.skipped ?? []), ...bridge.skipped] });
-		}
-	}
-
-	return result;
+	return bridgeOverRemoved(edges, id => removed.has(id), outgoing);
 }
 
 export function matchesQuery(node: DecisionGraphNode, query: string): boolean {
@@ -746,9 +692,6 @@ function buildCard(node: DecisionGraphNode): HTMLDivElement {
 
 //#region Render
 
-let rendered: RenderedNode<DecisionGraphNode>[] = [];
-let renderedEdges: RenderedEdge<DecisionGraphEdge>[] = [];
-let childrenById = new Map<string, string[]>();
 // Replaced by every rebuild, so a drag always puts back the graph that is actually on screen.
 let isolation: IsolationHandle | undefined = undefined;
 // Filled by buildContent before the cards are built, and read by buildDecisionCard. Empty whenever
@@ -774,26 +717,6 @@ function categoryKeyOf(graph: VisibleGraph, id: string): string {
 	return node?.kind === "category" ? node.categoryKey : id;
 }
 
-function skippedByDecisionOf(graph: VisibleGraph): Map<string, string[]> {
-	const result = new Map<string, string[]>();
-	for (const edge of graph.edges) {
-		if (!edge.skipped?.length) {
-			continue;
-		}
-		const existing = result.get(edge.from);
-		if (existing) {
-			for (const id of edge.skipped) {
-				if (!existing.includes(id)) {
-					existing.push(id);
-				}
-			}
-		} else {
-			result.set(edge.from, [...edge.skipped]);
-		}
-	}
-	return result;
-}
-
 function buildContent(): void {
 	const content = document.getElementById("decisiontreecontent") as HTMLDivElement | null;
 	if (!content) {
@@ -801,11 +724,6 @@ function buildContent(): void {
 	}
 
 	document.querySelectorAll("." + effectTooltipClass).forEach((el) => el.remove());
-	content.textContent = "";
-	rendered = [];
-	renderedEdges = [];
-	isolation = undefined;
-
 	// Before the filters: a control this file cannot use is forced back to its neutral position
 	// here, and a filter entry it cannot use is one the stored selection must not keep.
 	applyToolbarFlags();
@@ -816,21 +734,9 @@ function buildContent(): void {
 		isCategoryCollapsed(categoryKeyOf(filtered, id)),
 	);
 	hiddenByCategory = hidden;
-	skippedByDecision = skippedByDecisionOf(graph);
+	skippedByDecision = skippedBySource(graph.edges);
 
-	if (graph.nodes.length === 0) {
-		const empty = document.createElement("div");
-		empty.className = "ev-empty";
-		empty.textContent = feLocalize(
-			"decisiontree.nodecisions",
-			"No decisions to show for this file.",
-		);
-		content.appendChild(empty);
-		search.refresh(rendered);
-		return;
-	}
-
-	({ rendered, renderedEdges, childrenById } = renderGraph({
+	isolation = renderGraphInto({
 		content,
 		nodes: graph.nodes,
 		edges: graph.edges,
@@ -839,14 +745,10 @@ function buildContent(): void {
 		chipGuarded,
 		chipText: chipTextFor,
 		edgeClass,
-	}));
-
-	isolation = wireIsolation(rendered, renderedEdges, childrenById);
-	if (showEffects) {
-		wireEffectTooltips();
-	}
-	subscribeNavigators();
-	search.refresh(rendered);
+		emptyText: feLocalize("decisiontree.nodecisions", "No decisions to show for this file."),
+		search,
+		effects: showEffects ? { sectionsOf: effectSectionsOf, options: effectTooltipOptions } : undefined,
+	});
 }
 
 // Everything an arrow says next to itself: what one decision does to another, the random_list weight
@@ -1048,26 +950,9 @@ function effectSectionsOf(node: DecisionGraphNode): TooltipSection[] {
 	return sections;
 }
 
-function wireEffectTooltips(): void {
-	for (const item of rendered) {
-		const sections = effectSectionsOf(item.node);
-		if (sections.length > 0) {
-			wireEffectTooltip(item.element, sections, effectTooltipOptions);
-		}
-	}
-}
-
 //#endregion
 
-// A card the pointer left on its way to the background can still be finishing its fade, so sweeping
-// once guarantees nothing is left hanging over the canvas while it is being moved.
-panning$.subscribe((panning) => {
-	if (!panning) {
-		return;
-	}
-	document.querySelectorAll("." + effectTooltipClass).forEach((el) => el.remove());
-	isolation?.clear();
-});
+clearGraphHoverOnPan("." + effectTooltipClass, () => isolation);
 
 wireUpdateBody<DecisionGraphPayload>({
 	contentId: "decisiontreecontent",

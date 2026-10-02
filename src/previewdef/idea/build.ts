@@ -1,7 +1,8 @@
 import { localise } from "../localise";
 import { navOf } from "../sharedpayload";
 import { getImageByPath, getSpriteByGfxName } from "../../util/image/imagecache";
-import { StyleTable, normalizeForStyle } from "../../util/styletable";
+import { StyleTable } from "../../util/styletable";
+import { spriteIconStyle } from "../iconstyle";
 import { localize } from "../../util/i18n";
 import { IdeaSwap } from "../../util/ideaSwapIndex";
 import { HOIIdea } from "./schema";
@@ -128,19 +129,7 @@ async function buildIcon(
 		return undefined;
 	}
 
-	// Keyed on the picture rather than the idea, so a hundred ideas sharing one picture share one
-	// rule instead of writing the same data URL a hundred times into the stylesheet.
-	const styleKey = styleTable.style(
-		"idea-icon-" + normalizeForStyle(idea.picture),
-		() => `
-            background-image: url(${image.uri});
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-        `,
-	);
-
-	return { styleKey, width: image.width, height: image.height };
+	return spriteIconStyle(styleTable, "idea-icon-", idea.picture, image);
 }
 
 function badgesOf(idea: HOIIdea): string[] {
