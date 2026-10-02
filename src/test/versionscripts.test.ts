@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { mock } from 'node:test';
 
 // Plain CommonJS helpers shared by the version-check and version-bump workflows. They deliberately
 // live outside src/ so CI can run them without a build, so they are pulled in through require.
@@ -18,6 +19,7 @@ const issueVersionTriage = require('../../../scripts/issue-version-triage');
 const closeFixedIssues = require('../../../scripts/close-fixed-issues');
 const prereleaseVersion = require('../../../scripts/prerelease-version');
 const publishExtension = require('../../../scripts/publish-extension');
+const { createBudget } = require('../../../scripts/lib/openrouter');
 
 describe('scripts/bump-version', function () {
     describe('nextVersion', function () {
@@ -946,6 +948,12 @@ describe('scripts/check-version', function () {
         it('reads the base ref', function () {
             assert.strictEqual(checkVersion.parseArgs(['--base-ref', 'origin/dev']).baseRef, 'origin/dev');
         });
+
+        it('keeps the previous base ref when its value is missing or empty', function () {
+            assert.strictEqual(checkVersion.parseArgs(['--base-ref']).baseRef, 'origin/main');
+            assert.strictEqual(checkVersion.parseArgs(['--base-ref', 'origin/dev', '--base-ref']).baseRef, 'origin/dev');
+            assert.strictEqual(checkVersion.parseArgs(['--base-ref', 'origin/dev', '--base-ref', '']).baseRef, 'origin/dev');
+        });
     });
 });
 
@@ -1341,10 +1349,12 @@ describe('scripts/publish-extension', function () {
     // workflow the failure was transient. `outputs` is what each attempt answers; '' is a success.
     function run(registry: string, schedule: string, outputs: string[]) {
         const stdout = process.stdout.write;
+        const stderr = process.stderr.write;
         const slept: number[] = [];
         let attempts = 0;
         let transient = 0;
         process.stdout.write = (() => true) as typeof process.stdout.write;
+        process.stderr.write = (() => true) as typeof process.stderr.write;
         try {
             const ok = publishExtension.publish({ registry, vsix: 'ext.vsix', pat: 'secret', preRelease: false, schedule }, {
                 publishOnce: () => {
@@ -1357,6 +1367,7 @@ describe('scripts/publish-extension', function () {
             return { ok, attempts, slept, transient };
         } finally {
             process.stdout.write = stdout;
+            process.stderr.write = stderr;
         }
     }
 
@@ -1984,20 +1995,17 @@ describe('scripts/merge-changelog', function () {
 });
 
 describe('scripts/rewrite-bullets', function () {
-    // Every fallback path below announces itself as a `::warning::` or `::notice::` on stdout, which
-    // is the point of it -- but a hundred lines of workflow annotations in the test output would
-    // bury the results, so the block swallows them.
-    let originalWrite: typeof process.stdout.write;
+    let originalWrite: typeof process.stderr.write;
 
     beforeEach(function () {
-        originalWrite = process.stdout.write;
-        process.stdout.write = ((chunk: string | Uint8Array) =>
-            /^::(warning|notice)::/.test(String(chunk)) ? true : originalWrite.call(process.stdout, chunk)
-        ) as typeof process.stdout.write;
+        originalWrite = process.stderr.write;
+        process.stderr.write = ((chunk: string | Uint8Array) =>
+            /^::(warning|notice)::/.test(String(chunk)) ? true : originalWrite.call(process.stderr, chunk)
+        ) as typeof process.stderr.write;
     });
 
     afterEach(function () {
-        process.stdout.write = originalWrite;
+        process.stderr.write = originalWrite;
     });
 
     describe('cleanReply', function () {
@@ -2106,7 +2114,9 @@ describe('scripts/rewrite-bullets', function () {
         });
 
         it('takes every bullet from one structured reply', async function () {
-            globalThis.fetch = (async (_url: string, init: { body: string }) => {
+            globalThis.fetch = (async (_url: string, init: { body: string; headers: Record<string, string> }) => {
+                assert.strictEqual(init.headers['X-Title'], 'MD VSCode Utility Tool release');
+                assert.strictEqual(JSON.parse(init.body).max_tokens, rewriteBullets.maxTokens(entries.length));
                 calls.push(init.body);
                 return reply(JSON.stringify({
                     bullets: [
@@ -2424,6 +2434,15 @@ describe('scripts/close-fixed-issues', function () {
             assert.deepStrictEqual(closeFixedIssues.allSections('Some prose\n'), []);
             assert.deepStrictEqual(closeFixedIssues.allSections(''), []);
         });
+
+        it('uses the shared heading boundaries and never includes Unreleased content', function () {
+            const result = closeFixedIssues.allSections('Preamble\r\n\r\n Unreleased \r\n- Not shipped.\r\n'
+                + '\r\n v1.1.25 \r\n- New.\r\n\r\nUnreleased\r\n- Also not shipped.\r\n\r\nv1.1.24\r\n- Old.\r\n');
+            assert.deepStrictEqual(result, [
+                { version: '1.1.25', text: 'v1.1.25 \n- New.' },
+                { version: '1.1.24', text: 'v1.1.24\n- Old.' },
+            ]);
+        });
     });
 
     describe('changelogSince', function () {
@@ -2554,25 +2573,21 @@ describe('scripts/close-fixed-issues', function () {
     });
 
     describe('judge', function () {
-        let originalWrite: typeof process.stdout.write;
         let original: typeof globalThis.fetch;
 
         beforeEach(function () {
-            originalWrite = process.stdout.write;
-            process.stdout.write = ((chunk: string | Uint8Array) =>
-                /^::(warning|notice)::/.test(String(chunk)) ? true : originalWrite.call(process.stdout, chunk)
-            ) as typeof process.stdout.write;
             original = globalThis.fetch;
         });
 
         afterEach(function () {
-            process.stdout.write = originalWrite;
             globalThis.fetch = original;
         });
 
         it('sends the report and the changelog range and reads the structured verdict back', async function () {
             let sentBody = '';
-            globalThis.fetch = (async (_url: string, init: { body: string }) => {
+            globalThis.fetch = (async (_url: string, init: { body: string; headers: Record<string, string> }) => {
+                assert.strictEqual(init.headers['X-Title'], 'MD VSCode Utility Tool outdated-issue check');
+                assert.strictEqual(JSON.parse(init.body).max_tokens, 500);
                 sentBody = init.body;
                 return {
                     ok: true,
@@ -2601,6 +2616,126 @@ describe('scripts/close-fixed-issues', function () {
 
             await assert.rejects(() => closeFixedIssues.judge(
                 { number: 5, title: 'A bug', body: '', reportedVersion: '1.1.23', changesText: '' }, 'key'));
+        });
+
+        it('does not wait for a rate limit when the shared budget cannot afford it', async function () {
+            let calls = 0;
+            globalThis.fetch = (async () => {
+                calls++;
+                return { ok: false, status: 429, text: async () => 'rate limited' };
+            }) as unknown as typeof globalThis.fetch;
+            await assert.rejects(() => closeFixedIssues.judge(
+                { number: 5, title: 'A bug', body: '', reportedVersion: '1.1.23', changesText: '' }, 'key', createBudget(5000)),
+                /OpenRouter returned 429/);
+            assert.strictEqual(calls, 1);
+        });
+
+        it('cuts a stalled verdict request at the shared deadline', async function () {
+            let calls = 0;
+            globalThis.fetch = (async (_url: string, init: { signal: AbortSignal }) => {
+                calls++;
+                return await new Promise((_resolve, reject) => {
+                    if (init.signal.aborted) {
+                        reject(new Error('aborted'));
+                        return;
+                    }
+                    init.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+                });
+            }) as unknown as typeof globalThis.fetch;
+            await assert.rejects(() => closeFixedIssues.judge(
+                { number: 5, title: 'A bug', body: '', reportedVersion: '1.1.23', changesText: '' }, 'key', createBudget(50)),
+                /aborted/);
+            assert.strictEqual(calls, 1);
+        });
+    });
+
+    describe('run', function () {
+        let fetch: typeof globalThis.fetch;
+        let stderr: typeof process.stderr.write;
+        let env: Record<string, string | undefined>;
+
+        beforeEach(function () {
+            fetch = globalThis.fetch;
+            stderr = process.stderr.write;
+            process.stderr.write = (() => true) as typeof process.stderr.write;
+            env = { OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY, GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY };
+            process.env.OPENROUTER_API_KEY = 'test-key';
+            process.env.GITHUB_REPOSITORY = 'a/b';
+            mock.method(require('fs'), 'readFileSync', () => 'Unreleased\n\nv1.1.24\n- Fixed.\n\nv1.1.23\n- Old.\n');
+        });
+
+        afterEach(function () {
+            globalThis.fetch = fetch;
+            process.stderr.write = stderr;
+            mock.restoreAll();
+            for (const [name, value] of Object.entries(env)) {
+                if (value === undefined) {
+                    delete process.env[name];
+                } else {
+                    process.env[name] = value;
+                }
+            }
+        });
+
+        function issues(commands: string[][]) {
+            mock.method(require('child_process'), 'execFileSync', (command: string, args: string[]) => {
+                assert.strictEqual(command, 'gh');
+                commands.push(args);
+                if (args[1] === 'list') {
+                    return JSON.stringify([{ number: 1 }, { number: 2 }]);
+                }
+                if (args[1] === 'view') {
+                    return JSON.stringify({ number: Number(args[2]), title: 'A bug', body: '### Extension version\n\n1.1.23',
+                        state: 'OPEN', labels: ['outdated version'], comments: [] });
+                }
+                if (args[1] === 'close') {
+                    return '';
+                }
+                throw new Error(`Unexpected gh command: ${args.join(' ')}`);
+            });
+        }
+
+        it('uses one budget for the run and leaves remaining reports open when it expires', async function () {
+            let now = 1000;
+            mock.method(Date, 'now', () => now);
+            const commands: string[][] = [];
+            issues(commands);
+            let calls = 0;
+            globalThis.fetch = (async () => {
+                calls++;
+                now += 50;
+                return { ok: true, json: async () => ({ choices: [{ message: { content:
+                    JSON.stringify({ verdict: 'not fixed', version: '', reasoning: 'Not fixed.' }) } }] }) };
+            }) as unknown as typeof globalThis.fetch;
+            await closeFixedIssues.run({ dryRun: false, budgetMs: 50 });
+            assert.strictEqual(calls, 1);
+            assert.deepStrictEqual(commands.map((args) => args.slice(0, 3)), [['issue', 'list', '--repo'], ['issue', 'view', '1']]);
+        });
+
+        it('leaves reports open after a deadline abort instead of guessing a verdict', async function () {
+            const commands: string[][] = [];
+            issues(commands);
+            globalThis.fetch = (async (_url: string, init: { signal: AbortSignal }) => {
+                return await new Promise((_resolve, reject) => {
+                    init.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+                });
+            }) as unknown as typeof globalThis.fetch;
+            await closeFixedIssues.run({ dryRun: false, budgetMs: 50 });
+            assert.deepStrictEqual(commands.map((args) => args.slice(0, 3)), [['issue', 'list', '--repo'], ['issue', 'view', '1']]);
+        });
+
+        it('keeps dry-run behavior and closes only a fixed verdict naming a shipped version', async function () {
+            const commands: string[][] = [];
+            issues(commands);
+            globalThis.fetch = (async () => ({ ok: true, json: async () => ({ choices: [{ message: { content:
+                JSON.stringify({ verdict: 'fixed', version: '1.1.24', reasoning: 'Fixed.' }) } }] }) })) as unknown as typeof globalThis.fetch;
+            await closeFixedIssues.run({ dryRun: true });
+            assert.strictEqual(commands.filter((args) => args[1] === 'close').length, 0);
+            await closeFixedIssues.run({ dryRun: false });
+            assert.deepStrictEqual(commands.filter((args) => args[1] === 'close').map((args) => args[2]), ['1', '2']);
+            for (const args of commands.filter((args) => args[1] === 'close')) {
+                assert.strictEqual(args[args.indexOf('--comment') + 1], closeFixedIssues.commentFor('1.1.24'));
+            }
         });
     });
 

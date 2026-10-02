@@ -22,6 +22,8 @@
 
 const fs = require('fs');
 
+const { parseFlags } = require('./lib/flags');
+
 function select(found, options) {
 	const skip = String(options.skip ?? '').trim();
 	const covered = new Set(String(options.covered ?? '').split(',').map((value) => value.trim()).filter(Boolean));
@@ -45,31 +47,12 @@ function select(found, options) {
 }
 
 function parseArgs(argv) {
-	const options = { file: '', output: '', skip: '', covered: '' };
-	for (let i = 0; i < argv.length; i++) {
-		const value = argv[i + 1];
-		switch (argv[i]) {
-			case '--bullets-file':
-				options.file = value;
-				i++;
-				break;
-			case '--output':
-				options.output = value;
-				i++;
-				break;
-			case '--skip':
-				options.skip = value;
-				i++;
-				break;
-			case '--covered':
-				options.covered = value;
-				i++;
-				break;
-			default:
-				break;
-		}
-	}
-	return options;
+	return parseFlags(argv, {
+		'--bullets-file': 'file',
+		'--output': 'output',
+		'--skip': 'skip',
+		'--covered': 'covered',
+	}, { defaults: { file: '', output: '', skip: '', covered: '' } });
 }
 
 function main() {

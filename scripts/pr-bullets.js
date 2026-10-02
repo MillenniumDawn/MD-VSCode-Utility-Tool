@@ -20,6 +20,9 @@ const fs = require('fs');
 
 const { bulletFor, issueFromBody } = require('./bump-version');
 const { componentForFiles, sectionForPullRequest } = require('./changelog-bullets');
+const { warn, notice } = require('./lib/actions-log');
+const { parseFlags } = require('./lib/flags');
+const { gh } = require('./lib/github');
 
 function git(args) {
 	return execFileSync('git', args, { encoding: 'utf8' }).trim();
@@ -27,16 +30,6 @@ function git(args) {
 
 function lines(output) {
 	return output ? output.split(/\r?\n/).filter(Boolean) : [];
-}
-
-// Workflow annotations go to stderr on purpose: the workflow sends this script's stdout, which is
-// the JSON result, to /dev/null. The runner reads commands from either stream.
-function warn(message) {
-	process.stderr.write(`::warning::${message}\n`);
-}
-
-function notice(message) {
-	process.stderr.write(`::notice::${message}\n`);
 }
 
 // The pure half: a list of pull requests in merge order becomes the changelog bullets. A pull
@@ -101,10 +94,7 @@ function withComponent(bullet, component) {
 
 function api(path, args = []) {
 	try {
-		const output = execFileSync(
-			'gh',
-			['api', path, '-H', 'Accept: application/vnd.github+json', ...args],
-			{ encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+		const output = gh(['api', path, '-H', 'Accept: application/vnd.github+json', ...args]);
 		return JSON.parse(output);
 	} catch (error) {
 		// An unauthenticated gh, a rate limit or a commit pushed straight to main all land here; every
@@ -208,27 +198,11 @@ function collect(options) {
 }
 
 function parseArgs(argv) {
-	const options = { repo: process.env.GITHUB_REPOSITORY ?? '', output: '' };
-	for (let i = 0; i < argv.length; i++) {
-		const value = argv[i + 1];
-		switch (argv[i]) {
-			case '--tag':
-				options.tag = value;
-				i++;
-				break;
-			case '--repo':
-				options.repo = value;
-				i++;
-				break;
-			case '--output':
-				options.output = value;
-				i++;
-				break;
-			default:
-				break;
-		}
-	}
-	return options;
+	return parseFlags(argv, {
+		'--tag': 'tag',
+		'--repo': 'repo',
+		'--output': 'output',
+	}, { defaults: { repo: process.env.GITHUB_REPOSITORY ?? '', output: '' } });
 }
 
 function main() {

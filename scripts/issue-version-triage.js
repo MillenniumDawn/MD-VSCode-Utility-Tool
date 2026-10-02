@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { compareVersions, readVersion } = require('./bump-version');
+const { notice } = require('./lib/actions-log');
 
 const label = 'outdated version';
 const versionPattern = /^\d+\.\d+\.\d+$/;
@@ -75,9 +76,9 @@ function report(result) {
 
 	if (result.action === 'flag') {
 		fs.writeFileSync('issue-version-comment.md', result.comment);
-		process.stdout.write(`::notice::Reported version ${result.reported} is older than ${result.current}.\n`);
+		notice(`Reported version ${result.reported} is older than ${result.current}.`);
 	} else {
-		process.stdout.write(`::notice::No action: ${result.reason}.\n`);
+		notice(`No action: ${result.reason}.`);
 	}
 }
 

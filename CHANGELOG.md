@@ -1,5 +1,9 @@
 Unreleased
 
+  Bugfixes:
+
+- [ CI ] Automatic checks for fixed bug reports now stop when the model takes too long, leaving unchecked reports open for the next run. Issue #493.
+
 v1.1.40
 
   Functionality:

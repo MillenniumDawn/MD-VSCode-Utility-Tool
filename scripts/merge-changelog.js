@@ -21,37 +21,16 @@ const fs = require('fs');
 const path = require('path');
 
 const { readVersion, rebuildChangelog, writeVersion } = require('./bump-version');
+const { parseFlags } = require('./lib/flags');
 
 function parseArgs(argv) {
-	const options = { main: '', previousMain: '', release: '', version: '' };
-	for (let i = 0; i < argv.length; i++) {
-		const value = argv[i + 1];
-		switch (argv[i]) {
-			case '--main':
-				options.main = value;
-				i++;
-				break;
-			case '--previous-main':
-				options.previousMain = value;
-				i++;
-				break;
-			case '--release':
-				options.release = value;
-				i++;
-				break;
-			case '--version':
-				options.version = value;
-				i++;
-				break;
-			case '--cwd':
-				options.cwd = value;
-				i++;
-				break;
-			default:
-				break;
-		}
-	}
-	return options;
+	return parseFlags(argv, {
+		'--main': 'main',
+		'--previous-main': 'previousMain',
+		'--release': 'release',
+		'--version': 'version',
+		'--cwd': 'cwd',
+	}, { defaults: { main: '', previousMain: '', release: '', version: '' } });
 }
 
 function readIfThere(file) {
