@@ -189,6 +189,19 @@ describe('.github/workflows', function () {
         assert.strictEqual(pkg.devDependencies?.['@types/node'], `^${major}`);
     });
 
+    it('lints shared release helpers as CommonJS', async function () {
+        const root = path.join(workflowDir, '..', '..');
+        const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+        assert.match(pkg.scripts.lint, /\bscripts\b/);
+        const { ESLint } = require('eslint');
+        const eslint = new ESLint({ cwd: root });
+        for (const file of ['actions-log', 'flags', 'github', 'openrouter']) {
+            const config = await eslint.calculateConfigForFile(path.join(root, 'scripts', 'lib', `${file}.js`));
+            assert.strictEqual(config.languageOptions.sourceType, 'commonjs');
+            assert.strictEqual(config.rules['no-unused-vars'][0], 2);
+        }
+    });
+
     describe('release.yml', function () {
         const workflow = load('release.yml');
         const jobs = workflow.jobs ?? {};
