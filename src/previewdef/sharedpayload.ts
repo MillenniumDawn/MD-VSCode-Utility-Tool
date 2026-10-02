@@ -9,6 +9,12 @@ import { ConditionComplexExpr } from "../hoiformat/condition";
 
 // A localisation key together with the text it resolves to. Both travel to the webview so a
 // "show localisation" toggle can swap between them without a round trip to the host.
+export interface IconStyle {
+	styleKey: string;
+	width: number;
+	height: number;
+}
+
 export interface LocText {
 	key: string;
 	text: string;

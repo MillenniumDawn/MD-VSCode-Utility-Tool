@@ -1,5 +1,5 @@
 import { ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
-import { EffectTreeNode, LocText, ModifierLine, NavTarget } from "../sharedpayload";
+import { EffectTreeNode, LocText, ModifierLine, NavTarget, IconStyle } from "../sharedpayload";
 import { DecisionCallKind, DecisionEffectBlockName } from "./schema";
 
 // The serializable projection of a decisions file: what the host posts and the webview lays out as
@@ -16,11 +16,7 @@ export { DecisionCallKind, DecisionEffectBlockName } from "./schema";
 
 // An icon, as a StyleTable class carrying the decoded image as a data URL, plus the size to draw it
 // at. The same shape the idea preview uses.
-export interface DecisionIcon {
-	styleKey: string;
-	width: number;
-	height: number;
-}
+export type DecisionIcon = IconStyle;
 
 // A category the game draws with a custom GUI window instead of the standard list of buttons. The
 // name is always known; the window is only there when the interface tree defines it.

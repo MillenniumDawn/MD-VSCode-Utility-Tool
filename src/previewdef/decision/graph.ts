@@ -2,7 +2,8 @@ import { localise } from "../localise";
 import { getFlags } from "../../util/featureflags";
 import { navOf } from "../sharedpayload";
 import { getSpriteByGfxName } from "../../util/image/imagecache";
-import { StyleTable, normalizeForStyle } from "../../util/styletable";
+import { StyleTable } from "../../util/styletable";
+import { spriteIconStyle } from "../iconstyle";
 import { localize } from "../../util/i18n";
 import { formatModifiers } from "../../util/modifiers";
 import { renderStandaloneWindow } from "../../util/hoi4gui/window";
@@ -260,19 +261,7 @@ async function buildIcon(
 		return undefined;
 	}
 
-	// Keyed on the sprite rather than the decision, so the hundreds of decisions sharing
-	// GFX_decision_generic_decision share one rule instead of writing the same data URL each time.
-	const styleKey = styleTable.style(
-		"decision-icon-" + normalizeForStyle(spriteName),
-		() => `
-            background-image: url(${image.uri});
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-        `,
-	);
-
-	return { styleKey, width: image.width, height: image.height };
+	return spriteIconStyle(styleTable, "decision-icon-", spriteName, image);
 }
 
 function badgesOf(decision: HOIDecision): string[] {

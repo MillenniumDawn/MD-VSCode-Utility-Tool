@@ -9,12 +9,11 @@ import { ParentInfo, RenderCommonOptions } from '../../util/hoi4gui/common';
 import { renderGridBox, GridBoxItem, GridBoxConnection, GridBoxConnectionItem } from '../../util/hoi4gui/gridbox';
 import { renderInstantTextBox } from '../../util/hoi4gui/instanttextbox';
 import { renderIcon } from '../../util/hoi4gui/icon';
-import { escapeAttr, htmlEscape, html, previewedFileUriScript, errorPage } from '../../util/html';
+import { escapeAttr, htmlEscape } from '../../util/html';
 import { ContainerWindowType, GridBoxType, IconType, InstantTextBoxType, Format } from '../../hoiformat/gui';
 import { TechnologyTreeLoader, TechnologyTreeLoaderResult } from './loader';
 import { EquipmentArchetype } from './equipmentschema';
-import { LoaderSession } from '../../util/loader/loader';
-import { debug } from '../../util/debug';
+import { renderLoaderFile } from '../loaderrender';
 import flatMap from 'lodash/flatMap';
 import sumBy from 'lodash/sumBy';
 import min from 'lodash/min';
@@ -27,87 +26,41 @@ import { getFlags } from "../../util/featureflags";
 import { LoaderRender, RenderContentOptions } from '../loaderpreview';
 import { getPreviewOptions } from '../../util/previewoptions';
 import { technologyCountryOption } from './countryicons';
+import { localiseLabel, localiseOptionalText } from '../localise';
 
 const techTreeViewName = 'countrytechtreeview';
 const doctrineTreeViewName = 'countrydoctrineview';
 
 export async function renderTechnologyFile(loader: TechnologyTreeLoader, uri: vscode.Uri, webview: vscode.Webview, options?: RenderContentOptions): Promise<LoaderRender> {
-    try {
-        // The loader reads files besides the previewed one -- the .gui and .gfx files, the equipment
-        // archetypes, the country tags. Their edits arrive as dependencyChanged, and the reload
-        // decision hashes this preview's own document, which did not move, so the session has to be
-        // forced or the panel repaints what it read before the edit.
-        const session = new LoaderSession(options?.dependencyChanged ?? false);
-        const loadResult = await loader.load(session);
-        const loadedLoaders = session.loadedLoaderNames();
-        debug('Loader session tech tree', loadedLoaders);
-
-        const technologyTrees = loadResult.result.technologyTrees;
-        const folders = uniq(technologyTrees.map(tt => tt.folder));
-
-        if (folders.length === 0) {
-            const baseContent = localize('techtree.notechtree', 'No technology tree.');
-            return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
-        }
-
-        const styleTable = new StyleTable();
-        // Renders every name variant and reveals one via a "name-mode-*" class on #techtreecontent (default name-mode-id).
-        styleTable.raw('.tech-name-variant', 'display: none;');
-        for (const mode of techNameModes) {
-            styleTable.raw(`#techtreecontent.name-mode-${mode.id} .tech-name-${mode.id}`, 'display: contents;');
-        }
-        const countryTagsByFolder = loadResult.result.countryTagsByFolder ?? {};
-        const country = getSelectedCountry(countryTagsByFolder);
-        const { baseContent, contentHtml, folderOptionsHtml, countries } =
-            await renderTechnologyFolders(technologyTrees, folders, styleTable, loadResult.result, country);
-
-        // The full page is assembled only when the base assigns it; a skipped or posted edit never
-        // pays for it.
-        const fullHtml = () => html(
-            webview,
-            baseContent,
-            [
-                previewedFileUriScript(uri),
-                // The country dropdown is re-listed per folder on the page, so the page needs the
-                // whole map rather than one folder's options; the update carries it too, so an edit
-                // that moves a technology re-lists as well.
-                // jsonForScript, not JSON.stringify: the tags come from the workspace, and one
-                // containing `</script` would end the inline script.
-                { content: `window.techCountries = ${jsonForScript(countries)};` },
-                { content: `window.techCountry = ${jsonForScript(country ?? '')};` },
-                'common.js',
-                'techtree.js',
-            ],
-            [
-                'common.css',
-                'codicon.css',
-                // Addressable id so an in-place updateBody can refresh the server StyleTable (the tech
-                // markup references its classes) by mutating this <style>.textContent instead of a full
-                // reload. Tech injects no client-side <style>, so no extra style nonce is reserved.
-                { content: styleTable.toRawCss(), id: 'tech-server-styles' },
-            ],
-            // baseContent arrives already collapsed, folder markup and all.
-            { collapseWhitespace: false },
-        );
-
-        // Parts for the in-place update. The tree is rendered on the host, so unlike MIO the payload
-        // ships the server-rendered #techtreecontent inner markup and the <option> list, not data
-        // globals; the webview swaps them in and re-applies folder visibility. The parts are
-        // deterministic for identical input (fresh StyleTable per render, stable folder order), so an
-        // unchanged edit hashes equal and the LoaderPreview skips.
-        return {
-            html: fullHtml,
-            // `country` is the country the tree was actually drawn for, which is not always the
-            // stored one: getSelectedCountry drops a tag no folder in this file has art for. The page
-            // cannot know that on its own, and updateCountryOptions would re-add the dropped tag and
-            // leave the selector claiming a country the tree is not drawn for. Carrying it is also
-            // what keeps a country-only change from hashing equal and being skipped.
-            update: { styleCss: styleTable.toRawCss(), data: { contentHtml, folderOptionsHtml, folders, countries, country: country ?? '' } },
-        };
-
-    } catch (e) {
-        return errorPage(webview, uri, e);
-    }
+    return renderLoaderFile(loader, uri, webview, options, {
+        debugLabel: 'Loader session tech tree',
+        scripts: ['common.js', 'techtree.js'],
+        styles: ['common.css', 'codicon.css'],
+        serverStylesId: 'tech-server-styles',
+        buildPage: async (result, styleTable) => {
+            const technologyTrees = result.technologyTrees;
+            const folders = uniq(technologyTrees.map(tt => tt.folder));
+            if (folders.length === 0) {
+                return localize('techtree.notechtree', 'No technology tree.');
+            }
+            styleTable.raw('.tech-name-variant', 'display: none;');
+            for (const mode of techNameModes) {
+                styleTable.raw(`#techtreecontent.name-mode-${mode.id} .tech-name-${mode.id}`, 'display: contents;');
+            }
+            const country = getSelectedCountry(result.countryTagsByFolder ?? {});
+            const { baseContent, contentHtml, folderOptionsHtml, countries } =
+                await renderTechnologyFolders(technologyTrees, folders, styleTable, result, country);
+            return {
+                content: baseContent,
+                scripts: [
+                    { content: `window.techCountries = ${jsonForScript(countries)};` },
+                    { content: `window.techCountry = ${jsonForScript(country ?? '')};` },
+                ],
+                htmlOptions: { collapseWhitespace: false },
+                data: { contentHtml, folderOptionsHtml, folders, countries, country: country ?? '' },
+            };
+        },
+    });
 }
 
 interface TechnologyFoldersRender {
@@ -181,7 +134,7 @@ async function renderTechnologyFolders(technologyTrees: TechnologyTree[], folder
 
 async function renderFolderOptions(folders: string[]): Promise<string> {
     return (await Promise.all(folders.map(async (folder) => {
-        const localizedText = getFlags().localisationIndex ? `${await getLocalisedTextQuick(folder)} (${folder})` : folder;
+        const localizedText = await localiseLabel(folder, 'text-first');
         return `<option value="techfolder_${escapeAttr(folder)}">${htmlEscape(localizedText)}</option>`;
     }))).join('');
 }
@@ -193,7 +146,7 @@ async function renderCountryOptions(countryTagsByFolder: Record<string, string[]
     for (const folder of Object.keys(countryTagsByFolder)) {
         result[folder] = await Promise.all((countryTagsByFolder[folder] ?? []).map(async tag => ({
             tag,
-            label: getFlags().localisationIndex ? `${await getLocalisedTextQuick(tag)} (${tag})` : tag,
+            label: await localiseLabel(tag, 'text-first'),
         })));
     }
 
@@ -641,7 +594,7 @@ async function renderTechnology(
         data-tech-id="${escapeAttr(technology.id)}" data-tech-small="${technology.enableEquipments ? '0' : '1'}"
         start="${technology.token?.start}"
         end="${technology.token?.end}"
-        title="${escapeAttr(technology.id)}${getFlags().localisationIndex ? `\n${escapeAttr((await getLocalisedTextQuick(bestNameKey)) ?? '')}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${escapeAttr(technology.id)}${escapeAttr(await localiseOptionalText(bestNameKey, '\n'))}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `
@@ -723,7 +676,7 @@ async function renderSubTechnology(
         data-subtech-id="${escapeAttr(subTechnology.id)}"
         start="${subTechnology.token?.start}"
         end="${subTechnology.token?.end}"
-        title="${escapeAttr(subTechnology.id)}${getFlags().localisationIndex ? `\n${escapeAttr((await getLocalisedTextQuick(subTechnology.id)) ?? '')}` : ''}\n(${folder.x}, ${folder.y})"
+        title="${escapeAttr(subTechnology.id)}${escapeAttr(await localiseOptionalText(subTechnology.id, '\n'))}\n(${folder.x}, ${folder.y})"
         class="
             navigator
             ${commonOptions.styleTable.style('navigator', () => `
