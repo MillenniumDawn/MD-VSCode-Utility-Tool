@@ -35,19 +35,19 @@ export interface HOIIdeaCategory {
 
 // ModifierPair is written the same way by an idea and by a decision, so it lives in
 // sharedpayload.ts; re-exported here so this module's importers keep reaching it in one place.
-export { ModifierPair } from "../sharedpayload";
+;
 import { ModifierPair } from "../sharedpayload";
 
 // `targeted_modifier = { tag = SOV attack_bonus = 0.1 }` -- modifiers that apply against one
 // country rather than to the owner.
-export interface TargetedModifier {
+interface TargetedModifier {
 	tag: string | undefined;
 	modifiers: ModifierPair[];
 }
 
 // `equipment_bonus = { <archetype> = { <stat> = value ... } }`, plus the `instant = yes` flag that
 // can sit beside the archetypes.
-export interface EquipmentBonusGroup {
+interface EquipmentBonusGroup {
 	archetype: string;
 	instant: boolean;
 	modifiers: ModifierPair[];

@@ -31,7 +31,7 @@ export interface HOIBopRange {
 	token: Token | undefined;
 }
 
-export interface HOIBopSide {
+interface HOIBopSide {
 	id: string;
 	icon: string | undefined;
 	ranges: HOIBopRange[];

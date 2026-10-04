@@ -222,14 +222,6 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 		return loader;
 	}
 
-	protected override extraMeasurements(result: LoadResult<ProvinceMap>) {
-		return {
-			...super.extraMeasurements(result),
-			width: result.result.width,
-			height: result.result.height,
-			provinceCount: result.result.provinces.length,
-		};
-	}
 
 	public override toString() {
 		return `[DefaultMapLoader]`;

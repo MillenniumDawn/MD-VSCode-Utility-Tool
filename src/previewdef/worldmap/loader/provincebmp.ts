@@ -12,7 +12,7 @@ import {
 	WorldMapWarning,
 	Zone,
 } from "../definitions";
-import { FileLoader, LoadResult, LoadResultOD, mergeRegions } from "./common";
+import { FileLoader, LoadResultOD, mergeRegions } from "./common";
 
 export class ProvinceBmpLoader extends FileLoader<ProvinceBmp> {
 	protected async loadFromFile(): Promise<LoadResultOD<ProvinceBmp>> {
@@ -27,14 +27,6 @@ export class ProvinceBmpLoader extends FileLoader<ProvinceBmp> {
 		};
 	}
 
-	protected override extraMeasurements(result: LoadResult<ProvinceBmp>) {
-		return {
-			...super.extraMeasurements(result),
-			width: result.result.width,
-			height: result.result.height,
-			provinceCount: result.result.provinces.length,
-		};
-	}
 
 	public override toString() {
 		return `[ProvinceBmpLoader: ${this.file}]`;
@@ -316,7 +308,7 @@ export function fillEdges<T extends ColorContainer>(
 	return provinces;
 }
 
-export function fillEdgesOfProvince<T extends EdgeDef>(
+function fillEdgesOfProvince<T extends EdgeDef>(
 	index: number,
 	colorToProvince: Record<number, T>,
 	colorByPosition: Uint32Array,

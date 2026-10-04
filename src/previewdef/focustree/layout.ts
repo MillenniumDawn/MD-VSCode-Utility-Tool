@@ -25,7 +25,7 @@ export interface FocusItemLayout {
 }
 
 // The way the tree grows from its first row, which the game takes from the grid's `format`.
-export type FocusTreeFormat = 'up' | 'down' | 'left' | 'right';
+type FocusTreeFormat = 'up' | 'down' | 'left' | 'right';
 
 export interface FocusTreeLayout {
     mode: FocusTreeLayoutMode;

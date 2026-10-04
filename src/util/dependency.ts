@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import { Commands, ContextName } from "../constants";
-import { sendEvent } from "./telemetry";
 import { localize } from "./i18n";
 import { contextContainer } from "../context";
 import { error } from "./debug";
@@ -57,7 +56,6 @@ export function registerScanReferencesCommand(): vscode.Disposable {
 }
 
 async function scanReferences(): Promise<void> {
-	sendEvent("scanReferences");
 
 	const editor = vscode.window.activeTextEditor;
 	if (!editor) {

@@ -8,7 +8,7 @@ function formatLogMessage(context: string, cause: unknown): string {
 
 export function attachTaskWithErrorLogging(
 	task: Promise<unknown>,
-	onSuccess: () => void,
+	onSuccess: () => void = () => {},
 	context: string,
 	reportError: ErrorReporter,
 ): void {

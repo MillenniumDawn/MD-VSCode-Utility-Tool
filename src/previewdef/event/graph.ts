@@ -32,7 +32,7 @@ export interface EventNode {
 	token: Token | undefined;
 }
 
-export interface OptionNode {
+interface OptionNode {
 	optionName: string;
 	trigger: ConditionComplexExpr;
 	children: EventEdge[];
@@ -41,7 +41,7 @@ export interface OptionNode {
 	effects: EffectTreeNode[];
 }
 
-export interface EventEdge {
+interface EventEdge {
 	toScope: string;
 	toNode: EventNode | string;
 	days: number;
@@ -369,7 +369,7 @@ export async function buildEventGraphPayload(
 
 // Each predicate is exact: with the flag false, the toggle it gates produces the same output in
 // either position, so hiding it takes nothing away.
-export function toolbarFlagsOf(
+function toolbarFlagsOf(
 	nodes: EventGraphNode[],
 	edges: EventGraphEdge[],
 	effectBlocks: EffectTreeNode[][],

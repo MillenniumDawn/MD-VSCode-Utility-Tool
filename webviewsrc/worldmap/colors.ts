@@ -7,7 +7,7 @@ import { RenderContext } from "./renderContext";
 export const landWarning = 0xe02020;
 export const landNoWarning = 0x7fff7f;
 export const waterWarning = 0xc00000;
-export const waterNoWarning = 0x20e020;
+const waterNoWarning = 0x20e020;
 
 export function toColor(colorNum: number) {
 	return "#" + colorNum.toString(16).padStart(6, "0");

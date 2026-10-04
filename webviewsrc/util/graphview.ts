@@ -44,7 +44,7 @@ export interface RenderedEdge<E extends GraphEdgeLike> {
 
 // An arrow's label. `guarded` rides along because it decides both what the label says and which
 // classes the curve gets, and neither preview should have to work it out twice.
-export interface BuiltChip<E extends GraphEdgeLike> {
+interface BuiltChip<E extends GraphEdgeLike> {
 	edge: E;
 	guarded: boolean;
 	chip?: HTMLDivElement;

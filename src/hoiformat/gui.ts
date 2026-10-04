@@ -32,7 +32,7 @@ export interface Background {
     position: Position;
 }
 
-export interface GuiTypes {
+interface GuiTypes {
     containerwindowtype: ContainerWindowType[];
     windowtype: ContainerWindowType[];
     positiontype: PositionType[];

@@ -1,8 +1,6 @@
 import { JSDOM, VirtualConsole } from 'jsdom';
 
-// Every error the page raised that nobody asked for: an exception a listener threw out to jsdom, or
-// one `tryRun` caught and reported as exception telemetry. Both are still printed; a root hook below
-// turns whatever is left here into a failed test.
+// Every error the page raised that nobody asked for. A root hook below turns these into failed tests.
 const runtimeErrors: unknown[] = [];
 
 const virtualConsole = new VirtualConsole().forwardTo(console);
@@ -145,9 +143,6 @@ export function resetWebviewState(): void {
 (global as any).acquireVsCodeApi = () => ({
     postMessage: (message: any) => {
         postedMessages.push(message);
-        if (message?.command === 'telemetry' && message.telemetryType === 'exception') {
-            runtimeErrors.push(message.args?.[0] ?? message);
-        }
     },
     getState: () => state,
     setState: (s: Record<string, any>) => {

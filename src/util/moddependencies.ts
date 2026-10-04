@@ -269,7 +269,7 @@ async function readEnabledMods(userDataDir: vscode.Uri): Promise<Set<string>> {
  * workshop copy and a local one -- go to the one the launcher has enabled, else the first by file
  * name, and the tie is logged.
  */
-export async function loadModRegistry(
+async function loadModRegistry(
 	userDataDir: vscode.Uri,
 ): Promise<Map<string, vscode.Uri>> {
 	const registry = new Map<string, vscode.Uri>();

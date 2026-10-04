@@ -27,7 +27,7 @@ export interface BopWindowInput {
 	decisions: BopWindowDecision[];
 }
 
-export interface BopWindowDecision {
+interface BopWindowDecision {
 	// The sprite the decision's first icon names.
 	icon?: string;
 	// What the row writes where the game writes the cost.

@@ -12,12 +12,12 @@ export interface Mio {
     warnings: MioWarning[];
 }
 
-export interface MioTextHeader {
+interface MioTextHeader {
     text: string;
     x: number;
 }
 
-export interface MioWarning extends Warning<string> {
+interface MioWarning extends Warning<string> {
     navigations?: { file: string, start: number, end: number }[];
 }
 

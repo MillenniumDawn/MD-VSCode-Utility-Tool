@@ -8,7 +8,7 @@ import {
 	WorldMapWarning,
 	Zone,
 } from "../definitions";
-import { FileLoader, LoadResult, LoadResultOD, addPointToZone } from "./common";
+import { FileLoader, LoadResultOD, addPointToZone } from "./common";
 
 export class RiverLoader extends FileLoader<RiverBmp> {
 	protected async loadFromFile(): Promise<LoadResultOD<RiverBmp>> {
@@ -23,12 +23,6 @@ export class RiverLoader extends FileLoader<RiverBmp> {
 		};
 	}
 
-	protected override extraMeasurements(result: LoadResult<RiverBmp>) {
-		return {
-			...super.extraMeasurements(result),
-			riverCount: result.result.rivers.length,
-		};
-	}
 
 	public override toString() {
 		return `[RiverLoader: ${this.file}]`;

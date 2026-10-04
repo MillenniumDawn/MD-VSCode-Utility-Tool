@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 import { getFlags } from "./featureflags";
 import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
-import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions, ListFilesOptions } from "./fileloader";
 import {
@@ -48,7 +47,6 @@ const parentLocalisationFileMaps: Record<
 	Record<string, Set<string>>
 >[] = [];
 
-// Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
 let estimatedSize: [number] = [0];
 
@@ -68,7 +66,6 @@ const builder = createIndexBuilder({
 		]);
 	},
 	onSuccess: () => {
-		sendEvent("localisationIndex", { size: estimatedSize[0].toString() });
 	},
 });
 
@@ -475,7 +472,6 @@ const watchers = createIndexWatchers({
 			"localisationIndex.workspace.building",
 			"Building workspace localisation index...",
 		),
-		telemetryEvent: "localisationIndex.workspace",
 		failureMessage: "Building workspace localisation index failed.",
 	},
 	rebuildParent: {

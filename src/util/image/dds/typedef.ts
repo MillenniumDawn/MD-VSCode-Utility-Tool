@@ -6,7 +6,6 @@ export const HEADER_DXT10_LENGTH_INT = 5;
 export const DDPF_ALPHA = 0x1;
 export const DDPF_ALPHA_CHANNEL = 0x2;
 export const DDPF_RGB = 0x40;
-export const DDPF_RGBA = DDPF_ALPHA | DDPF_RGB;
 export const DDPF_FOURCC = 0x4;
 export const DDPF_YUV = 0x200;
 export const DDPF_LUMINANCE = 0x20000;

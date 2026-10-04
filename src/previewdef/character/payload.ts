@@ -10,15 +10,15 @@ import { CharacterRoleKind } from "./schema";
 // counter-free ids are what make an unchanged edit skip the re-render.
 
 export {
-	LocText,
-	NavTarget,
-	ModifierTone,
+
+
+
 	ModifierLine,
 	ModifierGroup,
 } from "../sharedpayload";
 import { LocText, NavTarget, ModifierLine, ModifierGroup, IconStyle } from "../sharedpayload";
 
-export { CharacterRoleKind } from "./schema";
+;
 
 // What a card and a group are keyed by. A character that carries no role block at all is still
 // drawn -- it is half-written rather than finished, and hiding it would hide exactly the case the

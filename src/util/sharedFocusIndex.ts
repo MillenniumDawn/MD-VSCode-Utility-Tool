@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 
 import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
-import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions, ListFilesOptions } from "./fileloader";
 import {
@@ -32,7 +31,6 @@ const globalFocusKeyToFile = new Map<string, string>();
 const parentFocusKeyToFiles: Map<string, string>[] = [];
 const workspaceFocusKeyToFile = new Map<string, string>();
 
-// Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
 let estimatedSize: [number] = [0];
 
@@ -52,7 +50,6 @@ const builder = createIndexBuilder({
 		]);
 	},
 	onSuccess: () => {
-		sendEvent("sharedFocusIndex", { size: estimatedSize[0].toString() });
 	},
 });
 
@@ -341,7 +338,6 @@ const watchers = createIndexWatchers({
 			"sharedFocusIndex.workspace.building",
 			"Building workspace Focus index...",
 		),
-		telemetryEvent: "sharedFocusIndex.workspace",
 		failureMessage: "Building workspace Focus index failed.",
 	},
 	rebuildParent: {

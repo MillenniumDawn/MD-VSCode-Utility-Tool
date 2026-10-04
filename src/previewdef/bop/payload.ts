@@ -5,7 +5,7 @@
 // And the payload must be deterministic: LoaderPreview hashes it to decide whether an edit changed
 // anything, so a stable order is what makes an unchanged edit skip the re-render.
 
-export { LocText, NavTarget } from "../sharedpayload";
+export { LocText,  } from "../sharedpayload";
 import { LocText, NavTarget } from "../sharedpayload";
 
 export interface BopRangeView {

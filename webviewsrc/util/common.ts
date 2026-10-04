@@ -3,8 +3,6 @@ import { enableDropdowns, numDropDownOpened$ } from "./dropdown";
 import { enableCheckboxes } from "./checkbox";
 import { feLocalize } from "./i18n";
 import { vscode } from "./vscode";
-import { sendException } from "./telemetry";
-import { forceError } from "../../src/util/common";
 import { iconButtonHtml } from "../../src/previewdef/toolbaricons";
 export { arrayToMap } from "../../src/util/common";
 
@@ -125,14 +123,12 @@ export function tryRun<T extends (...args: any[]) => any>(
 			if (result instanceof Promise) {
 				return result.catch((e) => {
 					console.error(e);
-					sendException(forceError(e));
 				}) as ReturnType<T>;
 			}
 
 			return result;
 		} catch (e) {
 			console.error(e);
-			sendException(forceError(e));
 		}
 
 		return undefined;

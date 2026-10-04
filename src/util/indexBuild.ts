@@ -21,7 +21,7 @@ export const indexParseQueue = createWorkQueue(4);
  * a cold build over a mod the size of Millennium Dawn is expected to take a while, a build still
  * running after this long is not going to finish.
  */
-export const indexBuildTimeout = 5 * 60 * 1000;
+const indexBuildTimeout = 5 * 60 * 1000;
 
 /**
  * What a build reports into, and watches for a cancel, while it runs. The token is shared by every

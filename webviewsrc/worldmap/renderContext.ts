@@ -2,7 +2,7 @@ import { Province, Zone } from "./definitions";
 import { TopBar, ViewMode } from "./topbar";
 import { ViewPoint } from "./viewpoint";
 
-export const renderScaleByViewMode: Record<
+const renderScaleByViewMode: Record<
 	ViewMode,
 	{ edge: number; labels: number }
 > = {

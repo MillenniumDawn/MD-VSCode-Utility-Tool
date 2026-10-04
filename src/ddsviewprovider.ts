@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { html, loadingShellHtml, errorPageContent } from './util/html';
 import { StyleTable } from './util/styletable';
-import { sendEvent } from './util/telemetry';
 import { previewWebviewOptions, readFile } from './util/vsccommon';
 import { decodeImageToPng } from './util/image/imagedecoder';
 
@@ -101,7 +100,6 @@ export class DDSViewProvider extends CommonViewProvider {
     protected readonly imageKind: 'dds' | 'tga' = 'dds';
 
     protected onOpen(): void {
-        sendEvent('preview.dds');
     }
 }
 
@@ -109,6 +107,5 @@ export class TGAViewProvider extends CommonViewProvider {
     protected readonly imageKind: 'dds' | 'tga' = 'tga';
 
     protected onOpen(): void {
-        sendEvent('preview.tga');
     }
 }

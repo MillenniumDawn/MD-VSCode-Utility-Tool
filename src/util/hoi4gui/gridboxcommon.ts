@@ -28,7 +28,7 @@ export interface GridBoxItem {
     classNames?: string;
 }
 
-export interface GridBoxConnectionItemDirection {
+interface GridBoxConnectionItemDirection {
     in: Record<string, true>;
     out: Record<string, true>;
 }
@@ -310,7 +310,7 @@ export function renderGridBoxConnection(a: NumberPosition, b: NumberPosition, st
  * The points the border drawing of `renderGridBoxConnection` passes through, from `a` to `b` with
  * the ends of a 'parent' connection swapped the same way, so a tiled line takes the same path.
  */
-export function connectionPath(a: NumberPosition, b: NumberPosition, type: GridBoxConnectionType, format: Format['_name'], gridSize: NumberSize, cornerPosition: number = 1.5): NumberPosition[] {
+function connectionPath(a: NumberPosition, b: NumberPosition, type: GridBoxConnectionType, format: Format['_name'], gridSize: NumberSize, cornerPosition: number = 1.5): NumberPosition[] {
     if (a.y === b.y || a.x === b.x) {
         return [a, b];
     }

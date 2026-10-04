@@ -30,6 +30,7 @@ coverage/**
 CLAUDE.md
 eslint.config.cjs
 .jscpd.json
+knip.json
 .nvmrc
 *.log
 *.tmp

@@ -8,7 +8,6 @@ import {
 import { error } from "../debug";
 import { mapLimit, UserError } from "../common";
 import { Dependency, getDependenciesFromText } from "../dependency";
-import { sendEvent } from "../telemetry";
 export { Dependency } from "../dependency";
 
 export class LoaderSession {
@@ -117,7 +116,6 @@ export abstract class Loader<T, E = {}> {
 
 	private loadingPromise: Promise<LoadResult<T, E>> | undefined = undefined;
 
-	public disableTelemetry = false;
 
 	constructor() {}
 
@@ -130,8 +128,6 @@ export abstract class Loader<T, E = {}> {
 			(!session.isLoaded(this) &&
 				(session.force || (await this.shouldReload(session))))
 		) {
-			const loadStartTime = Date.now();
-
 			session.loadingLoader.push(this);
 			try {
 				this.beforeLoadImpl(session);
@@ -149,15 +145,6 @@ export abstract class Loader<T, E = {}> {
 				}
 			}
 
-			const timeElapsed = Date.now() - loadStartTime;
-
-			if (timeElapsed > 500 && !this.disableTelemetry) {
-				sendEvent(
-					"loader.loaddone",
-					{ loaderType: this.constructor.name },
-					{ timeElapsed, ...this.extraMeasurements(this.cachedValue) },
-				);
-			}
 		} else if (session.shouldReload(this) === false) {
 			// A settled "no" keeps the cached value for the rest of the session. A caller that only
 			// saw "checking" is not marked: that check may still end in a reload.
@@ -194,12 +181,6 @@ export abstract class Loader<T, E = {}> {
 	protected async fireOnProgressEvent(progress: string): Promise<void> {
 		this.onProgressEmitter.fire(progress);
 		await new Promise((resolve) => setTimeout(resolve, 0));
-	}
-
-	protected extraMeasurements(
-		_result: LoadResult<T, E>,
-	): Record<string, number> {
-		return {};
 	}
 
 	protected abstract loadImpl(
@@ -296,7 +277,6 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 			let subLoader = subLoaders[file];
 			if (!subLoader) {
 				subLoader = new this.subLoaderConstructor(path.join(this.folder, file));
-				subLoader.disableTelemetry = true;
 				subLoader.onProgress((e) => this.onProgressEmitter.fire(e));
 			}
 
@@ -330,10 +310,6 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 		);
 
 		return this.mergeFiles(fileResults, session, failures);
-	}
-
-	protected override extraMeasurements(result: LoadResult<T, E>) {
-		return { ...super.extraMeasurements(result), fileCount: this.fileCount };
 	}
 
 	protected abstract mergeFiles(

@@ -36,7 +36,7 @@ const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
 // Caps how many focus/inlay renders run concurrently.
 const renderConcurrency = 8;
 
-export interface FocusTreeUpdatePayload {
+interface FocusTreeUpdatePayload {
     focusTrees: FocusTree[];
     renderedFocus: Record<string, string>;
     renderedInlayWindows: Record<string, string>;
@@ -57,7 +57,7 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
     toolbarFlags: ToolbarFlags;
 }
 
-export type { ToolbarFlags };
+;
 
 export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean }): Promise<FocusTreePayload | null> {
     const resolveIcons = options?.resolveIcons !== false;
@@ -438,7 +438,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
                 </div>
             </div>
         </div>`;
-    
+
     // The warning buttons stay in place, disabled while no tree has a warning.
     const hasNoWarnings = focusTrees.every(ft => ft.warnings.length === 0);
     const warningsButton = iconButtonHtml('showWarnings', localize, { domId: 'show-warnings', on: false, disabled: hasNoWarnings });
@@ -831,7 +831,7 @@ async function renderFocus(
                     : `background-color: rgba(127, 127, 127, 0.25); background-size: 0px;`
         );
     }
-    
+
     styleTable.style('focus-icon-' + normalizeForStyle('-empty'), () => 'background: grey;');
 
     const titlebarObject = await getFocusTitlebarImage(focus.textIcon, titlebarStyles);
@@ -943,7 +943,7 @@ function withOffset(base: string, offset: number): string {
     return offset === 0 ? base : `calc(${base} ${offset < 0 ? '-' : '+'} ${Math.abs(offset)}px)`;
 }
 
-export async function getFocusIcon(name: string, gfxFiles: string[]): Promise<Image | undefined> {
+async function getFocusIcon(name: string, gfxFiles: string[]): Promise<Image | undefined> {
     const sprite = await getSpriteByGfxName(name, gfxFiles);
     if (sprite !== undefined) {
         return sprite.image;

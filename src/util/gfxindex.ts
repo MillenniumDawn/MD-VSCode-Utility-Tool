@@ -5,7 +5,6 @@ import { getFlags } from "./featureflags";
 import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import uniq from "lodash/uniq";
-import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions, ListFilesOptions } from "./fileloader";
 import {
@@ -46,7 +45,6 @@ export function getGfxIndexVersion(): number {
 	return gfxIndexVersion;
 }
 
-// Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
 let estimatedSize: [number] = [0];
 
@@ -63,7 +61,6 @@ const builder = createIndexBuilder({
 		]);
 	},
 	onSuccess: () => {
-		sendEvent("gfxIndex", { size: estimatedSize[0].toString() });
 	},
 });
 
@@ -355,7 +352,6 @@ const watchers = createIndexWatchers({
 			"gfxindex.workspace.building",
 			"Building workspace GFX index...",
 		),
-		telemetryEvent: "gfxIndex.workspace",
 		failureMessage: "Building workspace GFX index failed.",
 	},
 	rebuildParent: {

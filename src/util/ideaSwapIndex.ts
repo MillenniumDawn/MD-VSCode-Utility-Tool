@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { IndexFile, IndexListing, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
-import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions } from "./fileloader";
 import {
@@ -64,7 +63,6 @@ const globalSwapIndex: SwapIndex = {};
 let parentSwapIndexes: SwapIndex[] = [];
 let workspaceSwapIndex: SwapIndex = {};
 
-// Both halves report into this so the telemetry event carries the whole build's size. Reset per
 // build, since a build that failed and is retried would otherwise keep counting from where it left off.
 let estimatedSize: [number] = [0];
 
@@ -81,7 +79,6 @@ const builder = createIndexBuilder({
 		]);
 	},
 	onSuccess: () => {
-		sendEvent("ideaSwapIndex", { size: estimatedSize[0].toString() });
 	},
 });
 
@@ -488,7 +485,6 @@ const watchers = createIndexWatchers({
 			"ideaSwapIndex.workspace.building",
 			"Building workspace idea swap index...",
 		),
-		telemetryEvent: "ideaSwapIndex.workspace",
 		failureMessage: "Building workspace idea swap index failed.",
 	},
 	rebuildParent: {
@@ -517,12 +513,3 @@ export function __resetIdeaSwapIndexForTests(): void {
 
 // Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
 export const __testHandlers = watchers.handlers;
-
-// Test-only: lets a test seed the workspace half of the index without touching the file system.
-export function __seedWorkspaceSwapsForTests(index: {
-	[file: string]: SwapRecord[];
-}): void {
-	workspaceSwapIndex = { ...index };
-	markSwapIndexChanged();
-	builder.seed([undefined, undefined, undefined]);
-}

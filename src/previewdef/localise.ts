@@ -19,11 +19,6 @@ export async function localise(key: string): Promise<LocText> {
 	return { key, text: text ?? key };
 }
 
-/** The resolved text alone, for the places that show a string rather than build a LocText. */
-export async function localiseText(key: string): Promise<string> {
-	return (await localise(key)).text;
-}
-
 export async function localiseLabel(key: string, order: "key-first" | "text-first"): Promise<string> {
 	if (!getFlags().localisationIndex) {
 		return key;

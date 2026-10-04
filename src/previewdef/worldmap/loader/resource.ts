@@ -29,7 +29,7 @@ export class ResourceDefinitionLoader extends FolderLoader<Resource[], Resource[
     constructor() {
         super('common/resources', ResourceFileLoader);
     }
-    
+
     protected mergeLoadedFiles(fileResults: LoadResult<Resource[], MapLoaderExtra>[], _session: LoaderSession): Promise<LoadResult<Resource[], MapLoaderExtra>> {
         const { result: resourceMap, warnings } = mergeByNameWithDuplicateWarning(fileResults, 'first', (resource, existingResource) => ({
             source: [],
@@ -50,7 +50,7 @@ export class ResourceDefinitionLoader extends FolderLoader<Resource[], Resource[
     }
 }
 
-export class ResourceFileLoader extends FileLoader<Resource[]> {
+class ResourceFileLoader extends FileLoader<Resource[]> {
     protected async loadFromFile(): Promise<LoadResultOD<Resource[]>> {
         return {
             result: await loadResources(this.file),

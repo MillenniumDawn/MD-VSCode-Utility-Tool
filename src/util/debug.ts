@@ -1,5 +1,4 @@
-import { sendException } from "./telemetry";
-import { forceError, UserError } from "./common";
+import { forceError } from "./common";
 import { Logger } from "./logger";
 
 // The unit tests set MD_UTILITIES_TEST (in their vscode stub), so a passing run is not buried
@@ -15,10 +14,4 @@ export function error(error: unknown): void {
     let realError = forceError(error);
     Logger.error(typeof error === 'string' ? error : (realError.stack ?? realError.message));
 
-    // Duck-type YAMLException by name so this module doesn't statically import js-yaml (which would
-    // pull the library in at activation just for logging). js-yaml sets `name` to 'YAMLException'.
-    const isYamlException = (error as { name?: string } | null)?.name === 'YAMLException';
-    if (!(error instanceof UserError) && !isYamlException) {
-        sendException(realError, { callerStack: new Error().stack ?? '' });
-    }
 }

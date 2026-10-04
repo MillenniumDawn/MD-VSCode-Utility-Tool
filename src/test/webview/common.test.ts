@@ -1,4 +1,4 @@
-import { recordedPosts, resetWebviewState, takeRuntimeErrors } from './setup';
+import { recordedPosts, resetWebviewState } from './setup';
 import * as assert from 'assert';
 import { copyArray, tryRun, getState, setState, setPreviewOption, enableZoom, scrollToState, subscribeNavigators, subscribeRefreshButton, initCommon } from '../../../webviewsrc/util/common';
 
@@ -37,11 +37,12 @@ describe('webview/util/common', function () {
 
         it('returns undefined on sync error', function () {
             const originalConsoleError = console.error;
-            console.error = () => undefined;
+            const errors: unknown[] = [];
+            console.error = error => errors.push(error);
             try {
                 const wrapped = tryRun(() => { throw new Error('fail'); });
                 assert.strictEqual(wrapped(), undefined);
-                assert.deepStrictEqual(takeRuntimeErrors().map(e => (e as Error).message), ['fail']);
+                assert.deepStrictEqual(errors.map(e => (e as Error).message), ['fail']);
             } finally {
                 console.error = originalConsoleError;
             }
@@ -49,12 +50,13 @@ describe('webview/util/common', function () {
 
         it('catches async errors and returns undefined', async function () {
             const originalConsoleError = console.error;
-            console.error = () => undefined;
+            const errors: unknown[] = [];
+            console.error = error => errors.push(error);
             try {
                 const wrapped = tryRun(async () => { throw new Error('async fail'); });
                 const result = await wrapped();
                 assert.strictEqual(result, undefined);
-                assert.deepStrictEqual(takeRuntimeErrors().map(e => (e as Error).message), ['async fail']);
+                assert.deepStrictEqual(errors.map(e => (e as Error).message), ['async fail']);
             } finally {
                 console.error = originalConsoleError;
             }

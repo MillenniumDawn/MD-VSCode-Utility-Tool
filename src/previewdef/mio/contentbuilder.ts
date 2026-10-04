@@ -153,7 +153,7 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml
                 </div>
             </div>
         </div>`;
-    
+
     const toggles = `
         <label for="show-included-traits" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showInheritedTraits', 'Show inherited traits')}</label>
         <input type="checkbox" id="show-included-traits" class="${styleTable.style('marginRight30', () => `margin-right:30px`)}">
@@ -200,7 +200,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
             background-size: ${iconObject ? iconObject.width: 0}px;`
         );
     }
-    
+
     styleTable.style('trait-icon-' + normalizeForStyle('-empty'), () => 'background: grey;');
     styleTable.raw(`.${styleTable.name('trait-common')}:hover .${styleTable.name('trait-span')}`, `display:inline-block;`);
     styleTable.raw(`.${styleTable.name('trait-common')}:hover .${styleTable.name('trait-span-display')}`, `margin-top: -12px;`);
@@ -292,7 +292,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
     </div>`;
 }
 
-export async function getTraitIcon(name: string, gfxFiles: string[]): Promise<Image | undefined> {
+async function getTraitIcon(name: string, gfxFiles: string[]): Promise<Image | undefined> {
     const sprite = await getSpriteByGfxName(name, gfxFiles);
     if (sprite !== undefined) {
         return sprite.image;

@@ -13,7 +13,6 @@ import {
 } from "./installpath";
 import { refreshModDependencies } from "./moddependencies";
 import { checkParentModPaths, clearParentModCache } from "./parentmods";
-import { sendEvent } from "./telemetry";
 import { getConfiguration, isFileScheme } from "./vsccommon";
 
 export function registerHoiFs(): vscode.Disposable {
@@ -62,7 +61,6 @@ export function registerHoiFs(): vscode.Disposable {
 }
 
 async function selectHoiFolder(): Promise<void> {
-	sendEvent("selectHoiFolder");
 
 	const dialogOptions: vscode.OpenDialogOptions = {
 		canSelectFolders: true,

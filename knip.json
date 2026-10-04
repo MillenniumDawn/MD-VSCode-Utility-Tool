@@ -1,0 +1,16 @@
+{
+	"include": ["files", "exports", "types"],
+	"entry": [
+		"src/extension.ts",
+		"src/util/image/imageWorker.ts",
+		"webviewsrc/*.ts",
+		"webviewsrc/**/index.ts",
+		"scripts/*.js",
+		"src/test/**/*.ts"
+	],
+	"project": [
+		"src/**",
+		"webviewsrc/**",
+		"scripts/**"
+	]
+}
