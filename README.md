@@ -86,11 +86,12 @@ for `replace_path` too, as it does in the game.
 ## Browser support
 
 In vscode.dev, the extension can read files exposed through the workspace or mounted filesystem
-you opened. To use vanilla and DLC files, make the game files available there and point
-`mdHoi4Utilities.installPath` at their exposed location. The browser cannot resolve mods through
-the launcher's mod registry, so include dependency mods in the opened workspace or mount. Index
-data is rebuilt during each web session, and image decoding runs on the extension host instead of
-worker threads; large maps and icon-heavy previews can take longer than on desktop.
+you opened. To use vanilla files or loose DLC folders, expose them there and point
+`mdHoi4Utilities.installPath` at their exposed location. DLC `.zip` archives cannot be read in the
+browser. The browser cannot resolve mods through the launcher's mod registry, so include dependency
+mods in the opened workspace or mount. Index data is rebuilt during each web session, and image
+decoding runs on the extension host instead of worker threads; large maps and icon-heavy previews
+can take longer than on desktop.
 
 ## Settings
 

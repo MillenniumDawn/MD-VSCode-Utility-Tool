@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
+import { WebviewType } from "../../../../constants";
 
 const extensionId = "MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026";
-const previewViewType = "mdHoi4Utilities.preview";
 
 suite("VS Code for the Web smoke", () => {
 	test("activates the browser bundle and opens an event preview", async () => {
@@ -27,7 +27,7 @@ suite("VS Code for the Web smoke", () => {
 		while (Date.now() < deadline) {
 			const opened = vscode.window.tabGroups.all.some((group) =>
 				group.tabs.some((tab) =>
-					tab.input instanceof vscode.TabInputWebview && tab.input.viewType === previewViewType,
+					tab.input instanceof vscode.TabInputWebview && tab.input.viewType === WebviewType.Preview,
 				),
 			);
 			if (opened) {
