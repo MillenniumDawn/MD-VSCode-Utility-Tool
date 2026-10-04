@@ -52,10 +52,14 @@ describe('compat/mods.json', () => {
 		}
 	});
 
+	// A mod's own pack under src/modtools/packs/ may name it: that is the one part of the extension
+	// that belongs to a mod, and it only runs while that mod is open (see src/modtools/README.md).
 	it('names no listed mod in the extension or its workflows', () => {
+		const modPacksDir = path.resolve(repoRoot, 'src', 'modtools', 'packs') + path.sep;
 		const files = ['src', 'webviewsrc', '.github']
 			.flatMap(dir => filesUnder(path.join(repoRoot, dir)))
-			.filter(file => path.resolve(file) !== path.resolve(repoRoot, 'src', 'test', 'compatmods.test.ts'));
+			.filter(file => path.resolve(file) !== path.resolve(repoRoot, 'src', 'test', 'compatmods.test.ts'))
+			.filter(file => !path.resolve(file).startsWith(modPacksDir));
 		const found: string[] = [];
 		for (const file of files) {
 			const text = fs.readFileSync(file, 'utf8').toLowerCase();

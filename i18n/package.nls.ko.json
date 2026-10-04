@@ -86,5 +86,9 @@
     "hoi4modutilities.auditor.reportFolder.desc": "[모든 중점 계통도 검사](command:mdhoi4utilities.auditfocustrees): 중점 계통도 미리보기가 경고하는 문제를 모든 중점 계통도 파일에서 검사하고, 파일별로 정리한 Markdown 보고서 하나로 보여 줍니다. GitHub 이슈에 그대로 붙여 넣을 수 있습니다.\n\n보고서를 focus-tree-audit.md로 저장할 폴더입니다. 상대 경로는 첫 번째 작업 영역 폴더를 기준으로 합니다. 비워 두면 저장하지 않은 편집기 탭에 보고서를 엽니다.",
     "hoi4modutilities.auditor.includeVanilla.title": "검사기: 기본 게임 포함",
     "hoi4modutilities.auditor.includeVanilla.desc": "모드의 파일뿐 아니라 Hearts of Iron IV 자체의 중점 계통도 파일도 검사합니다.",
-    "hoi4modutilities.section.auditor": "검사기"
+    "hoi4modutilities.section.auditor": "검사기",
+    "hoi4modutilities.section.modTools": "모드 도구",
+    "hoi4modutilities.runmodtool.title": "모드 도구 실행...",
+    "hoi4modutilities.modTools.enabled.title": "모드 도구: 사용",
+    "hoi4modutilities.modTools.enabled.desc": "특정 모드 전용 도구를 켭니다. 명령 팔레트의 **모드 도구 실행...** 으로 실행합니다. 모드의 도구는 그 모드가 열려 있을 때만 나타나며, 도구가 있는 모드마다 아래에 어떤 도구를 표시할지 고르는 페이지가 따로 생깁니다.\n\n모드 도구는 MD Utilities가 아니라 각 모드가 직접 작성하고 관리하며, 여기서는 지원하지 않습니다. 도구가 실패하면 오류 메시지에 보고할 모드 팀이 표시됩니다."
 }
