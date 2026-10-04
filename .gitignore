@@ -25,6 +25,7 @@ out-test-webview/
 
 # VS Code build downloaded by the integration tests
 .vscode-test/
+.vscode-test-web/
 
 # Logs
 *.log

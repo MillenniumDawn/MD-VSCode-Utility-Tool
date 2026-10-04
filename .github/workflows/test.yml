@@ -92,3 +92,10 @@ jobs:
       # comes after the uploads so the .vsix and coverage are still there when this step fails.
       - name: Run integration smoke tests
         run: xvfb-run -a npm run test:integration
+      - name: Cache VS Code for the Web build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .vscode-test-web
+          key: vscode-test-web-${{ runner.os }}-${{ hashFiles('.nvmrc') }}
+      - name: Run browser smoke tests
+        run: npm run test:web
