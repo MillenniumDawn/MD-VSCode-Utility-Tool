@@ -440,6 +440,28 @@ describe('webview/eventtree filteredGraph keeps chains connected', () => {
         assert.deepStrictEqual(bridge?.skipped, ['b:2']);
     });
 
+    it('keeps previously skipped events across repeated filtering, including option calls', () => {
+        const source = payload(
+            [
+                eventNode('a', { major: true, hidden: true }), optionNode('ao'),
+                eventNode('x'), eventNode('b', { major: true }), optionNode('bo'),
+                eventNode('y'), eventNode('c', { major: true, hidden: true }),
+            ],
+            [
+                edge('a', 'ao', { structural: true }), edge('ao', 'x', { days: 5 }), edge('x', 'b'),
+                edge('b', 'bo', { structural: true }), edge('bo', 'y'), edge('y', 'c'),
+            ],
+            ['a'],
+        );
+        const once = filteredGraph(source, ['major']);
+        const twice = filteredGraph({ ...source, ...once }, ['hidden']);
+        assert.deepStrictEqual(twice.edges, [
+            edge('a', 'ao', { structural: true }),
+            edge('ao', 'c', { days: 5, skipped: ['x', 'b', 'y'] }),
+        ]);
+        assert.deepStrictEqual(twice.nodes.map(n => n.id), ['a', 'ao', 'c']);
+    });
+
     it('names every event in a longer run, in the order they were walked', () => {
         const longer = payload(
             [

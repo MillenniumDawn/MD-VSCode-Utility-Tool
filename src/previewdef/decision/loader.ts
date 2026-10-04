@@ -1,6 +1,5 @@
 import { HOIDecisionFile, getDecisionsFromFile } from "./schema";
 import {
-	ContentLoader,
 	Dependency,
 	LoadResultOD,
 	LoaderSession,
@@ -11,7 +10,8 @@ import { localize } from "../../util/i18n";
 import uniq from "lodash/uniq";
 import flatten from "lodash/flatten";
 import { getGfxContainerFiles } from "../../util/gfxindex";
-import { getConfiguration, getLanguageIdInYml } from "../../util/vsccommon";
+import { getConfiguration } from "../../util/vsccommon";
+import { LanguageAwareContentLoader } from "../languageloader";
 import { getDescriptorDecisionGfx } from "../../util/fileloader";
 import { resolveConfiguredGfxFiles } from "../../util/configuredgfxfiles";
 import {
@@ -71,32 +71,23 @@ export function decisionSpriteName(icon: string): string {
 	return /^gfx_/i.test(icon) ? icon : `GFX_decision_${icon}`;
 }
 
-export class DecisionsLoader extends ContentLoader<DecisionsLoaderResult> {
-	private languageKey: string = "";
+export class DecisionsLoader extends LanguageAwareContentLoader<DecisionsLoaderResult> {
 	private categoriesLoader = new DecisionCategoriesLoader();
 	private scriptedGuisLoader = new ScriptedGuisLoader();
 
 	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
 		return (
 			(await super.shouldReloadImpl(session)) ||
-			this.languageKey !== getLanguageIdInYml() ||
 			(await this.categoriesLoader.shouldReload(session)) ||
 			(await this.scriptedGuisLoader.shouldReload(session))
 		);
 	}
 
-	protected async postLoad(
-		content: string | undefined,
+	protected async loadContent(
+		content: string,
 		dependencies: Dependency[],
-		error: unknown,
 		session: LoaderSession,
 	): Promise<LoadResultOD<DecisionsLoaderResult>> {
-		if (error || content === undefined) {
-			throw error;
-		}
-
-		this.languageKey = getLanguageIdInYml();
-
 		const decisionDependencies = dependencies
 			.filter((d) => d.type === "decision")
 			.map((d) => d.path);

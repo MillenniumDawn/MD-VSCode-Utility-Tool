@@ -1,6 +1,5 @@
 import { HOIBopFile, getBopsFromFile } from "./schema";
 import {
-	ContentLoader,
 	Dependency,
 	LoadResultOD,
 	LoaderSession,
@@ -9,7 +8,7 @@ import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
 import uniq from "lodash/uniq";
 import { getGfxContainerFiles } from "../../util/gfxindex";
-import { getLanguageIdInYml } from "../../util/vsccommon";
+import { LanguageAwareContentLoader } from "../languageloader";
 import { ResolvedGuiWindow, findContainerWindows } from "../../util/guiwindowindex";
 import { parseAndResolveHoi4FileCached } from "../../util/fileloader";
 import { ContainerWindowType, GuiFile, IconType, guiFileSchema } from "../../hoiformat/gui";
@@ -53,28 +52,13 @@ export const bopFillSprites = {
 // off, when the index cannot say which file a sprite lives in.
 const bopGfxFile = "interface/powerbalanceview.gfx";
 
-export class BopLoader extends ContentLoader<BopLoaderResult> {
-	private languageKey: string = "";
+export class BopLoader extends LanguageAwareContentLoader<BopLoaderResult> {
 
-	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
-		return (
-			(await super.shouldReloadImpl(session)) ||
-			this.languageKey !== getLanguageIdInYml()
-		);
-	}
-
-	protected async postLoad(
-		content: string | undefined,
+	protected async loadContent(
+		content: string,
 		dependencies: Dependency[],
-		error: unknown,
 		_session: LoaderSession,
 	): Promise<LoadResultOD<BopLoaderResult>> {
-		if (error || content === undefined) {
-			throw error;
-		}
-
-		this.languageKey = getLanguageIdInYml();
-
 		const bops = getBopsFromFile(
 			parseHoi4File(content, localize("infile", "In file {0}:\n", this.file)),
 			this.file,
