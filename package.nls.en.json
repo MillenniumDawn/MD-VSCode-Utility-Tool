@@ -86,5 +86,9 @@
     "hoi4modutilities.auditor.reportFolder.desc": "[Check all focus trees](command:mdhoi4utilities.auditfocustrees): checks every focus tree file for the problems the focus tree preview warns about, and lists them per file in one Markdown report you can paste into a GitHub issue.\n\nThe folder the report is saved to, as focus-tree-audit.md. A relative path starts at the first workspace folder. Leave it empty to open the report in an unsaved editor tab instead.",
     "hoi4modutilities.auditor.includeVanilla.title": "Auditor: include the base game",
     "hoi4modutilities.auditor.includeVanilla.desc": "Also check the focus tree files of Hearts of Iron IV itself, not only those of the mod.",
-    "hoi4modutilities.section.auditor": "Auditor"
+    "hoi4modutilities.section.auditor": "Auditor",
+    "hoi4modutilities.section.modTools": "Mod tools",
+    "hoi4modutilities.runmodtool.title": "Run Mod Tool...",
+    "hoi4modutilities.modTools.enabled.title": "Mod tools: enable",
+    "hoi4modutilities.modTools.enabled.desc": "Turns on tools that belong to one particular mod, run with **Run Mod Tool...** from the command palette. A mod's tools only appear while that mod is open, and each mod that has any gets its own page below to choose which of them are shown.\n\nMod tools are written and maintained by the mods themselves, not by MD Utilities, and are not supported here. When one fails, the error names the mod team to report it to."
 }
