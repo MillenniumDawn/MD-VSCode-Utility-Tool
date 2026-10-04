@@ -1,5 +1,5 @@
 import { CustomMap, DetailValue, Enum, SchemaDef } from "../../../hoiformat/schema";
-import { FileLoader, convertColor, LoadResultOD, FolderLoader, mergeInLoadResult } from "./common";
+import { FileLoader, convertColor, LoadResultOD, FolderLoader, mergeByNameWithDuplicateWarning } from "./common";
 import { MapLoaderExtra, Terrain } from "../definitions";
 import { readFileFromModOrHOI4AsJson } from "../../../util/fileloader";
 import { LoadResult, LoaderSession } from '../../../util/loader/loader';
@@ -33,23 +33,12 @@ export class TerrainDefinitionLoader extends FolderLoader<Terrain[], Terrain[]> 
     }
     
     protected mergeLoadedFiles(fileResults: LoadResult<Terrain[], MapLoaderExtra>[], _session: LoaderSession): Promise<LoadResult<Terrain[], MapLoaderExtra>> {
-        const results =  mergeInLoadResult(fileResults, 'result');
-        const terrainMap: Record<string, Terrain> = {};
-        const warnings = mergeInLoadResult(fileResults, 'warnings');
-
-        for (const terrain of results) {
-            const existingTerrain = terrainMap[terrain.name];
-            if (existingTerrain) {
-                warnings.push({
-                    source: [],
-                    text: localize('worldmap.warnings.terraindefinedtwice', 'Terrain {0} is defined in two files: {1}, {2}.',
-                        terrain.name, terrain.file, existingTerrain.file),
-                    relatedFiles: [terrain.file, existingTerrain.file],
-                });
-            } else {
-                terrainMap[terrain.name] = terrain;
-            }
-        }
+        const { result: terrainMap, warnings } = mergeByNameWithDuplicateWarning(fileResults, 'first', (terrain, existingTerrain) => ({
+            source: [],
+            text: localize('worldmap.warnings.terraindefinedtwice', 'Terrain {0} is defined in two files: {1}, {2}.',
+                terrain.name, terrain.file, existingTerrain.file),
+            relatedFiles: [terrain.file, existingTerrain.file],
+        }));
 
         return Promise.resolve({
             result: Object.values(terrainMap),

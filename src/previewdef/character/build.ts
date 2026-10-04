@@ -1,7 +1,8 @@
 import { localise } from "../localise";
 import { navOf } from "../sharedpayload";
 import { getImageByPath, getSpriteByGfxName } from "../../util/image/imagecache";
-import { StyleTable, normalizeForStyle } from "../../util/styletable";
+import { StyleTable } from "../../util/styletable";
+import { spriteIconStyle } from "../iconstyle";
 import { localize } from "../../util/i18n";
 import { formatModifiers, formatResearchBonuses } from "../../util/modifiers";
 import { CharacterTrait } from "../../util/characterTraits";
@@ -268,19 +269,7 @@ async function buildTraitIcon(
 	// dropping the medal: a trait written with `sprite = 40` is still a trait.
 	const image = sprite.frames[wanted.frame] ?? sprite.image;
 
-	// Keyed on the sprite and frame rather than the trait, so the forty advisors sharing frame 13 of
-	// the strip share one rule instead of writing the same data URL forty times.
-	const styleKey = styleTable.style(
-		"char-trait-icon-" + normalizeForStyle(`${wanted.name}-${wanted.frame}`),
-		() => `
-            background-image: url(${image.uri});
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-        `,
-	);
-
-	return { styleKey, width: image.width, height: image.height };
+	return spriteIconStyle(styleTable, "char-trait-icon-", `${wanted.name}-${wanted.frame}`, image);
 }
 
 interface ResolvedPortrait {
@@ -310,21 +299,8 @@ async function buildPortrait(
 		return { portrait: undefined, path: chosen, missing: true };
 	}
 
-	// Keyed on the portrait rather than the character, so the two cards a multi-role character
-	// produces -- and every character sharing a generic portrait -- share one rule instead of
-	// writing the same data URL into the stylesheet again.
-	const styleKey = styleTable.style(
-		"char-portrait-" + normalizeForStyle(chosen),
-		() => `
-            background-image: url(${image.uri});
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-        `,
-	);
-
 	return {
-		portrait: { styleKey, width: image.width, height: image.height },
+		portrait: spriteIconStyle(styleTable, "char-portrait-", chosen, image),
 		path: chosen,
 		missing: false,
 	};
