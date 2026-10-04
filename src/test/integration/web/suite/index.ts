@@ -1,16 +1,40 @@
-import Mocha from "mocha";
-import * as path from "path";
+import * as vscode from "vscode";
+import { WebviewType } from "../../../../constants";
 
+const extensionId = "MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026";
+
+// @vscode/test-web imports this module in the browser extension host. Keep this a plain runner:
+// Node-oriented test frameworks such as Mocha are not available to that host.
 export async function run(): Promise<void> {
-	const mocha = new Mocha({ ui: "tdd", color: true, timeout: 30000 });
-	mocha.addFile(path.resolve(__dirname, "extension.suite.js"));
-	return new Promise((resolve, reject) => {
-		mocha.run((failures: number) => {
-			if (failures > 0) {
-				reject(new Error(`${failures} web extension smoke test(s) failed.`));
-			} else {
-				resolve();
-			}
-		});
-	});
+	const extension = vscode.extensions.getExtension(extensionId);
+	if (!extension) {
+		throw new Error("Extension not found in the browser host");
+	}
+	await extension.activate();
+	if (!extension.isActive) {
+		throw new Error("Extension did not activate in the browser host");
+	}
+
+	const folder = vscode.workspace.workspaceFolders?.[0];
+	if (!folder) {
+		throw new Error("Browser smoke workspace did not open");
+	}
+	const eventUri = vscode.Uri.joinPath(folder.uri, "events", "smoke.txt");
+	const document = await vscode.workspace.openTextDocument(eventUri);
+	await vscode.window.showTextDocument(document);
+	await vscode.commands.executeCommand("mdhoi4utilities.preview");
+
+	const deadline = Date.now() + 20000;
+	while (Date.now() < deadline) {
+		const opened = vscode.window.tabGroups.all.some((group) =>
+			group.tabs.some((tab) =>
+				tab.input instanceof vscode.TabInputWebview && tab.input.viewType === WebviewType.Preview,
+			),
+		);
+		if (opened) {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	}
+	throw new Error("Event preview webview did not open in the browser host");
 }
