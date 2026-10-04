@@ -16,7 +16,7 @@ export {
 	ModifierLine,
 	ModifierGroup,
 } from "../sharedpayload";
-import { LocText, NavTarget, ModifierLine, ModifierGroup } from "../sharedpayload";
+import { LocText, NavTarget, ModifierLine, ModifierGroup, IconStyle } from "../sharedpayload";
 
 export { CharacterRoleKind } from "./schema";
 
@@ -28,11 +28,7 @@ export type CharacterGroupKind = CharacterRoleKind | "none";
 // An image the preview draws, as a StyleTable class carrying it as a data URL plus the size it was
 // decoded at. A character's portrait and a trait's medal are the same thing to the webview: a class
 // name to put on an empty element.
-export interface CharacterPortrait {
-	styleKey: string;
-	width: number;
-	height: number;
-}
+export type CharacterPortrait = IconStyle;
 
 // One trait a role names, with what it grants. `known` is false when nothing in
 // common/country_leader, common/unit_leader or common/scientist_traits defines it -- in a hand

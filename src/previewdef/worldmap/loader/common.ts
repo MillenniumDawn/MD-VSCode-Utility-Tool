@@ -71,6 +71,27 @@ export function fileLoadFailureWarning(
 
 export const mergeInLoadResult = commonMergeInLoadResult;
 
+export function mergeByNameWithDuplicateWarning<T extends { name: string }>(
+	files: LoadResult<T[]>[],
+	keep: "first" | "last",
+	warning: (item: T, existing: T) => WorldMapWarning,
+): { result: Record<string, T>; warnings: WorldMapWarning[] } {
+	const warnings = mergeInLoadResult(files, "warnings");
+	const items = new Map<string, T>();
+	for (const file of files) {
+		for (const item of file.result) {
+			const existing = items.get(item.name);
+			if (existing) {
+				warnings.push(warning(item, existing));
+			}
+			if (!existing || keep === "last") {
+				items.set(item.name, item);
+			}
+		}
+	}
+	return { result: Object.fromEntries(items), warnings };
+}
+
 export async function shouldReloadDependencies<T>(
 	session: T,
 	loaders: { shouldReload(session: T): Promise<boolean> }[],
