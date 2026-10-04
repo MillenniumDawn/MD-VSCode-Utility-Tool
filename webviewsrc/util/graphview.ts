@@ -6,7 +6,8 @@
 // helpers, which sat at the same line numbers in both files. What genuinely differs between the two
 // is passed in: which toggle guards an arrow, what its label says, and which classes its curve gets.
 
-import { currentScale, panning$ } from "./common";
+import { currentScale, panning$, subscribeNavigators } from "./common";
+import { EffectTooltipOptions, TooltipSection, wireEffectTooltip } from "./hovertooltip";
 import {
 	ChipInput,
 	LayoutInput,
@@ -313,6 +314,48 @@ export function renderGraph<N extends GraphNodeLike, E extends GraphEdgeLike>(
 	}
 
 	return { rendered, renderedEdges, childrenById };
+}
+
+export function renderGraphInto<N extends GraphNodeLike, E extends GraphEdgeLike>(
+	options: RenderGraphOptions<N, E> & {
+		emptyText: string;
+		search: { refresh: (items: RenderedNode<N>[]) => void };
+		effects?: { sectionsOf: (node: N) => TooltipSection[]; options: EffectTooltipOptions };
+		afterRender?: () => void;
+	},
+): IsolationHandle | undefined {
+	options.content.textContent = "";
+	if (options.nodes.length === 0) {
+		const empty = document.createElement("div");
+		empty.className = "ev-empty";
+		empty.textContent = options.emptyText;
+		options.content.appendChild(empty);
+		options.search.refresh([]);
+		return undefined;
+	}
+	const { rendered, renderedEdges, childrenById } = renderGraph(options);
+	const isolation = wireIsolation(rendered, renderedEdges, childrenById);
+	options.afterRender?.();
+	if (options.effects) {
+		for (const item of rendered) {
+			const sections = options.effects.sectionsOf(item.node);
+			if (sections.length > 0) {
+				wireEffectTooltip(item.element, sections, options.effects.options);
+			}
+		}
+	}
+	subscribeNavigators();
+	options.search.refresh(rendered);
+	return isolation;
+}
+
+export function clearGraphHoverOnPan(selector: string, isolation: () => IsolationHandle | undefined): void {
+	panning$.subscribe(panning => {
+		if (panning) {
+			document.querySelectorAll(selector).forEach(el => el.remove());
+			isolation()?.clear();
+		}
+	});
 }
 
 function downstreamOf(id: string, childrenById: Map<string, string[]>): Set<string> {

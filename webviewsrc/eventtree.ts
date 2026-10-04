@@ -1,6 +1,5 @@
 import {
 	tryRun,
-	subscribeNavigators,
 	enableZoom,
 	initCommon,
 	getState,
@@ -9,6 +8,7 @@ import {
 	currentScale,
 } from "./util/common";
 import { SearchBox } from "./util/searchbox";
+import { bridgeOverRemoved, skippedBySource } from "./util/graphbridge";
 import { applyNav, badge } from "./util/card";
 import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
@@ -27,14 +27,12 @@ import {
 	EffectTooltipOptions,
 	TooltipSection,
 	clampBelowToolbar,
-	wireEffectTooltip,
 } from "./util/hovertooltip";
 import {
 	IsolationHandle,
-	RenderedEdge,
 	RenderedNode,
-	renderGraph,
-	wireIsolation,
+	renderGraphInto,
+	clearGraphHoverOnPan,
 } from "./util/graphview";
 
 // The condition/effect rendering and the graph layout are shared with the decision preview and now
@@ -266,7 +264,7 @@ export function filteredGraph(
 	// Where an event's calls land, with the option hop collapsed away, so the walk below moves one
 	// event at a time rather than alternating between the two kinds of node.
 	const owners = ownersOfOptions(source.edges);
-	const callsOf = new Map<string, string[]>();
+	const callsOf = new Map<string, EventGraphEdge[]>();
 	for (const edge of source.edges) {
 		if (edge.structural) {
 			continue;
@@ -277,65 +275,18 @@ export function filteredGraph(
 		for (const from of froms) {
 			const list = callsOf.get(from);
 			if (list) {
-				list.push(edge.to);
+				list.push(edge);
 			} else {
-				callsOf.set(from, [edge.to]);
+				callsOf.set(from, [edge]);
 			}
 		}
 	}
 
-	// Breadth first, so each kept event is reached over the shortest run of dropped ones and the
-	// count on the arrow is the number of cards actually missing between the two, not the size of
-	// the whole region the walk wandered into.
-	const bridgeCache = new Map<string, { to: string; skipped: string[] }[]>();
-	const bridgesFrom = (start: string): { to: string; skipped: string[] }[] => {
-		const cached = bridgeCache.get(start);
-		if (cached) {
-			return cached;
-		}
-
-		const bridges: { to: string; skipped: string[] }[] = [];
-		const parent = new Map<string, string | undefined>([[start, undefined]]);
-		const queue = [start];
-		while (queue.length > 0) {
-			const current = queue.shift();
-			if (current === undefined) {
-				continue;
-			}
-			for (const next of callsOf.get(current) ?? []) {
-				if (parent.has(next)) {
-					continue;
-				}
-				parent.set(next, current);
-				if (kept.has(next)) {
-					const skipped: string[] = [];
-					for (let at: string | undefined = current; at !== undefined; at = parent.get(at)) {
-						skipped.unshift(at);
-					}
-					bridges.push({ to: next, skipped });
-				} else {
-					queue.push(next);
-				}
-			}
-		}
-
-		bridgeCache.set(start, bridges);
-		return bridges;
-	};
-
-	const edges: EventGraphEdge[] = [];
-	for (const edge of source.edges) {
-		if (!kept.has(edge.from)) {
-			continue;
-		}
-		if (kept.has(edge.to)) {
-			edges.push(edge);
-		} else if (!edge.structural) {
-			for (const bridge of bridgesFrom(edge.to)) {
-				edges.push({ ...edge, to: bridge.to, skipped: bridge.skipped });
-			}
-		}
-	}
+	const edges = bridgeOverRemoved(
+		source.edges.filter(edge => kept.has(edge.from) && (!edge.structural || kept.has(edge.to))),
+		id => !kept.has(id),
+		callsOf,
+	);
 
 	const hasParent = new Set(edges.map((e) => e.to));
 	// A surviving declared root keeps its place first: that is what keeps a group which is nothing
@@ -371,29 +322,6 @@ export function matchesQuery(node: EventGraphNode, query: string): boolean {
 //#endregion
 
 //#region Node markup
-
-// What a card says about the events a filter took out from under it: every id its own arrows now
-// step over, in the order they were walked. Collected per event, so an event whose three options all
-// bridge past the same card mentions it once.
-function skippedByEventOf(graph: VisibleGraph): Map<string, string[]> {
-	const owners = ownersOfOptions(graph.edges);
-	const byEvent = new Map<string, string[]>();
-	for (const edge of graph.edges) {
-		if (!edge.skipped?.length) {
-			continue;
-		}
-		for (const from of owners.get(edge.from) ?? [edge.from]) {
-			const list = byEvent.get(from) ?? [];
-			for (const id of edge.skipped) {
-				if (!list.includes(id)) {
-					list.push(id);
-				}
-			}
-			byEvent.set(from, list);
-		}
-	}
-	return byEvent;
-}
 
 // One glyph per kind the event actually is, in a fixed order, so the row reads the same way on every
 // card and a major news event is not made to choose which of the two it advertises. Each shape owns
@@ -617,9 +545,6 @@ function buildCard(node: EventGraphNode): HTMLDivElement {
 
 //#region Render
 
-let rendered: RenderedNode<EventGraphNode>[] = [];
-let renderedEdges: RenderedEdge<EventGraphEdge>[] = [];
-let childrenById = new Map<string, string[]>();
 // Replaced by every rebuild, so a drag always puts back the graph that is actually on screen.
 let isolation: IsolationHandle | undefined = undefined;
 // Filled by buildContent before the cards are built, and read by buildEventCard. Empty whenever no
@@ -635,11 +560,6 @@ function buildContent(): void {
 	document
 		.querySelectorAll("." + hoverPictureClass + ", ." + effectTooltipClass)
 		.forEach((el) => el.remove());
-	content.textContent = "";
-	rendered = [];
-	renderedEdges = [];
-	isolation = undefined;
-
 	// Before the filters: a control this file cannot use is forced back to its neutral position here,
 	// and a filter entry it cannot use is one the stored selection must not be allowed to keep.
 	applyToolbarFlags();
@@ -647,19 +567,8 @@ function buildContent(): void {
 	const graph = filteredGraph(payload, filters);
 	// The cards are built below and the arrows only afterwards, so what each card has to say about
 	// the events missing beneath it is collected from the edges first.
-	skippedByEvent = skippedByEventOf(graph);
-	if (graph.nodes.length === 0) {
-		const empty = document.createElement("div");
-		empty.className = "ev-empty";
-		empty.textContent = feLocalize("eventtree.noevents", "No event chain to show for this file.");
-		content.appendChild(empty);
-		// Nothing to highlight, but the counter still has to stop claiming the matches of the graph
-		// that was on screen a moment ago.
-		search.refresh(rendered);
-		return;
-	}
-
-	({ rendered, renderedEdges, childrenById } = renderGraph({
+	skippedByEvent = skippedBySource(graph.edges, ownersOfOptions(graph.edges));
+	isolation = renderGraphInto({
 		content,
 		nodes: graph.nodes,
 		edges: graph.edges,
@@ -669,19 +578,11 @@ function buildContent(): void {
 		chipText: chipTextFor,
 		edgeClass,
 		railLabel: (step: number) => feLocalize("eventtree.step", "step {0}", step),
-	}));
-
-	isolation = wireIsolation(rendered, renderedEdges, childrenById);
-	if (showPicture) {
-		showPictureWhenHover();
-	}
-	if (showEffects) {
-		wireEffectTooltips();
-	}
-	subscribeNavigators();
-	// The query survives every rebuild -- a toggle change, an in-place update, the first load -- so
-	// the highlight is re-applied to the cards that were just built. Class flipping only, no layout.
-	search.refresh(rendered);
+		emptyText: feLocalize("eventtree.noevents", "No event chain to show for this file."),
+		search,
+		afterRender: showPicture ? showPictureWhenHover : undefined,
+		effects: showEffects ? { sectionsOf: effectSectionsOf, options: effectTooltipOptions } : undefined,
+	});
 }
 
 // Everything an arrow says next to itself: the scope it fires in, its delay, its random_list weight
@@ -900,30 +801,9 @@ function effectSectionsOf(node: EventGraphNode): TooltipSection[] {
 	return sections;
 }
 
-function wireEffectTooltips(): void {
-	for (const item of rendered) {
-		const sections = effectSectionsOf(item.node);
-		if (sections.length > 0) {
-			wireEffectTooltip(item.element, sections, effectTooltipOptions);
-		}
-	}
-}
-
 //#endregion
 
-// A drag starts on the empty canvas, so a popup is rarely open at that moment -- but a card the
-// pointer left on its way to the background can still be finishing its fade, and the dragger keeps
-// the press even when the pointer runs back over the graph. Sweeping once, the way a re-render
-// does, guarantees nothing is left hanging over the canvas while it is being moved.
-panning$.subscribe((panning) => {
-	if (!panning) {
-		return;
-	}
-	document
-		.querySelectorAll("." + hoverPictureClass + ", ." + effectTooltipClass)
-		.forEach((el) => el.remove());
-	isolation?.clear();
-});
+clearGraphHoverOnPan("." + hoverPictureClass + ", ." + effectTooltipClass, () => isolation);
 
 wireUpdateBody<EventGraphPayload>({
 	contentId: "eventtreecontent",

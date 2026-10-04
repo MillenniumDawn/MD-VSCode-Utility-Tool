@@ -3,16 +3,16 @@ import { getSpriteByGfxName, Image, getImageByPath } from '../../util/image/imag
 import { localize, i18nTableAsScript } from '../../util/i18n';
 import { randomString, jsonForScript } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
-import { escapeAttr, html, htmlEscape, previewedFileUriScript, errorPage } from '../../util/html';
+import { escapeAttr, htmlEscape } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
 import { MioLoader } from './loader';
-import { LoaderSession } from '../../util/loader/loader';
-import { debug } from '../../util/debug';
+import { renderLoaderFile } from '../loaderrender';
+import { TOOLBAR_HEIGHT as toolbarHeight, toolbarWrapper } from '../toolbarparts';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { Mio, MioTrait, TraitEffect } from './schema';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
-import { getFlags } from "../../util/featureflags";
-import { LoaderRender } from '../loaderpreview';
+import { localiseLabel, localiseOptionalText } from '../localise';
+import { LoaderRender, RenderContentOptions } from '../loaderpreview';
 import { registerExclusiveLinkStyles } from '../../util/hoi4gui/exclusivelink';
 import { loadExclusiveLinkImages } from '../../util/hoi4gui/exclusivelinkimages';
 import { getPreviewOptions } from '../../util/previewoptions';
@@ -24,70 +24,31 @@ const traitEffectIconMap: Record<TraitEffect, string> = {
     organization: 'GFX_organization_modifier_icon',
 };
 
-export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<LoaderRender> {
-    try {
-        const session = new LoaderSession(false);
-        const loadResult = await loader.load(session);
-        const loadedLoaders = session.loadedLoaderNames();
-        debug('Loader session mio', loadedLoaders);
-
-        const mios = loadResult.result.mios;
-
-        if (mios.length === 0) {
-            const baseContent = localize('miopreview.nomio', 'No military industrial organization defined.');
-            return html(webview, baseContent, [ previewedFileUriScript(uri) ], []);
-        }
-
-        mios.sort((a, b) => a.id.localeCompare(b.id));
-
-        const styleTable = new StyleTable();
-        const jsCodes: string[] = [];
-        const styleNonce = randomString(32);
-        const { baseContent, data } = await renderMios(mios, styleTable, loadResult.result.gfxFiles, jsCodes, styleNonce, loader.file);
-        jsCodes.push(i18nTableAsScript());
-
-        // The full page is assembled only when the base assigns it; a skipped or posted edit never
-        // pays for it.
-        const fullHtml = () => html(
-            webview,
-            baseContent,
-            [
-                previewedFileUriScript(uri),
-                ...jsCodes.map(c => ({ content: c })),
-                'common.js',
-                'miopreview.js',
-            ],
-            [
-                'codicon.css',
-                'common.css',
-                // Addressable id so an in-place updateBody can refresh the trait-icon CSS (this is the
-                // server StyleTable the rendered trait HTML references) without a full webview reload.
-                { content: styleTable.toRawCss(), id: 'mio-server-styles' },
-                { nonce: styleNonce },
-            ],
-        );
-
-        // Parts for the in-place update. styleNonce is deliberately not resent: it stays the original
-        // so the CSP-authorized <style> the webview's buildContent re-injects keeps validating. The
-        // webview refreshes these globals + the trait-icon <style>, then re-runs buildContent to
-        // redraw the tree and the tree_header_text layer, preserving scroll and client state.
-        return { html: fullHtml, update: { styleCss: styleTable.toRawCss(), data } };
-
-    } catch (e) {
-        return errorPage(webview, uri, e);
-    }
+export async function renderMioFile(loader: MioLoader, uri: vscode.Uri, webview: vscode.Webview, options?: RenderContentOptions): Promise<LoaderRender> {
+    return renderLoaderFile(loader, uri, webview, options, {
+        debugLabel: 'Loader session mio',
+        scripts: ['common.js', 'miopreview.js'],
+        styles: ['codicon.css', 'common.css'],
+        serverStylesId: 'mio-server-styles',
+        buildPage: async (result, styleTable) => {
+            const mios = result.mios;
+            if (mios.length === 0) {
+                return localize('miopreview.nomio', 'No military industrial organization defined.');
+            }
+            mios.sort((a, b) => a.id.localeCompare(b.id));
+            const jsCodes: string[] = [];
+            const styleNonce = randomString(32);
+            const { baseContent, data } = await renderMios(mios, styleTable, result.gfxFiles, jsCodes, styleNonce, loader.file);
+            jsCodes.push(i18nTableAsScript());
+            return { content: baseContent, data, scripts: jsCodes.map(content => ({ content })), styles: [{ nonce: styleNonce }] };
+        },
+    });
 }
 
 const leftPadding = 50;
 const topPadding = 50;
 const xGridSize = 87;
 const yGridSize = 117;
-
-// The toolbar strip, matching the other previews. It has to clear its own scrollbar as well as the
-// controls: the strip is `overflow: auto hidden`, so on a narrow pane the scrollbar is laid out
-// inside this height, and at 40px it was drawn across the dropdown. Shipped to the webview as
-// window.toolbarHeight so the zoom anchor cannot drift from it.
-const toolbarHeight = 52;
 
 // The toolbar toggles whose position is remembered between panels. Read on the host because that is
 // where they are stored; the defaults live with the toggles in miopreview.ts.
@@ -164,7 +125,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
 
 async function renderMioOptions(mios: Mio[]): Promise<string> {
     return (await Promise.all(mios.map(async (mio, i) => {
-        const localizedText = getFlags().localisationIndex ? `(${mio.id}) ${await getLocalisedTextQuick(mio.id)}` : mio.id;
+        const localizedText = await localiseLabel(mio.id, 'key-first');
         return `<option value="${i}">${htmlEscape(localizedText)}</option>`;
     }))).join('');
 }
@@ -201,13 +162,9 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml
         <label for="show-overlaps" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showOverlaps', 'Show overlapping traits')}</label>
         <input type="checkbox" id="show-overlaps" class="${styleTable.style('marginRight10', () => `margin-right:10px`)}">`;
 
-    return `<div class="toolbar-outer ${styleTable.style('toolbar-height', () => `box-sizing: border-box; height: ${toolbarHeight}px;`)}">
-        <div class="toolbar">
-            ${mioSelect}
+    return toolbarWrapper(styleTable, () => `${mioSelect}
             ${conditions}
-            ${toggles}
-        </div>
-    </div>`;
+            ${toggles}`);
 }
 
 // Column headers declared by `tree_header_text` blocks. Each sits above the trait grid at its
@@ -252,7 +209,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
 
     // The token may be a quoted string and the localised name is copied verbatim out of the .yml, so
     // both are mod text and are escaped for the context they land in: the title attribute and the body.
-    const traitName = getFlags().localisationIndex ? (await getLocalisedTextQuick(trait.name)) ?? '' : '';
+    const traitName = await localiseOptionalText(trait.name);
 
     return `<div
     class="
@@ -285,7 +242,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
         start="${trait.token?.start}"
         end="${trait.token?.end}"
         ${file === trait.file ? '' : `file="${escapeAttr(trait.file)}"`}
-        title="${escapeAttr(trait.id)}${getFlags().localisationIndex ? `\n${escapeAttr(traitName)}` : ''}\n({{position}})">
+        title="${escapeAttr(trait.id)}${escapeAttr(await localiseOptionalText(trait.name, '\n'))}\n({{position}})">
             <div class="
                 ${styleTable.style('effect-host', () => `
                     text-align: center;

@@ -17,15 +17,11 @@ export {
 	ModifierLine,
 	ModifierGroup,
 } from "../sharedpayload";
-import { LocText, NavTarget, ModifierLine, ModifierGroup } from "../sharedpayload";
+import { LocText, NavTarget, ModifierLine, ModifierGroup, IconStyle } from "../sharedpayload";
 
 // The idea's icon, as a StyleTable class carrying the decoded image as a data URL, plus the size to
 // draw it at.
-export interface IdeaIcon {
-	styleKey: string;
-	width: number;
-	height: number;
-}
+export type IdeaIcon = IconStyle;
 
 export interface IdeaCard {
 	id: string;

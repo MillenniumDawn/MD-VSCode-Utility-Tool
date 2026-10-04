@@ -1,6 +1,5 @@
 import { HOIIdeaFile, getIdeasFromFile } from "./schema";
 import {
-	ContentLoader,
 	Dependency,
 	LoadResultOD,
 	LoaderSession,
@@ -11,7 +10,8 @@ import { localize } from "../../util/i18n";
 import uniq from "lodash/uniq";
 import flatten from "lodash/flatten";
 import { getGfxContainerFiles } from "../../util/gfxindex";
-import { getConfiguration, getLanguageIdInYml } from "../../util/vsccommon";
+import { getConfiguration } from "../../util/vsccommon";
+import { LanguageAwareContentLoader } from "../languageloader";
 import { getDescriptorIdeaPlaceholderIcon, getFilePathFromModOrHOI4 } from "../../util/fileloader";
 import { Logger } from "../../util/logger";
 import {
@@ -69,28 +69,13 @@ export function ideaSpriteName(picture: string): string {
 	return `GFX_idea_${picture}`;
 }
 
-export class IdeasLoader extends ContentLoader<IdeasLoaderResult> {
-	private languageKey: string = "";
+export class IdeasLoader extends LanguageAwareContentLoader<IdeasLoaderResult> {
 
-	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
-		return (
-			(await super.shouldReloadImpl(session)) ||
-			this.languageKey !== getLanguageIdInYml()
-		);
-	}
-
-	protected async postLoad(
-		content: string | undefined,
+	protected async loadContent(
+		content: string,
 		dependencies: Dependency[],
-		error: unknown,
 		session: LoaderSession,
 	): Promise<LoadResultOD<IdeasLoaderResult>> {
-		if (error || content === undefined) {
-			throw error;
-		}
-
-		this.languageKey = getLanguageIdInYml();
-
 		const ideaDependencies = dependencies
 			.filter((d) => d.type === "idea")
 			.map((d) => d.path);
