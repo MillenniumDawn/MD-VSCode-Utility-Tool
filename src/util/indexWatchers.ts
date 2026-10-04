@@ -53,7 +53,7 @@ export interface IndexWatcherSpec {
 	rebuildWorkspace: {
 		/** Empties the workspace half before the rebuild starts. */
 		reset: () => void;
-		build: (size: [number], progress: IndexProgress) => Promise<void>;
+		build: (progress: IndexProgress) => Promise<void>;
 		/** Localised, shown in the progress notification. */
 		message: string;
 		/** Logged if the rebuild fails. */
@@ -65,7 +65,7 @@ export interface IndexWatcherSpec {
 	 */
 	rebuildParent?: {
 		reset: () => void;
-		build: (size: [number], progress: IndexProgress) => Promise<void>;
+		build: (progress: IndexProgress) => Promise<void>;
 	};
 }
 
@@ -101,14 +101,13 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	function rebuild(
 		halves: readonly {
 			reset: () => void;
-			build: (size: [number], progress: IndexProgress) => Promise<void>;
+			build: (progress: IndexProgress) => Promise<void>;
 		}[],
 	) {
 		if (!hasStarted()) {
 			return;
 		}
 
-		const folderChangeSize: [number] = [0];
 		// Reset only after the current build; occupy the gate now so events wait.
 		const task = gate.followOn(() => {
 			for (const half of halves) {
@@ -116,7 +115,7 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 			}
 			return withIndexProgress(spec.rebuildWorkspace.message, (progress) =>
 				Promise.all(
-					halves.map((half) => half.build(folderChangeSize, progress)),
+					halves.map((half) => half.build(progress)),
 				).then(() => undefined),
 			);
 		});

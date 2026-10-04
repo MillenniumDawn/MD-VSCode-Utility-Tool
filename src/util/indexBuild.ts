@@ -214,7 +214,6 @@ export interface IndexBuilderOptions<T> {
 	/** Names this build in the shared progress notification for as long as it runs. */
 	message: string;
 	build: (progress: IndexProgress) => Promise<T>;
-	onSuccess?: () => void;
 	/** Overrides {@link indexBuildTimeout}; tests use this to keep the deadline short. */
 	timeout?: number;
 }
@@ -231,7 +230,7 @@ export interface IndexBuilderOptions<T> {
 export function createIndexBuilder<T>(
 	options: IndexBuilderOptions<T>,
 ): IndexBuilder<T> {
-	const { name, message, build, onSuccess } = options;
+	const { name, message, build } = options;
 	const timeout = options.timeout ?? indexBuildTimeout;
 	const gate = createBuildGate();
 	let buildTask: Promise<T> | undefined;
@@ -281,7 +280,6 @@ export function createIndexBuilder<T>(
 		void task.then(
 			() => {
 				Logger.info(`[Index] ${name}: build done`);
-				onSuccess?.();
 			},
 			(cause: unknown) => {
 				Logger.error(`[Index] ${name}: build failed: ${cause}`);

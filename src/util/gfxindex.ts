@@ -45,22 +45,16 @@ export function getGfxIndexVersion(): number {
 	return gfxIndexVersion;
 }
 
-// build, since a build that failed and is retried would otherwise keep counting from where it left off.
-let estimatedSize: [number] = [0];
-
 const builder = createIndexBuilder({
 	name: "gfxIndex",
 	message: localize("gfxindex.building", "Building GFX index..."),
 	build: async (progress) => {
-		estimatedSize = [0];
 		const context = await captureIndexBuildContext();
 		return Promise.all([
-			buildGlobalGfxIndex(estimatedSize, progress, context),
-			buildParentGfxIndex(estimatedSize, progress, context),
-			buildWorkspaceGfxIndex(estimatedSize, progress, context),
+			buildGlobalGfxIndex(progress, context),
+			buildParentGfxIndex(progress, context),
+			buildWorkspaceGfxIndex(progress, context),
 		]);
-	},
-	onSuccess: () => {
 	},
 });
 
@@ -163,7 +157,6 @@ const isGfxFile = (relativePath: string) =>
 	relativePath.toLocaleLowerCase().endsWith(".gfx");
 
 async function buildGlobalGfxIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
@@ -174,14 +167,12 @@ async function buildGlobalGfxIndex(
 		{ mod: false, recursively: true },
 		globalGfxIndex,
 		null,
-		estimatedSize,
 		progress,
 		context,
 	);
 }
 
 async function buildParentGfxIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context?: IndexBuildContext,
 ): Promise<void> {
@@ -204,7 +195,6 @@ async function buildParentGfxIndex(
 				},
 				parentGfxIndexes[index]!,
 				null,
-				estimatedSize,
 				progress,
 				buildContext,
 			),
@@ -213,7 +203,6 @@ async function buildParentGfxIndex(
 }
 
 async function buildWorkspaceGfxIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context?: IndexBuildContext,
 ): Promise<void> {
@@ -223,7 +212,6 @@ async function buildWorkspaceGfxIndex(
 		{ parent: false, hoi4: false, recursively: true },
 		workspaceGfxIndex,
 		workspaceGfxFileToKeys,
-		estimatedSize,
 		progress,
 		buildContext,
 	);
@@ -234,7 +222,6 @@ async function buildGfxIndexHalf(
 	options: ListFilesOptions,
 	targetIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
@@ -268,7 +255,6 @@ async function buildGfxIndexHalf(
 					targetIndex,
 					fileToKeysMap,
 					options,
-					estimatedSize,
 				);
 				bumpGfxIndexVersion();
 			},
@@ -284,13 +270,8 @@ async function fillGfxItems(
 	gfxIndex: Record<string, GfxIndexItem | undefined>,
 	fileToKeysMap: Map<string, string[]> | null,
 	options: FileSourceOptions,
-	estimatedSize?: [number],
 ): Promise<boolean> {
 	const filePath = gfxFile.path;
-	if (estimatedSize) {
-		// The path's length, not the file's, which is what this has always counted.
-		estimatedSize[0] += filePath.length;
-	}
 
 	const fileBuffer = await readIndexFileContent("Gfx index", gfxFile, options);
 	if (fileBuffer === undefined) {
@@ -310,9 +291,6 @@ async function fillGfxItems(
 			gfxIndex[spriteType.name] = { file: filePath };
 			if (fileToKeysMap) {
 				spriteNames.push(spriteType.name);
-			}
-			if (estimatedSize) {
-				estimatedSize[0] += spriteType.name.length + 8;
 			}
 		}
 		if (fileToKeysMap && spriteNames.length > 0) {

@@ -63,22 +63,16 @@ const globalSwapIndex: SwapIndex = {};
 let parentSwapIndexes: SwapIndex[] = [];
 let workspaceSwapIndex: SwapIndex = {};
 
-// build, since a build that failed and is retried would otherwise keep counting from where it left off.
-let estimatedSize: [number] = [0];
-
 const builder = createIndexBuilder({
 	name: "ideaSwapIndex",
 	message: localize("ideaSwapIndex.building", "Building idea swap index..."),
 	build: async (progress) => {
-		estimatedSize = [0];
 		const context = await captureIndexBuildContext();
 		return Promise.all([
-			buildGlobalSwapIndex(estimatedSize, progress, context),
-			buildParentSwapIndex(estimatedSize, progress, context),
-			buildWorkspaceSwapIndex(estimatedSize, progress, context),
+			buildGlobalSwapIndex(progress, context),
+			buildParentSwapIndex(progress, context),
+			buildWorkspaceSwapIndex(progress, context),
 		]);
-	},
-	onSuccess: () => {
 	},
 });
 
@@ -108,7 +102,6 @@ function listSwapFiles(
 }
 
 async function buildGlobalSwapIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
@@ -116,14 +109,12 @@ async function buildGlobalSwapIndex(
 		"ideaSwapIndex.global",
 		{ mod: false, hoi4: true },
 		globalSwapIndex,
-		estimatedSize,
 		progress,
 		context,
 	);
 }
 
 async function buildParentSwapIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context?: IndexBuildContext,
 ): Promise<void> {
@@ -144,7 +135,6 @@ async function buildParentSwapIndex(
 					parentModUris: [parent],
 				},
 				parentSwapIndexes[index]!,
-				estimatedSize,
 				progress,
 				buildContext,
 			),
@@ -153,7 +143,6 @@ async function buildParentSwapIndex(
 }
 
 async function buildWorkspaceSwapIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context?: IndexBuildContext,
 ): Promise<void> {
@@ -162,7 +151,6 @@ async function buildWorkspaceSwapIndex(
 		"ideaSwapIndex.workspace",
 		{ mod: true, parent: false, hoi4: false },
 		workspaceSwapIndex,
-		estimatedSize,
 		progress,
 		buildContext,
 	);
@@ -172,7 +160,6 @@ async function buildSwapIndexHalf(
 	cacheName: string,
 	options: FileSourceOptions,
 	swapIndex: SwapIndex,
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
@@ -190,7 +177,7 @@ async function buildSwapIndexHalf(
 				swapIndex[file] = swaps;
 				markSwapIndexChanged();
 			},
-			parseFile: (file) => fillSwaps(file, swapIndex, options, estimatedSize),
+			parseFile: (file) => fillSwaps(file, swapIndex, options),
 			serialize: () => Object.entries(swapIndex),
 		},
 		progress,
@@ -201,7 +188,6 @@ async function fillSwaps(
 	swapFile: IndexFile,
 	swapIndex: SwapIndex,
 	options: FileSourceOptions,
-	estimatedSize?: [number],
 ): Promise<void> {
 	const filePath = swapFile.path;
 	const fileBuffer = await readIndexFileContent(
@@ -213,9 +199,6 @@ async function fillSwaps(
 		return;
 	}
 	const fileContent = fileBuffer.toString();
-	if (estimatedSize) {
-		estimatedSize[0] += fileBuffer.length;
-	}
 
 	// The prescan that makes this affordable: parsing is what costs, and the overwhelming majority
 	// of files never mention a swap.

@@ -31,9 +31,6 @@ const globalFocusKeyToFile = new Map<string, string>();
 const parentFocusKeyToFiles: Map<string, string>[] = [];
 const workspaceFocusKeyToFile = new Map<string, string>();
 
-// build, since a build that failed and is retried would otherwise keep counting from where it left off.
-let estimatedSize: [number] = [0];
-
 const builder = createIndexBuilder({
 	name: "sharedFocusIndex",
 	message: localize(
@@ -41,15 +38,12 @@ const builder = createIndexBuilder({
 		"Building Shared Focus index...",
 	),
 	build: async (progress) => {
-		estimatedSize = [0];
 		const context = await captureIndexBuildContext();
 		return Promise.all([
-			buildGlobalFocusIndex(estimatedSize, progress, context),
-			buildParentFocusIndex(estimatedSize, progress, context),
-			buildWorkspaceFocusIndex(estimatedSize, progress, context),
+			buildGlobalFocusIndex(progress, context),
+			buildParentFocusIndex(progress, context),
+			buildWorkspaceFocusIndex(progress, context),
 		]);
-	},
-	onSuccess: () => {
 	},
 });
 
@@ -67,7 +61,6 @@ type FocusCacheRecord = [file: string, keys: string[]];
 const focusRoot = "common/national_focus";
 
 async function buildGlobalFocusIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
@@ -76,14 +69,12 @@ async function buildGlobalFocusIndex(
 		{ mod: false, hoi4: true, recursively: true },
 		globalFocusIndex,
 		globalFocusKeyToFile,
-		estimatedSize,
 		progress,
 		context,
 	);
 }
 
 async function buildParentFocusIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context?: IndexBuildContext,
 ): Promise<void> {
@@ -109,7 +100,6 @@ async function buildParentFocusIndex(
 				},
 				parentFocusIndexes[index]!,
 				reverseMap,
-				estimatedSize,
 				progress,
 				buildContext,
 			);
@@ -118,7 +108,6 @@ async function buildParentFocusIndex(
 }
 
 async function buildWorkspaceFocusIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context?: IndexBuildContext,
 ): Promise<void> {
@@ -128,7 +117,6 @@ async function buildWorkspaceFocusIndex(
 		{ mod: true, parent: false, hoi4: false, recursively: true },
 		workspaceFocusIndex,
 		workspaceFocusKeyToFile,
-		estimatedSize,
 		progress,
 		buildContext,
 	);
@@ -139,7 +127,6 @@ async function buildFocusIndexHalf(
 	options: ListFilesOptions,
 	focusIndex: FocusIndex,
 	reverseMap: Map<string, string>,
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
@@ -161,7 +148,7 @@ async function buildFocusIndexHalf(
 				}
 			},
 			parseFile: (file) =>
-				fillFocusItems(file, focusIndex, reverseMap, options, estimatedSize),
+				fillFocusItems(file, focusIndex, reverseMap, options),
 			serialize: () => Object.entries(focusIndex),
 		},
 		progress,
@@ -173,9 +160,8 @@ async function fillFocusItems(
 	focusIndex: FocusIndex,
 	reverseMap: Map<string, string>,
 	options: FileSourceOptions,
-	estimatedSize?: [number],
 ): Promise<void> {
-	const ids = await readFocusIds(focusFile, options, estimatedSize);
+	const ids = await readFocusIds(focusFile, options);
 	if (ids === undefined) {
 		return;
 	}
@@ -191,7 +177,6 @@ async function fillFocusItems(
 async function readFocusIds(
 	focusFile: IndexFile,
 	options: FileSourceOptions,
-	estimatedSize?: [number],
 ): Promise<string[] | undefined> {
 	const filePath = focusFile.path;
 	const fileBuffer = await readIndexFileContent(
@@ -221,10 +206,6 @@ async function readFocusIds(
 				{ keepTokens: false },
 			),
 		);
-
-		if (estimatedSize) {
-			estimatedSize[0] += fileBuffer.length;
-		}
 
 		return ids;
 	} catch (e) {
