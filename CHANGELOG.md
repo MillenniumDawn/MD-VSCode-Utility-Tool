@@ -1,5 +1,7 @@
 Unreleased
 
+v1.1.41
+
   Bugfixes:
 
 - [ Event Previewer ] [ MIO Preview ] Editing a file used by an open preview now refreshes it instead of showing cached content. Issue #490.
