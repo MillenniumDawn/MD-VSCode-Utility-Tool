@@ -22,6 +22,7 @@ describe("util/hoifs workspace folder and configuration change", function () {
 	let registration: vscode.Disposable;
 	let userDataDir: string;
 	let errors: string[];
+	let fsProvider: vscode.FileSystemProvider | undefined;
 
 	function configure(values: Record<string, unknown>): void {
 		stubVscode({
@@ -67,6 +68,7 @@ describe("util/hoifs workspace folder and configuration change", function () {
 		);
 
 		folderChangeHandler = undefined;
+		fsProvider = undefined;
 		errors = [];
 		resetParentModsForTest();
 		workspaceModFilesCache.clear();
@@ -102,6 +104,10 @@ describe("util/hoifs workspace folder and configuration change", function () {
 				);
 			},
 			readFile: async (uri: unknown) => nodeFs.readFile(realPathOf(uri)),
+			registerFileSystemProvider: (_scheme: string, provider: vscode.FileSystemProvider) => {
+				fsProvider = provider;
+				return { dispose: () => undefined };
+			},
 			showErrorMessage: async (message: string) => {
 				errors.push(message);
 				return undefined;
@@ -110,6 +116,73 @@ describe("util/hoifs workspace folder and configuration change", function () {
 		await nodeFs.mkdir(nodePath.join(root, "empty"), { recursive: true });
 		registration = registerHoiFs();
 		await whenModDependenciesSettled();
+	});
+
+	it("rejects every mutation on the read-only install-path filesystem", async function () {
+		assert.ok(fsProvider, "registerHoiFs registers a provider");
+		configure({ installPath: root });
+		clearInstallPathCache();
+		const provider = fsProvider as any;
+		const uri = { scheme: "hoi4installpath", path: "/common/test.txt", toString: () => "hoi4installpath:/common/test.txt" } as vscode.Uri;
+		const destination = { scheme: "hoi4installpath", path: "/common/copied.txt", toString: () => "hoi4installpath:/common/copied.txt" } as vscode.Uri;
+		let delegatedWrites = 0;
+		stubVscode({
+			createDirectory: async () => { delegatedWrites++; },
+			writeFile: async () => { delegatedWrites++; },
+			delete: async () => { delegatedWrites++; },
+			rename: async () => { delegatedWrites++; },
+			copy: async () => { delegatedWrites++; },
+		});
+
+		for (const [operation, invoke, errorUri] of [
+			["createDirectory", () => provider.createDirectory(uri), uri],
+			["writeFile", () => provider.writeFile(uri, new Uint8Array(), { create: true, overwrite: true }), uri],
+			["delete", () => provider.delete(uri, { recursive: true }), uri],
+			["rename", () => provider.rename(uri, destination, { overwrite: true }), uri],
+			["copy", () => provider.copy(uri, destination, { overwrite: true }), uri],
+		] as const) {
+			assert.throws(invoke, (error: any) => {
+				assert.strictEqual(error.code, "NoPermissions", `${operation} error code`);
+				assert.ok(error.message.includes(errorUri.toString()), `${operation} error names the rejected URI`);
+				return true;
+			}, `${operation} must be denied`);
+		}
+		assert.strictEqual(delegatedWrites, 0, "no workspace.fs mutator is called");
+	});
+
+	it("continues forwarding read operations to the configured install path", async function () {
+		assert.ok(fsProvider, "registerHoiFs registers a provider");
+		configure({ installPath: root });
+		clearInstallPathCache();
+		const provider = fsProvider as any;
+		const uri = { scheme: "hoi4installpath", path: "/common/test.txt", toString: () => "hoi4installpath:/common/test.txt" } as vscode.Uri;
+		const calls: string[] = [];
+		const expectedFile = new Uint8Array([1, 2, 3]);
+		stubVscode({
+			stat: async (target: unknown) => {
+				calls.push(`stat:${realPathOf(target)}`);
+				return { type: vscode.FileType.File, mtime: 1, ctime: 1, size: 3 };
+			},
+			readDirectory: async (target: unknown) => {
+				calls.push(`readDirectory:${realPathOf(target)}`);
+				return [["test.txt", vscode.FileType.File]];
+			},
+			readFile: async (target: unknown) => {
+				calls.push(`readFile:${realPathOf(target)}`);
+				return expectedFile;
+			},
+		});
+
+		await provider.stat(uri);
+		assert.deepStrictEqual(await provider.readDirectory({ scheme: "hoi4installpath", path: "/common" } as vscode.Uri), [
+			["test.txt", vscode.FileType.File],
+		]);
+		assert.strictEqual(await provider.readFile(uri), expectedFile);
+		assert.deepStrictEqual(calls, [
+			`stat:${nodePath.join(root, "common", "test.txt")}`,
+			`readDirectory:${nodePath.join(root, "common")}`,
+			`readFile:${nodePath.join(root, "common", "test.txt")}`,
+		]);
 	});
 
 	afterEach(async function () {
