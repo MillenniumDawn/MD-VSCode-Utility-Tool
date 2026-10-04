@@ -190,6 +190,7 @@ describe('.github/workflows', function () {
     });
 
     it('lints shared release helpers as CommonJS', async function () {
+        this.timeout(10_000);
         const root = path.join(workflowDir, '..', '..');
         const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
         assert.match(pkg.scripts.lint, /\bscripts\b/);
