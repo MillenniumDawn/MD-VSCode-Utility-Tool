@@ -8,8 +8,11 @@ import {
 // Every game path and `GFX_` sprite the extension's source names has to exist in the base game,
 // or be allowlisted with a reason. #448–#451 were Millennium Dawn-only names that made a preview go
 // quiet everywhere else, and nothing caught them because every fixture was written by hand.
+// src/modtools/packs/ is left out: a mod's own pack is the one place its file names belong, and it
+// only ever runs while that mod is open (see src/modtools/README.md).
 
 const repoRoot = findRepoRoot();
+const modPacksDir = path.join(repoRoot, 'src', 'modtools', 'packs');
 const allowlistFile = path.join(repoRoot, 'compat', 'hardcoded-allowlist.json');
 
 function sourceFiles(dir: string): string[] {
@@ -17,7 +20,7 @@ function sourceFiles(dir: string): string[] {
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 		const full = path.join(dir, entry.name);
 		if (entry.isDirectory()) {
-			if (full !== path.join(repoRoot, 'src', 'test')) {
+			if (full !== path.join(repoRoot, 'src', 'test') && full !== modPacksDir) {
 				result.push(...sourceFiles(full));
 			}
 		} else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {

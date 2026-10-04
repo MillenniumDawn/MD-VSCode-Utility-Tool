@@ -18,6 +18,7 @@ import { registerFeatureFlags } from "./util/featureflags";
 import { registerIndexStatusCommand } from "./util/indexBuild";
 import { disposeImageDecodeWorkers } from "./util/image/imagedecoder";
 import { registerAuditFocusTreesCommand } from "./previewdef/focustree/warningreport";
+import { registerModTools } from "./modtools/host";
 
 export function activate(context: vscode.ExtensionContext) {
     let locale: string | undefined = context.extension?.packageJSON?.locale;
@@ -52,6 +53,10 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push({ dispose: disposeImageDecodeWorkers });
 
     setVscodeContext(ContextName.Hoi4MULoaded, true);
+
+    // Last, and after the extension counts as loaded: mod tools are maintained by the mods, and
+    // nothing they do may keep the standard utilities from starting.
+    context.subscriptions.push(registerModTools());
 }
 
 export function deactivate() {}

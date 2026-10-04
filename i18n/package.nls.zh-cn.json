@@ -86,5 +86,9 @@
     "hoi4modutilities.auditor.reportFolder.desc": "[检查所有国策树](command:mdhoi4utilities.auditfocustrees)：按国策树预览所警告的问题检查每个国策树文件，并按文件列在一份 Markdown 报告中，可直接粘贴到 GitHub issue。\n\n报告以 focus-tree-audit.md 保存到的文件夹。相对路径以第一个工作区文件夹为起点。留空则在未保存的编辑器标签页中打开报告。",
     "hoi4modutilities.auditor.includeVanilla.title": "检查器：包含原版游戏",
     "hoi4modutilities.auditor.includeVanilla.desc": "除了模组的文件，也检查 Hearts of Iron IV 本身的国策树文件。",
-    "hoi4modutilities.section.auditor": "检查器"
+    "hoi4modutilities.section.auditor": "检查器",
+    "hoi4modutilities.section.modTools": "模组工具",
+    "hoi4modutilities.runmodtool.title": "运行模组工具...",
+    "hoi4modutilities.modTools.enabled.title": "模组工具：启用",
+    "hoi4modutilities.modTools.enabled.desc": "启用属于某个特定模组的工具，通过命令面板中的 **运行模组工具...** 运行。模组的工具只在该模组打开时出现，每个带有工具的模组在下方都有自己的页面，可选择显示哪些工具。\n\n模组工具由各模组自行编写和维护，而不是 MD Utilities，本扩展不提供支持。工具出错时，错误信息会注明应向哪个模组团队报告。"
 }
