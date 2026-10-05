@@ -28,6 +28,11 @@ export async function run(): Promise<void> {
 		throw new Error("Browser smoke workspace did not open");
 	}
 	const eventUri = vscode.Uri.joinPath(folder.uri, "events", "smoke.txt");
+	// Check the browser workspace can serve this exact source, not only open a preview tab.
+	const source = new TextDecoder().decode(await vscode.workspace.fs.readFile(eventUri));
+	if (!source.includes("id = browser_smoke.1")) {
+		throw new Error("Browser smoke event source did not load from the virtual workspace");
+	}
 	const document = await vscode.workspace.openTextDocument(eventUri);
 	await vscode.window.showTextDocument(document);
 	const previewCommand = "mdhoi4utilities.preview";
