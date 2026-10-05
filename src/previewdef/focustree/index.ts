@@ -15,6 +15,7 @@ import { getFlags } from '../../util/featureflags';
 import { FocusTreeLayout, focusTreeGridBoxFor } from './layout';
 import { computeContinuousFocusEdit } from './continuousedit';
 import { computeStructuralFingerprint, computeIconSourceFingerprint, computeTreeStructuralFingerprint, computeTreeIconFingerprint } from './fingerprint';
+import { acknowledgeFocusTreeDomRender, hasPendingFocusTreeDomRender } from './renderack';
 
 // A render taking longer than this is treated as stuck. The underlying load keeps running
 // in the background, but the user gets a recoverable panel instead of an endless spinner.
@@ -99,6 +100,11 @@ class FocusTreePreview extends UpdateablePreviewBase {
         this.subscriptions.push(this.focusTreeLoader.onLoadDone(r => this.updateDependencies(r.dependencies)));
         this.subscriptions.push(this.panel.webview.onDidReceiveMessage(msg => {
             if (msg?.command === 'ready') {
+                if (hasPendingFocusTreeDomRender(this.uri.toString())) {
+                    // Only smoke tests waiting on this panel request DOM ids. Ordinary previews
+                    // keep the original lightweight `ready` message and add no ID serialization.
+                    void this.panel.webview.postMessage({ type: 'focusTreeDomRenderAckRequest' });
+                }
                 this.signalWebviewReady();
                 // Bug #36: the webview re-posts `ready` after VS Code reloads it (e.g. on hide->show),
                 // which drops both the in-place structural update and the pushed icon CSS. Restore the
@@ -107,6 +113,8 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 // (structure, then icons stream in) and both orders would in fact work.
                 this.repostLatestUpdate();
                 this.repushCachedIconStyles();
+            } else if (msg?.command === 'focusTreeDomRenderAck') {
+                acknowledgeFocusTreeDomRender(this.uri.toString(), msg.renderedFocusIds);
             } else if (msg?.command === 'setContinuousFocusPosition') {
                 void this.setContinuousFocusPosition(msg);
             } else if (msg?.command === 'copyWarnings') {

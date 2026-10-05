@@ -1,4 +1,5 @@
 const vscode = require("vscode");
+const { assertRenderedFocusIds } = require("./web-smoke-assert");
 
 // VS Code loads extension tests as CommonJS in the browser extension host.
 exports.run = async function () {
@@ -28,8 +29,25 @@ exports.run = async function () {
 	if (!commands.includes(previewCommand)) {
 		throw new Error("The preview command is not registered.");
 	}
-	// This command completes only after the initial preview content has rendered.
-	await vscode.commands.executeCommand(previewCommand, uri);
+	const waitForFocusTreeDomRender = extension.exports?.waitForFocusTreeDomRender;
+	const cancelFocusTreeDomRenderWait = extension.exports?.cancelFocusTreeDomRenderWait;
+	if (typeof waitForFocusTreeDomRender !== "function" || typeof cancelFocusTreeDomRenderWait !== "function") {
+		throw new Error("The extension did not expose the bounded focus-tree DOM render acknowledgement.");
+	}
+	// Arm the host waiter before opening the preview so an early webview acknowledgement cannot be lost.
+	const uriKey = uri.toString();
+	const renderedDomAck = waitForFocusTreeDomRender(uriKey, 70000);
+	try {
+		// This command completes only after the initial preview content has rendered.
+		const [renderedFocusIds] = await Promise.all([
+			renderedDomAck,
+			vscode.commands.executeCommand(previewCommand, uri),
+		]);
+		assertRenderedFocusIds(renderedFocusIds, ["web_smoke_focus"]);
+	} finally {
+		// A command failure must not leave its 70 second acknowledgement timer alive.
+		cancelFocusTreeDomRenderWait(uriKey);
+	}
 
 	const deadline = Date.now() + 20000;
 	while (Date.now() < deadline) {

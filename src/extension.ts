@@ -19,6 +19,7 @@ import { registerIndexStatusCommand } from "./util/indexBuild";
 import { disposeImageDecodeWorkers } from "./util/image/imagedecoder";
 import { registerAuditFocusTreesCommand } from "./previewdef/focustree/warningreport";
 import { registerModTools } from "./modtools/host";
+import { cancelFocusTreeDomRenderWait, waitForFocusTreeDomRender } from "./previewdef/focustree/renderack";
 
 export function activate(context: vscode.ExtensionContext) {
     let locale: string | undefined = context.extension?.packageJSON?.locale;
@@ -57,6 +58,9 @@ export function activate(context: vscode.ExtensionContext) {
     // Last, and after the extension counts as loaded: mod tools are maintained by the mods, and
     // nothing they do may keep the standard utilities from starting.
     context.subscriptions.push(registerModTools());
+
+    // Browser smoke-test seam: resolve only when the focus-tree webview reports its mounted DOM.
+    return { waitForFocusTreeDomRender, cancelFocusTreeDomRenderWait };
 }
 
 export function deactivate() {}

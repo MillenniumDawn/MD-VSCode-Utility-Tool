@@ -1308,8 +1308,19 @@ function getInlayGfxClassName(
 
 let retriggerSearch: () => void = () => {};
 
+function mountedFocusIds(): string[] {
+	return Array.from(
+		document.querySelectorAll<HTMLElement>("#focustreeplaceholder .focus"),
+		(focus) => focus.id.startsWith("focus_") ? focus.id.slice("focus_".length) : focus.id,
+	);
+}
+
 window.addEventListener("message", tryRun(async (event) => {
 	const msg = event.data;
+	if (msg.type === "focusTreeDomRenderAckRequest") {
+		vscode.postMessage({ command: "focusTreeDomRenderAck", renderedFocusIds: mountedFocusIds() });
+		return;
+	}
 
 	// Fills the nonced <style> with the real focus-icon background CSS once the deferred conversion finishes.
 	if (msg.type === "iconStyles") {
@@ -1663,6 +1674,7 @@ window.addEventListener(
 		}
 
 		// Tells the extension the structure is on screen so it can post the deferred focus-icon CSS.
+		// DOM ids are sent only if a bounded smoke-test waiter explicitly requests them.
 		vscode.postMessage({ command: "ready" });
 	}),
 );
