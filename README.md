@@ -9,7 +9,11 @@ preview button, and the extension renders it next to your code with the game's o
 textures. Edit the file and the preview follows. Click anything in the preview and the editor
 jumps to where it is defined.
 
-Works in VS Code on the desktop and in the browser at [vscode.dev](https://vscode.dev).
+The extension includes a browser build and is smoke-tested in VS Code for the Web on CI: the
+browser build activates and opens a focus tree preview. In a browser, files outside the workspace
+are not assumed to be accessible. Base-game icons and localisation, the game launcher registry,
+and other files from a local Hearts of Iron IV installation may therefore be unavailable; previews
+use the files exposed by the VS Code workspace provider.
 Install it from the [VS Code Marketplace][marketplace] or [Open VSX][openvsx].
 
 Continuation of [hoi4modutilities](https://github.com/herbix/hoi4modutilities) by herbix,
