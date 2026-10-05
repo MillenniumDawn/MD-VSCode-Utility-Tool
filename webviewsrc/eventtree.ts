@@ -816,6 +816,14 @@ wireUpdateBody<EventGraphPayload>({
 	rebuild: buildContent,
 });
 
+export function acknowledgeBrowserSmokeRender(): void {
+	if ((window as Window & { browserSmokeRenderAck?: boolean }).browserSmokeRenderAck !== true) {
+		return;
+	}
+	const ids = Array.from(document.querySelectorAll("#eventtreecontent .ev-card-event .ev-id"), (element) => element.textContent ?? "");
+	vscode.postMessage({ command: "browserSmokeRendered", ids });
+}
+
 window.addEventListener(
 	"load",
 	tryRun(function () {
@@ -856,9 +864,6 @@ window.addEventListener(
 		search.wire();
 
 		buildContent();
-		if ((window as Window & { browserSmokeRenderAck?: boolean }).browserSmokeRenderAck === true) {
-			const ids = Array.from(document.querySelectorAll("#eventtreecontent .ev-card-event .ev-id"), (element) => element.textContent ?? "");
-			vscode.postMessage({ command: "browserSmokeRendered", ids });
-		}
+		acknowledgeBrowserSmokeRender();
 	}),
 );

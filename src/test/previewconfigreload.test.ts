@@ -120,7 +120,7 @@ describe("previewdef configuration reload", () => {
 		assert.strictEqual(subscriptions, 0);
 	});
 
-	it("releases the subscription when the preview is disposed", () => {
+		it("releases the subscription when the preview is disposed", () => {
 		stub();
 		const preview = new Watching(vscode.Uri.file("/tmp/a.txt"), panelStub());
 
@@ -128,6 +128,27 @@ describe("previewdef configuration reload", () => {
 		preview.dispose();
 
 		assert.strictEqual(disposals, 1);
+	});
+
+	it("enables the bounded render waiter on an event preview when requested", async () => {
+		stub();
+		const panel = panelStub();
+		let receive: ((message: unknown) => void) | undefined;
+		panel.webview.onDidReceiveMessage = (handler: (message: unknown) => void) => {
+			receive = handler;
+			return { dispose: () => undefined };
+		};
+		const preview = new (eventPreviewDef as any).previewConstructor(
+			vscode.Uri.file("/tmp/events/test.txt"),
+			panel,
+			true,
+		);
+		const rendered = preview.waitForBrowserSmokeRender(100);
+
+		receive!({ command: "browserSmokeRendered", ids: ["browser_smoke.1"] });
+
+		assert.deepStrictEqual(await rendered, ["browser_smoke.1"]);
+		preview.dispose();
 	});
 
 	describe("what each preview watches", () => {

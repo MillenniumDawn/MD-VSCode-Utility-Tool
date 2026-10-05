@@ -129,6 +129,29 @@ describe("previewdef/previewmanager PreviewManager", function () {
 			assert.deepStrictEqual(captured.localResourceRoots, [extensionUri]);
 		});
 
+		it("waits for the browser DOM acknowledgement only for an opted-in event preview", async function () {
+			let receivedSmokeFlag: boolean | undefined;
+			const provider = {
+				...fakeProvider(),
+				type: "event",
+				previewConstructor: class {
+					constructor(_uri: vscode.Uri, _panel: any, browserSmoke: boolean) {
+						receivedSmokeFlag = browserSmoke;
+					}
+					onDispose() { return { dispose() {} }; }
+					onDependencyChanged() { return { dispose() {} }; }
+					async initializePanelContent() {}
+					async waitForBrowserSmokeRender() { return ["browser_smoke.1"]; }
+				},
+			};
+			const manager = new PreviewManager() as any;
+			manager._previewProviders = [provider];
+			const result = await manager.showPreviewImpl(uri, panelStub({ enableScripts: true }), { browserSmoke: true });
+
+			assert.strictEqual(receivedSmokeFlag, true);
+			assert.deepStrictEqual(result, ["browser_smoke.1"]);
+		});
+
 		it("scopes a restored panel's localResourceRoots to the extension folder", async function () {
 			const panel = panelStub({ enableScripts: true });
 			const manager = new PreviewManager();
