@@ -232,9 +232,6 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             return previewProvider.onPreview(document);
         }
 
-        if (!panel) {
-        }
-
         const filename = basename(uri);
         const webviewOptions = previewWebviewOptions();
         panel = panel ?? vscode.window.createWebviewPanel(
