@@ -18,6 +18,20 @@ describe('focus-tree webview DOM render acknowledgement', () => {
 		assert.strictEqual(hasPendingFocusTreeDomRender('file:///workspace/focus.txt'), false);
 	});
 
+	it('replaces an older waiter for the same preview and resolves only the newer request', async () => {
+		const uri = 'file:///workspace/replaced.txt';
+		const older = waitForFocusTreeDomRender(uri, 1000);
+		const newer = waitForFocusTreeDomRender(uri, 1000);
+
+		await assert.rejects(older, /A newer focus-tree DOM render acknowledgement was requested/);
+		acknowledgeFocusTreeDomRender(uri, ['web_smoke_focus']);
+		assert.deepStrictEqual(await newer, ['web_smoke_focus']);
+	});
+
+	it('ignores an acknowledgement after its waiter has been cleared', () => {
+		assert.doesNotThrow(() => acknowledgeFocusTreeDomRender('file:///workspace/closed.txt', ['web_smoke_focus']));
+	});
+
 	it('fails when the webview never acknowledges a mounted DOM', async () => {
 		await assert.rejects(
 			waitForFocusTreeDomRender('file:///workspace/no-ack.txt', 5),

@@ -121,6 +121,21 @@ describe('webview/focustree rendering', () => {
         assert.strictEqual(element.querySelector('#focus_first_focus'), null);
     });
 
+    it('reports focus ids mounted in the DOM when the host requests a smoke acknowledgement', async () => {
+        const placeholder = document.getElementById('focustreeplaceholder')!;
+        placeholder.innerHTML = '<div id="focus_web_smoke_focus" class="focus"></div><div id="already_normalized" class="focus"></div>';
+
+        window.dispatchEvent(new (window as any).MessageEvent('message', {
+            data: { type: 'focusTreeDomRenderAckRequest' },
+        }));
+        await settled();
+
+        assert.deepStrictEqual(takePostedMessages(), [{
+            command: 'focusTreeDomRenderAck',
+            renderedFocusIds: ['web_smoke_focus', 'already_normalized'],
+        }]);
+    });
+
     // An inlay's `visible` trigger can only be met from the inlay conditions dropdown, which exists
     // only in condition mode. Outside it, ticking the window on is what shows it.
     describe('inlay window visible trigger', () => {

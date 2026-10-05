@@ -4,6 +4,7 @@ import { PreviewBase } from '../previewdef/previewbase';
 import { UpdateablePreviewBase, LoaderRender } from '../previewdef/updateablepreview';
 import { focusTreePreviewDef } from '../previewdef/focustree';
 import { WorldMap } from '../previewdef/worldmap/worldmap';
+import { waitForFocusTreeDomRender } from '../previewdef/focustree/renderack';
 
 // Issue #180: every subscription a preview takes on its panel is released when the preview is
 // disposed, so a closed panel stops holding the preview through its emitters.
@@ -79,6 +80,40 @@ describe('previewdef preview disposal (issue #180)', () => {
 
         preview.dispose();
         assert.deepStrictEqual(disposed, { message: 2, viewState: 2, panelDispose: 1 });
+    });
+
+    it('requests a DOM acknowledgement only for an active browser smoke waiter', async () => {
+        const handlers: ((message: unknown) => void)[] = [];
+        const posted: unknown[] = [];
+        const panel = {
+            webview: {
+                html: '',
+                cspSource: '',
+                asWebviewUri: (u: unknown) => u,
+                postMessage: async (message: unknown) => { posted.push(message); return true; },
+                onDidReceiveMessage: (handler: (message: unknown) => void) => {
+                    handlers.push(handler);
+                    return { dispose() {} };
+                },
+            },
+            visible: true,
+            onDidChangeViewState: () => ({ dispose() {} }),
+            onDidDispose: () => ({ dispose() {} }),
+        };
+        const uri = vscode.Uri.file('/tmp/smoke-tree.txt');
+        const preview = new (focusTreePreviewDef as any).previewConstructor(uri, panel);
+        const send = (message: unknown) => handlers.forEach(handler => handler(message));
+
+        send({ command: 'ready' });
+        assert.deepStrictEqual(posted, []);
+
+        const rendered = waitForFocusTreeDomRender(uri.toString(), 100);
+        send({ command: 'ready' });
+        assert.deepStrictEqual(posted, [{ type: 'focusTreeDomRenderAckRequest' }]);
+
+        send({ command: 'focusTreeDomRenderAck', renderedFocusIds: ['web_smoke_focus'] });
+        assert.deepStrictEqual(await rendered, ['web_smoke_focus']);
+        preview.dispose();
     });
 
     it('WorldMap releases the subscriptions initialize() took', () => {

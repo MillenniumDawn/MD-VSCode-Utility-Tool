@@ -19,6 +19,7 @@ import { registerIndexStatusCommand } from "./util/indexBuild";
 import { disposeImageDecodeWorkers } from "./util/image/imagedecoder";
 import { registerAuditFocusTreesCommand } from "./previewdef/focustree/warningreport";
 import { registerModTools } from "./modtools/host";
+// This bridge is exercised by the browser-only test:web workflow; unit coverage tests the waiter itself.
 import { cancelFocusTreeDomRenderWait, waitForFocusTreeDomRender } from "./previewdef/focustree/renderack";
 
 export function activate(context: vscode.ExtensionContext) {
