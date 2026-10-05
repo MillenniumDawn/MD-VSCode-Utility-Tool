@@ -1,0 +1,10 @@
+focus_tree = {
+	id = web_smoke
+	focus = {
+		id = web_smoke_focus
+		x = 0
+		y = 0
+		cost = 1
+		completion_reward = { }
+	}
+}
