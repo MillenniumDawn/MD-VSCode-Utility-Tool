@@ -1,7 +1,10 @@
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { setTryRunErrorReporter } from '../../../webviewsrc/util/tryRunError';
 
 // Every error the page raised that nobody asked for. A root hook below turns these into failed tests.
 const runtimeErrors: unknown[] = [];
+
+setTryRunErrorReporter(error => runtimeErrors.push(error));
 
 const virtualConsole = new VirtualConsole().forwardTo(console);
 virtualConsole.on('jsdomError', (error: any) => {
