@@ -18,8 +18,7 @@ import { renderContainerWindow, RenderChildTypeMap } from "../../util/hoi4gui/co
 import { calculateBBox, ParentInfo } from "../../util/hoi4gui/common";
 import { renderInstantTextBox } from "../../util/hoi4gui/instanttextbox";
 import { renderSprite } from "../../util/hoi4gui/nodecommon";
-import { registerWarningStyles, warningListClass } from "./warningstyles";
-import { registerTraceStyles } from "./tracestyles";
+import { registerTraceStyles } from "../../util/hoi4gui/tracestyles";
 import { registerExclusiveLinkStyles } from "../../util/hoi4gui/exclusivelink";
 import { loadExclusiveLinkImages, nationalFocusViewGfxFile } from "../../util/hoi4gui/exclusivelinkimages";
 import { registerFocusLinkStyles } from "../../util/hoi4gui/focuslink";
@@ -28,7 +27,7 @@ import { FocusItemLayout, FocusShortcutGui, FocusTreeLayout, focusTreeGridBoxFor
 import { describeParseFailure } from "../../util/indexHalf";
 import { actionGroupHtml, iconButtonHtml, iconClassOf } from "../toolbaricons";
 import { Logger } from "../../util/logger";
-import { TOOLBAR_HEIGHT, toolbarWrapper } from "../toolbarparts";
+import { TOOLBAR_HEIGHT, toolbarWrapper, traceStatusHtml, warningPanelHtml } from "../toolbarparts";
 import { spriteIconStyle } from "../iconstyle";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
@@ -274,9 +273,9 @@ export function buildFocusTreeErrorHtml(webview: vscode.Webview, uri: vscode.Uri
  * injected by the webview, so this is a cheap synchronous step.
  */
 function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, toolbarFlags: ToolbarFlags, styleNonce: string, shortcutToggle: string): string {
-    // Same reason as registerWarningStyles below: the shell stylesheet is the only one the webview
+    // Same reason as warningPanelHtml below: the shell stylesheet is the only one the webview
     // can still attach classes against after a render. See tracestyles.ts.
-    registerTraceStyles(styleTable);
+    registerTraceStyles(styleTable, 'focustreeplaceholder');
 
     // The search highlight. Same id-prefixed `raw` trick as the trace styles: the webview attaches
     // this class after a render, so the rule has to exist in the shell stylesheet, and the id keeps
@@ -320,7 +319,7 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
             <div id="inlaywindowplaceholder"></div>
             ${continuousFocusContent}
         </div>` +
-        renderWarningContainer(styleTable) +
+        warningPanelHtml(styleTable) +
         renderShortcutOverlay(styleTable, shortcutToggle) +
         renderToolBar(focusTrees, styleTable, toolbarFlags)
     );
@@ -331,26 +330,6 @@ interface ToolbarFlags {
     hasFocusOverlay: boolean;
     hasInlayWindows: boolean;
     hasWarnings: boolean;
-}
-
-function renderWarningContainer(styleTable: StyleTable) {
-    // Emitted into the shell stylesheet, which is serialized once before any render, so the
-    // webview can attach these classes to freshly rendered focuses at any time. See warningstyles.ts.
-    registerWarningStyles(styleTable);
-    return `
-    <div id="warnings-container" class="${styleTable.style('warnings-container', () => `
-        height: 100vh;
-        width: 100vw;
-        position: fixed;
-        top: 0;
-        left: 0;
-        padding-top: ${TOOLBAR_HEIGHT}px;
-        background: var(--vscode-editor-background);
-        box-sizing: border-box;
-        display: none;
-    `)}">
-        <div id="warnings" class="${warningListClass}"></div>
-    </div>`;
 }
 
 function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: ToolbarFlags): string {
@@ -447,14 +426,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
     const editContinuousButton = iconButtonHtml('editContinuous', localize, { domId: 'edit-continuous-focus' });
     const copyWarningsButton = iconButtonHtml('copyWarnings', localize, { domId: 'copy-warnings', disabled: hasNoWarnings });
 
-    // Shown by the webview only while a prerequisite trace is active, so there is always a visible
-    // way out of the dimmed view. Hidden through an inline display rather than the `hidden`
-    // attribute: the class below sets a display of its own, which would win over `[hidden]`.
-    const traceStatus = `
-        <div id="trace-status-container" style="display:none" class="${styleTable.style('traceStatusContainer', () => `margin-left:10px; align-items:center;`)}">
-            <span id="trace-status" class="${styleTable.style('traceStatus', () => `margin-right:5px; opacity:0.8;`)}"></span>
-            ${iconButtonHtml('clearTrace', localize, { domId: 'clear-trace' })}
-        </div>`;
+    const traceStatus = traceStatusHtml(styleTable, localize);
 
     return toolbarWrapper(styleTable, () => `${getFlags().useConditionInFocus ? conditions + inlayConditions : allowbranch}
             ${focuses}

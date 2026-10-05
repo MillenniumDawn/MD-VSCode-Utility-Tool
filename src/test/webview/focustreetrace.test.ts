@@ -3,7 +3,7 @@ import * as assert from 'assert';
 import { GridBoxConnectionTiles, GridBoxItem, renderLineConnections } from '../../util/hoi4gui/gridboxcommon';
 import { focusLinkClass } from '../../util/hoi4gui/focuslink';
 import { StyleTable } from '../../util/styletable';
-import { traceDimClass, traceLineClass } from '../../previewdef/focustree/tracestyles';
+import { traceDimClass, traceLineClass } from '../../util/hoi4gui/tracestyles';
 
 // focustree.ts reads window.focusTrees at module scope and binds its handlers to window load and
 // message. Only the exported helpers are under test, so it is loaded with those listeners held back.

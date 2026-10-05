@@ -22,15 +22,14 @@ import { StyleTable, normalizeForStyle } from "../src/util/styletable";
 import { escapeAttr } from "../src/util/escape";
 import { FocusTree, Focus } from "../src/previewdef/focustree/schema";
 import {
-	warningBadgeClass,
-	warningBoxClass,
-	warningEntryClass,
-	warningFlashClass,
-} from "../src/previewdef/focustree/warningstyles";
-import {
-	traceDimClass,
-	traceLineClass,
-} from "../src/previewdef/focustree/tracestyles";
+	WarnedTree,
+	applyWarningMarkers as applyTreeWarningMarkers,
+	bindWarningPanelButton,
+	renderWarningList as renderTreeWarningList,
+	revealNode,
+	setWarningMarkersVisible,
+} from "./util/warnings";
+import { Tracing, subscribeTracing } from "./util/trace";
 import { applyExclusiveLinkStyle } from "../src/util/hoi4gui/exclusivelink";
 import { focusLinkClass } from "../src/util/hoi4gui/focuslink";
 import { applyCondition, ConditionItem } from "../src/hoiformat/condition";
@@ -41,6 +40,13 @@ import { feLocalize } from "./util/i18n";
 import { applyIconState } from "../src/previewdef/toolbaricons";
 import { Checkbox } from "./util/checkbox";
 import { vscode } from "./util/vscode";
+
+// Shared with the MIO preview; re-exported so the focus tree tests reach them through this entry.
+export { applyPrerequisiteTrace } from "./util/trace";
+export {
+	warningIdsFor as warningFocusIdsFor,
+	warningCellCountsFor,
+} from "./util/warnings";
 
 initCommon();
 
@@ -106,125 +112,8 @@ export function search(searchContent: string, navigate: boolean = true) {
 	return searchedFocus;
 }
 
-// Prerequisite line tracing. A dense tree draws hundreds of overlapping connector lines underneath
-// the nodes, so following one by eye is guesswork. Shift+clicking a focus dims every connection in
-// the tree except the ones that focus's own prerequisite blocks produce. Focus nodes are left
-// untouched -- only lines are filtered.
-let tracedFocusId: string | undefined;
-
-// Exported for the same reason applyWarningMarkers is: the classes landing on the emitted
-// connection divs is the whole behaviour, and only a DOM test can prove it.
-export function applyPrerequisiteTrace(
-	root: HTMLElement,
-	focusId: string | undefined,
-): void {
-	const connections = root.querySelectorAll("[data-conn-from]");
-	for (let i = 0; i < connections.length; i++) {
-		const connection = connections[i] as HTMLElement;
-		connection.classList.remove(traceLineClass, traceDimClass);
-		if (focusId === undefined) {
-			continue;
-		}
-
-		// data-conn-from is the focus that owns the connection, and data-conn-type is written
-		// before renderGridBoxConnection flips a diagonal "parent" to "child", so this pair means
-		// exactly "a line one of this focus's prerequisite blocks produced". A mutually exclusive
-		// link is "related" and dims with everything else.
-		const isPrerequisiteOfTraced =
-			connection.dataset.connFrom === focusId &&
-			connection.dataset.connType === "parent";
-		connection.classList.add(
-			isPrerequisiteOfTraced ? traceLineClass : traceDimClass,
-		);
-	}
-}
-
-function reapplyPrerequisiteTrace(): void {
-	const placeholder = document.getElementById("focustreeplaceholder");
-	if (placeholder) {
-		applyPrerequisiteTrace(placeholder, tracedFocusId);
-	}
-}
-
-function setTracedFocus(focusId: string | undefined): void {
-	tracedFocusId = focusId;
-	reapplyPrerequisiteTrace();
-
-	const status = document.getElementById("trace-status");
-	if (status) {
-		// Focus ids come from the mod file, so they go in as text and never as markup.
-		status.textContent = focusId
-			? feLocalize("focustree.tracing", "Tracing: {0}", focusId)
-			: "";
-	}
-
-	const container = document.getElementById("trace-status-container");
-	if (container) {
-		container.style.display = focusId ? "flex" : "none";
-	}
-}
-
-// Wired to the shell elements, which outlive every rebuild of the tree, so this runs once.
-function subscribeTracing(): void {
-	const content = document.getElementById("focustreecontent");
-	if (content) {
-		content.addEventListener(
-			"click",
-			(e) => {
-				if (!e.shiftKey) {
-					return;
-				}
-
-				// Capture phase: stopping the event here is what keeps the bubble-phase .navigator
-				// handler from also jumping to the focus in the editor, and keeps a shift+click that
-				// lands on the completion checkbox from ticking it.
-				e.preventDefault();
-				e.stopPropagation();
-
-				const item = (e.target as Element | null)?.closest(
-					"[data-gridbox-item]",
-				) as HTMLElement | null;
-				const id = item?.dataset.gridboxItem;
-				if (!id) {
-					return;
-				}
-
-				setTracedFocus(id === tracedFocusId ? undefined : id);
-			},
-			true,
-		);
-	}
-
-	const clearButton = document.getElementById("clear-trace");
-	clearButton?.addEventListener("click", () => setTracedFocus(undefined));
-
-	window.addEventListener("keydown", (e) => {
-		if (e.key === "Escape" && tracedFocusId !== undefined) {
-			setTracedFocus(undefined);
-		}
-	});
-
-	// Clicking empty canvas clears the trace. The end of a pan is a click on that same canvas, so
-	// only a press that stayed where it started counts as one.
-	const dragger = document.getElementById("dragger");
-	if (dragger) {
-		let downX = 0;
-		let downY = 0;
-		dragger.addEventListener("mousedown", (e) => {
-			downX = e.pageX;
-			downY = e.pageY;
-		});
-		dragger.addEventListener("mouseup", (e) => {
-			if (
-				tracedFocusId !== undefined &&
-				Math.abs(e.pageX - downX) < 4 &&
-				Math.abs(e.pageY - downY) < 4
-			) {
-				setTracedFocus(undefined);
-			}
-		});
-	}
-}
+// Shift+click a focus to isolate its prerequisite lines. Set up once the shell has loaded.
+let tracing: Tracing | undefined;
 
 let useConditionInFocus: boolean = (window as any).useConditionInFocus;
 let focusTrees: FocusTree[] = (window as any).focusTrees;
@@ -493,123 +382,14 @@ async function buildContent() {
 	applyCustomTitlebarVisibility();
 	applyFocusOverlayVisibility();
 	// The connection divs are new after every rebuild, so an active trace has to be put back on.
-	reapplyPrerequisiteTrace();
+	tracing?.reapply();
 }
 
 // Focuses named in a layout warning get a red box with a warning badge so the problem is visible
-// on the tree itself, not only as a line in the warnings panel. Runs after every (re)render,
-// including the in-place update path, and marks every focus the warning involves (source +
-// related sources).
-// Exported (like miopreview's findOverlaps) so the id-collection logic is unit-testable.
-export function warningFocusIdsFor(focusTree: FocusTree): Set<string> {
-	const warningFocusIds = new Set<string>();
-	for (const warning of focusTree.warnings) {
-		warningFocusIds.add(warning.source);
-		for (const related of warning.relatedSources ?? []) {
-			warningFocusIds.add(related);
-		}
-	}
-	return warningFocusIds;
-}
-
-// How many warned focuses resolve to each grid slot, keyed by focus id. Focuses stacked on the
-// same slot are drawn on top of each other, so all but the last one rendered are invisible -- the
-// count on the badge is the only way to see that more than one focus is hiding there. Counting is
-// restricted to focuses that already carry a warning, so a stack of shared or joint focuses merged
-// in from another file (which the validator deliberately ignores) can't manufacture a marker.
-// Exported for the same testability reason as warningFocusIdsFor.
-export function warningCellCountsFor(
-	items: GridBoxItem[],
-	warningFocusIds: Set<string>,
-): Record<string, number> {
-	const countByCell: Record<string, number> = {};
-	const cellByFocusId: Record<string, string> = {};
-	for (const item of items) {
-		if (!warningFocusIds.has(item.id)) {
-			continue;
-		}
-		const cell = item.gridX + "," + item.gridY;
-		cellByFocusId[item.id] = cell;
-		countByCell[cell] = (countByCell[cell] ?? 0) + 1;
-	}
-
-	const countByFocusId: Record<string, number> = {};
-	for (const [id, cell] of Object.entries(cellByFocusId)) {
-		countByFocusId[id] = countByCell[cell] ?? 1;
-	}
-	return countByFocusId;
-}
-
-// Warning texts per focus, filed under the warning's source *and* every related source, so both
-// ends of a pair explain themselves on hover instead of only the focus the warning was filed under.
-function warningTextsByFocusId(focusTree: FocusTree): Record<string, string[]> {
-	const texts: Record<string, string[]> = {};
-	for (const warning of focusTree.warnings) {
-		for (const id of [warning.source, ...(warning.relatedSources ?? [])]) {
-			(texts[id] ??= []).push(warning.text);
-		}
-	}
-	return texts;
-}
-
-// Exported so a test can assert the markers really land on the rendered nodes: the previous
-// highlight silently did nothing because its CSS was registered after the stylesheet had already
-// been serialized, and nothing covered the DOM side.
-export function applyWarningMarkers(focusTree: FocusTree, items: GridBoxItem[]) {
-	const warningFocusIds = warningFocusIdsFor(focusTree);
-	if (warningFocusIds.size === 0) {
-		return;
-	}
-
-	const cellCounts = warningCellCountsFor(items, warningFocusIds);
-	const texts = warningTextsByFocusId(focusTree);
-	const visible = showWarningMarkers();
-
-	warningFocusIds.forEach((id) => {
-		// A focus hidden by allow_branch, or belonging to another tree, simply has no element.
-		const element = document.getElementById(`focus_${id}`);
-		if (!element) {
-			return;
-		}
-
-		// Built through the DOM rather than innerHTML: nothing derived from a mod-supplied focus id
-		// is ever interpolated into markup.
-		const marker = document.createElement("div");
-		marker.className = warningBoxClass;
-		if (!visible) {
-			marker.style.display = "none";
-		}
-		const badge = document.createElement("span");
-		badge.className = warningBadgeClass;
-		const stacked = cellCounts[id] ?? 1;
-		badge.textContent = stacked > 1 ? `⚠×${stacked}` : "⚠";
-		marker.appendChild(badge);
-		element.appendChild(marker);
-
-		// The tooltip lives on the .navigator child, which is what carries the focus id and
-		// position title; the marker itself is pointer-events:none so it can't show one.
-		const navigator = element.querySelector(".navigator") as HTMLElement | null;
-		const focusTexts = texts[id];
-		if (navigator && focusTexts) {
-			navigator.title = [navigator.title, ...focusTexts.map((t) => `⚠ ${t}`)]
-				.filter((line) => line)
-				.join("\n");
-		}
-	});
-}
-
-function setWarningMarkersVisible(visible: boolean) {
-	const markers = document.getElementsByClassName(warningBoxClass);
-	for (let i = 0; i < markers.length; i++) {
-		(markers[i] as HTMLDivElement).style.display = visible ? "block" : "none";
-	}
-
-	const button = document.getElementById(
-		"toggle-warning-markers",
-	) as HTMLButtonElement | null;
-	if (button) {
-		applyIconState(button, "warningMarkers", visible, feLocalize);
-	}
+// on the tree itself, not only as a line in the warnings panel. Exported so a test can assert the
+// markers really land on the rendered nodes.
+export function applyWarningMarkers(focusTree: WarnedTree, items: GridBoxItem[]) {
+	applyTreeWarningMarkers(focusTree, items, "focus_", showWarningMarkers());
 }
 
 function calculateFocusAllowed(
@@ -764,7 +544,7 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 	}
 
 	renderShortcuts(focusTree, renderedShortcuts[selectedFocusTreeIndex]);
-	renderWarningList(focusTree);
+	renderTreeWarningList(focusTree, "focus_");
 }
 
 // The host renders every button; this only puts the selected tree's into the overlay, and hides
@@ -905,44 +685,6 @@ export function wireContinuousFocusEditing(
 	});
 }
 
-// The warnings panel lists one clickable entry per warning: activating it closes the panel and
-// scrolls the offending focus into view with a short flash, so a warning never has to be read
-// off as coordinates and hunted for by hand.
-function renderWarningList(focusTree: FocusTree) {
-	const warnings = document.getElementById("warnings") as HTMLDivElement | null;
-	if (!warnings) {
-		return;
-	}
-
-	warnings.textContent = "";
-	if (focusTree.warnings.length === 0) {
-		const empty = document.createElement("div");
-		empty.textContent = feLocalize(
-			"worldmap.warnings.nowarnings",
-			"No warnings.",
-		);
-		warnings.appendChild(empty);
-		return;
-	}
-
-	for (const warning of focusTree.warnings) {
-		const entry = document.createElement("div");
-		entry.className = warningEntryClass;
-		entry.setAttribute("role", "button");
-		entry.tabIndex = 0;
-		entry.textContent = `[${warning.source}] ${warning.text}`;
-		const reveal = () => revealFocus(warning.source);
-		entry.addEventListener("click", reveal);
-		entry.addEventListener("keydown", (e) => {
-			if (e.key === "Enter" || e.key === " ") {
-				e.preventDefault();
-				reveal();
-			}
-		});
-		warnings.appendChild(entry);
-	}
-}
-
 // One listener on the overlay, so the buttons can be replaced per tree without rebinding. The
 // fold state is the reader's, kept across reloads like the other toolbar toggles.
 export function bindShortcuts(overlay: HTMLElement, currentTree: () => FocusTree | undefined) {
@@ -971,31 +713,7 @@ export function bindShortcuts(overlay: HTMLElement, currentTree: () => FocusTree
 }
 
 function revealFocus(focusId: string) {
-	hideWarningPanel();
-
-	// A focus hidden by allow_branch has no element; the entry then just closes the panel.
-	const element = document.getElementById(`focus_${focusId}`);
-	if (!element) {
-		return;
-	}
-
-	element.scrollIntoView({ block: "center", inline: "center" });
-	element.classList.add(warningFlashClass);
-	setTimeout(() => element.classList.remove(warningFlashClass), 1200);
-}
-
-function hideWarningPanel() {
-	const container = document.getElementById(
-		"warnings-container",
-	) as HTMLDivElement | null;
-	if (container) {
-		container.style.display = "none";
-		document.body.style.overflow = "";
-	}
-	const button = document.getElementById("show-warnings");
-	if (button) {
-		applyIconState(button, "showWarnings", false, feLocalize);
-	}
+	revealNode(`focus_${focusId}`);
 }
 
 function getFocusPosition(
@@ -1584,23 +1302,14 @@ window.addEventListener(
 		enableZoom(contentElement, 0, 52);
 
 		// Shift+click a focus to isolate its prerequisite lines
-		subscribeTracing();
+		tracing = subscribeTracing({
+			contentId: "focustreecontent",
+			placeholderId: "focustreeplaceholder",
+			statusText: (id) => feLocalize("focustree.tracing", "Tracing: {0}", id),
+		});
 
 		// Toggle warnings
-		const showWarnings = document.getElementById(
-			"show-warnings",
-		) as HTMLButtonElement;
-		if (showWarnings) {
-			const warnings = document.getElementById(
-				"warnings-container",
-			) as HTMLDivElement;
-			showWarnings.addEventListener("click", () => {
-				const visible = warnings.style.display === "block";
-				document.body.style.overflow = visible ? "" : "hidden";
-				warnings.style.display = visible ? "none" : "block";
-				applyIconState(showWarnings, "showWarnings", !visible, feLocalize);
-			});
-		}
+		bindWarningPanelButton();
 
 		// Toggle the on-canvas warning markers. Flips the existing marker elements instead of
 		// rebuilding the tree, so hiding them stays instant on large focus trees.

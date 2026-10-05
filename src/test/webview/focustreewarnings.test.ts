@@ -2,7 +2,7 @@ import { loadEntrypoint } from './setup';
 import * as assert from 'assert';
 import { FocusTree } from '../../previewdef/focustree/schema';
 import { GridBoxItem } from '../../util/hoi4gui/gridboxcommon';
-import { warningBadgeClass, warningBoxClass } from '../../previewdef/focustree/warningstyles';
+import { warningBadgeClass, warningBoxClass } from '../../util/hoi4gui/warningstyles';
 
 // focustree.ts reads window.focusTrees at module scope and binds its handlers to window load and
 // message. Only the exported helpers are under test, so it is loaded with those listeners held back.

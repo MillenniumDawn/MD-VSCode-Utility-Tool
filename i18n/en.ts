@@ -180,7 +180,6 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"focustree.audit.title": "Focus tree warnings",
 	"focustree.conditions": "Conditions: ",
 	"focustree.continuousstale": "The focus tree changed since the preview was drawn. Drag the continuous focus box again.",
-	"focustree.copywarnings": "Copy this focus tree's warnings",
 	"focustree.copywarnings.done": "Copied {0} warnings.",
 	"focustree.copywarnings.none": "This focus tree has no warnings.",
 	"focustree.customtitlebars": "Custom titlebars",
@@ -304,16 +303,23 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"localisationIndex.workspace.building":
 		"Building workspace localisation index...",
 	"miopreview.conditions": "Conditions: ",
+	"miopreview.copywarnings.none": "This organization has no warnings.",
 	"miopreview.mio": "Military Industrial Organization: ",
 	"miopreview.nomio": "No military industrial organization defined.",
 	"miopreview.showGrid": "Show grid",
 	"miopreview.showInheritedTraits": "Show inherited traits",
 	"miopreview.showOverlaps": "Show overlapping traits",
+	"miopreview.tracing": "Tracing: {0}",
 	"miopreview.warnings": "Toggle warnings",
+	"miopreview.warnings.exclusivenotexist": "Mutually exclusive trait {0} of trait {1} does not exist.",
+	"miopreview.warnings.exclusivenotsamey": "Mutually exclusive traits {0} and {1} are not on the same row.",
+	"miopreview.warnings.numparentsneeded": "Trait {0} needs {1} parents but lists only {2}, so it can never be unlocked.",
 	"miopreview.warnings.overridetraitidnotexist":
 		"An override_trait referenced a trait that doesn't exist: {0}.",
 	"miopreview.warnings.overridetraitnoid":
 		"An override_trait defined in this file don't have token property: {0}.",
+	"miopreview.warnings.parentnotabove": "Parent {0} of trait {1} is not positioned above it.",
+	"miopreview.warnings.parentnotexist": "Parent {0} of trait {1} does not exist.",
 	"miopreview.warnings.relativepositioncircularref":
 		"There're circular reference in relative position ID of these traits: {0}.",
 	"miopreview.warnings.relativepositionidnotexist":
@@ -393,6 +399,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"techtree.techfolder": "Technology folder: ",
 	"toolbar.cleartrace": "Stop tracing prerequisite lines (Esc)",
 	"toolbar.containerwindows": "Show container windows",
+	"toolbar.copywarnings": "Copy the warnings",
 	"toolbar.nowarnings": "No warnings to show",
 	"toolbar.openfile": "Open file in editor",
 	"toolbar.saveimage": "Save map as image",

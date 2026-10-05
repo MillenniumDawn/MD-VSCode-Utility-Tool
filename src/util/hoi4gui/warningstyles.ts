@@ -1,12 +1,13 @@
-import { StyleTable } from '../../util/styletable';
+import { StyleTable } from '../styletable';
 
 /**
- * Class names shared between the focus tree content builder (which emits the CSS into the shell
- * stylesheet) and the focus tree webview (which attaches the classes to rendered focuses).
+ * Class names shared between a grid box tree's content builder (which emits the CSS into the shell
+ * stylesheet) and its webview (which attaches the classes to rendered nodes). Used by the focus
+ * tree and the MIO trait tree.
  *
  * The rules deliberately live in the shell stylesheet rather than in the per-render StyleTable the
  * webview builds: `StyleTable.toStyleElement` snapshots its records at call time, so anything
- * registered after `#focustreeplaceholder` has been filled never reaches the page. Keeping them in
+ * registered after the tree's placeholder has been filled never reaches the page. Keeping them in
  * the shell -- emitted once, before any render -- makes that ordering trap impossible.
  *
  * `registerWarningStyles` derives the names through `StyleTable.name`, and a unit test asserts the

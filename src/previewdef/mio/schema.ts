@@ -19,6 +19,8 @@ export interface MioTextHeader {
 
 export interface MioWarning extends Warning<string> {
     navigations?: { file: string, start: number, end: number }[];
+    // The other traits a warning is about, which the preview marks along with the source.
+    relatedSources?: string[];
 }
 
 export type TraitEffect = 'equiment' | 'production' | 'organization';
@@ -229,6 +231,7 @@ function getMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }, depend
     }
 
     validateRelativePositionId(traits, warnings);
+    validateTraitLinks(traits, id, warnings);
 
     return {
         id,
@@ -277,6 +280,125 @@ function validateRelativePositionId(traits: Record<string, MioTrait>, warnings: 
                 break;
             }
             currentTrait = nextFocus;
+        }
+    }
+}
+
+// Resolves where a trait is drawn, following relative_position_id the way the preview does. A
+// circular chain stops where it loops; validateRelativePositionId reports it.
+function resolveTraitPosition(
+    trait: MioTrait,
+    traits: Record<string, MioTrait>,
+    cache: Map<string, { x: number, y: number }>,
+    stack: Set<string> = new Set(),
+): { x: number, y: number } {
+    const cached = cache.get(trait.id);
+    if (cached) {
+        return cached;
+    }
+
+    const position = { x: trait.x, y: trait.y };
+    const relative = trait.relativePositionId !== undefined ? traits[trait.relativePositionId] : undefined;
+    if (relative && !stack.has(trait.id)) {
+        stack.add(trait.id);
+        const relativePosition = resolveTraitPosition(relative, traits, cache, stack);
+        stack.delete(trait.id);
+        position.x += relativePosition.x;
+        position.y += relativePosition.y;
+    }
+
+    cache.set(trait.id, position);
+    return position;
+}
+
+function isRemoved(trait: MioTrait): boolean {
+    return trait.hasVisible && trait.visible === false;
+}
+
+// The parent and mutually exclusive links of every trait: links to traits that do not exist, a
+// parent that is not above the trait it unlocks, a parent block that asks for more parents than it
+// lists, and exclusive alternatives that are not side by side. A link between two traits inherited
+// unchanged from the included organization is that organization's to report, so a derived one only
+// checks the links its own traits take part in.
+function validateTraitLinks(traits: Record<string, MioTrait>, mioId: string, warnings: MioWarning[]) {
+    const positions = new Map<string, { x: number, y: number }>();
+    const yOf = (trait: MioTrait) => resolveTraitPosition(trait, traits, positions).y;
+    const reportedPairs = new Set<string>();
+
+    for (const trait of Object.values(traits)) {
+        if (isRemoved(trait)) {
+            continue;
+        }
+
+        const ownTrait = trait.sourceMioId === mioId;
+        const y = yOf(trait);
+        const parentGroups: { parents: string[], numNeeded: number }[] = [
+            ...trait.allParents.map(p => ({ parents: [p], numNeeded: 1 })),
+            ...(trait.anyParent.length > 0 ? [{ parents: trait.anyParent, numNeeded: 1 }] : []),
+            ...(trait.parent ? [{ parents: trait.parent.traits, numNeeded: trait.parent.numNeeded }] : []),
+        ];
+
+        for (const parentId of [...trait.allParents, ...trait.anyParent, ...(trait.parent?.traits ?? [])]) {
+            if (ownTrait && !(parentId in traits)) {
+                warnings.push({
+                    text: localize('miopreview.warnings.parentnotexist', 'Parent {0} of trait {1} does not exist.', parentId, trait.id),
+                    source: trait.id,
+                });
+            }
+        }
+
+        if (ownTrait && trait.parent && trait.parent.numNeeded > trait.parent.traits.length) {
+            warnings.push({
+                text: localize('miopreview.warnings.numparentsneeded', 'Trait {0} needs {1} parents but lists only {2}, so it can never be unlocked.', trait.id, trait.parent.numNeeded, trait.parent.traits.length),
+                source: trait.id,
+            });
+        }
+
+        for (const group of parentGroups) {
+            const known = group.parents
+                .filter(p => p !== trait.id)
+                .map(p => traits[p])
+                .filter((p): p is MioTrait => p !== undefined);
+            if (known.length === 0 || !(ownTrait || known.some(p => p.sourceMioId === mioId))) {
+                continue;
+            }
+            const notAbove = known.filter(p => yOf(p) >= y).map(p => p.id);
+            const above = known.length - notAbove.length;
+            if (notAbove.length > 0 && above < Math.min(group.numNeeded, known.length)) {
+                warnings.push({
+                    text: localize('miopreview.warnings.parentnotabove', 'Parent {0} of trait {1} is not positioned above it.', notAbove.join(', '), trait.id),
+                    source: trait.id,
+                    relatedSources: notAbove,
+                });
+            }
+        }
+
+        for (const exclusiveId of trait.exclusive) {
+            if (exclusiveId === trait.id) {
+                continue;
+            }
+            const exclusive = traits[exclusiveId];
+            if (!exclusive) {
+                if (ownTrait) {
+                    warnings.push({
+                        text: localize('miopreview.warnings.exclusivenotexist', 'Mutually exclusive trait {0} of trait {1} does not exist.', exclusiveId, trait.id),
+                        source: trait.id,
+                    });
+                }
+                continue;
+            }
+            const key = trait.id < exclusiveId ? `${trait.id}\u0001${exclusiveId}` : `${exclusiveId}\u0001${trait.id}`;
+            if (reportedPairs.has(key) || isRemoved(exclusive) || !(ownTrait || exclusive.sourceMioId === mioId)) {
+                continue;
+            }
+            reportedPairs.add(key);
+            if (yOf(exclusive) !== y) {
+                warnings.push({
+                    text: localize('miopreview.warnings.exclusivenotsamey', 'Mutually exclusive traits {0} and {1} are not on the same row.', trait.id, exclusiveId),
+                    source: trait.id,
+                    relatedSources: [exclusiveId],
+                });
+            }
         }
     }
 }

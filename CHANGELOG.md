@@ -3,6 +3,7 @@ Unreleased
   Functionality:
 
 - [ Mod Tools ] Mods can now ship tools of their own, run with the new Run Mod Tool command. They are off until you turn them on under Settings > Mod tools, only appear while their mod is open, and each mod gets its own settings page to choose which of its tools are shown. Mod tools are maintained by their mods, not by this extension: when one fails, the error says which mod team to report it to.
+- [ MIO ] The MIO preview now shows its warnings like the focus tree does: a warnings list, markers on the traits involved and a button to copy them. It also warns about a parent that does not exist, is not above its trait, or a `parent` block needing more parents than it lists, and about `mutually_exclusive` traits that do not exist or are not on the same row. Shift+click a trait to trace its parent lines. Issue #512.
   
   Bugfixes:
 - [ Event Previewer ] [ MIO Preview ] Editing a file used by an open preview now refreshes it instead of showing cached content. Issue #490.

@@ -5,6 +5,8 @@ import { renderedHtml, LoaderRenderResult } from '../previewdef/loaderpreview';
 import { getMiosFromFile } from '../previewdef/mio/schema';
 import { parseHoi4File } from '../hoiformat/hoiparser';
 import { stubLocalisation, restoreLocalisation } from './_localisation_stub';
+import { warningBoxClass } from '../util/hoi4gui/warningstyles';
+import { traceLineClass } from '../util/hoi4gui/tracestyles';
 
 // The mio preview's updateBody replaces the whole #mio-server-styles sheet while the shell markup
 // (#dragger, #miopreviewcontent, frame, toolbar) persists. These drive renderMioFile against a stub
@@ -145,6 +147,19 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
     it('hands the page the stored toolbar options', async () => {
         const rendered = await renderMioFile(loaderFor(1), uri, webview) as LoaderRenderResult;
         assert.ok(renderedHtml(rendered).includes('window.previewOptions = '));
+    });
+
+    // The webview attaches the marker and trace classes after a render, and an in-place update
+    // replaces the whole server sheet, so their rules have to be in every render's styleCss.
+    it('ships the warnings panel, its buttons and the trace styles with the shell', async () => {
+        const rendered = await renderMioFile(loaderFor(1), uri, webview) as LoaderRenderResult;
+        const html = renderedHtml(rendered);
+        for (const id of ['warnings-container', 'warnings', 'show-warnings', 'toggle-warning-markers', 'copy-warnings', 'trace-status-container', 'clear-trace']) {
+            assert.ok(html.includes(`id="${id}"`), `expected #${id} in the shell`);
+        }
+        const css = rendered.update!.styleCss ?? '';
+        assert.ok(css.includes(`.${warningBoxClass} {`), 'expected the marker rule in the update sheet');
+        assert.ok(css.includes(`#miopreviewplaceholder .${traceLineClass} {`), 'expected the trace rule scoped to the MIO tree');
     });
 });
 

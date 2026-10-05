@@ -14,6 +14,7 @@ export type Localizer = (key: LocaleKey, message: string) => string;
 // Where an icon is drawn. The guard test uses it to know which surfaces to render.
 export type IconSurface =
 	| "focustree"
+	| "mio"
 	| "gui"
 	| "worldmap"
 	| "zoom"
@@ -90,7 +91,7 @@ export const iconActions = {
 		disabledTooltipKey: "toolbar.nowarnings",
 		disabledTooltip: "No warnings to show",
 		reportsProblem: true,
-		surfaces: ["focustree", "worldmap"],
+		surfaces: ["focustree", "mio", "worldmap"],
 	},
 	warningMarkers: {
 		icon: { on: "circle-large-filled", off: "circle-large-outline" },
@@ -100,7 +101,7 @@ export const iconActions = {
 		tooltip: "Show warning markers on the tree",
 		disabledTooltipKey: "toolbar.nowarnings",
 		disabledTooltip: "No warnings to show",
-		surfaces: ["focustree"],
+		surfaces: ["focustree", "mio"],
 	},
 	editContinuous: {
 		icon: "move",
@@ -111,11 +112,11 @@ export const iconActions = {
 	},
 	copyWarnings: {
 		icon: "copy",
-		tooltipKey: "focustree.copywarnings",
-		tooltip: "Copy this focus tree's warnings",
+		tooltipKey: "toolbar.copywarnings",
+		tooltip: "Copy the warnings",
 		disabledTooltipKey: "toolbar.nowarnings",
 		disabledTooltip: "No warnings to show",
-		surfaces: ["focustree"],
+		surfaces: ["focustree", "mio"],
 	},
 	shortcutToggle: {
 		icon: "chevron-left",
@@ -152,7 +153,7 @@ export const iconActions = {
 		tooltipKey: "toolbar.cleartrace",
 		tooltip: "Stop tracing prerequisite lines (Esc)",
 		shortcut: "Esc",
-		surfaces: ["focustree"],
+		surfaces: ["focustree", "mio"],
 		shownWhen: "a prerequisite trace is active",
 	},
 	search: {

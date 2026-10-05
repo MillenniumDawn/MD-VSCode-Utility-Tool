@@ -5,6 +5,9 @@ import { LoaderPreview } from '../loaderpreview';
 import { matchPathEnd } from '../../util/nodecommon';
 import { MioLoader } from './loader';
 import { renderMioFile } from './contentbuilder';
+import { copyTreeWarnings } from '../focustree/warningreport';
+import { getRelativePathInWorkspace } from '../../util/vsccommon';
+import { error } from '../../util/debug';
 
 function canPreviewMio(document: vscode.TextDocument) {
     const uri = document.uri;
@@ -18,6 +21,14 @@ function canPreviewMio(document: vscode.TextDocument) {
 class MioPreview extends LoaderPreview<MioLoader> {
     constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
         super(uri, panel, (file, contentProvider) => new MioLoader(file, contentProvider), renderMioFile);
+        // The copy button posts the warnings of the organization on screen; the host writes the
+        // clipboard, which a webview cannot reach reliably on its own.
+        this.subscriptions.push(this.panel.webview.onDidReceiveMessage(msg => {
+            if (msg?.command === 'copyWarnings') {
+                const none = localize('miopreview.copywarnings.none', 'This organization has no warnings.');
+                void copyTreeWarnings(msg, getRelativePathInWorkspace(this.uri), none).catch(error);
+            }
+        }));
     }
 
     // localisationIndex and previewLocalisation change every trait and organization name;

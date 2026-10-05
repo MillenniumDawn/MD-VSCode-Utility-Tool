@@ -13,6 +13,9 @@ import { toNumberLike } from "../src/hoiformat/schema";
 import { vscode } from "./util/vscode";
 import { Mio, MioTrait } from "../src/previewdef/mio/schema";
 import { applyExclusiveLinkStyle } from "../src/util/hoi4gui/exclusivelink";
+import { applyWarningMarkers, bindWarningPanelButton, renderWarningList, setWarningMarkersVisible } from "./util/warnings";
+import { Tracing, subscribeTracing } from "./util/trace";
+import { feLocalize } from "./util/i18n";
 
 let mios: Mio[] = (window as any).mios;
 
@@ -24,6 +27,12 @@ let showIncludedTraits: boolean = previewOption('mio.showIncludedTraits', true);
 let showGrid: boolean = previewOption('mio.showGrid', false);
 let showOverlaps: boolean = previewOption('mio.showOverlaps', true);
 let conditions: DivDropdown | undefined = undefined;
+// Shift+click a trait to isolate its parent lines. Set up once the shell has loaded.
+let tracing: Tracing | undefined;
+
+function showWarningMarkers(): boolean {
+    return getState().showMioWarningMarkers ?? true;
+}
 
 initCommon();
 
@@ -95,6 +104,10 @@ async function buildContent() {
     miopreviewplaceholder.innerHTML = traitPreviewContent + headerLayer + gridGuideLayer + overlapLayer + styleTable.toStyleElement((window as any).styleNonce);
 
     subscribeNavigators();
+    applyWarningMarkers(mio, traitGrixBoxItems, 'trait_', showWarningMarkers());
+    renderWarningList(mio, 'trait_');
+    // The connection divs are new after every rebuild, so an active trace has to be put back on.
+    tracing?.reapply();
 }
 
 // Column grid overlay. Draws a faint vertical line at every column boundary (k = 0..10) anchored to
@@ -470,6 +483,39 @@ window.addEventListener('load', tryRun(async function() {
     // Zoom. The anchor is the toolbar strip's height, which the host owns.
     const contentElement = document.getElementById('miopreviewcontent') as HTMLDivElement;
     enableZoom(contentElement, 0, (window as any).toolbarHeight ?? 52);
+
+    tracing = subscribeTracing({
+        contentId: 'miopreviewcontent',
+        placeholderId: 'miopreviewplaceholder',
+        statusText: id => feLocalize('miopreview.tracing', 'Tracing: {0}', id),
+    });
+
+    bindWarningPanelButton();
+
+    // Flips the existing markers rather than rebuilding the tree. Kept in panel state, like the
+    // focus tree's.
+    const toggleWarningMarkers = document.getElementById('toggle-warning-markers');
+    if (toggleWarningMarkers) {
+        setWarningMarkersVisible(showWarningMarkers());
+        toggleWarningMarkers.addEventListener('click', () => {
+            const visible = !showWarningMarkers();
+            setState({ showMioWarningMarkers: visible });
+            setWarningMarkersVisible(visible);
+        });
+    }
+
+    // The host formats the warnings and writes the clipboard.
+    document.getElementById('copy-warnings')?.addEventListener('click', () => {
+        const mio = mios[selectedMioIndex];
+        if (mio === undefined) {
+            return;
+        }
+        vscode.postMessage({
+            command: 'copyWarnings',
+            treeId: mio.id,
+            warnings: mio.warnings.map(w => ({ source: w.source, text: w.text })),
+        });
+    });
 
     // The toolbar toggles. bindToggle puts each one in its restored position -- including the
     // codicon widget over it, which enableCheckboxes already built from the unrestored value -- and

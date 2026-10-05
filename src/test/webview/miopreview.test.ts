@@ -2,11 +2,13 @@ import { takePostedMessages, loadEntrypoint, useEntrypoint } from './setup';
 import * as assert from 'assert';
 import { GridBoxItem } from '../../util/hoi4gui/gridboxcommon';
 import { MioTrait } from '../../previewdef/mio/schema';
+import { warningBoxClass, warningEntryClass } from '../../util/hoi4gui/warningstyles';
+import { traceDimClass, traceLineClass } from '../../util/hoi4gui/tracestyles';
 
-function trait(id: string, x: number, y: number): MioTrait {
+function trait(id: string, x: number, y: number, allParents: string[] = []): MioTrait {
     return {
         id, name: id + '_name', icon: undefined,
-        anyParent: [], allParents: [], exclusive: [], parent: undefined,
+        anyParent: [], allParents, exclusive: [], parent: undefined,
         x, y, relativePositionId: undefined,
         visible: true, hasVisible: false, specialTraitBackground: false,
         effects: [], token: undefined,
@@ -27,14 +29,17 @@ const hostileCondition = `has_country_flag = "x'"><img src=x onerror=alert(1)>"`
 function installPayload(): void {
     (global as any).window.mios = [{
         id: 'mio_test',
-        traits: { alpha: trait('alpha', 0, 0), beta: trait('beta', 1, 0) },
+        // beta and gamma both take alpha as their parent, so tracing one has a line to light and a
+        // line to dim.
+        traits: { alpha: trait('alpha', 0, 1), beta: trait('beta', 1, 0, ['alpha']), gamma: trait('gamma', 2, 2, ['alpha']) },
         textHeaders: [],
         // A trigger as a mod could write it, with the characters that would break out of the
         // option markup the filter lists it in.
         conditionExprs: [{ scopeName: 'ROOT', nodeContent: hostileCondition }],
-        warnings: [],
+        warnings: [{ text: 'Parent alpha of trait beta is not positioned above it.', source: 'beta', relatedSources: ['alpha'] }],
     }];
-    (global as any).window.renderedTrait = { mio_test: { alpha: '<span>alpha</span>', beta: '<span>beta</span>' } };
+    const card = (id: string) => `<div class="navigator" start="1" end="2" title="${id}">${id}</div>`;
+    (global as any).window.renderedTrait = { mio_test: { alpha: card('alpha'), beta: card('beta'), gamma: card('gamma') } };
     (global as any).window.renderedHeaders = { mio_test: '' };
     (global as any).window.gridBox = {
         position: { x: { _value: 50 }, y: { _value: 50 } },
@@ -74,8 +79,19 @@ const shellHtml = `
         <input type="checkbox" id="show-grid">
         <label for="show-overlaps">Show overlapping traits</label>
         <input type="checkbox" id="show-overlaps">
+        <div class="toolbar-actions">
+            <button id="show-warnings" type="button" aria-pressed="false"><i class="codicon codicon-warning"></i></button>
+            <button id="toggle-warning-markers" type="button" aria-pressed="true"><i class="codicon codicon-circle-large-filled"></i></button>
+            <button id="copy-warnings" type="button"><i class="codicon codicon-copy"></i></button>
+            <div id="trace-status-container" style="display:none">
+                <span id="trace-status"></span>
+                <button id="clear-trace" type="button"><i class="codicon codicon-close"></i></button>
+            </div>
+        </div>
     </div></div>
-    <div id="miopreviewcontent"><div id="miopreviewplaceholder"></div></div>`;
+    <div id="dragger"></div>
+    <div id="miopreviewcontent"><div id="miopreviewplaceholder"></div></div>
+    <div id="warnings-container" style="display:none"><div id="warnings"></div></div>`;
 
 const { module: { findOverlaps }, listeners } = loadEntrypoint(
     () => require('../../../webviewsrc/miopreview') as typeof import('../../../webviewsrc/miopreview'),
@@ -159,7 +175,84 @@ describe('webview/miopreview rendering', () => {
     });
 
     it('draws the tree the payload describes', () => {
-        assert.strictEqual(placeholder().querySelectorAll('.trait').length, 2);
+        assert.strictEqual(placeholder().querySelectorAll('.trait').length, 3);
+    });
+
+    // Both ends of the warning are marked, and say why on hover.
+    it('marks the traits a warning names, with the warning on their tooltip', () => {
+        for (const id of ['alpha', 'beta']) {
+            const node = document.getElementById('trait_' + id)!;
+            assert.ok(node.querySelector('.' + warningBoxClass), `expected a marker on ${id}`);
+            const title = (node.querySelector('.navigator') as HTMLElement).title;
+            assert.ok(title.includes('⚠ Parent alpha of trait beta is not positioned above it.'), title);
+        }
+        assert.strictEqual(document.getElementById('trait_gamma')!.querySelector('.' + warningBoxClass), null);
+    });
+
+    it('hides and shows the markers from the toolbar', () => {
+        const button = document.getElementById('toggle-warning-markers')!;
+        const marker = () => document.getElementById('trait_beta')!.querySelector('.' + warningBoxClass) as HTMLElement;
+        button.click();
+        assert.strictEqual(marker().style.display, 'none');
+        assert.strictEqual(button.getAttribute('aria-pressed'), 'false');
+        button.click();
+        assert.strictEqual(marker().style.display, 'block');
+    });
+
+    it('lists the warnings in the panel the toolbar opens', () => {
+        const container = document.getElementById('warnings-container')!;
+        const entries = container.querySelectorAll('.' + warningEntryClass);
+        assert.deepStrictEqual([...entries].map(e => e.textContent), [
+            '[beta] Parent alpha of trait beta is not positioned above it.',
+        ]);
+
+        document.getElementById('show-warnings')!.click();
+        assert.strictEqual(container.style.display, 'block');
+        // An entry closes the panel to show the trait it is about. jsdom does no layout, so the
+        // scroll is caught on the element.
+        let scrolled = false;
+        document.getElementById('trait_beta')!.scrollIntoView = () => { scrolled = true; };
+        (entries[0] as HTMLElement).click();
+        assert.strictEqual(container.style.display, 'none');
+        assert.ok(scrolled, 'expected the entry to scroll its trait into view');
+    });
+
+    it('sends the warnings of the organization on screen to the host to copy', () => {
+        takePostedMessages();
+        document.getElementById('copy-warnings')!.click();
+        assert.deepStrictEqual(takePostedMessages(), [{
+            command: 'copyWarnings',
+            treeId: 'mio_test',
+            warnings: [{ source: 'beta', text: 'Parent alpha of trait beta is not positioned above it.' }],
+        }]);
+    });
+
+    it('traces the parent lines of a shift+clicked trait, without jumping to its definition', () => {
+        takePostedMessages();
+        const navigator = document.getElementById('trait_beta')!.querySelector('.navigator') as HTMLElement;
+        navigator.dispatchEvent(new (window as any).MouseEvent('click', { bubbles: true, cancelable: true, shiftKey: true }));
+
+        assert.deepStrictEqual(takePostedMessages(), [], 'a traced click must not navigate');
+        const lines = [...placeholder().querySelectorAll('[data-conn-from]')] as HTMLElement[];
+        const lit = lines.filter(l => l.classList.contains(traceLineClass));
+        assert.ok(lit.length > 0, 'expected the parent line of beta to be lit');
+        assert.ok(lit.every(l => l.dataset.connFrom === 'beta'));
+        const gammaLines = lines.filter(l => l.dataset.connFrom === 'gamma');
+        assert.ok(gammaLines.length > 0 && gammaLines.every(l => l.classList.contains(traceDimClass)));
+        assert.strictEqual(document.getElementById('trace-status')!.textContent, 'Tracing: beta');
+        assert.strictEqual(document.getElementById('trace-status-container')!.style.display, 'flex');
+    });
+
+    it('clears the trace on Escape', () => {
+        window.dispatchEvent(new (window as any).KeyboardEvent('keydown', { key: 'Escape' }));
+        assert.strictEqual(placeholder().querySelectorAll('.' + traceLineClass + ', .' + traceDimClass).length, 0);
+        assert.strictEqual(document.getElementById('trace-status-container')!.style.display, 'none');
+    });
+
+    it('still jumps to the definition on a plain click', () => {
+        takePostedMessages();
+        (document.getElementById('trait_beta')!.querySelector('.navigator') as HTMLElement).click();
+        assert.deepStrictEqual(takePostedMessages(), [{ command: 'navigate', start: 1, end: 2, file: undefined }]);
     });
 
     // The condition filter lists trigger text straight from the mod. It has to come out as the
@@ -232,6 +325,6 @@ describe('webview/miopreview rendering', () => {
 
         assert.strictEqual(writes, 1);
         assert.strictEqual(placeholder().querySelector('.st-mio-grid-line'), null);
-        assert.strictEqual(placeholder().querySelectorAll('.trait').length, 2);
+        assert.strictEqual(placeholder().querySelectorAll('.trait').length, 3);
     });
 });
