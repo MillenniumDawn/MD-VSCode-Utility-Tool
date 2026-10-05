@@ -37,6 +37,7 @@ export async function run(): Promise<void> {
 	}
 	// Pass the resource directly because the headless browser host may not keep an active editor.
 	try {
+		// The command waits for the initial loader read and webview HTML assignment before the test host exits.
 		await vscode.commands.executeCommand(previewCommand, eventUri);
 
 		const deadline = Date.now() + 20000;
