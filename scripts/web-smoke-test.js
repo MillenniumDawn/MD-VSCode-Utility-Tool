@@ -1,48 +1,55 @@
-/* global define */
+const vscode = require("vscode");
 
-// VS Code for the Web loads extension test modules through its AMD loader. Keep this smoke test
-// dependency-free so it runs in the browser extension host, not under Node's desktop host.
-define(['require', 'exports', 'vscode'], function (require, exports, vscode) {
-	'use strict';
-
-	exports.run = async function () {
-		const extension = vscode.extensions.getExtension('MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026');
-		if (!extension) {
-			throw new Error('Extension was not loaded from its browser entrypoint.');
-		}
-		await extension.activate();
-		if (!extension.isActive) {
-			throw new Error('Browser extension did not activate.');
-		}
-
-		const workspace = vscode.workspace.workspaceFolders?.[0];
-		if (!workspace) {
-			throw new Error('The web smoke test needs its fixture workspace.');
-		}
-		const uri = vscode.Uri.joinPath(workspace.uri, 'common', 'national_focus', 'web-smoke.txt');
-		await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(workspace.uri, 'common', 'national_focus'));
-		await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(`focus_tree = {
-	id = web_smoke
-	focus = {
-		id = web_smoke_focus
-		x = 0
-		y = 0
-		cost = 1
-		completion_reward = { }
+// VS Code loads extension tests as CommonJS in the browser extension host.
+exports.run = async function () {
+	const extension = vscode.extensions.getExtension("MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026");
+	if (!extension) {
+		throw new Error("The extension was not loaded from its browser entrypoint.");
 	}
+	await extension.activate();
+	if (!extension.isActive) {
+		throw new Error("The browser extension did not activate.");
+	}
+
+	const folder = vscode.workspace.workspaceFolders?.[0];
+	if (!folder) {
+		throw new Error("The browser smoke workspace did not open.");
+	}
+	const uri = vscode.Uri.joinPath(folder.uri, "common", "national_focus", "web-smoke.txt");
+	const source = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+	if (!source.includes("id = web_smoke_focus")) {
+		throw new Error("The browser workspace did not serve the focus tree fixture.");
+	}
+	const document = await vscode.workspace.openTextDocument(uri);
+	await vscode.window.showTextDocument(document);
+
+	const previewCommand = "mdhoi4utilities.preview";
+	const commands = await vscode.commands.getCommands(true);
+	if (!commands.includes(previewCommand)) {
+		throw new Error("The preview command is not registered.");
+	}
+	// This command completes only after the initial preview content has rendered.
+	await vscode.commands.executeCommand(previewCommand, uri);
+
+	const deadline = Date.now() + 20000;
+	while (Date.now() < deadline) {
+		const tabs = vscode.window.tabGroups.all.flatMap((group) => group.tabs);
+		if (tabs.some((tab) => isPreviewTab(tab.input))) {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	}
+	const tabs = vscode.window.tabGroups.all.flatMap((group) => group.tabs).map((tab) => {
+		const input = tab.input;
+		return { label: tab.label, viewType: input && typeof input === "object" ? input.viewType : undefined };
+	});
+	throw new Error(`The event preview webview did not open: ${JSON.stringify(tabs)}`);
+};
+
+function isPreviewTab(input) {
+	if (!input || typeof input !== "object") {
+		return false;
+	}
+	const viewType = input.viewType;
+	return viewType === "mdftpreview" || viewType === "mainThreadWebview-mdftpreview";
 }
-`));
-
-		const document = await vscode.workspace.openTextDocument(uri);
-		await vscode.window.showTextDocument(document);
-		await vscode.commands.executeCommand('mdhoi4utilities.preview');
-
-		const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
-		if (!tab || !(tab.input instanceof vscode.TabInputWebview)) {
-			throw new Error('Preview command did not open a webview panel.');
-		}
-		if (tab.input.viewType !== 'mdftpreview') {
-			throw new Error(`Unexpected preview panel type: ${tab.input.viewType}`);
-		}
-	};
-});
