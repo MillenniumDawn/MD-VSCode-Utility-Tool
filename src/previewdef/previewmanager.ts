@@ -271,7 +271,12 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             this.addPreviewToSubscription(previewItem, newDep);
         });
 
-        await previewItem.initializePanelContent(document);
+        try {
+            await previewItem.initializePanelContent(document);
+        } catch (e) {
+            panel.dispose();
+            throw e;
+        }
     }
 
     private findPreviewProvider(document: vscode.TextDocument): PreviewProviderDef | undefined {
