@@ -23,7 +23,8 @@ export async function run(): Promise<void> {
 	const eventUri = vscode.Uri.joinPath(folder.uri, "events", "smoke.txt");
 	const document = await vscode.workspace.openTextDocument(eventUri);
 	await vscode.window.showTextDocument(document);
-	await vscode.commands.executeCommand("mdhoi4utilities.preview");
+	// Pass the resource directly because the headless browser host may not keep an active editor.
+	await vscode.commands.executeCommand("mdhoi4utilities.preview", eventUri);
 
 	const deadline = Date.now() + 20000;
 	while (Date.now() < deadline) {
