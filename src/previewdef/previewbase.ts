@@ -45,7 +45,7 @@ export abstract class PreviewBase {
         return run;
     }
 
-    private async renderDocument(document: vscode.TextDocument, dependencyChanged: boolean): Promise<void> {
+    private async renderDocument(document: vscode.TextDocument, dependencyChanged: boolean, throwOnError = false): Promise<void> {
         if (this.isDisposed) {
             return;
         }
@@ -62,6 +62,9 @@ export abstract class PreviewBase {
             }
         } catch(e) {
             error(e);
+            if (throwOnError) {
+                throw e;
+            }
         }
     }
 
@@ -99,7 +102,7 @@ export abstract class PreviewBase {
             }
             this.panelInitialized = false;
             this.panel.webview.html = this.getLoadingShellHtml();
-            await this.renderDocument(document, false);
+            await this.renderDocument(document, false, true);
         });
     }
 
