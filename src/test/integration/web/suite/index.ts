@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
-import { WebviewType } from "../../../../constants";
 
 const extensionId = "MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026";
+// Keep this in sync with WebviewType.Preview in src/constants.ts.
+const previewViewType = "mdftpreview";
 
 // @vscode/test-web imports this module in the browser extension host. Keep this a plain runner:
 // Node-oriented test frameworks such as Mocha are not available to that host.
@@ -28,7 +29,7 @@ export async function run(): Promise<void> {
 	while (Date.now() < deadline) {
 		const opened = vscode.window.tabGroups.all.some((group) =>
 			group.tabs.some((tab) =>
-				tab.input instanceof vscode.TabInputWebview && tab.input.viewType === WebviewType.Preview,
+				tab.input instanceof vscode.TabInputWebview && tab.input.viewType === previewViewType,
 			),
 		);
 		if (opened) {
