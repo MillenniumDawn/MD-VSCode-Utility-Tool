@@ -9,6 +9,7 @@ import { loadingShellHtml } from '../util/html';
 import { openOrCopyHoiFile } from '../util/previewfileopener';
 import { setPreviewOption } from '../util/previewoptions';
 import { ConfigurationKey } from '../constants';
+import { waitForRenderAck } from './renderack';
 
 export abstract class PreviewBase {
     private cachedDependencies: string[] | undefined = undefined;
@@ -27,10 +28,13 @@ export abstract class PreviewBase {
     // Renders run one at a time, so a slow render can never land after a newer one and overwrite
     // it. A queued render reads the live document when it starts, so edits in between coalesce.
     private renderQueue: Promise<void> = Promise.resolve();
+    private browserSmokeRenderedIds: string[] | undefined;
+    private browserSmokeWaiter: ((ids: string[]) => void) | undefined;
 
     constructor(
         readonly uri: vscode.Uri,
         readonly panel: vscode.WebviewPanel,
+        protected readonly browserSmoke = false,
     ) {
         this.registerEvents(panel);
     }
@@ -137,6 +141,13 @@ export abstract class PreviewBase {
                 return;
             }
             switch (msg.command) {
+                case 'browserSmokeRendered':
+                    if (this.browserSmoke && Array.isArray(msg.ids) && msg.ids.every((id) => typeof id === 'string')) {
+                        this.browserSmokeRenderedIds = msg.ids;
+                        this.browserSmokeWaiter?.(msg.ids);
+                        this.browserSmokeWaiter = undefined;
+                    }
+                    break;
                 case 'navigate':
                     if (isOffset(msg.start) && isOptionalOffset(msg.end) && isOptionalString(msg.file)) {
                         if (msg.file === undefined) {
@@ -187,6 +198,22 @@ export abstract class PreviewBase {
                 }
             }));
         }
+    }
+
+    /** Wait for the opt-in browser smoke's post-DOM-mount acknowledgement. */
+    public waitForBrowserSmokeRender(timeoutMs = 10000): Promise<string[]> {
+        if (!this.browserSmoke) {
+            return Promise.reject(new Error('Browser smoke render acknowledgement was not enabled'));
+        }
+        if (this.browserSmokeRenderedIds !== undefined) {
+            return Promise.resolve(this.browserSmokeRenderedIds);
+        }
+        const ack = new Promise<string[]>((resolve) => {
+            this.browserSmokeWaiter = resolve;
+        });
+        return waitForRenderAck(ack, timeoutMs).finally(() => {
+            this.browserSmokeWaiter = undefined;
+        });
     }
     
     /**

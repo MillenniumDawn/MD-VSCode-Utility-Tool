@@ -13,6 +13,7 @@ import { applyNav, badge } from "./util/card";
 import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { wireUpdateBody } from "./util/updatebody";
+import { vscode } from "./util/vscode";
 import {
 	EventGraphEdge,
 	EventGraphEventNode,
@@ -855,6 +856,9 @@ window.addEventListener(
 		search.wire();
 
 		buildContent();
+		if ((window as Window & { browserSmokeRenderAck?: boolean }).browserSmokeRenderAck === true) {
+			const ids = Array.from(document.querySelectorAll("#eventtreecontent .ev-card-event .ev-id"), (element) => element.textContent ?? "");
+			vscode.postMessage({ command: "browserSmokeRendered", ids });
+		}
 	}),
 );
-

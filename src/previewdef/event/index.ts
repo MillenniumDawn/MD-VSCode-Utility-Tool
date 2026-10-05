@@ -22,8 +22,8 @@ function canPreviewEvent(document: vscode.TextDocument) {
 }
 
 class EventPreview extends LoaderPreview<EventsLoader> {
-    constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
-        super(uri, panel, (file, contentProvider) => new EventsLoader(file, contentProvider), renderEventFile);
+    constructor(uri: vscode.Uri, panel: vscode.WebviewPanel, browserSmoke = false) {
+        super(uri, panel, (file, contentProvider) => new EventsLoader(file, contentProvider), renderEventFile, browserSmoke);
     }
 
     // previewLocalisation changes the text in the payload; localisationIndex changes whether

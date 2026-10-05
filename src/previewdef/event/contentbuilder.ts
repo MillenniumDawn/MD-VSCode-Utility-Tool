@@ -19,7 +19,13 @@ export async function renderEventFile(loader: EventsLoader, uri: vscode.Uri, web
 		serverStylesId: "event-server-styles",
 		buildPage: async (result, styleTable) => {
 			const eventGraph = await renderEvents(result, styleTable);
-			return { content: renderPreviewShell(styleTable, "eventtreecontent", () => renderToolBar(styleTable), true), data: { eventGraph } };
+			return {
+				content: renderPreviewShell(styleTable, "eventtreecontent", () => renderToolBar(styleTable), true),
+				data: {
+					eventGraph,
+					...(options?.browserSmoke === true ? { browserSmokeRenderAck: true } : {}),
+				},
+			};
 		},
 	});
 }

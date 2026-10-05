@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { assertRenderedIds } from "../../../../previewdef/renderack";
 
 const extensionId = "MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026";
 // Keep this in sync with WebviewType.Preview in src/constants.ts.
@@ -43,7 +44,8 @@ export async function run(): Promise<void> {
 	// Pass the resource directly because the headless browser host may not keep an active editor.
 	try {
 		// The command waits for the initial loader read and webview HTML assignment before the test host exits.
-		await vscode.commands.executeCommand(previewCommand, eventUri);
+		const renderedIds = await vscode.commands.executeCommand<string[]>(previewCommand, eventUri, { browserSmoke: true });
+		assertRenderedIds(renderedIds ?? [], ["browser_smoke.1"]);
 
 		const deadline = Date.now() + 20000;
 		while (Date.now() < deadline) {
