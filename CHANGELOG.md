@@ -9,6 +9,7 @@ Unreleased
 - [ Previews ] Filtering or collapsing a chain no longer forgets decisions or events already hidden along its arrows. Issue #492.
 - [ World Map ] Supply nodes with leading spaces or tabs now load at the correct province and level. Issue #494.
 - [ Focus Tree Previewer ] Overlap warnings now account for an `offset` triggered by `has_focus_tree` for the tree on screen, so a shared branch moved aside in one tree is no longer reported as colliding with that tree's own focuses. Issue #514.
+- [ Focus Tree Previewer ] Shared focuses placed or unlocked relative to a `joint_focus` of the same file are now drawn at the right spot and no longer reported as overlapping, and a tree that imports the joint focus now shows the shared focuses that follow from it. Issue #515.
 
 v1.1.40
 

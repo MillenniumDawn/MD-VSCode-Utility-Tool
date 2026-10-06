@@ -37,6 +37,10 @@ export interface FocusTree {
 	allowBranchOptions: string[];
 	conditionExprs: ConditionItem[];
 	isSharedFocues: boolean;
+	// The other pseudo-tree's focuses when a file defines both shared and joint focuses. The game
+	// treats both kinds as one pool, so a shared focus may sit relative_position_id to a joint one;
+	// these resolve such anchors and are never drawn or checked as part of this tree.
+	anchorFocuses?: Record<string, Focus>;
 	continuousFocusPositionX?: number;
 	continuousFocusPositionY?: number;
 	// The file and offset of the tree's `focus_tree` key, so the preview can write a dragged
@@ -321,61 +325,70 @@ export function getFocusTreeWithFocusFile(
 	constants: {},
 ): FocusTree[] {
 	const focusTrees: FocusTree[] = [];
-	if (file.shared_focus.length > 0) {
-		const conditionExprs: ConditionItem[] = [];
-		const warnings: FocusWarning[] = [];
-		const focuses = getFocuses(
-			flattenFocusGroups(file.shared_focus),
-			conditionExprs,
-			filePath,
-			warnings,
-			constants,
-		);
+	const sharedConditionExprs: ConditionItem[] = [];
+	const sharedWarnings: FocusWarning[] = [];
+	const sharedFocuses = getFocuses(
+		flattenFocusGroups(file.shared_focus),
+		sharedConditionExprs,
+		filePath,
+		sharedWarnings,
+		constants,
+	);
+	const jointConditionExprs: ConditionItem[] = [];
+	const jointWarnings: FocusWarning[] = [];
+	const jointFocuses = getFocuses(
+		flattenFocusGroups(file.joint_focus),
+		jointConditionExprs,
+		filePath,
+		jointWarnings,
+		constants,
+	);
+	const hasSharedFocuses = file.shared_focus.length > 0;
+	const hasJointFocuses = file.joint_focus.length > 0;
+	const ownPseudoTrees: FocusTree[] = [];
 
-		runLayoutValidation(focuses, warnings, false);
+	if (hasSharedFocuses) {
+		const anchorFocuses = hasJointFocuses ? jointFocuses : undefined;
+		runLayoutValidation(sharedFocuses, sharedWarnings, false, { anchorFocuses });
 
-		const sharedFocusTree = {
+		const sharedFocusTree: FocusTree = {
 			id: localize("focustree.sharedfocuses", "<Shared focuses>"),
-			focuses,
+			focuses: sharedFocuses,
 			inlayWindowRefs: [],
 			inlayWindows: [],
 			inlayConditionExprs: [],
-			allowBranchOptions: getAllowBranchOptions(focuses),
-			conditionExprs,
+			allowBranchOptions: getAllowBranchOptions(sharedFocuses),
+			conditionExprs: sharedConditionExprs,
 			isSharedFocues: true,
-			warnings,
+			...(anchorFocuses ? { anchorFocuses } : {}),
+			warnings: sharedWarnings,
 		};
 		focusTrees.push(sharedFocusTree);
-		sharedFocusTrees = [sharedFocusTree, ...sharedFocusTrees];
+		ownPseudoTrees.push(sharedFocusTree);
 	}
 
-	if (file.joint_focus.length > 0) {
-		const conditionExprs: ConditionItem[] = [];
-		const warnings: FocusWarning[] = [];
-		const focuses = getFocuses(
-			flattenFocusGroups(file.joint_focus),
-			conditionExprs,
-			filePath,
-			warnings,
-			constants,
-		);
+	if (hasJointFocuses) {
+		const anchorFocuses = hasSharedFocuses ? sharedFocuses : undefined;
+		runLayoutValidation(jointFocuses, jointWarnings, false, { anchorFocuses });
 
-		runLayoutValidation(focuses, warnings, false);
-
-		focusTrees.push({
+		const jointFocusTree: FocusTree = {
 			id: getJointFocusTreeId(filePath),
-			focuses,
+			focuses: jointFocuses,
 			inlayWindowRefs: [],
 			inlayWindows: [],
 			inlayConditionExprs: [],
-			allowBranchOptions: getAllowBranchOptions(focuses),
-			conditionExprs,
+			allowBranchOptions: getAllowBranchOptions(jointFocuses),
+			conditionExprs: jointConditionExprs,
 			// isSharedFocues also gates loader.ts's cross-file synthetic-tree inclusion and the
 			// webview's always-allow-branch handling for pseudo-trees, both of which apply here too.
 			isSharedFocues: true,
-			warnings,
-		});
+			...(anchorFocuses ? { anchorFocuses } : {}),
+			warnings: jointWarnings,
+		};
+		focusTrees.push(jointFocusTree);
+		ownPseudoTrees.push(jointFocusTree);
 	}
+	sharedFocusTrees = [...ownPseudoTrees, ...sharedFocusTrees];
 
 	for (const focusTree of file.focus_tree) {
 		const conditionExprs: ConditionItem[] = [];
@@ -401,7 +414,7 @@ export function getFocusTreeWithFocusFile(
 			}
 		}
 
-		runLayoutValidation(focuses, warnings, true, focusTree.id);
+		runLayoutValidation(focuses, warnings, true, { treeId: focusTree.id });
 
 		focusTrees.push({
 			id:
@@ -754,11 +767,24 @@ function addSharedFocus(
 	const sharedFocusTree = sharedFocusTrees.find(
 		(sft) => sharedFocusId in sft.focuses,
 	);
-	if (!sharedFocusTree) {
+	const requested = sharedFocusTree?.focuses[sharedFocusId];
+	if (!sharedFocusTree || !requested) {
 		return;
 	}
 
-	const sharedFocuses = sharedFocusTree.focuses;
+	// The game pulls in shared and joint focuses alike, so a file's two pseudo-trees form one
+	// donor pool: a shared focus whose prerequisite is a joint focus comes along with it.
+	const donorTrees = sharedFocusTrees.filter(
+		(sft) =>
+			sft === sharedFocusTree ||
+			(sft.isSharedFocues &&
+				Object.values(sft.focuses).some((f) => f.file === requested.file)),
+	);
+	const sharedFocuses: Record<string, Focus> = Object.assign(
+		{},
+		...donorTrees.map((sft) => sft.focuses),
+		sharedFocusTree.focuses,
+	);
 
 	// Build reverse dependency map: focus -> focuses that depend on it
 	const dependents = new Map<string, string[]>();
@@ -854,7 +880,7 @@ function addSharedFocus(
 	// but layout warnings describe the donor's grid. This tree runs validateFocusLayout over the
 	// focuses it actually merged, on its own grid, so replaying the donor's would duplicate a line
 	// or name a focus that never came across.
-	for (const warning of sharedFocusTree.warnings) {
+	for (const warning of donorTrees.flatMap((sft) => sft.warnings)) {
 		if (!warning.layout && warning.source in focuses) {
 			warnings.push(warning);
 		}
@@ -891,7 +917,7 @@ function getAllowBranchOptions(focuses: Record<string, Focus>): string[] {
 function resolveFocusPosition(
 	focus: Focus,
 	focuses: Record<string, Focus>,
-	treeId: string | undefined,
+	context: LayoutContext,
 ): { x: number; y: number } {
 	// Mirrors the webview's getFocusPosition: the focus's own x/y plus the resolved position of the
 	// relative_position_id chain, each link adding the offsets it would apply. Only offsets that
@@ -905,7 +931,7 @@ function resolveFocusPosition(
 		x += current.x;
 		y += current.y;
 		for (const offset of current.offset) {
-			if (isFocusTreeOffsetApplied(offset, treeId)) {
+			if (isFocusTreeOffsetApplied(offset, context.treeId)) {
 				x += offset.x;
 				y += offset.y;
 			}
@@ -913,7 +939,8 @@ function resolveFocusPosition(
 		seen.add(current.id);
 		current =
 			current.relativePositionId !== undefined
-				? focuses[current.relativePositionId]
+				? (focuses[current.relativePositionId] ??
+					context.anchorFocuses?.[current.relativePositionId])
 				: undefined;
 	}
 	return { x, y };
@@ -942,6 +969,16 @@ function isFocusTreeOffsetApplied(
 }
 
 /**
+ * What the layout checks know about a tree beyond its focuses.
+ */
+interface LayoutContext {
+	// The focus_tree's id, for offsets triggered by has_focus_tree. Pseudo-trees have none.
+	treeId?: string;
+	// Focuses that only resolve relative_position_id anchors (FocusTree.anchorFocuses).
+	anchorFocuses?: Record<string, Focus>;
+}
+
+/**
  * Runs both layout validators over one tree and tags what they produce, so addSharedFocus can
  * tell a tree-local layout problem from a warning about the focus itself.
  *
@@ -955,7 +992,7 @@ function runLayoutValidation(
 	focuses: Record<string, Focus>,
 	warnings: FocusWarning[],
 	reportMissingRelativePositionTarget: boolean,
-	treeId?: string,
+	context: LayoutContext = {},
 ) {
 	const layoutWarnings: FocusWarning[] = [];
 	validateRelativePositionId(
@@ -963,7 +1000,7 @@ function runLayoutValidation(
 		layoutWarnings,
 		reportMissingRelativePositionTarget,
 	);
-	validateFocusLayout(focuses, layoutWarnings, treeId);
+	validateFocusLayout(focuses, layoutWarnings, context);
 	for (const warning of layoutWarnings) {
 		warnings.push({ ...warning, layout: true });
 	}
@@ -990,12 +1027,12 @@ function runLayoutValidation(
 function validateFocusLayout(
 	focuses: Record<string, Focus>,
 	warnings: FocusWarning[],
-	treeId: string | undefined,
+	context: LayoutContext,
 ) {
 	for (const [filePath, fileFocuses] of Object.entries(
 		groupBy(Object.values(focuses), "file"),
 	)) {
-		validateFocusLayoutOfFile(focuses, warnings, filePath, fileFocuses, treeId);
+		validateFocusLayoutOfFile(focuses, warnings, filePath, fileFocuses, context);
 	}
 }
 
@@ -1004,13 +1041,13 @@ function validateFocusLayoutOfFile(
 	warnings: FocusWarning[],
 	filePath: string,
 	fileFocuses: Focus[],
-	treeId: string | undefined,
+	context: LayoutContext,
 ) {
 	// Resolved against the whole tree, so a shared focus anchored to one of the host tree's own
 	// focuses lands where the preview draws it.
 	const entries = fileFocuses.map((focus) => ({
 		focus,
-		position: resolveFocusPosition(focus, focuses, treeId),
+		position: resolveFocusPosition(focus, focuses, context),
 	}));
 	const positions = new Map(
 		entries.map((entry) => [entry.focus.id, entry.position] as const),

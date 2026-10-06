@@ -745,6 +745,67 @@ shared_focus = {
 		);
 	});
 
+	// 06_czehcoslavakia_shared.txt hangs shared focuses off joint focuses of the same file.
+	it("resolves a shared focus anchored on a joint focus of the same file", () => {
+		const content = `shared_focus = { id = ROOT_F x = 0 y = 0 }
+joint_focus = { id = JOINT_A x = -6 y = 1 relative_position_id = ROOT_F }
+joint_focus = { id = JOINT_B x = 6 y = 1 relative_position_id = ROOT_F }
+shared_focus = { id = LEFT_F x = 0 y = 1 relative_position_id = JOINT_A }
+shared_focus = { id = RIGHT_F x = 0 y = 1 relative_position_id = JOINT_B }`;
+		const trees = treesOf(content);
+		assert.deepStrictEqual(
+			trees.map((t) => t.warnings.map((w) => w.text)),
+			[[], []],
+		);
+		assert.deepStrictEqual(Object.keys(trees[0].anchorFocuses ?? {}).sort(), [
+			"JOINT_A",
+			"JOINT_B",
+		]);
+		assert.deepStrictEqual(Object.keys(trees[1].anchorFocuses ?? {}).sort(), [
+			"LEFT_F",
+			"RIGHT_F",
+			"ROOT_F",
+		]);
+	});
+
+	it("gives a pseudo-tree no anchors when its file has only one kind of focus", () => {
+		const trees = treesOf("shared_focus = { id = SH_a x = 0 y = 0 }");
+		assert.strictEqual(trees[0].anchorFocuses, undefined);
+	});
+
+	it("merges the shared focuses that depend on an imported joint focus", () => {
+		const { host } = mergeSharedFocuses(
+			`joint_focus = { id = j_root x = 0 y = 0 }
+shared_focus = {
+    id = sh_child
+    x = 0
+    y = 1
+    relative_position_id = j_root
+    prerequisite = { focus = j_root }
+}`,
+			["j_root"],
+			focusBlock("m1", 10, 0),
+		);
+		assert.deepStrictEqual(Object.keys(host.focuses).sort(), [
+			"j_root",
+			"m1",
+			"sh_child",
+		]);
+		assert.deepStrictEqual(host.warnings, []);
+	});
+
+	it("merges a joint focus imported by a tree in the same file", () => {
+		const tree = treeWithFocuses(focusBlock("m1", 10, 0)).replace(
+			"id = test_tree",
+			"id = test_tree shared_focus = j_root",
+		);
+		const trees = treesWithSharedFocuses(
+			`joint_focus = { id = j_root x = 0 y = 0 }\n${tree}`,
+		);
+		const merged = trees.find((t) => t.id === "test_tree");
+		assert.ok(merged?.focuses["j_root"], "the joint focus must be merged");
+	});
+
 	it("checks shared focuses merged in from another file against each other", () => {
 		const { host } = mergeSharedFocuses(
 			`shared_focus = {
