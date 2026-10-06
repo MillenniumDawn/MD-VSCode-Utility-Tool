@@ -1,3 +1,5 @@
+add_namespace = browser_smoke
+
 country_event = {
 	id = browser_smoke.1
 	title = browser_smoke.1.t
