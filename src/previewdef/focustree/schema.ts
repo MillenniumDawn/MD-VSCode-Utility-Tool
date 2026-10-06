@@ -346,8 +346,10 @@ export function getFocusTreeWithFocusFile(
 	const hasSharedFocuses = file.shared_focus.length > 0;
 	const hasJointFocuses = file.joint_focus.length > 0;
 	const ownPseudoTrees: FocusTree[] = [];
+	// Without useConditionInFocus no tree merges shared focuses, so the pseudo-trees are the only
+	// place their overlaps are checked, and every pair stays in.
 	const importRoots =
-		hasSharedFocuses || hasJointFocuses
+		(hasSharedFocuses || hasJointFocuses) && getFlags().useConditionInFocus
 			? computeImportRoots({ ...jointFocuses, ...sharedFocuses })
 			: undefined;
 
@@ -784,12 +786,15 @@ function addSharedFocus(
 
 	// The game pulls in shared and joint focuses alike, so a file's two pseudo-trees form one
 	// donor pool: a shared focus whose prerequisite is a joint focus comes along with it.
-	const donorTrees = sharedFocusTrees.filter(
-		(sft) =>
-			sft === sharedFocusTree ||
-			(sft.isSharedFocues &&
-				Object.values(sft.focuses).some((f) => f.file === requested.file)),
+	const donorTrees = uniq(
+		sharedFocusTrees.filter(
+			(sft) =>
+				sft === sharedFocusTree ||
+				(sft.isSharedFocues &&
+					Object.values(sft.focuses).some((f) => f.file === requested.file)),
+		),
 	);
+	const merged = new Set<string>(sharedFocusId in focuses ? [] : [sharedFocusId]);
 	const sharedFocuses: Record<string, Focus> = Object.assign(
 		{},
 		...donorTrees.map((sft) => sft.focuses),
@@ -880,6 +885,7 @@ function addSharedFocus(
 					});
 				}
 				focuses[dep] = focus;
+				merged.add(dep);
 				updateConditionExprsByFocus(focus, conditionExprs);
 				queue.push(dep);
 			}
@@ -890,8 +896,9 @@ function addSharedFocus(
 	// but layout warnings describe the donor's grid. This tree runs validateFocusLayout over the
 	// focuses it actually merged, on its own grid, so replaying the donor's would duplicate a line
 	// or name a focus that never came across.
+	// Only for the focuses this import brought in: an earlier import already replayed its own.
 	for (const warning of donorTrees.flatMap((sft) => sft.warnings)) {
-		if (!warning.layout && warning.source in focuses) {
+		if (!warning.layout && merged.has(warning.source)) {
 			warnings.push(warning);
 		}
 	}
@@ -1314,7 +1321,8 @@ function validateFocusLayoutOfFile(
 }
 
 // Outside a pseudo-tree every focus is on screen with the rest; inside one, only focuses sharing an
-// import root are. A focus whose roots are unknown is compared with everything.
+// import root are. A focus whose roots are unknown, such as one caught in a prerequisite cycle, is
+// compared with everything.
 function shareImportRoot(
 	importRoots: Map<string, Set<string>> | undefined,
 	a: string,
@@ -1322,7 +1330,12 @@ function shareImportRoot(
 ): boolean {
 	const rootsOfA = importRoots?.get(a);
 	const rootsOfB = importRoots?.get(b);
-	if (rootsOfA === undefined || rootsOfB === undefined) {
+	if (
+		rootsOfA === undefined ||
+		rootsOfB === undefined ||
+		rootsOfA.size === 0 ||
+		rootsOfB.size === 0
+	) {
 		return true;
 	}
 	for (const root of rootsOfA) {
@@ -1344,13 +1357,7 @@ function computeVisibleTogether(
 ): boolean {
 	const rootsOfA = focuses[a]?.inAllowBranch ?? [];
 	const rootsOfB = focuses[b]?.inAllowBranch ?? [];
-	// Each focus under an allow_branch gate the other is not under is how a mod draws alternative
-	// branches on one spot: gated on flags set by rival events or exclusive focuses, they never
-	// show together, though nothing here can prove the two flags exclusive.
-	if (
-		rootsOfA.some((root) => !rootsOfB.includes(root)) &&
-		rootsOfB.some((root) => !rootsOfA.includes(root))
-	) {
+	if (onlyUnderDistinctGates(focuses, a, b)) {
 		return false;
 	}
 	const roots = uniq([...rootsOfA, ...rootsOfB]);
@@ -1371,7 +1378,12 @@ function computeVisibleTogether(
 
 	for (let mask = 0; mask < 1 << conditions.length; mask++) {
 		const trueExprs = conditions.filter((_, i) => (mask & (1 << i)) !== 0);
-		const isHidden = hiddenByAllowBranch(focuses, trueExprs);
+		const isHidden = hiddenByAllowBranch(
+			focuses,
+			(focus) =>
+				focus.allowBranch === undefined ||
+				applyCondition(focus.allowBranch, trueExprs),
+		);
 		if (!isHidden(a) && !isHidden(b)) {
 			return true;
 		}
@@ -1380,13 +1392,41 @@ function computeVisibleTogether(
 }
 
 /**
+ * Whether a and b each depend on an allow_branch condition the other does not: that is how a mod
+ * draws alternative branches on one spot, gated on flags set by rival events or exclusive focuses,
+ * though nothing here can prove two such flags exclusive. Gates are compared by condition, so two
+ * gates testing the same thing count as one, and a focus only depends on a condition when closing
+ * every gate testing it hides the focus: an OR prerequisite with an ungated option keeps it shown.
+ */
+function onlyUnderDistinctGates(
+	focuses: Record<string, Focus>,
+	a: string,
+	b: string,
+): boolean {
+	const gateKey = (root: string) => JSON.stringify(focuses[root]?.allowBranch);
+	const keysOfA = new Set((focuses[a]?.inAllowBranch ?? []).map(gateKey));
+	const keysOfB = new Set((focuses[b]?.inAllowBranch ?? []).map(gateKey));
+	const onlyA = [...keysOfA].filter((key) => !keysOfB.has(key));
+	const onlyB = [...keysOfB].filter((key) => !keysOfA.has(key));
+	if (onlyA.length === 0 || onlyB.length === 0) {
+		return false;
+	}
+	const hiddenWhenClosed = (keys: string[]) =>
+		hiddenByAllowBranch(
+			focuses,
+			(focus) => !keys.includes(JSON.stringify(focus.allowBranch)),
+		);
+	return hiddenWhenClosed(onlyA)(a) && hiddenWhenClosed(onlyB)(b);
+}
+
+/**
  * The webview's calculateFocusAllowed as a lookup: a focus with allow_branch is hidden when its
- * condition fails, and any other focus is hidden when one of its prerequisite groups has every
+ * gate is closed, and any other focus is hidden when one of its prerequisite groups has every
  * option hidden. A prerequisite outside the tree, or a cycle, hides nothing.
  */
 function hiddenByAllowBranch(
 	focuses: Record<string, Focus>,
-	trueExprs: ConditionItem[],
+	isGateOpen: (focus: Focus) => boolean,
 ): (id: string) => boolean {
 	const memo = new Map<string, boolean>();
 	const inProgress = new Set<string>();
@@ -1401,8 +1441,7 @@ function hiddenByAllowBranch(
 		}
 		inProgress.add(id);
 		const hidden = focus.hasAllowBranch
-			? focus.allowBranch !== undefined &&
-				!applyCondition(focus.allowBranch, trueExprs)
+			? !isGateOpen(focus)
 			: focus.prerequisite.some(
 					(group) => group.length > 0 && group.every(isHidden),
 				);

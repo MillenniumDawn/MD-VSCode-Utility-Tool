@@ -590,6 +590,29 @@ focus_tree = {
 		]);
 	});
 
+	it("still warns for a focus an ungated OR option keeps shown", () => {
+		const content = treeWithFocuses(
+			focusBlock("gate_f", 0, 0, "allow_branch = { has_country_flag = f }"),
+			focusBlock("plain", 4, 0),
+			focusBlock("gate_q", 8, 0, "allow_branch = { has_country_flag = q }"),
+			focusBlock("focus_c", 2, 1, "prerequisite = { focus = gate_f focus = plain }"),
+			focusBlock("focus_d", 2, 1, "prerequisite = { focus = gate_q }"),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Focuses focus_c, focus_d share the same position, so their icons overlap.",
+		]);
+	});
+
+	it("still warns for two gates testing the same condition", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_a", 0, 0, "allow_branch = { has_country_flag = f }"),
+			focusBlock("focus_b", 0, 0, "allow_branch = { has_country_flag = f }"),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Focuses focus_a, focus_b share the same position, so their icons overlap.",
+		]);
+	});
+
 	it("keeps a stack member without allow_branch that overlaps both alternatives", () => {
 		const content = treeWithFocuses(
 			focusBlock("focus_a", 0, 0, flagSet),
@@ -757,7 +780,7 @@ shared_focus = {
 		const content = `shared_focus = { id = SPA_a_great_spain x = 0 y = 0 }
 shared_focus = { id = SPR_the_popular_front x = 0 y = 0 }
 shared_focus = { id = SOV_raskovas_aviation_group x = 0 y = 0 }`;
-		assert.deepStrictEqual(warningTexts(content), []);
+		assert.deepStrictEqual(treesWithSharedFocuses(content)[0].warnings, []);
 	});
 
 	it("does not check the branches of separately imported shared roots against each other", () => {
@@ -765,7 +788,7 @@ shared_focus = { id = SOV_raskovas_aviation_group x = 0 y = 0 }`;
 shared_focus = { id = sh_a1 x = 0 y = 1 prerequisite = { focus = sh_a } }
 shared_focus = { id = sh_b x = 4 y = 0 }
 shared_focus = { id = sh_b1 x = 1 y = 1 prerequisite = { focus = sh_b } }`;
-		assert.deepStrictEqual(warningTexts(content), []);
+		assert.deepStrictEqual(treesWithSharedFocuses(content)[0].warnings, []);
 	});
 
 	it("checks a joint focus against the shared focuses imported with it", () => {
@@ -780,6 +803,53 @@ shared_focus = { id = sh_other x = 1 y = 1 prerequisite = { focus = j_root } }`;
 				["Focuses sh_child, sh_other share the same position, so their icons overlap."],
 				[],
 			],
+		);
+	});
+
+	it("checks a focus caught in a prerequisite cycle whatever the definition order", () => {
+		const cycle = (first: string, second: string) =>
+			treesWithSharedFocuses(`shared_focus = { id = sh_r x = 0 y = 0 }
+shared_focus = { id = sh_a x = 4 y = 2 prerequisite = { focus = sh_r } }
+${first}
+${second}`)[0].warnings.map((w) => w.text);
+		const q = "shared_focus = { id = sh_q x = 8 y = 1 prerequisite = { focus = sh_p } prerequisite = { focus = sh_r } }";
+		const p = "shared_focus = { id = sh_p x = 4 y = 2 prerequisite = { focus = sh_q } }";
+		const overlap = "Focuses sh_a, sh_p share the same position, so their icons overlap.";
+		assert.ok(cycle(q, p).includes(overlap));
+		assert.ok(cycle(p, q).includes(overlap));
+	});
+
+	it("checks every shared focus against the rest when trees do not merge them", () => {
+		stubVscode({ configuration: { useConditionInFocus: false } });
+		refreshFeatureFlags();
+		try {
+			const content = `shared_focus = { id = sh_a x = 0 y = 0 }
+shared_focus = { id = sh_b x = 0 y = 0 }`;
+			assert.deepStrictEqual(warningTexts(content), [
+				"Focuses sh_a, sh_b share the same position, so their icons overlap.",
+			]);
+		} finally {
+			restoreVscodeStubs();
+			refreshFeatureFlags();
+		}
+	});
+
+	it("replays a merged focus's own warnings once per tree", () => {
+		const trees = treesWithSharedFocuses(`shared_focus = { id = s1 x = 0 y = 0 }
+shared_focus = { id = s1 x = 0 y = 0 }
+joint_focus = { id = j1 x = 4 y = 0 }
+focus_tree = {
+    id = test_tree
+    shared_focus = s1
+    shared_focus = j1
+    shared_focus = s1
+    ${focusBlock("m1", 10, 0)}
+}`);
+		const tree = trees.find((t) => t.id === "test_tree");
+		assert.strictEqual(
+			tree?.warnings.filter((w) => w.text.startsWith("There're more than one focuses with ID s1"))
+				.length,
+			1,
 		);
 	});
 
