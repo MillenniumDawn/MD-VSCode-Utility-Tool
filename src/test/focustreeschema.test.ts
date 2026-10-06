@@ -738,17 +738,49 @@ focus_tree = {
 	it("reports layout warnings for shared_focus blocks", () => {
 		const content = `shared_focus = {
     id = SH_a
-    focus = { id = sh_a1 x = 0 y = 0 }
+    focus = { id = sh_root x = 0 y = 0 }
+    focus = { id = sh_a1 x = 0 y = 1 prerequisite = { focus = sh_root } }
 }
 shared_focus = {
     id = SH_b
-    focus = { id = sh_b1 x = 0 y = 0 }
+    focus = { id = sh_b1 x = 0 y = 1 prerequisite = { focus = sh_root } }
 }`;
 		// The container blocks (SH_a, SH_b) are unwrapped into their real children, so the
 		// synthetic <Shared focuses> tree has real coordinates to check.
 		assert.deepStrictEqual(warningTexts(content), [
 			"Focuses sh_a1, sh_b1 share the same position, so their icons overlap.",
 		]);
+	});
+
+	// 00_music_dlc_compatibility.txt: placeholders no tree imports, all at (0, 0).
+	it("does not check shared focuses no single import brings in together", () => {
+		const content = `shared_focus = { id = SPA_a_great_spain x = 0 y = 0 }
+shared_focus = { id = SPR_the_popular_front x = 0 y = 0 }
+shared_focus = { id = SOV_raskovas_aviation_group x = 0 y = 0 }`;
+		assert.deepStrictEqual(warningTexts(content), []);
+	});
+
+	it("does not check the branches of separately imported shared roots against each other", () => {
+		const content = `shared_focus = { id = sh_a x = 0 y = 0 }
+shared_focus = { id = sh_a1 x = 0 y = 1 prerequisite = { focus = sh_a } }
+shared_focus = { id = sh_b x = 4 y = 0 }
+shared_focus = { id = sh_b1 x = 1 y = 1 prerequisite = { focus = sh_b } }`;
+		assert.deepStrictEqual(warningTexts(content), []);
+	});
+
+	it("checks a joint focus against the shared focuses imported with it", () => {
+		const content = `joint_focus = { id = j_root x = 0 y = 0 }
+joint_focus = { id = j_child x = 0 y = 1 prerequisite = { focus = j_root } }
+shared_focus = { id = sh_child x = 1 y = 1 prerequisite = { focus = j_child } }
+shared_focus = { id = sh_other x = 1 y = 1 prerequisite = { focus = j_root } }`;
+		// sh_child and sh_other both come in with j_root, so the shared tree flags them.
+		assert.deepStrictEqual(
+			treesOf(content).map((t) => t.warnings.map((w) => w.text)),
+			[
+				["Focuses sh_child, sh_other share the same position, so their icons overlap."],
+				[],
+			],
+		);
 	});
 
 	it("reports layout warnings for joint_focus blocks", () => {
@@ -964,13 +996,21 @@ joint_focus = {
 		const { donor, host } = mergeSharedFocuses(
 			`shared_focus = {
     id = SH_a
-    focus = { id = sh_a1 x = 0 y = 0 }
+    focus = { id = sh_root x = 5 y = 0 }
+    focus = { id = sh_gate x = 10 y = 0 }
+    focus = { id = sh_a1 x = 0 y = 1 prerequisite = { focus = sh_root } }
 }
 shared_focus = {
     id = SH_b
-    focus = { id = sh_b1 x = 0 y = 0 }
+    focus = {
+        id = sh_b1
+        x = 0
+        y = 1
+        prerequisite = { focus = sh_root }
+        prerequisite = { focus = sh_gate }
+    }
 }`,
-			["sh_a1"],
+			["sh_root"],
 			focusBlock("m1", 0, 0),
 			focusBlock("m2", 0, 2),
 		);
@@ -979,6 +1019,7 @@ shared_focus = {
 			["Focuses sh_a1, sh_b1 share the same position, so their icons overlap."],
 		);
 		assert.ok(host.focuses["sh_a1"], "the shared focus must be merged");
+		assert.strictEqual(host.focuses["sh_b1"], undefined);
 		// Only sh_a1 came across, so the stack the shared file reports doesn't exist here.
 		assert.deepStrictEqual(host.warnings, []);
 	});

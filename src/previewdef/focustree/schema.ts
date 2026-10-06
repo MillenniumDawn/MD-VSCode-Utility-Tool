@@ -346,10 +346,17 @@ export function getFocusTreeWithFocusFile(
 	const hasSharedFocuses = file.shared_focus.length > 0;
 	const hasJointFocuses = file.joint_focus.length > 0;
 	const ownPseudoTrees: FocusTree[] = [];
+	const importRoots =
+		hasSharedFocuses || hasJointFocuses
+			? computeImportRoots({ ...jointFocuses, ...sharedFocuses })
+			: undefined;
 
 	if (hasSharedFocuses) {
 		const anchorFocuses = hasJointFocuses ? jointFocuses : undefined;
-		runLayoutValidation(sharedFocuses, sharedWarnings, false, { anchorFocuses });
+		runLayoutValidation(sharedFocuses, sharedWarnings, false, {
+			anchorFocuses,
+			importRoots,
+		});
 
 		const sharedFocusTree: FocusTree = {
 			id: localize("focustree.sharedfocuses", "<Shared focuses>"),
@@ -369,7 +376,10 @@ export function getFocusTreeWithFocusFile(
 
 	if (hasJointFocuses) {
 		const anchorFocuses = hasSharedFocuses ? sharedFocuses : undefined;
-		runLayoutValidation(jointFocuses, jointWarnings, false, { anchorFocuses });
+		runLayoutValidation(jointFocuses, jointWarnings, false, {
+			anchorFocuses,
+			importRoots,
+		});
 
 		const jointFocusTree: FocusTree = {
 			id: getJointFocusTreeId(filePath),
@@ -976,6 +986,48 @@ interface LayoutContext {
 	treeId?: string;
 	// Focuses that only resolve relative_position_id anchors (FocusTree.anchorFocuses).
 	anchorFocuses?: Record<string, Focus>;
+	// For a pseudo-tree: the import roots each focus arrives with (computeImportRoots).
+	importRoots?: Map<string, Set<string>>;
+}
+
+/**
+ * The roots a shared or joint focus is imported with. A tree imports a root with
+ * `shared_focus = <id>` and gets every focus whose prerequisites in the pool it then holds, so a
+ * root is a focus with no prerequisite in the pool, and a focus belongs to the roots of its
+ * prerequisites. The pseudo-trees draw every root on one grid, but two focuses with no root in
+ * common only meet in a tree that imports both, and that tree's own layout check covers them.
+ */
+function computeImportRoots(
+	pool: Record<string, Focus>,
+): Map<string, Set<string>> {
+	const roots = new Map<string, Set<string>>();
+	const inProgress = new Set<string>();
+	const rootsOf = (id: string): Set<string> => {
+		const cached = roots.get(id);
+		if (cached !== undefined) {
+			return cached;
+		}
+		const focus = pool[id];
+		if (focus === undefined || inProgress.has(id)) {
+			return new Set();
+		}
+		inProgress.add(id);
+		const prerequisites = flatten(focus.prerequisite).filter(
+			(p) => p !== id && p in pool,
+		);
+		const result = new Set<string>();
+		if (prerequisites.length === 0) {
+			result.add(id);
+		}
+		for (const prerequisite of prerequisites) {
+			rootsOf(prerequisite).forEach((root) => result.add(root));
+		}
+		inProgress.delete(id);
+		roots.set(id, result);
+		return result;
+	};
+	Object.keys(pool).forEach(rootsOf);
+	return roots;
 }
 
 /**
@@ -1024,7 +1076,8 @@ function runLayoutValidation(
  * a pair of alternatives gated on `has_country_flag = X` and `NOT = { has_country_flag = X }` is
  * routinely drawn on one spot, and only one of them is ever on screen. The same goes for two
  * focuses that each sit under an allow_branch gate the other does not: that is how alternative
- * branches are gated, on flags set by exclusive events or focuses.
+ * branches are gated, on flags set by exclusive events or focuses. In a shared or joint pseudo-tree,
+ * two focuses no single `shared_focus` import brings in together are not checked either.
  */
 function validateFocusLayout(
 	focuses: Record<string, Focus>,
@@ -1099,7 +1152,9 @@ function validateFocusLayoutOfFile(
 		if (cached !== undefined) {
 			return cached;
 		}
-		const result = computeVisibleTogether(focuses, a, b);
+		const result =
+			shareImportRoot(context.importRoots, a, b) &&
+			computeVisibleTogether(focuses, a, b);
 		visibleTogetherCache.set(key, result);
 		return result;
 	};
@@ -1256,6 +1311,26 @@ function validateFocusLayoutOfFile(
 			}
 		}
 	}
+}
+
+// Outside a pseudo-tree every focus is on screen with the rest; inside one, only focuses sharing an
+// import root are. A focus whose roots are unknown is compared with everything.
+function shareImportRoot(
+	importRoots: Map<string, Set<string>> | undefined,
+	a: string,
+	b: string,
+): boolean {
+	const rootsOfA = importRoots?.get(a);
+	const rootsOfB = importRoots?.get(b);
+	if (rootsOfA === undefined || rootsOfB === undefined) {
+		return true;
+	}
+	for (const root of rootsOfA) {
+		if (rootsOfB.has(root)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 // Past this many distinct allow_branch conditions the pair is assumed visible together (it keeps
