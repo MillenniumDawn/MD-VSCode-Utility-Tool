@@ -1397,6 +1397,11 @@ function computeVisibleTogether(
  * though nothing here can prove two such flags exclusive. Gates are compared by condition, so two
  * gates testing the same thing count as one, and a focus only depends on a condition when closing
  * every gate testing it hides the focus: an OR prerequisite with an ungated option keeps it shown.
+ *
+ * Only gates that start closed and test nothing in common count. A gate open by default, such as
+ * `NOT = { has_completed_focus = X }` on the obsolete-branch pattern or `always = yes`, shows its
+ * branch next to the other until something closes it; and a gate sharing a test with the other
+ * side, such as `has_dlc = X` against `has_dlc = X` plus another check, can be open with it.
  */
 function onlyUnderDistinctGates(
 	focuses: Record<string, Focus>,
@@ -1409,6 +1414,34 @@ function onlyUnderDistinctGates(
 	const onlyA = [...keysOfA].filter((key) => !keysOfB.has(key));
 	const onlyB = [...keysOfB].filter((key) => !keysOfA.has(key));
 	if (onlyA.length === 0 || onlyB.length === 0) {
+		return false;
+	}
+	const conditionByKey = new Map<string, ConditionComplexExpr | undefined>(
+		[...(focuses[a]?.inAllowBranch ?? []), ...(focuses[b]?.inAllowBranch ?? [])].map(
+			(root) => [gateKey(root), focuses[root]?.allowBranch] as const,
+		),
+	);
+	const closedByDefault = (key: string) => {
+		const condition = conditionByKey.get(key);
+		return condition !== undefined && !applyCondition(condition, []);
+	};
+	if (!onlyA.every(closedByDefault) || !onlyB.every(closedByDefault)) {
+		return false;
+	}
+	const leafKeys = (keys: string[]) =>
+		new Set(
+			keys.flatMap((key) => {
+				const condition = conditionByKey.get(key);
+				return condition === undefined
+					? []
+					: extractConditionalExprs(condition).map(
+							(leaf) => `${leaf.scopeName}
+${leaf.nodeContent}`,
+						);
+			}),
+		);
+	const leavesOfA = leafKeys(onlyA);
+	if ([...leafKeys(onlyB)].some((leaf) => leavesOfA.has(leaf))) {
 		return false;
 	}
 	const hiddenWhenClosed = (keys: string[]) =>

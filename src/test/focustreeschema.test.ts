@@ -613,6 +613,48 @@ focus_tree = {
 		]);
 	});
 
+	// Millennium Dawn's obsolete-branch pattern: both gates are open until one side is completed, so
+	// both branches are on screen together at the start.
+	it("still warns for the branches below gates that start open", () => {
+		const obsolete = (other: string) =>
+			"allow_branch = { if = { limit = { has_game_rule = { rule = obsolete_focus_branches_visibility option = HIDE } } " +
+			`NOT = { has_completed_focus = ${other} } } }`;
+		const content = treeWithFocuses(
+			focusBlock("focus_a", 0, 0, obsolete("focus_b")),
+			focusBlock("focus_b", 4, 0, obsolete("focus_a")),
+			focusBlock("focus_a_child", 2, 1, "prerequisite = { focus = focus_a }"),
+			focusBlock("focus_b_child", 2, 1, "prerequisite = { focus = focus_b }"),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Focuses focus_a_child, focus_b_child share the same position, so their icons overlap.",
+		]);
+	});
+
+	it("still warns for a gate that refines the other", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_a", 0, 0, 'allow_branch = { has_dlc = "Gotterdammerung" }'),
+			focusBlock(
+				"focus_b",
+				0,
+				0,
+				'allow_branch = { has_dlc = "Gotterdammerung" NOT = { has_game_rule = { rule = rule_nuclear_weapons option = disabled } } }',
+			),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Focuses focus_a, focus_b share the same position, so their icons overlap.",
+		]);
+	});
+
+	it("still warns for a gate that is always open", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_a", 0, 0, "allow_branch = { always = yes }"),
+			focusBlock("focus_b", 0, 0, "allow_branch = { has_country_flag = f }"),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Focuses focus_a, focus_b share the same position, so their icons overlap.",
+		]);
+	});
+
 	it("keeps a stack member without allow_branch that overlaps both alternatives", () => {
 		const content = treeWithFocuses(
 			focusBlock("focus_a", 0, 0, flagSet),
