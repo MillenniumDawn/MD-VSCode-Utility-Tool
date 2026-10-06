@@ -401,7 +401,7 @@ export function getFocusTreeWithFocusFile(
 			}
 		}
 
-		runLayoutValidation(focuses, warnings, true);
+		runLayoutValidation(focuses, warnings, true, focusTree.id);
 
 		focusTrees.push({
 			id:
@@ -891,20 +891,25 @@ function getAllowBranchOptions(focuses: Record<string, Focus>): string[] {
 function resolveFocusPosition(
 	focus: Focus,
 	focuses: Record<string, Focus>,
+	treeId: string | undefined,
 ): { x: number; y: number } {
-	// Mirrors the webview's getFocusPosition without the condition-dependent offset pass:
-	// the resolved position is the focus's own x/y plus the resolved position of the
-	// relative_position_id chain. Cycles are cut (validateRelativePositionId reports them).
-	let x = focus.x;
-	let y = focus.y;
-	const seen = new Set<string>([focus.id]);
-	let current =
-		focus.relativePositionId !== undefined
-			? focuses[focus.relativePositionId]
-			: undefined;
+	// Mirrors the webview's getFocusPosition: the focus's own x/y plus the resolved position of the
+	// relative_position_id chain, each link adding the offsets it would apply. Only offsets that
+	// depend on has_focus_tree alone are known here; every other offset is condition-dependent and
+	// ignored. Cycles are cut (validateRelativePositionId reports them).
+	let x = 0;
+	let y = 0;
+	const seen = new Set<string>();
+	let current: Focus | undefined = focus;
 	while (current !== undefined && !seen.has(current.id)) {
 		x += current.x;
 		y += current.y;
+		for (const offset of current.offset) {
+			if (isFocusTreeOffsetApplied(offset, treeId)) {
+				x += offset.x;
+				y += offset.y;
+			}
+		}
 		seen.add(current.id);
 		current =
 			current.relativePositionId !== undefined
@@ -912,6 +917,28 @@ function resolveFocusPosition(
 				: undefined;
 	}
 	return { x, y };
+}
+
+/**
+ * Whether an offset whose trigger tests nothing but has_focus_tree applies in the tree being
+ * checked. Millennium Dawn moves a shared focus per importing tree this way, and the webview
+ * already applies it, because it treats `has_focus_tree = <selected tree>` as true.
+ */
+function isFocusTreeOffsetApplied(
+	offset: Offset,
+	treeId: string | undefined,
+): boolean {
+	if (treeId === undefined || offset.trigger === undefined) {
+		return false;
+	}
+	const leaves = extractConditionalExprs(offset.trigger);
+	return (
+		leaves.length > 0 &&
+		leaves.every((leaf) => /^has_focus_tree\s*=/.test(leaf.nodeContent)) &&
+		applyCondition(offset.trigger, [
+			{ scopeName: "", nodeContent: "has_focus_tree = " + treeId },
+		])
+	);
 }
 
 /**
@@ -928,6 +955,7 @@ function runLayoutValidation(
 	focuses: Record<string, Focus>,
 	warnings: FocusWarning[],
 	reportMissingRelativePositionTarget: boolean,
+	treeId?: string,
 ) {
 	const layoutWarnings: FocusWarning[] = [];
 	validateRelativePositionId(
@@ -935,7 +963,7 @@ function runLayoutValidation(
 		layoutWarnings,
 		reportMissingRelativePositionTarget,
 	);
-	validateFocusLayout(focuses, layoutWarnings);
+	validateFocusLayout(focuses, layoutWarnings, treeId);
 	for (const warning of layoutWarnings) {
 		warnings.push({ ...warning, layout: true });
 	}
@@ -946,8 +974,9 @@ function runLayoutValidation(
  * a prerequisite not positioned above its dependent (unless the two are row-mates in a mutually
  * exclusive row, see below), mutually exclusive focuses not sharing a row, and icons less than two
  * grid units apart on the same row (the sprites are two units wide, so they overlap). Positions are
- * resolved through relative_position_id chains like the preview does; condition-dependent offsets
- * are ignored.
+ * resolved through relative_position_id chains like the preview does. Of the offsets, only those
+ * triggered by has_focus_tree alone are applied, against the tree being checked; the rest are
+ * condition-dependent and ignored.
  *
  * Checked one defining file at a time, so a country tree flags the shared and joint focuses merged
  * into it instead of only its own. The two sets are never compared against each other: a merged
@@ -961,11 +990,12 @@ function runLayoutValidation(
 function validateFocusLayout(
 	focuses: Record<string, Focus>,
 	warnings: FocusWarning[],
+	treeId: string | undefined,
 ) {
 	for (const [filePath, fileFocuses] of Object.entries(
 		groupBy(Object.values(focuses), "file"),
 	)) {
-		validateFocusLayoutOfFile(focuses, warnings, filePath, fileFocuses);
+		validateFocusLayoutOfFile(focuses, warnings, filePath, fileFocuses, treeId);
 	}
 }
 
@@ -974,12 +1004,13 @@ function validateFocusLayoutOfFile(
 	warnings: FocusWarning[],
 	filePath: string,
 	fileFocuses: Focus[],
+	treeId: string | undefined,
 ) {
 	// Resolved against the whole tree, so a shared focus anchored to one of the host tree's own
 	// focuses lands where the preview draws it.
 	const entries = fileFocuses.map((focus) => ({
 		focus,
-		position: resolveFocusPosition(focus, focuses),
+		position: resolveFocusPosition(focus, focuses, treeId),
 	}));
 	const positions = new Map(
 		entries.map((entry) => [entry.focus.id, entry.position] as const),

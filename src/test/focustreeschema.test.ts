@@ -86,6 +86,18 @@ function mergeSharedFocuses(
 	}
 }
 
+// Parses one file with useConditionInFocus on, so a focus_tree merges the file's own shared focuses.
+function treesWithSharedFocuses(content: string): FocusTree[] {
+	stubVscode({ configuration: { useConditionInFocus: true } });
+	refreshFeatureFlags();
+	try {
+		return treesOf(content);
+	} finally {
+		restoreVscodeStubs();
+		refreshFeatureFlags();
+	}
+}
+
 describe("previewdef/focustree layout warnings", () => {
 	it("parses a prerequisite block with multiple focuses as one OR group", () => {
 		const trees = treesOf(
@@ -349,6 +361,69 @@ describe("previewdef/focustree layout warnings", () => {
 		);
 		// focus_a resolves to (7, 2), focus_b to (5, 2): one row, two columns apart.
 		assert.deepStrictEqual(warningTexts(content), []);
+	});
+
+	// A shared focus moved per importing tree by `offset = { trigger = { has_focus_tree = X } }`
+	// carries everything placed relative to it, as in 05_Australia.txt's AST_the_lucky_country.
+	const sharedWithTreeOffset = (treeId: string) => `shared_focus = {
+    id = sh_root
+    x = 0
+    y = 0
+    offset = {
+        x = 9
+        y = 0
+        trigger = { has_focus_tree = tree_a }
+    }
+}
+shared_focus = {
+    id = sh_child
+    x = 0
+    y = 1
+    relative_position_id = sh_root
+    prerequisite = { focus = sh_root }
+}
+focus_tree = {
+    id = ${treeId}
+    shared_focus = sh_root
+    ${focusBlock("own_root", 4, 0)}
+    ${focusBlock("own_child", 0, 1, "prerequisite = { focus = own_root }")}
+}`;
+
+	it("applies a has_focus_tree offset for the tree being checked", () => {
+		const tree = treesWithSharedFocuses(sharedWithTreeOffset("tree_a")).find(
+			(t) => t.id === "tree_a",
+		);
+		assert.ok(tree?.focuses["sh_child"], "the shared branch must be merged");
+		assert.deepStrictEqual(
+			tree.warnings.map((w) => w.text),
+			[],
+		);
+	});
+
+	it("leaves a has_focus_tree offset for another tree unapplied", () => {
+		const tree = treesWithSharedFocuses(sharedWithTreeOffset("tree_b")).find(
+			(t) => t.id === "tree_b",
+		);
+		assert.deepStrictEqual(
+			tree?.warnings.map((w) => w.text),
+			[
+				"Focuses own_child, sh_child share the same position, so their icons overlap.",
+			],
+		);
+	});
+
+	it("does not apply an offset whose trigger also tests something else", () => {
+		const content = sharedWithTreeOffset("tree_a").replace(
+			"trigger = { has_focus_tree = tree_a }",
+			"trigger = { has_focus_tree = tree_a has_country_flag = moved }",
+		);
+		const tree = treesWithSharedFocuses(content).find((t) => t.id === "tree_a");
+		assert.deepStrictEqual(
+			tree?.warnings.map((w) => w.text),
+			[
+				"Focuses own_child, sh_child share the same position, so their icons overlap.",
+			],
+		);
 	});
 
 	it("warns once when the exclusivity is declared on both focuses", () => {
