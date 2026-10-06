@@ -532,10 +532,58 @@ focus_tree = {
 		assert.deepStrictEqual(warningTexts(content), []);
 	});
 
-	it("still warns when the allow_branch conditions can both hold", () => {
+	// Gates on unrelated flags are how mods draw alternative branches on one spot (05_poland.txt):
+	// the flags come from exclusive focuses or event options, which no condition here can show.
+	it("reports no overlap for focuses under different allow_branch gates", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_root", 0, 0),
+			focusBlock(
+				"branch_a",
+				0,
+				1,
+				"relative_position_id = focus_root allow_branch = { has_country_flag = path_a }",
+			),
+			focusBlock(
+				"branch_b",
+				0,
+				1,
+				"relative_position_id = focus_root allow_branch = { has_country_flag = path_b }",
+			),
+		);
+		assert.deepStrictEqual(warningTexts(content), []);
+	});
+
+	it("reports no overlap for the branches below different allow_branch gates", () => {
 		const content = treeWithFocuses(
 			focusBlock("focus_a", 0, 0, "allow_branch = { has_country_flag = f }"),
-			focusBlock("focus_b", 0, 0, "allow_branch = { has_country_flag = g }"),
+			focusBlock("focus_b", 4, 0, "allow_branch = { has_country_flag = g }"),
+			focusBlock("focus_a_child", 2, 1, "prerequisite = { focus = focus_a }"),
+			focusBlock("focus_b_child", 3, 1, "prerequisite = { focus = focus_b }"),
+		);
+		assert.deepStrictEqual(warningTexts(content), []);
+	});
+
+	it("still warns for two focuses under the same allow_branch gate", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_gate", 0, 0, "allow_branch = { has_country_flag = f }"),
+			focusBlock("focus_a", 0, 1, "prerequisite = { focus = focus_gate }"),
+			focusBlock("focus_b", 0, 1, "prerequisite = { focus = focus_gate }"),
+		);
+		assert.deepStrictEqual(warningTexts(content), [
+			"Focuses focus_a, focus_b share the same position, so their icons overlap.",
+		]);
+	});
+
+	it("still warns for a focus nested under a second gate inside the first", () => {
+		const content = treeWithFocuses(
+			focusBlock("focus_gate", 0, 0, "allow_branch = { has_country_flag = f }"),
+			focusBlock("focus_a", 0, 1, "prerequisite = { focus = focus_gate }"),
+			focusBlock(
+				"focus_b",
+				0,
+				1,
+				"prerequisite = { focus = focus_gate } allow_branch = { has_country_flag = g }",
+			),
 		);
 		assert.deepStrictEqual(warningTexts(content), [
 			"Focuses focus_a, focus_b share the same position, so their icons overlap.",

@@ -1022,7 +1022,9 @@ function runLayoutValidation(
  *
  * Two focuses that allow_branch never shows at the same time are not checked for overlap either:
  * a pair of alternatives gated on `has_country_flag = X` and `NOT = { has_country_flag = X }` is
- * routinely drawn on one spot, and only one of them is ever on screen.
+ * routinely drawn on one spot, and only one of them is ever on screen. The same goes for two
+ * focuses that each sit under an allow_branch gate the other does not: that is how alternative
+ * branches are gated, on flags set by exclusive events or focuses.
  */
 function validateFocusLayout(
 	focuses: Record<string, Focus>,
@@ -1087,8 +1089,8 @@ function validateFocusLayoutOfFile(
 	// Two focuses overlap on screen only when the game can show both at once. Visibility follows
 	// the preview's own model (calculateFocusAllowed in the webview): a focus with allow_branch is
 	// shown when its condition holds, and a focus below one is shown when every prerequisite group
-	// has a shown option. Every true/false combination of the allow_branch conditions involved is
-	// tried; treating them as independent covers more cases than the game can reach, so a pair is
+	// has a shown option. Two focuses under different gates are taken as alternatives; otherwise
+	// every true/false combination of the allow_branch conditions involved is tried, and a pair is
 	// only excused when no combination shows both.
 	const visibleTogetherCache = new Map<string, boolean>();
 	const canBeVisibleTogether = (a: string, b: string): boolean => {
@@ -1265,10 +1267,18 @@ function computeVisibleTogether(
 	a: string,
 	b: string,
 ): boolean {
-	const roots = uniq([
-		...(focuses[a]?.inAllowBranch ?? []),
-		...(focuses[b]?.inAllowBranch ?? []),
-	]);
+	const rootsOfA = focuses[a]?.inAllowBranch ?? [];
+	const rootsOfB = focuses[b]?.inAllowBranch ?? [];
+	// Each focus under an allow_branch gate the other is not under is how a mod draws alternative
+	// branches on one spot: gated on flags set by rival events or exclusive focuses, they never
+	// show together, though nothing here can prove the two flags exclusive.
+	if (
+		rootsOfA.some((root) => !rootsOfB.includes(root)) &&
+		rootsOfB.some((root) => !rootsOfA.includes(root))
+	) {
+		return false;
+	}
+	const roots = uniq([...rootsOfA, ...rootsOfB]);
 	if (roots.length === 0) {
 		return true;
 	}
