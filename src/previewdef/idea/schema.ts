@@ -33,9 +33,6 @@ export interface HOIIdeaCategory {
 	token: Token | undefined;
 }
 
-// ModifierPair is written the same way by an idea and by a decision, so it lives in
-// sharedpayload.ts; re-exported here so this module's importers keep reaching it in one place.
-;
 import { ModifierPair } from "../sharedpayload";
 
 // `targeted_modifier = { tag = SOV attack_bonus = 0.1 }` -- modifiers that apply against one

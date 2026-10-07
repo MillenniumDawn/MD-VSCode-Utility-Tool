@@ -56,7 +56,6 @@ export function registerScanReferencesCommand(): vscode.Disposable {
 }
 
 async function scanReferences(): Promise<void> {
-
 	const editor = vscode.window.activeTextEditor;
 	if (!editor) {
 		void vscode.window.showErrorMessage(

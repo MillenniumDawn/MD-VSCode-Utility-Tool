@@ -11,8 +11,7 @@ import { DecisionCallKind, DecisionEffectBlockName } from "./schema";
 // LoaderPreview hashes it to decide whether an edit changed anything, so a stable order and
 // counter-free ids are what make an unchanged edit skip the re-render.
 
-export {   EffectTreeNode,  } from "../sharedpayload";
-;
+export { EffectTreeNode } from "../sharedpayload";
 
 // An icon, as a StyleTable class carrying the decoded image as a data URL, plus the size to draw it
 // at. The same shape the idea preview uses.

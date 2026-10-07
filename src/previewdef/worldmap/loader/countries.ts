@@ -146,7 +146,6 @@ export class CountriesLoader extends Loader<Country[]> {
 		};
 	}
 
-
 	public override toString() {
 		return "[CountriesLoader]";
 	}

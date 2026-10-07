@@ -17,7 +17,6 @@ import {
 } from "./typedef";
 import { UserError } from "../../common";
 
-
 export enum PixelValueType {
 	typeless = 0,
 	float = 0x10,
@@ -38,7 +37,6 @@ export enum CompressFormat {
 	bc6h,
 	bc7,
 }
-
 
 export enum ChannelFormat {
 	rgb = 0,

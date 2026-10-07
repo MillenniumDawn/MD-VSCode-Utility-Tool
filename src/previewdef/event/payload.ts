@@ -14,10 +14,6 @@ import { HOIEventType } from "./schema";
 // unchanged.
 export {
 	LocText,
-
-
-
-
 	EffectTreeNode,
 } from "../sharedpayload";
 import { LocText, NavTarget, EffectTreeNode } from "../sharedpayload";

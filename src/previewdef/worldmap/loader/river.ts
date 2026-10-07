@@ -23,7 +23,6 @@ export class RiverLoader extends FileLoader<RiverBmp> {
 		};
 	}
 
-
 	public override toString() {
 		return `[RiverLoader: ${this.file}]`;
 	}

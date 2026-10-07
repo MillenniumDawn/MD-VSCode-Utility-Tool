@@ -19,7 +19,7 @@ export interface ModToolPack {
     readonly tools: readonly ModTool[];
 }
 
-interface ModToolMaintainer {
+export interface ModToolMaintainer {
     /** The mod team, e.g. "The <mod> team". */
     readonly name: string;
     /** An https:// link to where problems with the pack are reported. */
@@ -39,7 +39,7 @@ export interface ModTool {
     run(context: ModToolContext): Promise<void>;
 }
 
-interface ModToolContext {
+export interface ModToolContext {
     /** The workspace folder the pack's `detect` files were found in. */
     readonly modRoot: vscode.Uri;
     /** Writes to the extension's output channel, prefixed with the pack's name. */

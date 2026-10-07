@@ -61,7 +61,6 @@ export function registerHoiFs(): vscode.Disposable {
 }
 
 async function selectHoiFolder(): Promise<void> {
-
 	const dialogOptions: vscode.OpenDialogOptions = {
 		canSelectFolders: true,
 		canSelectFiles: false,

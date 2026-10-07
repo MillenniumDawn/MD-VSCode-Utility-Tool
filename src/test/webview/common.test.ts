@@ -36,16 +36,28 @@ describe('webview/util/common', function () {
         });
 
         it('returns undefined on sync error', function () {
-            const wrapped = tryRun(() => { throw new Error('fail'); });
-            assert.strictEqual(wrapped(), undefined);
-            assert.deepStrictEqual(takeRuntimeErrors().map(e => (e as Error).message), ['fail']);
+            const originalConsoleError = console.error;
+            console.error = () => {};
+            try {
+                const wrapped = tryRun(() => { throw new Error('fail'); });
+                assert.strictEqual(wrapped(), undefined);
+                assert.deepStrictEqual(takeRuntimeErrors().map(e => (e as Error).message), ['fail']);
+            } finally {
+                console.error = originalConsoleError;
+            }
         });
 
         it('catches async errors and returns undefined', async function () {
-            const wrapped = tryRun(async () => { throw new Error('async fail'); });
-            const result = await wrapped();
-            assert.strictEqual(result, undefined);
-            assert.deepStrictEqual(takeRuntimeErrors().map(e => (e as Error).message), ['async fail']);
+            const originalConsoleError = console.error;
+            console.error = () => {};
+            try {
+                const wrapped = tryRun(async () => { throw new Error('async fail'); });
+                const result = await wrapped();
+                assert.strictEqual(result, undefined);
+                assert.deepStrictEqual(takeRuntimeErrors().map(e => (e as Error).message), ['async fail']);
+            } finally {
+                console.error = originalConsoleError;
+            }
         });
     });
 

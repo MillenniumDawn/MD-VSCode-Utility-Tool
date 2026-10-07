@@ -159,7 +159,6 @@ export class WorldMapLoader extends Loader<WorldMapData> {
 		this.shouldReloadValue = true;
 	}
 
-
 	public override toString() {
 		return `[WorldMapLoader]`;
 	}

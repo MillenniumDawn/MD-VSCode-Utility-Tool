@@ -27,7 +27,6 @@ import {
 // across them -- `ideology` only ever appears in a country_leader, `slot` only in an advisor -- and
 // six near-identical schemas would be six places to keep in step.
 
-;
 import { ModifierPair } from "../sharedpayload";
 
 export interface HOICharacterFile {

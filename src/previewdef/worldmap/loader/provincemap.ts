@@ -222,7 +222,6 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 		return loader;
 	}
 
-
 	public override toString() {
 		return `[DefaultMapLoader]`;
 	}

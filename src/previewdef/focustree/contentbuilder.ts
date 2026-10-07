@@ -57,7 +57,6 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
     toolbarFlags: ToolbarFlags;
 }
 
-;
 
 export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean }): Promise<FocusTreePayload | null> {
     const resolveIcons = options?.resolveIcons !== false;

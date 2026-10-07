@@ -116,7 +116,6 @@ export abstract class Loader<T, E = {}> {
 
 	private loadingPromise: Promise<LoadResult<T, E>> | undefined = undefined;
 
-
 	constructor() {}
 
 	async load(session: LoaderSession): Promise<LoadResult<T, E>> {

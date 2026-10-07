@@ -121,7 +121,6 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 		});
 		attachTaskWithErrorLogging(
 			task,
-			undefined,
 			spec.rebuildWorkspace.failureMessage,
 			Logger.error,
 		);

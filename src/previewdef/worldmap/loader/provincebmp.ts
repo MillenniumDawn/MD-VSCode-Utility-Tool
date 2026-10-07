@@ -27,7 +27,6 @@ export class ProvinceBmpLoader extends FileLoader<ProvinceBmp> {
 		};
 	}
 
-
 	public override toString() {
 		return `[ProvinceBmpLoader: ${this.file}]`;
 	}

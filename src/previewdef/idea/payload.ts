@@ -11,9 +11,7 @@ import { ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
 // The modifier shapes are written the same way by an idea and by a decision, so they live in
 // sharedpayload.ts alongside LocText and NavTarget.
 export {
-
 	NavTarget,
-
 	ModifierLine,
 	ModifierGroup,
 } from "../sharedpayload";

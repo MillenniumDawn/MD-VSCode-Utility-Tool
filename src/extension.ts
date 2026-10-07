@@ -33,7 +33,6 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(registerContextContainer(context));
     context.subscriptions.push(registerFeatureFlags());
 
-
     context.subscriptions.push(previewManager.register());
     context.subscriptions.push(registerModFile());
     context.subscriptions.push(worldMap.register());

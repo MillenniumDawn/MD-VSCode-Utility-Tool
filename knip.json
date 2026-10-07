@@ -2,6 +2,7 @@
 	"include": ["files", "exports", "types"],
 	"entry": [
 		"src/extension.ts",
+		"src/modtools/api.ts",
 		"src/util/image/imageWorker.ts",
 		"webviewsrc/*.ts",
 		"webviewsrc/**/index.ts",
