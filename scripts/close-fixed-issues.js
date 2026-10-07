@@ -15,15 +15,16 @@
 
 'use strict';
 
-const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const { compareVersions } = require('./bump-version');
+const { compareVersions, headingPattern, sectionAt } = require('./bump-version');
+const { warn, notice } = require('./lib/actions-log');
+const { parseFlags } = require('./lib/flags');
+const { gh } = require('./lib/github');
+const { createBudget, messageContent, post, request, withRateLimitRetry } = require('./lib/openrouter');
 
-const endpoint = 'https://openrouter.ai/api/v1';
-const defaultModel = 'z-ai/glm-5.2:free';
-const timeoutMs = 120000;
+const title = 'MD VSCode Utility Tool outdated-issue check';
 const maxBodyLength = 4000;
 const maxChangesLength = 20000;
 const maxClosuresPerRun = 3;
@@ -41,18 +42,6 @@ const style = [
 	'Keep the reasoning to one sentence.',
 ].join('\n');
 
-function warn(message) {
-	process.stdout.write(`::warning::${message}\n`);
-}
-
-function notice(message) {
-	process.stdout.write(`::notice::${message}\n`);
-}
-
-function modelName() {
-	return process.env.OPENROUTER_MODEL?.trim() || defaultModel;
-}
-
 const versionFieldPattern = /###\s*Extension version\s*\n+([^\n]+)/i;
 
 // The bug report template (.github/ISSUE_TEMPLATE/bug-report.yml) renders its "Extension version"
@@ -67,29 +56,24 @@ function extractReportedVersion(body) {
 	return version ? version[1] : undefined;
 }
 
-const headingPattern = /^v(\d+\.\d+\.\d+)$/;
-
-// CHANGELOG.md split into its version sections, heading included, in file order (newest first).
+// CHANGELOG.md split into its shipped version sections, newest first.
 function allSections(changelogText) {
 	const lines = String(changelogText ?? '').split(/\r?\n/);
 	const sections = [];
-	let current;
 	for (let i = 0; i < lines.length; i++) {
-		const heading = headingPattern.exec(lines[i].trim());
-		if (heading) {
-			if (current) {
-				sections.push({ ...current, end: i });
-			}
-			current = { version: heading[1], start: i };
+		if (!headingPattern.test(lines[i].trim())) {
+			continue;
 		}
+		const section = sectionAt(lines, i);
+		if (!section.unreleased) {
+			sections.push({
+				version: section.version,
+				text: lines.slice(section.start, section.end).join('\n').trim(),
+			});
+		}
+		i = section.end - 1;
 	}
-	if (current) {
-		sections.push({ ...current, end: lines.length });
-	}
-	return sections.map((section) => ({
-		version: section.version,
-		text: lines.slice(section.start, section.end).join('\n').trim(),
-	}));
+	return sections;
 }
 
 // What shipped after the version an issue was filed against, oldest first so the model reads it as
@@ -118,58 +102,6 @@ function describeIssue(entry) {
 	}
 	lines.push('', `Changelog entries shipped after v${entry.reportedVersion}:`, entry.changesText || '(none)');
 	return lines.join('\n');
-}
-
-async function post(pathname, body, key) {
-	const response = await fetch(`${endpoint}${pathname}`, {
-		method: 'POST',
-		headers: {
-			'Authorization': `Bearer ${key}`,
-			'Content-Type': 'application/json',
-			'HTTP-Referer': 'https://github.com/MillenniumDawn/MD-VSCode-Utility-Tool',
-			'X-Title': 'MD VSCode Utility Tool outdated-issue check',
-		},
-		body: JSON.stringify(body),
-		signal: AbortSignal.timeout(timeoutMs),
-	});
-
-	if (!response.ok) {
-		const detail = await response.text().catch(() => '');
-		const error = new Error(`OpenRouter returned ${response.status}: ${detail.slice(0, 300)}`);
-		error.status = response.status;
-		throw error;
-	}
-
-	return response.json();
-}
-
-function messageContent(payload) {
-	return payload?.choices?.[0]?.message?.content ?? '';
-}
-
-function request(messages, extra) {
-	return {
-		model: modelName(),
-		messages,
-		temperature: 0.2,
-		seed: 7,
-		max_tokens: 500,
-		...extra,
-	};
-}
-
-const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
-
-async function withRateLimitRetry(call) {
-	try {
-		return await call();
-	} catch (error) {
-		if (error?.status !== 429) {
-			throw error;
-		}
-		await wait(20000);
-		return call();
-	}
 }
 
 // Any reply that is not a clean "fixed"/"not fixed"/"unsure" with a one-sentence reason is treated
@@ -218,12 +150,13 @@ function alreadyHandled(comments) {
 	return (comments ?? []).some((comment) => String(comment?.body ?? '').includes(marker));
 }
 
-async function judge(entry, key) {
+async function judge(entry, key, budget = createBudget()) {
 	const payload = await withRateLimitRetry(() => post('/chat/completions', request(
 		[
 			{ role: 'system', content: style },
 			{ role: 'user', content: describeIssue(entry) },
 		],
+		500,
 		{
 			response_format: {
 				type: 'json_schema',
@@ -242,13 +175,9 @@ async function judge(entry, key) {
 					},
 				},
 			},
-		}), key));
+		}), key, { budget, title }), budget);
 
 	return parseVerdict(messageContent(payload));
-}
-
-function gh(args) {
-	return execFileSync('gh', args, { encoding: 'utf8' });
 }
 
 function listOpenIssueNumbers(repo) {
@@ -296,8 +225,13 @@ async function run(options) {
 	const changelogPath = path.join(process.cwd(), 'CHANGELOG.md');
 	const changelogText = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : '';
 
+	const budget = createBudget(options.budgetMs);
 	let closed = 0;
 	for (const number of listOpenIssueNumbers(repo)) {
+		if (budget.signal.aborted || budget.remaining() <= 0) {
+			notice('The outdated-issue check used up its model budget; remaining issues stay open.');
+			break;
+		}
 		if (closed >= maxClosuresPerRun) {
 			notice(`Reached the cap of ${maxClosuresPerRun} closures for this run; the rest wait for next time.`);
 			break;
@@ -326,7 +260,7 @@ async function run(options) {
 		let verdict;
 		try {
 			verdict = await judge(
-				{ number, title: issue.title, body: issue.body, reportedVersion, changesText: changes.text }, key);
+				{ number, title: issue.title, body: issue.body, reportedVersion, changesText: changes.text }, key, budget);
 		} catch (error) {
 			warn(`Issue #${number}: could not reach the model (${error?.message ?? error}); leaving it open.`);
 			continue;
@@ -351,13 +285,7 @@ async function run(options) {
 }
 
 function parseArgs(argv) {
-	const options = { dryRun: false };
-	for (const arg of argv) {
-		if (arg === '--dry-run') {
-			options.dryRun = true;
-		}
-	}
-	return options;
+	return parseFlags(argv, { '--dry-run': { name: 'dryRun', value: true } }, { defaults: { dryRun: false } });
 }
 
 async function main() {
@@ -384,4 +312,5 @@ module.exports = {
 	outdatedVersionLabel,
 	parseArgs,
 	parseVerdict,
+	run,
 };
