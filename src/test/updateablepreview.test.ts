@@ -331,17 +331,18 @@ describe('previewdef/updateablepreview extension points', () => {
             restoreVscodeStubs();
         });
 
-        it('rejects an initial render failure so callers can detect a preview that never loaded', async () => {
+        it('keeps the loading shell when an ordinary initial render fails', async () => {
             stubVscode({ textDocuments: [document] });
             const h = makePreview(true);
             h.preview.failNext = true;
             const consoleError = console.error;
             console.error = () => undefined;
             try {
-                await assert.rejects(h.preview.initializePanelContent(document), /render failed/);
+                await h.preview.initializePanelContent(document);
             } finally {
                 console.error = consoleError;
             }
+            assert.match(h.preview.panel.webview.html, /class="preview-loading"/);
         });
 
         it('starts the next render only once the one in flight has finished', async () => {
