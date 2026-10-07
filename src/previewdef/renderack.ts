@@ -15,11 +15,3 @@ export function waitForRenderAck(ack: Promise<string[]>, timeoutMs: number): Pro
 	});
 }
 
-/** Require the browser to report exactly the event IDs that the fixture is meant to render. */
-export function assertRenderedIds(actual: readonly string[], expected: readonly string[]): void {
-	const actualSorted = [...actual].sort();
-	const expectedSorted = [...expected].sort();
-	if (actualSorted.length !== expectedSorted.length || actualSorted.some((id, i) => id !== expectedSorted[i])) {
-		throw new Error(`Rendered event IDs did not match fixture: expected ${JSON.stringify(expectedSorted)}, received ${JSON.stringify(actualSorted)}`);
-	}
-}
