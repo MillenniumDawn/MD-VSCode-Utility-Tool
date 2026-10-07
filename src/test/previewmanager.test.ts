@@ -98,6 +98,16 @@ describe("previewdef/previewmanager PreviewManager", function () {
 	}
 
 	describe("webview options", function () {
+		async function silenceExpectedRenderErrors<T>(action: () => Promise<T>): Promise<T> {
+			const previous = console.error;
+			console.error = () => undefined;
+			try {
+				return await action();
+			} finally {
+				console.error = previous;
+			}
+		}
+
 		const extensionUri = vscode.Uri.file("/ext");
 		const uri = vscode.Uri.parse("file:///tmp/focus.txt");
 		let previous: typeof contextContainer.current;
@@ -128,10 +138,10 @@ describe("previewdef/previewmanager PreviewManager", function () {
 				},
 			}];
 
-			await (manager as any).showPreviewImpl(uri);
+			await silenceExpectedRenderErrors(() => (manager as any).showPreviewImpl(uri));
 
 			assert.strictEqual(disposed, false);
-			assert.match(panel.webview.html, /Loading preview/);
+			assert.match(panel.webview.html, /class="preview-loading" role="status"/);
 		});
 
 		it("keeps a restored preview open after its first render fails", async function () {
@@ -150,10 +160,10 @@ describe("previewdef/previewmanager PreviewManager", function () {
 				},
 			}];
 
-			await manager.deserializeWebviewPanel(panel as any, { uri: uri.toString() });
+			await silenceExpectedRenderErrors(() => manager.deserializeWebviewPanel(panel as any, { uri: uri.toString() }));
 
 			assert.strictEqual(disposed, false);
-			assert.match(panel.webview.html, /Loading preview/);
+			assert.match(panel.webview.html, /class="preview-loading" role="status"/);
 		});
 
 		it("still propagates first-render errors for the opted-in browser smoke", async function () {
@@ -170,10 +180,10 @@ describe("previewdef/previewmanager PreviewManager", function () {
 				},
 			}];
 
-			await assert.rejects(
+			await silenceExpectedRenderErrors(() => assert.rejects(
 				(manager as any).showPreviewImpl(uri, undefined, { browserSmoke: true }),
 				/initial render failed/,
-			);
+			));
 		});
 
 		it("creates the panel with localResourceRoots scoped to the extension folder", async function () {
