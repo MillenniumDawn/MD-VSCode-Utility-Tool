@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { PreviewManager } from "../previewdef/previewmanager";
+import { PreviewBase } from "../previewdef/previewbase";
 import { contextContainer } from "../context";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 import { refreshFeatureFlags } from "../util/featureflags";
@@ -109,6 +110,70 @@ describe("previewdef/previewmanager PreviewManager", function () {
 
 		afterEach(function () {
 			contextContainer.current = previous;
+		});
+
+		it("keeps an ordinary preview open after its first render fails", async function () {
+			let disposed = false;
+			const panel = panelStub({});
+			panel.dispose = () => { disposed = true; };
+			stubVscode({ textDocuments: [{ uri, getText: () => "" }], createWebviewPanel: () => panel });
+			const manager = new PreviewManager();
+			(manager as any)._previewProviders = [{
+				type: "event",
+				canPreview: () => 0,
+				previewConstructor: class extends PreviewBase {
+					protected getContent(_document: vscode.TextDocument): Promise<string> {
+						return Promise.reject(new Error("initial render failed"));
+					}
+				},
+			}];
+
+			await (manager as any).showPreviewImpl(uri);
+
+			assert.strictEqual(disposed, false);
+			assert.match(panel.webview.html, /Loading preview/);
+		});
+
+		it("keeps a restored preview open after its first render fails", async function () {
+			let disposed = false;
+			const panel = panelStub({});
+			panel.dispose = () => { disposed = true; };
+			stubVscode({ textDocuments: [{ uri, getText: () => "" }] });
+			const manager = new PreviewManager();
+			(manager as any)._previewProviders = [{
+				type: "event",
+				canPreview: () => 0,
+				previewConstructor: class extends PreviewBase {
+					protected getContent(_document: vscode.TextDocument): Promise<string> {
+						return Promise.reject(new Error("initial render failed"));
+					}
+				},
+			}];
+
+			await manager.deserializeWebviewPanel(panel as any, { uri: uri.toString() });
+
+			assert.strictEqual(disposed, false);
+			assert.match(panel.webview.html, /Loading preview/);
+		});
+
+		it("still propagates first-render errors for the opted-in browser smoke", async function () {
+			const panel = panelStub({});
+			stubVscode({ textDocuments: [{ uri, getText: () => "" }], createWebviewPanel: () => panel });
+			const manager = new PreviewManager();
+			(manager as any)._previewProviders = [{
+				type: "event",
+				canPreview: () => 0,
+				previewConstructor: class extends PreviewBase {
+					protected getContent(_document: vscode.TextDocument): Promise<string> {
+						return Promise.reject(new Error("initial render failed"));
+					}
+				},
+			}];
+
+			await assert.rejects(
+				(manager as any).showPreviewImpl(uri, undefined, { browserSmoke: true }),
+				/initial render failed/,
+			);
 		});
 
 		it("creates the panel with localResourceRoots scoped to the extension folder", async function () {
