@@ -3,8 +3,7 @@
 const timers = require('timers/promises');
 
 const endpoint = 'https://openrouter.ai/api/v1';
-// Free, 256k context, and one of the few free models on OpenRouter that supports structured
-// outputs and `seed`. Overridden by the OPENROUTER_MODEL repository variable.
+// Free default; use OPENROUTER_MODEL for an explicitly selected alternative.
 const defaultModel = 'z-ai/glm-5.2:free';
 const timeoutMs = 120000;
 // Shared by rewrite-bullets (release job: 15 minutes) and close-fixed-issues (10 minutes). Six
@@ -53,7 +52,7 @@ function request(messages, maxTokens, extra) {
 	return {
 		model: modelName(),
 		messages,
-		// Keep the output stable across workflow reruns so already-seeded release wording does not drift.
+		// Pin generation settings across retries so they do not intentionally change release wording.
 		temperature: 0.2,
 		seed: 7,
 		max_tokens: maxTokens,
