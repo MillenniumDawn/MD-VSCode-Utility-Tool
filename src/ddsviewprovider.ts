@@ -31,7 +31,6 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
 
     public async resolveCustomEditor(document: vscode.CustomDocument, webviewPanel: vscode.WebviewPanel, token: vscode.CancellationToken): Promise<void> {
         try {
-
             // Show the shared loading spinner while the (potentially large) texture is read
             // and decoded. It is replaced by the rendered image as soon as decoding finishes.
             webviewPanel.webview.html = loadingShellHtml();
@@ -96,10 +95,8 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
 
 export class DDSViewProvider extends CommonViewProvider {
     protected readonly imageKind: 'dds' | 'tga' = 'dds';
-
 }
 
 export class TGAViewProvider extends CommonViewProvider {
     protected readonly imageKind: 'dds' | 'tga' = 'tga';
-
 }

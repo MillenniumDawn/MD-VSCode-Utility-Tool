@@ -30,10 +30,6 @@ class RecordingLoader extends Loader<{ id: number }> {
         }
         return { result: { id: 1 }, dependencies: [] };
     }
-
-    constructor() {
-        super();
-    }
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve(v: T): void } {
@@ -156,7 +152,6 @@ describe('util/loader/loader', () => {
                 protected async loadImpl(): Promise<LoadResult<{}>> {
                     throw new Error('boom');
                 }
-                constructor() { super(); }
             }
 
             const loader = new ThrowLoader();
@@ -268,7 +263,6 @@ describe('util/loader/loader', () => {
             class Stub extends Loader<{}> {
                 protected async shouldReloadImpl(): Promise<boolean> { return d.promise; }
                 protected async loadImpl(): Promise<LoadResult<{}>> { return { result: {}, dependencies: [] }; }
-                constructor() { super(); }
             }
             const stub = new Stub();
 
@@ -290,7 +284,6 @@ describe('util/loader/loader', () => {
             class Stub extends Loader<{}> {
                 protected async shouldReloadImpl(): Promise<boolean> { return d.promise; }
                 protected async loadImpl(): Promise<LoadResult<{}>> { return { result: {}, dependencies: [] }; }
-                constructor() { super(); }
             }
             const stub = new Stub();
 

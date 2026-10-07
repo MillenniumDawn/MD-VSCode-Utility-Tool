@@ -13,5 +13,4 @@ export function error(error: unknown): void {
     console.error(error);
     let realError = forceError(error);
     Logger.error(typeof error === 'string' ? error : (realError.stack ?? realError.message));
-
 }

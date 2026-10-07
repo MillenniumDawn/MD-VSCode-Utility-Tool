@@ -143,7 +143,6 @@ export abstract class Loader<T, E = {}> {
 					throw new Error("loadingLoader corrupted.");
 				}
 			}
-
 		} else if (session.shouldReload(this) === false) {
 			// A settled "no" keeps the cached value for the rest of the session. A caller that only
 			// saw "checking" is not marked: that check may still end in a reload.
