@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import { acknowledgeFocusTreeDomRender, cancelFocusTreeDomRenderWait, hasPendingFocusTreeDomRender, waitForFocusTreeDomRender } from '../previewdef/focustree/renderack';
 
-const { assertRenderedFocusIds } = require('../../../scripts/web-smoke-assert') as {
+const { assertRenderedFocusIds } = require('../../../scripts/web-smoke-test') as {
 	assertRenderedFocusIds(renderedFocusIds: unknown, expectedFocusIds: string[]): string[];
 };
 

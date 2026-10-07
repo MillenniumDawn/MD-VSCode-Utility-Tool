@@ -25,6 +25,7 @@ out-test-webview/
 
 # VS Code build downloaded by the integration tests
 .vscode-test/
+.vscode-test-web/
 
 # Logs
 *.log
@@ -103,3 +104,4 @@ updated-body.md
 # The vanilla-shaped fixture mod lays its files out like the game, under common/ and interface/
 !src/test/fixtures/vanilla-shaped/common/
 !src/test/fixtures/vanilla-shaped/interface/
+!scripts/web-smoke-workspace/common/

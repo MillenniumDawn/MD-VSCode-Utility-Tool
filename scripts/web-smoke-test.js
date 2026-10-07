@@ -60,7 +60,7 @@ exports.run = async function () {
 		const input = tab.input;
 		return { label: tab.label, viewType: input && typeof input === "object" ? input.viewType : undefined };
 	});
-	throw new Error(`The event preview webview did not open: ${JSON.stringify(tabs)}`);
+	throw new Error(`The focus-tree preview webview did not open: ${JSON.stringify(tabs)}`);
 };
 
 // Keep the browser-loaded test entrypoint self-contained; VS Code for the Web loads this
@@ -90,3 +90,5 @@ function isPreviewTab(input) {
 	const viewType = input.viewType;
 	return viewType === "mdftpreview" || viewType === "mainThreadWebview-mdftpreview";
 }
+
+exports.assertRenderedFocusIds = assertRenderedFocusIds;
