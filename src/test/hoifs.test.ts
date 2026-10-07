@@ -160,15 +160,15 @@ describe("util/hoifs workspace folder and configuration change", function () {
 		const expectedFile = new Uint8Array([1, 2, 3]);
 		stubVscode({
 			stat: async (target: unknown) => {
-				calls.push(`stat:${realPathOf(target)}`);
+				calls.push(`stat:${nodePath.normalize(realPathOf(target))}`);
 				return { type: vscode.FileType.File, mtime: 1, ctime: 1, size: 3 };
 			},
 			readDirectory: async (target: unknown) => {
-				calls.push(`readDirectory:${realPathOf(target)}`);
+				calls.push(`readDirectory:${nodePath.normalize(realPathOf(target))}`);
 				return [["test.txt", vscode.FileType.File]];
 			},
 			readFile: async (target: unknown) => {
-				calls.push(`readFile:${realPathOf(target)}`);
+				calls.push(`readFile:${nodePath.normalize(realPathOf(target))}`);
 				return expectedFile;
 			},
 		});

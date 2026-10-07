@@ -5,7 +5,6 @@ Unreleased
 - [ Mod Tools ] Mods can now ship tools of their own, run with the new Run Mod Tool command. They are off until you turn them on under Settings > Mod tools, only appear while their mod is open, and each mod gets its own settings page to choose which of its tools are shown. Mod tools are maintained by their mods, not by this extension: when one fails, the error says which mod team to report it to.
   
   Bugfixes:
-- [ Security ] The install-path filesystem now rejects direct `workspace.fs` create, write, delete, rename, and copy requests. Issue #484.
 - [ Event Previewer ] [ MIO Preview ] Editing a file used by an open preview now refreshes it instead of showing cached content. Issue #490.
 - [ Previews ] Filtering or collapsing a chain no longer forgets decisions or events already hidden along its arrows. Issue #492.
 - [ World Map ] Supply nodes with leading spaces or tabs now load at the correct province and level. Issue #494.
