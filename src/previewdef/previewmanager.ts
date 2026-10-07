@@ -255,7 +255,8 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             };
         }
 
-        const browserSmoke = options?.browserSmoke === true && previewProvider.type === 'event';
+        const browserSmoke = options?.browserSmoke === true && previewProvider.type === 'event'
+            && contextContainer.current?.extensionMode === vscode.ExtensionMode.Test;
         const previewItem = new previewProvider.previewConstructor(uri, panel, browserSmoke);
         this._previews[key] = previewItem;
 
@@ -272,10 +273,11 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             this.addPreviewToSubscription(previewItem, newDep);
         });
 
-        await previewItem.initializePanelContent(document);
         if (browserSmoke) {
+            await previewItem.initializePanelContent(document);
             return previewItem.waitForBrowserSmokeRender();
         }
+        void previewItem.initializePanelContent(document);
     }
 
     private findPreviewProvider(document: vscode.TextDocument): PreviewProviderDef | undefined {

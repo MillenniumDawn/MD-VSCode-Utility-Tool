@@ -102,7 +102,9 @@ describe("previewdef/previewmanager PreviewManager", function () {
 			const previous = console.error;
 			console.error = () => undefined;
 			try {
-				return await action();
+				const result = await action();
+				await new Promise<void>((resolve) => setImmediate(resolve));
+				return result;
 			} finally {
 				console.error = previous;
 			}
@@ -114,7 +116,7 @@ describe("previewdef/previewmanager PreviewManager", function () {
 
 		beforeEach(function () {
 			previous = contextContainer.current;
-			contextContainer.current = { extensionUri } as any;
+			contextContainer.current = { extensionUri, extensionMode: vscode.ExtensionMode.Test } as any;
 			stubVscode({ textDocuments: [{ uri, getText: () => "" }] });
 		});
 
@@ -164,6 +166,65 @@ describe("previewdef/previewmanager PreviewManager", function () {
 
 			assert.strictEqual(disposed, false);
 			assert.match(panel.webview.html, /class="preview-loading" role="status"/);
+		});
+
+		for (const restored of [false, true]) {
+			it(`returns before the ${restored ? "restored" : "ordinary"} preview finishes its first render`, async function () {
+				let releaseRender!: (html: string) => void;
+				const content = new Promise<string>((resolve) => { releaseRender = resolve; });
+				const panel = panelStub({});
+				stubVscode({ createWebviewPanel: () => panel });
+				const manager = new PreviewManager();
+				(manager as any)._previewProviders = [{
+					type: "event",
+					canPreview: () => 0,
+					previewConstructor: class extends PreviewBase {
+						protected getContent(): Promise<string> { return content; }
+					},
+				}];
+				const opened = restored
+					? manager.deserializeWebviewPanel(panel as any, { uri: uri.toString() })
+					: (manager as any).showPreviewImpl(uri) as Promise<unknown>;
+				try {
+					const returned = await Promise.race([
+						opened.then(() => true),
+						new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+					]);
+					assert.strictEqual(returned, true, "opening the panel must not wait for the render");
+					assert.match(panel.webview.html, /class="preview-loading" role="status"/);
+				} finally {
+					releaseRender("rendered");
+					await opened;
+					await (manager as any)._previews[uri.toString()].renderQueue;
+				}
+				assert.strictEqual(panel.webview.html, "rendered");
+			});
+		}
+
+		it("ignores the browser smoke option in production", async function () {
+			contextContainer.current = { extensionUri, extensionMode: vscode.ExtensionMode.Production } as any;
+			let receivedSmokeFlag: boolean | undefined;
+			let waits = 0;
+			const manager = new PreviewManager() as any;
+			manager._previewProviders = [{
+				...fakeProvider(),
+				type: "event",
+				previewConstructor: class {
+					constructor(_uri: vscode.Uri, _panel: any, browserSmoke: boolean) {
+						receivedSmokeFlag = browserSmoke;
+					}
+					onDispose() { return { dispose() {} }; }
+					onDependencyChanged() { return { dispose() {} }; }
+					async initializePanelContent() {}
+					async waitForBrowserSmokeRender() { waits++; return []; }
+				},
+			}];
+
+			const result = await manager.showPreview(uri, { browserSmoke: true });
+
+			assert.strictEqual(receivedSmokeFlag, false);
+			assert.strictEqual(waits, 0);
+			assert.strictEqual(result, undefined);
 		});
 
 		it("still propagates first-render errors for the opted-in browser smoke", async function () {

@@ -9,6 +9,7 @@ async function main(): Promise<void> {
 		await runTests({
 			browserType: "chromium",
 			quality: "stable",
+			commit: "2a59476c9bfcb90b3ddc372c36762471b7dfad1c",
 			extensionDevelopmentPath,
 			extensionTestsPath,
 			folderPath,

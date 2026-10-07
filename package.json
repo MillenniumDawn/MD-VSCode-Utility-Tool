@@ -581,6 +581,7 @@
 		"util": "^0.12.5"
 	},
 	"allowScripts": {
+		"@playwright/browser-chromium@1.63.0": true,
 		"@vscode/vsce-sign@2.0.9": true,
 		"keytar": false
 	}

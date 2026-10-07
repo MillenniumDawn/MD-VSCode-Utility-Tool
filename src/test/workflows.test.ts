@@ -33,6 +33,7 @@ interface Job {
 }
 
 interface Workflow {
+    env?: Record<string, string>;
     on?: Record<string, unknown>;
     name?: string;
     concurrency?: { group?: string; 'cancel-in-progress'?: boolean };
@@ -44,7 +45,11 @@ function workflowFiles(): string[] {
 }
 
 function load(file: string): Workflow {
-    return yaml.load(fs.readFileSync(path.join(workflowDir, file), 'utf8')) as Workflow;
+    const workflow = yaml.load(fs.readFileSync(path.join(workflowDir, file), 'utf8')) as Workflow;
+    for (const step of steps(workflow)) {
+        step.run = step.run?.replace(/\\\n[ \t]*/g, '');
+    }
+    return workflow;
 }
 
 // `on` is a boolean in YAML 1.1 and a plain string in 1.2, and which one a parser believes decides
@@ -119,6 +124,38 @@ describe('.github/workflows', function () {
                 }
             }
         }
+    });
+
+    it('downloads Chromium only in jobs that run the browser smoke', function () {
+        for (const file of workflowFiles()) {
+            const workflow = load(file);
+            for (const [id, job] of Object.entries(workflow.jobs ?? {})) {
+                const runsBrowserSmoke = job.steps?.some((step) => step.run?.includes('npm run test:web'));
+                for (const step of job.steps ?? []) {
+                    if (!step.run?.includes('npm ci')) {
+                        continue;
+                    }
+                    const env = { ...workflow.env, ...job.env, ...step.env };
+                    if (runsBrowserSmoke) {
+                        assert.notStrictEqual(env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD, '1', `${file}: ${id} skips its browser download`);
+                    } else {
+                        assert.strictEqual(env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD, '1', `${file}: ${id} downloads an unused browser`);
+                    }
+                }
+            }
+        }
+    });
+
+    it('approves the locked Chromium install script', function () {
+        const root = path.join(workflowDir, '..', '..');
+        const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as {
+            allowScripts: Record<string, boolean>;
+        };
+        const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8')) as {
+            packages: Record<string, { version: string }>;
+        };
+        const version = lock.packages['node_modules/@playwright/browser-chromium'].version;
+        assert.strictEqual(pkg.allowScripts[`@playwright/browser-chromium@${version}`], true);
     });
 
     it('gives every job a time limit', function () {
@@ -439,7 +476,7 @@ describe('.github/workflows', function () {
             assert.match(summary?.run ?? '', /select\(\.conclusion == "failure"\)/);
             assert.doesNotMatch(summary?.run ?? '', /startswith\("Release:"\)/);
             assert.doesNotMatch(summary?.run ?? '', /\\\(\.conclusion/, 'the list still prints a conclusion per job');
-            assert.match(summary?.run ?? '', /"Release: GitHub release" and \.conclusion == "skipped"/);
+            assert.match(summary?.run ?? '', /"Release: GitHub release" and\s+\.conclusion == "skipped"/);
             assert.match(summary?.run ?? '', /No GitHub release was created/);
             assert.match(summary?.run ?? '', /\$TAG tag yet/);
         });
@@ -504,6 +541,52 @@ describe('.github/workflows', function () {
             assert.doesNotMatch(summary?.run ?? '', /release pull request after it/);
         });
 
+        it('limits bot tokens to the permissions each job needs', function () {
+            const writers = ['release-pull-request', 'release-failed'];
+            for (const [id, job] of Object.entries(jobs)) {
+                for (const step of job.steps ?? []) {
+                    if (!step.uses?.startsWith('actions/create-github-app-token@')) {
+                        continue;
+                    }
+                    const permissions = Object.fromEntries(Object.entries(step.with ?? {})
+                        .filter(([key]) => key.startsWith('permission-')));
+                    assert.deepStrictEqual(permissions, writers.includes(id) ? {
+                        'permission-contents': 'write',
+                        'permission-pull-requests': 'write',
+                        'permission-workflows': 'write',
+                    } : { 'permission-contents': 'write' }, id);
+                    assert.strictEqual(step.with?.owner, undefined, `${id} broadens the repository scope`);
+                    assert.notStrictEqual(step.with?.['skip-token-revoke'], true, `${id} leaves its token alive`);
+                }
+            }
+        });
+
+        it('keeps checkout credentials out of cached and uploaded files', function () {
+            for (const file of ['compat.yml', 'release.yml']) {
+                for (const step of steps(load(file))) {
+                    if (step.uses?.startsWith('actions/checkout@')) {
+                        assert.strictEqual(step.with?.['persist-credentials'], false, file);
+                    }
+                }
+            }
+            for (const id of ['release-pull-request', 'release-failed']) {
+                const auth = runsIn(workflow, id, 'GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $header');
+                assert.ok(auth, `${id} cannot authenticate its pushes`);
+                assert.match(auth.run ?? '', /echo "::add-mask::\$header"/);
+                assert.match(auth.run ?? '', /GIT_CONFIG_COUNT=1/);
+                assert.match(auth.run ?? '', /GIT_CONFIG_KEY_0=http\.https:\/\/github\.com\/\.extraheader/);
+                assert.match(auth.run ?? '', />> "\$GITHUB_ENV"/);
+                assert.strictEqual(auth.env?.TOKEN, '${{ steps.app-token.outputs.token }}');
+                const checkout = usesIn(workflow, id, 'actions/checkout');
+                assert.ok(checkout);
+                assert.strictEqual(checkout.with?.token, '${{ steps.app-token.outputs.token }}');
+                assert.ok(jobSteps(workflow, id).indexOf(auth) > jobSteps(workflow, id).indexOf(checkout));
+            }
+            assert.deepStrictEqual(jobs['release-failed'].permissions, { contents: 'read', actions: 'read' });
+            assert.strictEqual(runsIn(workflow, 'release-failed', 'Publishing **$TAG** failed')?.env?.GH_TOKEN,
+                '${{ secrets.GITHUB_TOKEN }}');
+        });
+
         it('mints the bot token with a client id, not the deprecated app id', function () {
             const minting = steps(workflow).filter((step) => step.uses?.startsWith('actions/create-github-app-token@'));
             assert.ok(minting.length > 0, 'no step mints the release bot token');
@@ -516,6 +599,21 @@ describe('.github/workflows', function () {
 
     describe('test.yml', function () {
         const workflow = load('test.yml');
+
+        it('runs one browser smoke after uploading the artifacts', function () {
+            const testSteps = jobSteps(workflow, 'test');
+            const browser = testSteps.filter((step) => step.run?.includes('npm run test:web'));
+            assert.strictEqual(browser.length, 1);
+            for (const upload of testSteps.filter((step) => step.uses?.startsWith('actions/upload-artifact@'))) {
+                assert.ok(testSteps.indexOf(browser[0]) > testSteps.indexOf(upload));
+            }
+        });
+
+        it('pins the VS Code web build to a commit', function () {
+            const root = path.join(workflowDir, '..', '..');
+            const runner = fs.readFileSync(path.join(root, 'src/test/integration/runWebTest.ts'), 'utf8');
+            assert.match(runner, /commit: "[0-9a-f]{40}"/);
+        });
 
         it('gates every pull request on coverage of the lines it changed', function () {
             // The whole-suite c8 thresholds leave room for thousands of untested lines, so the
