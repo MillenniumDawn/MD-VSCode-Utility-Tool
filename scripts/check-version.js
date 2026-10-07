@@ -19,6 +19,8 @@ const fs = require('fs');
 const path = require('path');
 
 const { compareVersions, nextVersion, readVersion, versionHeadingPattern } = require('./bump-version');
+const { warn, notice } = require('./lib/actions-log');
+const { parseFlags } = require('./lib/flags');
 
 // Paths that cannot change what the packaged extension does, so a change touching only these does
 // not need a version bump. scripts/release-check.js reads this same list to decide whether a push
@@ -173,7 +175,7 @@ function report(result) {
 	const outputPath = process.env.GITHUB_OUTPUT;
 
 	if (result.ok) {
-		process.stdout.write(`::notice::${result.notice}\n`);
+		notice(result.notice);
 		if (summaryPath) {
 			fs.appendFileSync(summaryPath, `### Version check passed\n\n${result.notice}\n`);
 		}
@@ -184,7 +186,7 @@ function report(result) {
 	}
 
 	const body = `### ${result.title}\n\n${result.message}\n`;
-	process.stdout.write(`::warning::${result.title}. The merge is not blocked by this.\n`);
+	warn(`${result.title}. The merge is not blocked by this.`);
 	process.stdout.write(body);
 	if (summaryPath) {
 		fs.appendFileSync(summaryPath, body);
@@ -197,14 +199,9 @@ function report(result) {
 }
 
 function parseArgs(argv) {
-	const options = { baseRef: 'origin/main' };
-	for (let i = 0; i < argv.length; i++) {
-		if (argv[i] === '--base-ref' && argv[i + 1]) {
-			options.baseRef = argv[i + 1];
-			i++;
-		}
-	}
-	return options;
+	return parseFlags(argv, {
+		'--base-ref': { name: 'baseRef', parse: (value, options) => value || options.baseRef },
+	}, { defaults: { baseRef: 'origin/main' } });
 }
 
 function main() {

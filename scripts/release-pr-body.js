@@ -15,6 +15,8 @@
 
 const fs = require('fs');
 
+const { parseFlags } = require('./lib/flags');
+
 const openMarker = '<!-- release-pr:prs -->';
 const closeMarker = '<!-- /release-pr:prs -->';
 const heading = '### Pull requests in this release';
@@ -110,31 +112,12 @@ function readEntries(file) {
 }
 
 function parseArgs(argv) {
-	const options = { version: '', file: '', existing: '', output: '' };
-	for (let i = 0; i < argv.length; i++) {
-		const value = argv[i + 1];
-		switch (argv[i]) {
-			case '--version':
-				options.version = value;
-				i++;
-				break;
-			case '--bullets-file':
-				options.file = value;
-				i++;
-				break;
-			case '--existing':
-				options.existing = value;
-				i++;
-				break;
-			case '--output':
-				options.output = value;
-				i++;
-				break;
-			default:
-				break;
-		}
-	}
-	return options;
+	return parseFlags(argv, {
+		'--version': 'version',
+		'--bullets-file': 'file',
+		'--existing': 'existing',
+		'--output': 'output',
+	}, { defaults: { version: '', file: '', existing: '', output: '' } });
 }
 
 function main() {
