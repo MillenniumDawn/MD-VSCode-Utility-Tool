@@ -106,7 +106,7 @@ export abstract class PreviewBase {
             }
             this.panelInitialized = false;
             this.panel.webview.html = this.getLoadingShellHtml();
-            await this.renderDocument(document, false, true);
+            await this.renderDocument(document, false, this.browserSmoke);
         });
     }
 

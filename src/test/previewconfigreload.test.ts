@@ -120,7 +120,7 @@ describe("previewdef configuration reload", () => {
 		assert.strictEqual(subscriptions, 0);
 	});
 
-		it("releases the subscription when the preview is disposed", () => {
+	it("releases the subscription when the preview is disposed", () => {
 		stub();
 		const preview = new Watching(vscode.Uri.file("/tmp/a.txt"), panelStub());
 

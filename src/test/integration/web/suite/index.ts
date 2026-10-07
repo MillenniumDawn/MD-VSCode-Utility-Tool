@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { assertRenderedIds } from "../../../../previewdef/renderack";
 
 const extensionId = "MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026";
 // Keep this in sync with WebviewType.Preview in src/constants.ts.
@@ -45,11 +46,7 @@ export async function run(): Promise<void> {
 		// The command waits for the initial loader read and webview HTML assignment before the test host exits.
 		const renderedIds = await vscode.commands.executeCommand<string[]>(previewCommand, eventUri, { browserSmoke: true });
 		const expectedIds = ["browser_smoke.1"];
-		const actualIds = [...(renderedIds ?? [])].sort();
-		const sortedExpectedIds = [...expectedIds].sort();
-		if (actualIds.length !== sortedExpectedIds.length || actualIds.some((id, index) => id !== sortedExpectedIds[index])) {
-			throw new Error(`Rendered event IDs did not match fixture: expected ${JSON.stringify(sortedExpectedIds)}, received ${JSON.stringify(actualIds)}`);
-		}
+		assertRenderedIds(renderedIds ?? [], expectedIds);
 
 		const deadline = Date.now() + 20000;
 		while (Date.now() < deadline) {
