@@ -62,7 +62,7 @@ function segments(file) {
 const componentRules = [
 	// .claude/ is repository tooling in the same sense .github/ is: it changes how the project is
 	// built and released, never what the extension does.
-	{ label: 'CI', test: (file) => file.startsWith('.github/') || file.startsWith('.claude/') || releaseScripts.has(file) },
+	{ label: 'CI', test: (file) => file.startsWith('.github/') || file.startsWith('.claude/') || file.startsWith('scripts/lib/') || releaseScripts.has(file) },
 	{
 		label: 'Localisation',
 		test: (file) => file.startsWith('i18n/')

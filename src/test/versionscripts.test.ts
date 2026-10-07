@@ -1672,6 +1672,16 @@ describe('scripts/changelog-bullets', function () {
             assert.strictEqual(changelogBullets.componentForFiles(['scripts/genzhi18n.js']), 'Localisation');
         });
 
+        it('counts shared release helper files as CI', function () {
+            assert.strictEqual(changelogBullets.componentForFiles([
+                'scripts/lib/actions-log.js',
+                'scripts/lib/flags.js',
+                'scripts/lib/github.js',
+                'scripts/lib/openrouter.js',
+            ]), 'CI');
+        });
+
+
         it('gives no prefix when nothing owns a majority', function () {
             assert.strictEqual(changelogBullets.componentForFiles([
                 'src/previewdef/focustree/a.ts',
