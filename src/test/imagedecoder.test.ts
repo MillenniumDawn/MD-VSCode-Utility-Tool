@@ -157,7 +157,11 @@ describe("util/image/imagedecoder", () => {
 
 		it("rejects malformed PNG-signature bytes instead of treating them as DDS", () => {
 			const truncatedPng = makePng(1, 1).subarray(0, 16);
-			assert.throws(() => decodeImageToPngSync(truncatedPng, "dds"));
+			assert.throws(
+				() => decodeImageToPngSync(truncatedPng, "dds"),
+				(e: unknown) =>
+					e instanceof UserError && /Unsupported png format/.test(e.message),
+			);
 		});
 
 		it("rejects oversized PNG dimensions before decoding", () => {
@@ -286,6 +290,41 @@ describe("util/image/imagedecoder", () => {
 			}
 		});
 
+		it("rejects a corrupt PNG via the worker and its sync fallback as a UserError", async () => {
+			const originalConsoleError = console.error;
+			const loggedErrors: unknown[] = [];
+			console.error = (...args: unknown[]) => loggedErrors.push(...args);
+			let rejection: unknown;
+			try {
+				await decodeImageToPng(makePng(1, 1).subarray(0, 16), "dds");
+			} catch (e) {
+				rejection = e;
+			} finally {
+				console.error = originalConsoleError;
+			}
+
+			// The worker classifies the malformed PNG payload itself, and the decode still rejects as a
+			// user error when its failed job goes through the sync fallback, so getImage treats a corrupt
+			// image as bad input rather than a tool failure on either path.
+			assert.ok(
+				loggedErrors.some(
+					(e) =>
+						e instanceof UserError &&
+						/Unsupported png format/.test(e.message),
+				),
+				"worker should report its png decode failure as a user error",
+			);
+			assert.ok(
+				rejection instanceof UserError &&
+					/Unsupported png format/.test(rejection.message),
+				"decode should reject with the sync fallback's user-error classification",
+			);
+			// Worker survives a decode error: a subsequent valid decode still succeeds.
+			const ok = await decodeImageToPng(makeTga(), "tga");
+			assert.strictEqual(ok.width, 2);
+			assert.strictEqual(_getLiveWorkerCountForTest(), _getWorkerCountForTest());
+		});
+
 		it("grows the pool under a concurrent decode burst", async () => {
 			const tga = makeTga();
 			const dds = makeDds(4, 4);
@@ -347,6 +386,17 @@ describe("util/image/imagedecoder", () => {
 			assert.strictEqual(result.width, 4);
 			assert.strictEqual(result.height, 4);
 			assertValidPng(result.pngBuffer, 4, 4);
+		});
+
+		it("rejects a corrupt PNG through the sync fallback as a UserError too", async () => {
+			// The pool is given up on here, so the decode runs entirely in the sync path; its PNG
+			// classification inside a DDS buffer must match the worker's.
+			const truncatedPng = makePng(1, 1).subarray(0, 16);
+			await assert.rejects(
+				decodeImageToPng(truncatedPng, "dds"),
+				(e: unknown) =>
+					e instanceof UserError && /Unsupported png format/.test(e.message),
+			);
 		});
 
 		it("teardown waits for the doomed worker to exit, so nothing it logs escapes the block", async () => {

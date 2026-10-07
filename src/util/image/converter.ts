@@ -37,7 +37,13 @@ export function pngToPng(buffer: Buffer): PNG {
 	if (dimensions) {
 		assertImageDimensions(dimensions.width, dimensions.height, "PNG");
 	}
-	return PNG.sync.read(buffer);
+	// PNG.sync.read throws a plain Error for every malformed payload, which getImage would log as a
+	// tool failure instead of bad user input; classify it like tgaToPng does.
+	try {
+		return PNG.sync.read(buffer);
+	} catch (e) {
+		throw new UserError(`Unsupported png format: ${e instanceof Error ? e.message : String(e)}`);
+	}
 }
 
 export function ddsToPng(dds: DDS): PNG {
