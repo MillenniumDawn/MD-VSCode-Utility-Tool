@@ -426,6 +426,21 @@ focus_tree = {
 		);
 	});
 
+	// Scoped to another country, has_focus_tree tests a tree the validator does not know.
+	it("does not apply an offset whose has_focus_tree is scoped to another country", () => {
+		const content = sharedWithTreeOffset("tree_a").replace(
+			"trigger = { has_focus_tree = tree_a }",
+			"trigger = { NOT = { GER = { has_focus_tree = german_tree } } }",
+		);
+		const tree = treesWithSharedFocuses(content).find((t) => t.id === "tree_a");
+		assert.deepStrictEqual(
+			tree?.warnings.map((w) => w.text),
+			[
+				"Focuses own_child, sh_child share the same position, so their icons overlap.",
+			],
+		);
+	});
+
 	it("warns once when the exclusivity is declared on both focuses", () => {
 		const content = treeWithFocuses(
 			focusBlock("focus_a", 0, 0, "mutually_exclusive = { focus = focus_b }"),

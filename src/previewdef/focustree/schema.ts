@@ -955,7 +955,9 @@ function resolveFocusPosition(
 /**
  * Whether an offset whose trigger tests nothing but has_focus_tree applies in the tree being
  * checked. Millennium Dawn moves a shared focus per importing tree this way, and the webview
- * already applies it, because it treats `has_focus_tree = <selected tree>` as true.
+ * already applies it, because it treats `has_focus_tree = <selected tree>` as true. Under a
+ * country scope, like `GER = { has_focus_tree = X }`, it tests a tree this check does not know,
+ * so such an offset is condition-dependent and ignored.
  */
 function isFocusTreeOffsetApplied(
 	offset: Offset,
@@ -967,7 +969,10 @@ function isFocusTreeOffsetApplied(
 	const leaves = extractConditionalExprs(offset.trigger);
 	return (
 		leaves.length > 0 &&
-		leaves.every((leaf) => /^has_focus_tree\s*=/.test(leaf.nodeContent)) &&
+		leaves.every(
+			(leaf) =>
+				leaf.scopeName === "" && /^has_focus_tree\s*=/.test(leaf.nodeContent),
+		) &&
 		applyCondition(offset.trigger, [
 			{ scopeName: "", nodeContent: "has_focus_tree = " + treeId },
 		])
