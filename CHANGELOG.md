@@ -1,11 +1,15 @@
 Unreleased
 
+v1.1.41
+
   Functionality:
 
 - [ Browser support ] The README explains how workspace access affects vanilla and DLC assets in vscode.dev. Issue #495.
 
 - [ Mod Tools ] Mods can now ship tools of their own, run with the new Run Mod Tool command. They are off until you turn them on under Settings > Mod tools, only appear while their mod is open, and each mod gets its own settings page to choose which of its tools are shown. Mod tools are maintained by their mods, not by this extension: when one fails, the error says which mod team to report it to.
 - [ MIO ] The MIO preview now shows its warnings like the focus tree does: a warnings list, markers on the traits involved and a button to copy them. It also warns about a parent that does not exist, is not above its trait, or a `parent` block needing more parents than it lists, and about `mutually_exclusive` traits that do not exist or are not on the same row. Shift+click a trait to trace its parent lines. Issue #512.
+- [ Testing ] Add explicit read-only guards to the install-path provider. Issue #484.
+- Remove no-op telemetry and stale exports. Issue #483.
   
   Bugfixes:
 - [ CI ] Automatic checks for fixed bug reports now stop when the model takes too long, leaving unchecked reports open for the next run. Issue #493.
