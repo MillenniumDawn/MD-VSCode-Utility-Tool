@@ -153,15 +153,19 @@ describe('previewdef/mio/schema include', () => {
     const base = `
         base_org = {
             trait = {
+                token = root
+                position = { x = 0 y = 0 }
+            }
+            trait = {
                 token = kept
                 name = kept_name
-                position = { x = 0 y = 0 }
+                position = { x = 0 y = 1 }
                 any_parent = { root }
                 mutually_exclusive = { removed }
             }
             trait = {
                 token = removed
-                position = { x = 1 y = 0 }
+                position = { x = 1 y = 1 }
             }
         }
     `;
@@ -188,7 +192,7 @@ describe('previewdef/mio/schema include', () => {
             }
         `)['derived_org'];
 
-        assert.deepStrictEqual(Object.keys(derived.traits).sort(), ['added', 'kept', 'removed']);
+        assert.deepStrictEqual(Object.keys(derived.traits).sort(), ['added', 'kept', 'removed', 'root']);
         const kept = derived.traits['kept'];
         assert.strictEqual(kept.name, 'new_name');
         assert.deepStrictEqual(kept.allParents, ['added'], 'a non-empty list replaces the old one');
@@ -231,7 +235,7 @@ describe('previewdef/mio/schema include', () => {
         `), dependent, 'derived.txt');
 
         assert.strictEqual(mios.length, 1);
-        assert.deepStrictEqual(Object.keys(mios[0].traits).sort(), ['kept', 'removed']);
+        assert.deepStrictEqual(Object.keys(mios[0].traits).sort(), ['kept', 'removed', 'root']);
         assert.strictEqual(mios[0].traits['removed'].visible, false);
         assert.notStrictEqual(dependent[0].traits['removed'].visible, false);
     });
@@ -264,5 +268,172 @@ describe('previewdef/mio/schema include', () => {
 
         assert.ok(derived.some(w => w.text.includes('more than one trait with ID kept')), JSON.stringify(derived));
         assert.ok(derived.some(w => w.text.includes("doesn't exist: nowhere")), JSON.stringify(derived));
+    });
+});
+
+describe('previewdef/mio/schema link warnings', () => {
+    function warningsOf(traits: string, extra = ''): { text: string, source: string, relatedSources?: string[] }[] {
+        const mios = getMiosFromFile(parseHoi4File(`test_org = { ${traits} } ${extra}`), [], 'test.txt');
+        return mios.find(m => m.id === 'test_org')!.warnings;
+    }
+
+    function texts(traits: string): string[] {
+        return warningsOf(traits).map(w => w.text);
+    }
+
+    it('accepts parents that sit above the trait they unlock', () => {
+        assert.deepStrictEqual(texts(`
+            trait = { token = a position = { x = 0 y = 0 } }
+            trait = { token = b position = { x = 1 y = 0 } }
+            trait = { token = c position = { x = 0 y = 1 } all_parents = { a } any_parent = { a b } parent = { traits = { a b } num_parents_needed = 2 } }
+        `), []);
+    });
+
+    it('warns about an all_parents parent on the same row or below', () => {
+        const warnings = warningsOf(`
+            trait = { token = a position = { x = 0 y = 1 } }
+            trait = { token = b position = { x = 1 y = 2 } }
+            trait = { token = c position = { x = 0 y = 1 } all_parents = { a b } }
+        `);
+        assert.deepStrictEqual(warnings, [
+            { text: 'Parent a of trait c is not positioned above it.', source: 'c', relatedSources: ['a'] },
+            { text: 'Parent b of trait c is not positioned above it.', source: 'c', relatedSources: ['b'] },
+        ]);
+    });
+
+    it('accepts any_parent when one option is above, and warns when none is', () => {
+        assert.deepStrictEqual(texts(`
+            trait = { token = a position = { x = 0 y = 0 } }
+            trait = { token = b position = { x = 1 y = 3 } }
+            trait = { token = c position = { x = 0 y = 1 } any_parent = { a b } }
+        `), []);
+        assert.deepStrictEqual(warningsOf(`
+            trait = { token = a position = { x = 0 y = 2 } }
+            trait = { token = b position = { x = 1 y = 3 } }
+            trait = { token = c position = { x = 0 y = 1 } any_parent = { a b } }
+        `), [{ text: 'Parent a, b of trait c is not positioned above it.', source: 'c', relatedSources: ['a', 'b'] }]);
+    });
+
+    it('warns about a parent block with fewer parents above than it needs', () => {
+        assert.deepStrictEqual(texts(`
+            trait = { token = a position = { x = 0 y = 0 } }
+            trait = { token = b position = { x = 1 y = 0 } }
+            trait = { token = d position = { x = 2 y = 4 } }
+            trait = { token = c position = { x = 0 y = 1 } parent = { traits = { a b d } num_parents_needed = 2 } }
+        `), []);
+        assert.deepStrictEqual(texts(`
+            trait = { token = a position = { x = 0 y = 0 } }
+            trait = { token = b position = { x = 1 y = 4 } }
+            trait = { token = c position = { x = 0 y = 1 } parent = { traits = { a b } num_parents_needed = 2 } }
+        `), ['Parent b of trait c is not positioned above it.']);
+    });
+
+    it('warns about a parent block that needs more parents than it lists', () => {
+        assert.deepStrictEqual(texts(`
+            trait = { token = a position = { x = 0 y = 0 } }
+            trait = { token = c position = { x = 0 y = 1 } parent = { traits = { a } num_parents_needed = 2 } }
+        `), ['Trait c needs 2 parents but lists only 1, so it can never be unlocked.']);
+    });
+
+    it('warns about a parent or exclusive trait that does not exist', () => {
+        assert.deepStrictEqual(texts(`
+            trait = { token = c position = { x = 0 y = 1 } all_parents = { nowhere } mutually_exclusive = { ghost } }
+        `), [
+            'Parent nowhere of trait c does not exist.',
+            'Mutually exclusive trait ghost of trait c does not exist.',
+        ]);
+    });
+
+    it('warns once about mutually exclusive traits on different rows', () => {
+        const warnings = warningsOf(`
+            trait = { token = a position = { x = 0 y = 0 } mutually_exclusive = { b } }
+            trait = { token = b position = { x = 2 y = 1 } mutually_exclusive = { a } }
+            trait = { token = c position = { x = 4 y = 0 } mutually_exclusive = { a } }
+        `);
+        assert.deepStrictEqual(warnings, [
+            { text: 'Mutually exclusive traits a and b are not on the same row.', source: 'a', relatedSources: ['b'] },
+        ]);
+    });
+
+    it('resolves positions through relative_position_id', () => {
+        assert.deepStrictEqual(texts(`
+            trait = { token = a position = { x = 0 y = 2 } }
+            trait = { token = b position = { x = 0 y = 1 } relative_position_id = a all_parents = { a } }
+        `), []);
+        assert.deepStrictEqual(texts(`
+            trait = { token = a position = { x = 0 y = 2 } }
+            trait = { token = b position = { x = 0 y = -1 } relative_position_id = a all_parents = { a } }
+        `), ['Parent a of trait b is not positioned above it.']);
+    });
+
+    it('skips a removed trait', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            base_org = {
+                trait = { token = a position = { x = 0 y = 0 } }
+                trait = { token = b position = { x = 0 y = 1 } all_parents = { a } mutually_exclusive = { c } }
+                trait = { token = c position = { x = 1 y = 1 } mutually_exclusive = { b } }
+            }
+            derived_org = {
+                include = base_org
+                override_trait = { token = a position = { x = 0 y = 3 } }
+                remove_trait = { b }
+                add_trait = { token = d position = { x = 3 y = 0 } mutually_exclusive = { c } }
+            }
+        `), [], 'test.txt');
+        const derived = mios.find(m => m.id === 'derived_org')!;
+        // b is below the moved a, but it is removed; d and c are on different rows.
+        assert.deepStrictEqual(derived.warnings.map(w => w.text), [
+            'Mutually exclusive traits d and c are not on the same row.',
+        ]);
+    });
+
+    // The cycle is warned about already; the trait it started from is drawn at its own offset, as
+    // the preview draws it, not pushed down by counting its own y twice.
+    it('cuts a circular relative_position_id chain where the preview does', () => {
+        assert.deepStrictEqual(texts(`
+            trait = { token = a position = { x = 0 y = 2 } relative_position_id = b }
+            trait = { token = b position = { x = 1 y = 0 } relative_position_id = a }
+            trait = { token = c position = { x = 0 y = 3 } all_parents = { a } }
+        `).filter(t => !t.includes('circular')), []);
+    });
+
+    // Neither end of either link is the derived organization's, but the anchor they hang from is,
+    // and moving it moves them.
+    it('checks the inherited links a derived organization moves by overriding their anchor', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            base_org = {
+                trait = { token = anchor position = { x = 0 y = 1 } }
+                trait = { token = top position = { x = 1 y = 1 } }
+                trait = { token = child position = { x = 0 y = 1 } relative_position_id = anchor all_parents = { top } }
+                trait = { token = left position = { x = 2 y = 0 } relative_position_id = anchor mutually_exclusive = { right } }
+                trait = { token = right position = { x = 3 y = 1 } mutually_exclusive = { left } }
+            }
+            derived_org = {
+                include = base_org
+                override_trait = { token = anchor position = { x = 0 y = 0 } }
+            }
+        `), [], 'test.txt');
+        const byId = Object.fromEntries(mios.map(m => [m.id, m.warnings.map(w => w.text)]));
+        assert.deepStrictEqual(byId['base_org'], []);
+        assert.deepStrictEqual(byId['derived_org'], [
+            'Parent top of trait child is not positioned above it.',
+            'Mutually exclusive traits left and right are not on the same row.',
+        ]);
+    });
+
+    it('does not repeat in a derived organization what its included one reports', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            base_org = {
+                trait = { token = a position = { x = 0 y = 1 } }
+                trait = { token = b position = { x = 0 y = 0 } all_parents = { a } }
+            }
+            derived_org = {
+                include = base_org
+                add_trait = { token = c position = { x = 1 y = 0 } all_parents = { a } }
+            }
+        `), [], 'test.txt');
+        const byId = Object.fromEntries(mios.map(m => [m.id, m.warnings.map(w => w.text)]));
+        assert.deepStrictEqual(byId['base_org'], ['Parent a of trait b is not positioned above it.']);
+        assert.deepStrictEqual(byId['derived_org'], ['Parent a of trait c is not positioned above it.']);
     });
 });

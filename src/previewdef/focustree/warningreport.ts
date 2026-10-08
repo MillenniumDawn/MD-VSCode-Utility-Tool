@@ -156,15 +156,17 @@ function isWarningList(value: unknown): value is { source: string; text: string 
 
 /**
  * Answers the preview's copy button: `msg` is what the webview posted for the tree on screen, and
- * `file` the previewed file. The clipboard gets the same section the audit report has for it.
+ * `file` the previewed file. The clipboard gets the same section the audit report has for it. The
+ * MIO preview posts the same message for the organization on screen, and passes its own
+ * `noWarningsMessage`.
  */
-export async function copyTreeWarnings(msg: unknown, file: string): Promise<void> {
+export async function copyTreeWarnings(msg: unknown, file: string, noWarningsMessage?: string): Promise<void> {
 	if (!isRecord(msg) || typeof msg.treeId !== "string" || !isWarningList(msg.warnings)) {
 		return;
 	}
 	if (msg.warnings.length === 0) {
 		void vscode.window.showInformationMessage(
-			localize("focustree.copywarnings.none", "This focus tree has no warnings."),
+			noWarningsMessage ?? localize("focustree.copywarnings.none", "This focus tree has no warnings."),
 		);
 		return;
 	}

@@ -13,6 +13,8 @@ import {
 import { localize } from "../util/i18n";
 import { buildFocusTreeHtml, buildFocusTreePayload } from "../previewdef/focustree/contentbuilder";
 import { renderGuiFile } from "../previewdef/gui/contentbuilder";
+import { renderMioFile } from "../previewdef/mio/contentbuilder";
+import { LoaderRenderResult, renderedHtml } from "../previewdef/loaderpreview";
 import { renderWorldMapIcons } from "../previewdef/worldmap/toolbar";
 import { toNumberLike } from "../hoiformat/schema";
 import { refreshFeatureFlags } from "../util/featureflags";
@@ -178,6 +180,14 @@ async function renderedGui(): Promise<string> {
 	return renderGuiFile(loader, vscode.Uri.file("/tmp/interface/test.gui"), webview);
 }
 
+async function renderedMio(): Promise<string> {
+	const loader: any = {
+		file: "common/military_industrial_organization/organizations/test.txt",
+		load: async () => ({ result: { mios: [{ id: "test_mio", traits: {}, textHeaders: [], warnings: [] }], gfxFiles: [] } }),
+	};
+	return renderedHtml(await renderMioFile(loader, vscode.Uri.file("/tmp/common/military_industrial_organization/organizations/test.txt"), webview) as LoaderRenderResult);
+}
+
 function renderedWorldMap(): string {
 	const template = fs.readFileSync(path.join(root, "src/previewdef/worldmap/worldmapview.html"), "utf8");
 	return renderWorldMapIcons(template, localize);
@@ -202,6 +212,7 @@ describe("toolbar icons (issue #446)", () => {
 			"focus tree": await renderedFocusTree(true),
 			"focus tree without warnings": await renderedFocusTree(false),
 			"GUI": await renderedGui(),
+			"MIO": await renderedMio(),
 			"world map": renderedWorldMap(),
 			"registry": renderedRegistryButtons(),
 		};
