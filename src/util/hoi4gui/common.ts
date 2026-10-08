@@ -42,7 +42,7 @@ const offsetMap: Record<Orientation['_name'], { x: number, y: number }> = {
     'center': { x: 0.5, y: 0.5 },
 };
 
-export function calculateStartLength(pos: NumberLike | undefined, size: NumberLike | undefined, parentSize: number, orientationFactor: number, origoFactor: number, scale: number): [number, number] {
+function calculateStartLength(pos: NumberLike | undefined, size: NumberLike | undefined, parentSize: number, orientationFactor: number, origoFactor: number, scale: number): [number, number] {
     let posValue = normalizeNumberLike(pos, parentSize) ?? 0;
     let length = (normalizeNumberLike(size, parentSize) ?? 0) * scale;
     if (size?._unit === '%%') {

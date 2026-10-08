@@ -501,7 +501,7 @@ function probeDlcFolders(
 
 const DLC_PROBE_CONCURRENCY = 8;
 
-export function isHoiFileOpened(path: vscode.Uri): boolean {
+function isHoiFileOpened(path: vscode.Uri): boolean {
 	return path.fragment === ":opened";
 }
 
@@ -509,11 +509,11 @@ export function getHoiOpenedFileOriginalUri(path: vscode.Uri): vscode.Uri {
 	return path.with({ fragment: "" });
 }
 
-export function isHoiFileFromDlc(path: vscode.Uri): boolean {
+function isHoiFileFromDlc(path: vscode.Uri): boolean {
 	return path.fragment !== "" && path.path.endsWith(".zip");
 }
 
-export function getHoiDlcFileOriginalUri(path: vscode.Uri): {
+function getHoiDlcFileOriginalUri(path: vscode.Uri): {
 	uri: vscode.Uri;
 	entryPath: string;
 } {
@@ -580,7 +580,7 @@ export async function expiryToken(
 	);
 }
 
-export async function readFileFromPath(
+async function readFileFromPath(
 	realPath: vscode.Uri,
 	relativePath?: string,
 ): Promise<[Buffer, vscode.Uri]> {

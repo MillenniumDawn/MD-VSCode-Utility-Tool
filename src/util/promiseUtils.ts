@@ -8,9 +8,9 @@ function formatLogMessage(context: string, cause: unknown): string {
 
 export function attachTaskWithErrorLogging(
 	task: Promise<unknown>,
-	onSuccess: () => void,
 	context: string,
 	reportError: ErrorReporter,
+	onSuccess?: () => void,
 ): void {
 	void task.then(onSuccess).catch((cause) => {
 		reportError(formatLogMessage(context, cause));

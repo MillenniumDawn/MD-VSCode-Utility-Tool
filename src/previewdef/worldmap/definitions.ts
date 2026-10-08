@@ -1,6 +1,5 @@
 import { Token } from "../../hoiformat/hoiparser";
 import { Warning } from "../../util/common";
-import type { TelemetryMessage } from "../../util/telemetry";
 import {
 	isOffset,
 	isOptionalOffset,
@@ -330,7 +329,7 @@ const openFileTypes: ReadonlySet<string> = new Set<OpenFileMessage["type"]>([
  */
 export function isWorldMapHostMessage(
 	msg: unknown,
-): msg is WorldMapMessage | TelemetryMessage {
+): msg is WorldMapMessage {
 	if (!isRecord(msg) || typeof msg.command !== "string") {
 		return false;
 	}
@@ -348,13 +347,6 @@ export function isWorldMapHostMessage(
 		case "exportmap":
 		case "requestexportmap":
 			return isOptionalBytes(msg.data);
-		case "telemetry":
-			return (
-				(msg.telemetryType === "event" ||
-					msg.telemetryType === "error" ||
-					msg.telemetryType === "exception") &&
-				Array.isArray(msg.args)
-			);
 		default:
 			return (
 				requestMapItemCommands.has(msg.command) &&

@@ -3,7 +3,6 @@ import { Commands, WebviewType } from '../../constants';
 import { WorldMap } from './worldmap';
 import { contextContainer } from '../../context';
 import { localize } from '../../util/i18n';
-import { sendEvent } from '../../util/telemetry';
 import { getConfiguration, previewWebviewOptions } from '../../util/vsccommon';
 
 export class WorldMapContainer implements vscode.WebviewPanelSerializer {
@@ -19,10 +18,9 @@ export class WorldMapContainer implements vscode.WebviewPanelSerializer {
     }
 
     public openPreview(): Promise<void> {
-        sendEvent('preview.show.worldmap');
         return this.openWorldMapView();
     }
-    
+
     public deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel, _state: unknown): Promise<void> {
         return this.openWorldMapView(webviewPanel);
     }

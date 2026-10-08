@@ -12,7 +12,6 @@ import {
 import { localize } from "../../util/i18n";
 import { isRecord } from "../../util/messageguards";
 import { ProgressReport, withCancellableProgress } from "../../util/progress";
-import { sendEvent } from "../../util/telemetry";
 import { getConfiguration } from "../../util/vsccommon";
 import {
 	convertFocusFileNodeToJson,
@@ -21,7 +20,7 @@ import {
 	getFocusTreeWithFocusFile,
 } from "./schema";
 
-export interface ReportedWarning {
+interface ReportedWarning {
 	treeId: string;
 	source: string;
 	text: string;
@@ -111,7 +110,7 @@ function oneLine(text: string): string {
 }
 
 /** One file's warnings as a Markdown section: the copy button copies exactly this for its tree. */
-export function formatFileWarnings(file: FileWarnings): string {
+function formatFileWarnings(file: FileWarnings): string {
 	const lines = [`## ${file.file}`, ""];
 	if (file.parseError !== undefined) {
 		lines.push(
@@ -178,7 +177,7 @@ export async function copyTreeWarnings(msg: unknown, file: string): Promise<void
 }
 
 /** Reads and checks every focus tree file; `undefined` when the reader cancelled. */
-export async function buildFocusTreeAuditReport(
+async function buildFocusTreeAuditReport(
 	progress: ProgressReport,
 	includeVanilla: boolean,
 ): Promise<string | undefined> {
@@ -246,7 +245,6 @@ async function showReport(report: string, folder: string): Promise<void> {
 }
 
 export async function auditFocusTrees(): Promise<void> {
-	sendEvent("auditFocusTrees");
 	const config = getConfiguration();
 	const folder = (config.get<string>("auditor.reportFolder") ?? "").trim();
 	const includeVanilla = config.get<boolean>("auditor.includeVanilla") ?? false;

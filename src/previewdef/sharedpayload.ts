@@ -48,7 +48,7 @@ export interface NavTarget {
 //
 // Unlike EffectComplexExpr, which is sniffed structurally, each variant names itself: the renderer
 // walks this tree in the webview, where a `kind` reads better than probing for a property.
-export interface EffectLine {
+interface EffectLine {
 	kind: "line";
 	scopeName: string;
 	content: string;
@@ -56,14 +56,14 @@ export interface EffectLine {
 
 // Effects that only run when a condition holds -- an `if` / `else_if` / `else` in the file, with
 // every enclosing guard already folded into `condition` by extractEffectValue.
-export interface EffectGroup {
+interface EffectGroup {
 	kind: "group";
 	condition: ConditionComplexExpr;
 	items: EffectTreeNode[];
 }
 
 // One `random_list`: exactly one of the branches runs, with the weight it was written with.
-export interface EffectChoice {
+interface EffectChoice {
 	kind: "choice";
 	items: { possibility: number; effect: EffectTreeNode[] }[];
 }

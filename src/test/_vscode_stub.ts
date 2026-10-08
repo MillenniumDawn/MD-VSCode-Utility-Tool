@@ -142,6 +142,9 @@ function buildStub() {
             readFile: async () => new Uint8Array(),
             writeFile: async () => undefined,
             createDirectory: async () => undefined,
+            delete: async () => undefined,
+            rename: async () => undefined,
+            copy: async () => undefined,
         },
     };
 
@@ -222,8 +225,18 @@ function buildStub() {
         }
     }
 
+    class FileSystemErrorStub extends Error {
+        code = "NoPermissions";
+        constructor(uri: any) {
+            super(`No permissions to write '${uri?.toString?.() ?? uri}'`);
+            this.name = "NoPermissions";
+        }
+        static NoPermissions(uri: any) { return new FileSystemErrorStub(uri); }
+    }
+
     return {
         Uri,
+        FileSystemError: FileSystemErrorStub,
         workspace,
         window,
         commands,
@@ -309,6 +322,7 @@ const pristine = {
     workspaceFolders: stub.workspace.workspaceFolders as unknown,
     onDidChangeConfiguration: stub.workspace.onDidChangeConfiguration,
     onDidChangeWorkspaceFolders: stub.workspace.onDidChangeWorkspaceFolders,
+    registerFileSystemProvider: stub.workspace.registerFileSystemProvider,
     onDidChangeTextDocument: stub.workspace.onDidChangeTextDocument,
     createFileSystemWatcher: stub.workspace.createFileSystemWatcher,
     activeTextEditor: stub.window.activeTextEditor as unknown,
@@ -317,6 +331,9 @@ const pristine = {
     readFile: stub.workspace.fs.readFile,
     writeFile: stub.workspace.fs.writeFile,
     createDirectory: stub.workspace.fs.createDirectory,
+    delete: stub.workspace.fs.delete,
+    rename: stub.workspace.fs.rename,
+    copy: stub.workspace.fs.copy,
     getWorkspaceFolder: stub.workspace.getWorkspaceFolder,
     openTextDocument: stub.workspace.openTextDocument,
     textDocuments: stub.workspace.textDocuments as unknown,
@@ -349,6 +366,7 @@ export interface VscodeStubOverrides {
     onDidChangeConfiguration?: (handler: any) => { dispose(): void };
     /** Captures the folder-change handler a suite's `register()` call installs, to drive it directly. */
     onDidChangeWorkspaceFolders?: (handler: any) => { dispose(): void };
+    registerFileSystemProvider?: (scheme: string, provider: any, options?: any) => { dispose(): void };
     /** Captures the document-change handler a suite's `register()` call installs, to drive it directly. */
     onDidChangeTextDocument?: (handler: any, thisArg?: any) => { dispose(): void };
     createFileSystemWatcher?: (glob: string, ignoreCreate?: boolean, ignoreChange?: boolean, ignoreDelete?: boolean) => any;
@@ -359,6 +377,9 @@ export interface VscodeStubOverrides {
     readFile?: (uri: any) => Promise<Uint8Array>;
     writeFile?: (uri: any, content: Uint8Array) => Promise<void>;
     createDirectory?: (uri: any) => Promise<void>;
+    delete?: (uri: any, options?: any) => Promise<void>;
+    rename?: (oldUri: any, newUri: any, options?: any) => Promise<void>;
+    copy?: (source: any, destination: any, options?: any) => Promise<void>;
     getWorkspaceFolder?: (uri: any) => any;
     openTextDocument?: (uri: any) => Promise<any>;
     /** Replaces `workspace.textDocuments`, for suites driving `getDocumentByUri` lookups. */
@@ -425,6 +446,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.onDidChangeWorkspaceFolders !== undefined) {
         workspace.onDidChangeWorkspaceFolders = overrides.onDidChangeWorkspaceFolders;
     }
+    if (overrides.registerFileSystemProvider !== undefined) {
+        workspace.registerFileSystemProvider = overrides.registerFileSystemProvider;
+    }
     if (overrides.onDidChangeTextDocument !== undefined) {
         workspace.onDidChangeTextDocument = overrides.onDidChangeTextDocument;
     }
@@ -448,6 +472,15 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     }
     if (overrides.createDirectory !== undefined) {
         fs.createDirectory = overrides.createDirectory;
+    }
+    if (overrides.delete !== undefined) {
+        fs.delete = overrides.delete;
+    }
+    if (overrides.rename !== undefined) {
+        fs.rename = overrides.rename;
+    }
+    if (overrides.copy !== undefined) {
+        fs.copy = overrides.copy;
     }
     if (overrides.getWorkspaceFolder !== undefined) {
         workspace.getWorkspaceFolder = overrides.getWorkspaceFolder;
@@ -513,6 +546,7 @@ export function restoreVscodeStubs(): void {
     workspace.onDidChangeConfiguration = pristine.onDidChangeConfiguration;
     (stub as any)._configurationChanged.dispose();
     workspace.onDidChangeWorkspaceFolders = pristine.onDidChangeWorkspaceFolders;
+    workspace.registerFileSystemProvider = pristine.registerFileSystemProvider;
     workspace.onDidChangeTextDocument = pristine.onDidChangeTextDocument;
     workspace.createFileSystemWatcher = pristine.createFileSystemWatcher;
     window.activeTextEditor = pristine.activeTextEditor;
@@ -521,6 +555,9 @@ export function restoreVscodeStubs(): void {
     fs.readFile = pristine.readFile;
     fs.writeFile = pristine.writeFile;
     fs.createDirectory = pristine.createDirectory;
+    fs.delete = pristine.delete;
+    fs.rename = pristine.rename;
+    fs.copy = pristine.copy;
     workspace.getWorkspaceFolder = pristine.getWorkspaceFolder;
     workspace.openTextDocument = pristine.openTextDocument;
     workspace.textDocuments = pristine.textDocuments;

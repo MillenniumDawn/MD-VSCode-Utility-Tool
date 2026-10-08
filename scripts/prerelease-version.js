@@ -25,6 +25,8 @@ const fs = require('fs');
 const path = require('path');
 
 const { parseVersion, readVersion, stableMinor, writeVersion } = require('./bump-version');
+const { warn, notice } = require('./lib/actions-log');
+const { parseFlags } = require('./lib/flags');
 
 function positiveInteger(value, what) {
 	const text = String(value ?? '').trim();
@@ -70,10 +72,10 @@ function evaluate(options = {}) {
 
 function report(result) {
 	if (result.warning) {
-		process.stdout.write(`::warning::${result.warning}\n`);
+		warn(result.warning);
 	}
-	const notice = `Pre-release ${result.version} from stable ${result.stable}, tagged ${result.tag}.`;
-	process.stdout.write(`::notice::${notice}\n`);
+	const message = `Pre-release ${result.version} from stable ${result.stable}, tagged ${result.tag}.`;
+	notice(message);
 
 	const outputPath = process.env.GITHUB_OUTPUT;
 	if (outputPath) {
@@ -82,35 +84,22 @@ function report(result) {
 
 	const summaryPath = process.env.GITHUB_STEP_SUMMARY;
 	if (summaryPath) {
-		fs.appendFileSync(summaryPath, `### Pre-release\n\n${notice}\n`);
+		fs.appendFileSync(summaryPath, `### Pre-release\n\n${message}\n`);
 	}
 }
 
 function parseArgs(argv) {
-	const options = {
-		apply: false,
-		runNumber: process.env.GITHUB_RUN_NUMBER ?? '',
-		runAttempt: process.env.GITHUB_RUN_ATTEMPT || '1',
-	};
-	for (let i = 0; i < argv.length; i++) {
-		const value = argv[i + 1];
-		switch (argv[i]) {
-			case '--apply':
-				options.apply = true;
-				break;
-			case '--run-number':
-				options.runNumber = value;
-				i++;
-				break;
-			case '--run-attempt':
-				options.runAttempt = value;
-				i++;
-				break;
-			default:
-				break;
-		}
-	}
-	return options;
+	return parseFlags(argv, {
+		'--apply': { name: 'apply', value: true },
+		'--run-number': 'runNumber',
+		'--run-attempt': 'runAttempt',
+	}, {
+		defaults: {
+			apply: false,
+			runNumber: process.env.GITHUB_RUN_NUMBER ?? '',
+			runAttempt: process.env.GITHUB_RUN_ATTEMPT || '1',
+		},
+	});
 }
 
 function main() {

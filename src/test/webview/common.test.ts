@@ -37,7 +37,7 @@ describe('webview/util/common', function () {
 
         it('returns undefined on sync error', function () {
             const originalConsoleError = console.error;
-            console.error = () => undefined;
+            console.error = () => {};
             try {
                 const wrapped = tryRun(() => { throw new Error('fail'); });
                 assert.strictEqual(wrapped(), undefined);
@@ -49,7 +49,7 @@ describe('webview/util/common', function () {
 
         it('catches async errors and returns undefined', async function () {
             const originalConsoleError = console.error;
-            console.error = () => undefined;
+            console.error = () => {};
             try {
                 const wrapped = tryRun(async () => { throw new Error('async fail'); });
                 const result = await wrapped();

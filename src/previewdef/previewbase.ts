@@ -3,7 +3,6 @@ import { localize } from '../util/i18n';
 import { error, debug } from '../util/debug';
 import { getDocumentByUri } from '../util/vsccommon';
 import isEqual from 'lodash/isEqual';
-import { sendByMessage, isTelemetryMessage } from '../util/telemetry';
 import { isOffset, isOptionalOffset, isOptionalString, isRecord } from '../util/messageguards';
 import { loadingShellHtml } from '../util/html';
 import { openOrCopyHoiFile } from '../util/previewfileopener';
@@ -82,7 +81,7 @@ export abstract class PreviewBase {
         }
         this.panel.webview.html = html;
     }
-    
+
     public dispose(): void {
         if (this.disposed) {
             return;
@@ -165,11 +164,6 @@ export abstract class PreviewBase {
                         }
                     }
                     break;
-                case 'telemetry':
-                    if (isTelemetryMessage(msg)) {
-                        sendByMessage(msg);
-                    }
-                    break;
                 case 'reload':
                     this.reload();
                     break;
@@ -215,7 +209,7 @@ export abstract class PreviewBase {
             this.browserSmokeWaiter = undefined;
         });
     }
-    
+
     /**
      * Persists a toolbar option the page just changed. Most previews draw the option themselves and
      * need nothing more; one whose content is rendered on this side overrides this to re-render

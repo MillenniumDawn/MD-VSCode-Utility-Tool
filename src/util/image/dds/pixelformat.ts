@@ -17,10 +17,6 @@ import {
 } from "./typedef";
 import { UserError } from "../../common";
 
-export const PIXEL_VALUE_TYPE_SIGNED = 0x1;
-export const PIXEL_VALUE_TYPE_NORM = 0x2;
-export const PIXEL_VALUE_TYPE_SRGB = 0x4;
-
 export enum PixelValueType {
 	typeless = 0,
 	float = 0x10,
@@ -42,9 +38,6 @@ export enum CompressFormat {
 	bc7,
 }
 
-export const CHANNEL_FORMAT_ALPHA = 0x1;
-export const CHANNEL_FORMAT_TYPE_MASK = 0xfe;
-
 export enum ChannelFormat {
 	rgb = 0,
 	rgba = 1,
@@ -61,7 +54,7 @@ export enum ChannelFormat {
 	ycbcra = 18,
 }
 
-export interface PixelFormatBase {
+interface PixelFormatBase {
 	compressed: boolean;
 	valueType: PixelValueType;
 }

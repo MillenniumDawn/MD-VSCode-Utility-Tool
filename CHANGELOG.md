@@ -7,9 +7,11 @@ Unreleased
 - [ Mod Tools ] Mods can now ship tools of their own, run with the new Run Mod Tool command. They are off until you turn them on under Settings > Mod tools, only appear while their mod is open, and each mod gets its own settings page to choose which of its tools are shown. Mod tools are maintained by their mods, not by this extension: when one fails, the error says which mod team to report it to.
   
   Bugfixes:
+- [ CI ] Automatic checks for fixed bug reports now stop when the model takes too long, leaving unchecked reports open for the next run. Issue #493.
 - [ Event Previewer ] [ MIO Preview ] Editing a file used by an open preview now refreshes it instead of showing cached content. Issue #490.
 - [ Previews ] Filtering or collapsing a chain no longer forgets decisions or events already hidden along its arrows. Issue #492.
 - [ World Map ] Supply nodes with leading spaces or tabs now load at the correct province and level. Issue #494.
+- [ DDS ] PNG images saved with a .dds extension now show in previews and the DDS viewer instead of going missing. Issue #504.
 
 v1.1.40
 

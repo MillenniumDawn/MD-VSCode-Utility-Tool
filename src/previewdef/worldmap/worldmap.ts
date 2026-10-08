@@ -20,7 +20,6 @@ import { WorldMapLoader } from "./loader/worldmaploader";
 import { buildWorldMapChangeMessages } from "./worldmapchanges";
 import { renderWorldMapIcons } from "./toolbar";
 import { LoaderSession } from "../../util/loader/loader";
-import { sendByMessage } from "../../util/telemetry";
 
 export class WorldMap {
 	public panel: vscode.WebviewPanel | undefined;
@@ -183,9 +182,6 @@ export class WorldMap {
 					break;
 				case "openfile":
 					await this.openFile(msg.file, msg.type, msg.start, msg.end);
-					break;
-				case "telemetry":
-					sendByMessage(msg);
 					break;
 				case "requestexportmap":
 					await this.requestExportMap();

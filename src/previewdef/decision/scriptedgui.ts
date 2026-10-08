@@ -22,7 +22,7 @@ export interface ScriptedGuiDef {
 	file: string;
 }
 
-export function getScriptedGuisFromFile(node: Node, filePath: string): ScriptedGuiDef[] {
+function getScriptedGuisFromFile(node: Node, filePath: string): ScriptedGuiDef[] {
 	const result: ScriptedGuiDef[] = [];
 	if (!Array.isArray(node.value)) {
 		return result;
