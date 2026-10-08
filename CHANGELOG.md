@@ -5,6 +5,7 @@ v1.1.41
   Functionality:
 
 - [ Mod Tools ] Mods can now ship tools of their own, run with the new Run Mod Tool command. They are off until you turn them on under Settings > Mod tools, only appear while their mod is open, and each mod gets its own settings page to choose which of its tools are shown. Mod tools are maintained by their mods, not by this extension: when one fails, the error says which mod team to report it to.
+- [ Testing ] Add explicit read-only guards to the install-path provider. Issue #484.
   
   Bugfixes:
 - [ CI ] Automatic checks for fixed bug reports now stop when the model takes too long, leaving unchecked reports open for the next run. Issue #493.
