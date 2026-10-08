@@ -7,7 +7,7 @@ import { escapeAttr, htmlEscape } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
 import { MioLoader } from './loader';
 import { renderLoaderFile } from '../loaderrender';
-import { TOOLBAR_HEIGHT as toolbarHeight, toolbarWrapper } from '../toolbarparts';
+import { TOOLBAR_HEIGHT as toolbarHeight, toolbarWrapper, traceStatusHtml, warningPanelHtml } from '../toolbarparts';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { Mio, MioTrait, TraitEffect } from './schema';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
@@ -16,6 +16,8 @@ import { LoaderRender, RenderContentOptions } from '../loaderpreview';
 import { registerExclusiveLinkStyles } from '../../util/hoi4gui/exclusivelink';
 import { loadExclusiveLinkImages } from '../../util/hoi4gui/exclusivelinkimages';
 import { getPreviewOptions } from '../../util/previewoptions';
+import { registerTraceStyles } from '../../util/hoi4gui/tracestyles';
+import { actionGroupHtml, iconButtonHtml } from '../toolbaricons';
 
 const defaultTraitIcon = 'gfx/interface/goals/goal_unknown.dds';
 const traitEffectIconMap: Record<TraitEffect, string> = {
@@ -74,6 +76,10 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     // can't rebuild them from `mios` alone — it swaps this html into the stable <select>.
     const mioOptionsHtml = await renderMioOptions(mios);
 
+    // The webview attaches the trace classes after every render, so their rules go into this shell
+    // stylesheet, which is serialized before any render. See tracestyles.ts.
+    registerTraceStyles(styleTable, 'miopreviewplaceholder');
+
     const baseContent = (
         `<div id="dragger" class="${styleTable.style('dragger', () => `
             width: 100vw;
@@ -85,6 +91,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
         `<div id="miopreviewcontent" class="${styleTable.style('miopreviewcontent', () => `top:${toolbarHeight}px;left:-20px;position:relative`)}">
             <div id="miopreviewplaceholder"></div>
         </div>` +
+        warningPanelHtml(styleTable) +
         await renderToolBar(mios, styleTable, mioOptionsHtml)
     );
 
@@ -162,9 +169,19 @@ async function renderToolBar(mios: Mio[], styleTable: StyleTable, mioOptionsHtml
         <label for="show-overlaps" class="${styleTable.style('toggleLabel', () => `margin-right:5px`)}">${localize('miopreview.showOverlaps', 'Show overlapping traits')}</label>
         <input type="checkbox" id="show-overlaps" class="${styleTable.style('marginRight10', () => `margin-right:10px`)}">`;
 
+    // The warning buttons are always enabled: an edit can bring in the first warning without a
+    // reload, and the panel says so when there is none.
+    const actions = actionGroupHtml({
+        showWarnings: iconButtonHtml('showWarnings', localize, { domId: 'show-warnings', on: false }),
+        warningMarkers: iconButtonHtml('warningMarkers', localize, { domId: 'toggle-warning-markers', on: true }),
+        copyWarnings: iconButtonHtml('copyWarnings', localize, { domId: 'copy-warnings' }),
+        clearTrace: traceStatusHtml(styleTable, localize),
+    });
+
     return toolbarWrapper(styleTable, () => `${mioSelect}
             ${conditions}
-            ${toggles}`);
+            ${toggles}
+            ${actions}`);
 }
 
 // Column headers declared by `tree_header_text` blocks. Each sits above the trait grid at its

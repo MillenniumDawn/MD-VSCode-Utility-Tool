@@ -2,7 +2,7 @@ import { loadEntrypoint } from './setup';
 import * as assert from 'assert';
 import { FocusTree } from '../../previewdef/focustree/schema';
 import { GridBoxItem } from '../../util/hoi4gui/gridboxcommon';
-import { warningBadgeClass, warningBoxClass } from '../../previewdef/focustree/warningstyles';
+import { warningBadgeClass, warningBoxClass } from '../../util/hoi4gui/warningstyles';
 
 // focustree.ts reads window.focusTrees at module scope and binds its handlers to window load and
 // message. Only the exported helpers are under test, so it is loaded with those listeners held back.
@@ -78,7 +78,7 @@ describe('webview/focustree warningCellCountsFor', () => {
             gridItem('b', 3, 4),
             gridItem('c', 3, 4),
         ], new Set(['a', 'b', 'c']));
-        assert.deepStrictEqual(counts, { a: 3, b: 3, c: 3 });
+        assert.deepStrictEqual(Object.fromEntries(counts), { a: 3, b: 3, c: 3 });
     });
 
     it('ignores unwarned focuses sharing the slot', () => {
@@ -86,7 +86,7 @@ describe('webview/focustree warningCellCountsFor', () => {
             gridItem('a', 1, 1),
             gridItem('shared', 1, 1),
         ], new Set(['a']));
-        assert.deepStrictEqual(counts, { a: 1 });
+        assert.deepStrictEqual(Object.fromEntries(counts), { a: 1 });
     });
 
     it('keeps focuses on distinct slots at one', () => {
@@ -95,16 +95,16 @@ describe('webview/focustree warningCellCountsFor', () => {
             gridItem('b', 1, 0),
             gridItem('c', 0, 1),
         ], new Set(['a', 'b', 'c']));
-        assert.deepStrictEqual(counts, { a: 1, b: 1, c: 1 });
+        assert.deepStrictEqual(Object.fromEntries(counts), { a: 1, b: 1, c: 1 });
     });
 
     it('omits warned focuses that are not rendered', () => {
         const counts = warningCellCountsFor([gridItem('a', 0, 0)], new Set(['a', 'hidden']));
-        assert.deepStrictEqual(counts, { a: 1 });
+        assert.deepStrictEqual(Object.fromEntries(counts), { a: 1 });
     });
 
     it('returns nothing when no focus is warned', () => {
-        assert.deepStrictEqual(warningCellCountsFor([gridItem('a', 0, 0)], new Set()), {});
+        assert.strictEqual(warningCellCountsFor([gridItem('a', 0, 0)], new Set()).size, 0);
     });
 });
 

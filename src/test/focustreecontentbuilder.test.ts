@@ -17,12 +17,12 @@ import {
 	warningEntryClass,
 	warningFlashClass,
 	warningListClass,
-} from "../previewdef/focustree/warningstyles";
+} from "../util/hoi4gui/warningstyles";
 import {
 	registerTraceStyles,
 	traceDimClass,
 	traceLineClass,
-} from "../previewdef/focustree/tracestyles";
+} from "../util/hoi4gui/tracestyles";
 import {
 	exclusiveLinkClass,
 	exclusiveLinkInsets,
@@ -442,7 +442,7 @@ describe("previewdef/focustree contentbuilder", () => {
 
 	it("registerTraceStyles emits the exported class names, scoped so they win", () => {
 		const styleTable = new StyleTable();
-		registerTraceStyles(styleTable);
+		registerTraceStyles(styleTable, "focustreeplaceholder");
 		const css = styleTable.toRawCss();
 		for (const className of [traceLineClass, traceDimClass]) {
 			// The id prefix is what beats the per-line geometry class, which is serialized into the
