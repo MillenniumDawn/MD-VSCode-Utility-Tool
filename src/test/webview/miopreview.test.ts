@@ -96,6 +96,8 @@ const shellHtml = `
 const { module: { findOverlaps }, listeners } = loadEntrypoint(
     () => require('../../../webviewsrc/miopreview') as typeof import('../../../webviewsrc/miopreview'),
 );
+// The organizations the page read at load, which is what every rebuild draws from.
+const pageMios: any[] = (global as any).window.mios;
 
 function item(id: string, gridX: number, gridY: number): GridBoxItem {
     return { id, gridX, gridY, connections: [] };
@@ -326,5 +328,50 @@ describe('webview/miopreview rendering', () => {
         assert.strictEqual(writes, 1);
         assert.strictEqual(placeholder().querySelector('.st-mio-grid-line'), null);
         assert.strictEqual(placeholder().querySelectorAll('.trait').length, 3);
+    });
+
+    // MIO tokens may be constructor or __proto__, and a warning can name them. Filed on a plain
+    // object, their warning texts reached an inherited member and threw before the panel was filled
+    // or the trace put back.
+    it('fills the panel and keeps the trace when a warning names constructor or __proto__', async () => {
+        const mio = pageMios[0];
+        const savedTraits = mio.traits;
+        const savedWarnings = mio.warnings;
+        const renderedTraits = (global as any).window.renderedTrait.mio_test;
+        const text = 'Mutually exclusive traits constructor and __proto__ are not on the same row.';
+        const toggleGrid = async () => {
+            const input = checkbox('show-grid');
+            input.checked = !input.checked;
+            input.dispatchEvent(new (window as any).Event('change'));
+            await settled();
+        };
+        try {
+            mio.traits = { ...savedTraits, constructor: trait('constructor', 3, 0) };
+            mio.warnings = [...savedWarnings, { text, source: 'constructor', relatedSources: ['__proto__', 'beta'] }];
+            renderedTraits.constructor = '<div class="navigator" start="3" end="4" title="constructor">constructor</div>';
+
+            const navigator = document.getElementById('trait_beta')!.querySelector('.navigator') as HTMLElement;
+            navigator.dispatchEvent(new (window as any).MouseEvent('click', { bubbles: true, cancelable: true, shiftKey: true }));
+            await toggleGrid();
+
+            const entries = document.getElementById('warnings-container')!.querySelectorAll('.' + warningEntryClass);
+            assert.deepStrictEqual([...entries].map(e => e.textContent), [
+                '[beta] Parent alpha of trait beta is not positioned above it.',
+                `[constructor] ${text}`,
+            ]);
+            const constructorNode = document.getElementById('trait_constructor')!;
+            assert.ok(constructorNode.querySelector('.' + warningBoxClass), 'expected a marker on constructor');
+            assert.ok((constructorNode.querySelector('.navigator') as HTMLElement).title.includes('⚠ ' + text));
+            assert.ok((document.getElementById('trait_beta')!.querySelector('.navigator') as HTMLElement).title.includes('⚠ ' + text));
+            const lit = [...placeholder().querySelectorAll('.' + traceLineClass)] as HTMLElement[];
+            assert.ok(lit.length > 0 && lit.every(l => l.dataset.connFrom === 'beta'), 'expected the trace to survive the rebuild');
+        } finally {
+            window.dispatchEvent(new (window as any).KeyboardEvent('keydown', { key: 'Escape' }));
+            mio.traits = savedTraits;
+            mio.warnings = savedWarnings;
+            delete renderedTraits.constructor;
+            await toggleGrid();
+            takePostedMessages();
+        }
     });
 });

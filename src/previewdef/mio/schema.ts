@@ -285,23 +285,32 @@ function validateRelativePositionId(traits: Record<string, MioTrait>, warnings: 
 }
 
 // Resolves where a trait is drawn, following relative_position_id the way the preview does. A
-// circular chain stops where it loops; validateRelativePositionId reports it.
+// circular chain is cut the way the preview cuts it: the trait reached a second time counts as 0,0
+// and is not cached, so the trait the chain started from keeps its own offset. The cycle itself is
+// validateRelativePositionId's to report.
 function resolveTraitPosition(
-    trait: MioTrait,
+    trait: MioTrait | undefined,
     traits: Record<string, MioTrait>,
     cache: Map<string, { x: number, y: number }>,
     stack: Set<string> = new Set(),
 ): { x: number, y: number } {
+    if (trait === undefined) {
+        return { x: 0, y: 0 };
+    }
+
     const cached = cache.get(trait.id);
     if (cached) {
         return cached;
     }
 
+    if (stack.has(trait.id)) {
+        return { x: 0, y: 0 };
+    }
+
     const position = { x: trait.x, y: trait.y };
-    const relative = trait.relativePositionId !== undefined ? traits[trait.relativePositionId] : undefined;
-    if (relative && !stack.has(trait.id)) {
+    if (trait.relativePositionId !== undefined) {
         stack.add(trait.id);
-        const relativePosition = resolveTraitPosition(relative, traits, cache, stack);
+        const relativePosition = resolveTraitPosition(traits[trait.relativePositionId], traits, cache, stack);
         stack.delete(trait.id);
         position.x += relativePosition.x;
         position.y += relativePosition.y;
@@ -311,6 +320,21 @@ function resolveTraitPosition(
     return position;
 }
 
+// Whether this organization decides where a trait is drawn: it defines or overrides the trait, or
+// any trait its relative_position_id chain hangs from. An inherited trait anchored to an overridden
+// one moves with it, so its links are this organization's to check as much as its own traits' are.
+function placedBy(trait: MioTrait, traits: Record<string, MioTrait>, mioId: string): boolean {
+    const seen = new Set<string>();
+    for (let current: MioTrait | undefined = trait; current && !seen.has(current.id);
+        current = current.relativePositionId !== undefined ? traits[current.relativePositionId] : undefined) {
+        if (current.sourceMioId === mioId) {
+            return true;
+        }
+        seen.add(current.id);
+    }
+    return false;
+}
+
 function isRemoved(trait: MioTrait): boolean {
     return trait.hasVisible && trait.visible === false;
 }
@@ -318,11 +342,18 @@ function isRemoved(trait: MioTrait): boolean {
 // The parent and mutually exclusive links of every trait: links to traits that do not exist, a
 // parent that is not above the trait it unlocks, a parent block that asks for more parents than it
 // lists, and exclusive alternatives that are not side by side. A link between two traits inherited
-// unchanged from the included organization is that organization's to report, so a derived one only
-// checks the links its own traits take part in.
+// unchanged from the included organization, both still drawn where it put them, is that
+// organization's to report, so a derived one only checks the links its own traits take part in and
+// the ones it moved by overriding an anchor.
 function validateTraitLinks(traits: Record<string, MioTrait>, mioId: string, warnings: MioWarning[]) {
+    // Resolved up front in the order the preview draws them, which decides where a circular chain
+    // is cut.
     const positions = new Map<string, { x: number, y: number }>();
+    for (const trait of Object.values(traits)) {
+        resolveTraitPosition(trait, traits, positions);
+    }
     const yOf = (trait: MioTrait) => resolveTraitPosition(trait, traits, positions).y;
+    const checked = (trait: MioTrait) => placedBy(trait, traits, mioId);
     const reportedPairs = new Set<string>();
 
     for (const trait of Object.values(traits)) {
@@ -359,7 +390,7 @@ function validateTraitLinks(traits: Record<string, MioTrait>, mioId: string, war
                 .filter(p => p !== trait.id)
                 .map(p => traits[p])
                 .filter((p): p is MioTrait => p !== undefined);
-            if (known.length === 0 || !(ownTrait || known.some(p => p.sourceMioId === mioId))) {
+            if (known.length === 0 || !(checked(trait) || known.some(checked))) {
                 continue;
             }
             const notAbove = known.filter(p => yOf(p) >= y).map(p => p.id);
@@ -388,7 +419,7 @@ function validateTraitLinks(traits: Record<string, MioTrait>, mioId: string, war
                 continue;
             }
             const key = trait.id < exclusiveId ? `${trait.id}\u0001${exclusiveId}` : `${exclusiveId}\u0001${trait.id}`;
-            if (reportedPairs.has(key) || isRemoved(exclusive) || !(ownTrait || exclusive.sourceMioId === mioId)) {
+            if (reportedPairs.has(key) || isRemoved(exclusive) || !(checked(trait) || checked(exclusive))) {
                 continue;
             }
             reportedPairs.add(key);

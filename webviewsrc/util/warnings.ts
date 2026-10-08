@@ -38,35 +38,43 @@ export function warningIdsFor(tree: WarnedTree): Set<string> {
 // badge is the only way to see that more than one node is hiding there. Counting is restricted to
 // nodes that already carry a warning, so a stack of shared or joint focuses merged in from another
 // file (which the validator deliberately ignores) can't manufacture a marker.
+//
+// Maps rather than objects throughout: the ids are tokens from the mod, and one named constructor or
+// __proto__ would otherwise land on the prototype.
 export function warningCellCountsFor(
 	items: GridBoxItem[],
 	warningIds: Set<string>,
-): Record<string, number> {
-	const countByCell: Record<string, number> = {};
-	const cellById: Record<string, string> = {};
+): Map<string, number> {
+	const countByCell = new Map<string, number>();
+	const cellById = new Map<string, string>();
 	for (const item of items) {
 		if (!warningIds.has(item.id)) {
 			continue;
 		}
 		const cell = item.gridX + "," + item.gridY;
-		cellById[item.id] = cell;
-		countByCell[cell] = (countByCell[cell] ?? 0) + 1;
+		cellById.set(item.id, cell);
+		countByCell.set(cell, (countByCell.get(cell) ?? 0) + 1);
 	}
 
-	const countById: Record<string, number> = {};
-	for (const [id, cell] of Object.entries(cellById)) {
-		countById[id] = countByCell[cell] ?? 1;
+	const countById = new Map<string, number>();
+	for (const [id, cell] of cellById) {
+		countById.set(id, countByCell.get(cell) ?? 1);
 	}
 	return countById;
 }
 
 // Warning texts per node, filed under the warning's source *and* every related source, so both
 // ends of a pair explain themselves on hover instead of only the node the warning was filed under.
-function warningTextsById(tree: WarnedTree): Record<string, string[]> {
-	const texts: Record<string, string[]> = {};
+function warningTextsById(tree: WarnedTree): Map<string, string[]> {
+	const texts = new Map<string, string[]>();
 	for (const warning of tree.warnings) {
 		for (const id of [warning.source, ...(warning.relatedSources ?? [])]) {
-			(texts[id] ??= []).push(warning.text);
+			const nodeTexts = texts.get(id);
+			if (nodeTexts) {
+				nodeTexts.push(warning.text);
+			} else {
+				texts.set(id, [warning.text]);
+			}
 		}
 	}
 	return texts;
@@ -104,7 +112,7 @@ export function applyWarningMarkers(
 		}
 		const badge = document.createElement("span");
 		badge.className = warningBadgeClass;
-		const stacked = cellCounts[id] ?? 1;
+		const stacked = cellCounts.get(id) ?? 1;
 		badge.textContent = stacked > 1 ? `⚠×${stacked}` : "⚠";
 		marker.appendChild(badge);
 		element.appendChild(marker);
@@ -112,7 +120,7 @@ export function applyWarningMarkers(
 		// The tooltip lives on the .navigator child, which is what carries the node id and position
 		// title; the marker itself is pointer-events:none so it can't show one.
 		const navigator = element.querySelector(".navigator") as HTMLElement | null;
-		const nodeTexts = texts[id];
+		const nodeTexts = texts.get(id);
 		if (navigator && nodeTexts) {
 			navigator.title = [navigator.title, ...nodeTexts.map((t) => `⚠ ${t}`)]
 				.filter((line) => line)

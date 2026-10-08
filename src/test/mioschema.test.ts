@@ -387,6 +387,40 @@ describe('previewdef/mio/schema link warnings', () => {
         ]);
     });
 
+    // The cycle is warned about already; the trait it started from is drawn at its own offset, as
+    // the preview draws it, not pushed down by counting its own y twice.
+    it('cuts a circular relative_position_id chain where the preview does', () => {
+        assert.deepStrictEqual(texts(`
+            trait = { token = a position = { x = 0 y = 2 } relative_position_id = b }
+            trait = { token = b position = { x = 1 y = 0 } relative_position_id = a }
+            trait = { token = c position = { x = 0 y = 3 } all_parents = { a } }
+        `).filter(t => !t.includes('circular')), []);
+    });
+
+    // Neither end of either link is the derived organization's, but the anchor they hang from is,
+    // and moving it moves them.
+    it('checks the inherited links a derived organization moves by overriding their anchor', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            base_org = {
+                trait = { token = anchor position = { x = 0 y = 1 } }
+                trait = { token = top position = { x = 1 y = 1 } }
+                trait = { token = child position = { x = 0 y = 1 } relative_position_id = anchor all_parents = { top } }
+                trait = { token = left position = { x = 2 y = 0 } relative_position_id = anchor mutually_exclusive = { right } }
+                trait = { token = right position = { x = 3 y = 1 } mutually_exclusive = { left } }
+            }
+            derived_org = {
+                include = base_org
+                override_trait = { token = anchor position = { x = 0 y = 0 } }
+            }
+        `), [], 'test.txt');
+        const byId = Object.fromEntries(mios.map(m => [m.id, m.warnings.map(w => w.text)]));
+        assert.deepStrictEqual(byId['base_org'], []);
+        assert.deepStrictEqual(byId['derived_org'], [
+            'Parent top of trait child is not positioned above it.',
+            'Mutually exclusive traits left and right are not on the same row.',
+        ]);
+    });
+
     it('does not repeat in a derived organization what its included one reports', () => {
         const mios = getMiosFromFile(parseHoi4File(`
             base_org = {

@@ -9,7 +9,7 @@ import { escapeAttr } from "../src/util/escape";
 import { applyCondition, ConditionItem } from "../src/hoiformat/condition";
 import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
-import { toNumberLike } from "../src/hoiformat/schema";
+import { emptyMap, toNumberLike } from "../src/hoiformat/schema";
 import { vscode } from "./util/vscode";
 import { Mio, MioTrait } from "../src/previewdef/mio/schema";
 import { applyExclusiveLinkStyle } from "../src/util/hoi4gui/exclusivelink";
@@ -50,7 +50,8 @@ async function buildContent() {
     const renderedTrait: Record<string, string> = (window as any).renderedTrait[mio.id] ?? {};
     const allTraits = Object.values(mio.traits);
 
-    const allowBranchOptionsValue: Record<string, boolean> = {};
+    // Keyed by trait token, so a trait named constructor or __proto__ finds no prototype member here.
+    const allowBranchOptionsValue: Record<string, boolean> = emptyMap();
     const exprs = selectedExprs;
     Object.values(mio.traits).forEach(trait => {
         if (trait.hasVisible) {
@@ -61,7 +62,7 @@ async function buildContent() {
     const gridbox: GridBoxType = (window as any).gridBox;
     const xGridSize: number = (window as any).xGridSize;
 
-    const traitPosition: Record<string, NumberPosition> = {};
+    const traitPosition: Record<string, NumberPosition> = emptyMap();
     calculateTraitVisible(mio, allowBranchOptionsValue);
     const visibleTraits = showIncludedTraits ? allTraits : allTraits.filter(t => t.sourceMioId === mio.id);
     const traitGrixBoxItems = visibleTraits.map(trait => traitToGridItem(trait, mio, allowBranchOptionsValue, traitPosition)).filter((v): v is GridBoxItem => !!v);
