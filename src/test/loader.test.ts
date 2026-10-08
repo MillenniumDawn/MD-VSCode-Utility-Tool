@@ -8,8 +8,7 @@ import { UserError } from '../util/common';
 import * as fileloader from '../util/fileloader';
 
 // RecordingLoader counts loadImpl calls and can stall mid-load so concurrent load() calls
-// overlap in the dedup window. disableTelemetry is forced on so the test never depends on
-// telemetry state.
+// overlap in the dedup window.
 class RecordingLoader extends Loader<{ id: number }> {
     public loadImplCalls = 0;
     public shouldReloadCalls = 0;
@@ -30,11 +29,6 @@ class RecordingLoader extends Loader<{ id: number }> {
             await this.loadGate.promise;
         }
         return { result: { id: 1 }, dependencies: [] };
-    }
-
-    constructor() {
-        super();
-        this.disableTelemetry = true;
     }
 }
 
@@ -158,7 +152,6 @@ describe('util/loader/loader', () => {
                 protected async loadImpl(): Promise<LoadResult<{}>> {
                     throw new Error('boom');
                 }
-                constructor() { super(); this.disableTelemetry = true; }
             }
 
             const loader = new ThrowLoader();
@@ -197,7 +190,7 @@ describe('util/loader/loader', () => {
         it('forChild carries every field: force, cancellation, reload marks and the loader cache', () => {
             const loader = {} as Loader<unknown, unknown>;
             class T extends Loader<{}> {
-                constructor(_file: string) { super(); this.disableTelemetry = true; }
+                constructor(_file: string) { super(); }
                 protected async loadImpl(): Promise<LoadResult<{}>> { return { result: {}, dependencies: [] }; }
             }
             let cancelled = false;
@@ -239,7 +232,7 @@ describe('util/loader/loader', () => {
         it('createOrGetCachedLoader returns the same instance for the same file and type', () => {
             const session = new LoaderSession(false);
             class T extends Loader<{}> {
-                constructor(_file: string) { super(); this.disableTelemetry = true; }
+                constructor(_file: string) { super(); }
                 protected async loadImpl(): Promise<LoadResult<{}>> { return { result: {}, dependencies: [] }; }
             }
 
@@ -251,11 +244,11 @@ describe('util/loader/loader', () => {
         it('createOrGetCachedLoader replaces the cached instance when the type changes', () => {
             const session = new LoaderSession(false);
             class A extends Loader<{}> {
-                constructor(_file: string) { super(); this.disableTelemetry = true; }
+                constructor(_file: string) { super(); }
                 protected async loadImpl(): Promise<LoadResult<{}>> { return { result: {}, dependencies: [] }; }
             }
             class B extends Loader<{}> {
-                constructor(_file: string) { super(); this.disableTelemetry = true; }
+                constructor(_file: string) { super(); }
                 protected async loadImpl(): Promise<LoadResult<{}>> { return { result: {}, dependencies: [] }; }
             }
 
@@ -270,7 +263,6 @@ describe('util/loader/loader', () => {
             class Stub extends Loader<{}> {
                 protected async shouldReloadImpl(): Promise<boolean> { return d.promise; }
                 protected async loadImpl(): Promise<LoadResult<{}>> { return { result: {}, dependencies: [] }; }
-                constructor() { super(); this.disableTelemetry = true; }
             }
             const stub = new Stub();
 
@@ -292,7 +284,6 @@ describe('util/loader/loader', () => {
             class Stub extends Loader<{}> {
                 protected async shouldReloadImpl(): Promise<boolean> { return d.promise; }
                 protected async loadImpl(): Promise<LoadResult<{}>> { return { result: {}, dependencies: [] }; }
-                constructor() { super(); this.disableTelemetry = true; }
             }
             const stub = new Stub();
 
@@ -315,7 +306,6 @@ describe('util/loader/loader', () => {
 
             constructor(file: string) {
                 super(file);
-                this.disableTelemetry = true;
             }
 
             protected async postLoad(content: string | undefined): Promise<LoadResultOD<{ payload: string }>> {
@@ -359,7 +349,6 @@ describe('util/loader/loader', () => {
 
             constructor(file: string, provider: () => Promise<string>, readDependency: boolean) {
                 super(file, provider);
-                this.disableTelemetry = true;
                 this.readDependency = readDependency;
             }
 
@@ -437,7 +426,6 @@ describe('util/loader/loader', () => {
                 public postLoadCalls = 0;
                 constructor(provider: () => Promise<string>) {
                     super('a.txt', provider);
-                    this.disableTelemetry = true;
                     this.readDependency = false;
                 }
                 protected async postLoad(content: string | undefined): Promise<LoadResultOD<{ payload: string }>> {
@@ -472,7 +460,6 @@ describe('util/loader/loader', () => {
                 public gated = false;
                 constructor(provider: () => Promise<string>) {
                     super('a.txt', provider);
-                    this.disableTelemetry = true;
                     this.readDependency = false;
                 }
                 protected async postLoad(content: string | undefined): Promise<LoadResultOD<{ payload: string }>> {
@@ -555,7 +542,6 @@ describe('util/loader/loader', () => {
             public failures: FolderFileFailure[] = [];
             constructor() {
                 super('folder', StubFileLoader);
-                this.disableTelemetry = true;
             }
             protected async mergeFiles(
                 fileResults: LoadResult<string>[],

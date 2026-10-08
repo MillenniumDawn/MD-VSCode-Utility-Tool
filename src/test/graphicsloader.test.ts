@@ -163,6 +163,19 @@ describe("util/image/graphicsloader (headless)", function () {
 		assertValidPng(image!.pngBuffer, 8, 8);
 	});
 
+	it("decodes PNG content stored at a .dds path", async function () {
+		const png = makePng(3, 2);
+		files["gfx/interface/goals/foo.dds"] = png;
+		const image = await getImageByPath("gfx/interface/goals/foo.dds");
+		assert.ok(image, "expected a decoded image");
+		assert.strictEqual(image!.width, 3);
+		assert.strictEqual(image!.height, 2);
+		assert.deepStrictEqual(
+			PNG.sync.read(image!.pngBuffer).data,
+			PNG.sync.read(png).data,
+		);
+	});
+
 	it("decodes a TGA texture to an Image", async function () {
 		files["gfx/interface/goals/bar.tga"] = makeTga();
 		const image = await getImageByPath("gfx/interface/goals/bar.tga");

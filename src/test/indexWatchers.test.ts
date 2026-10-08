@@ -60,7 +60,6 @@ describe("util/indexWatchers folder-change rebuild", function () {
 					await rebuild.promise;
 				},
 				message: "Building workspace index...",
-				telemetryEvent: "testIndex.workspace",
 				failureMessage: "Building workspace index failed.",
 			},
 		}).handlers;
@@ -206,7 +205,6 @@ describe("util/indexWatchers parent list change", function () {
 					rebuilds++;
 				},
 				message: "Building workspace index...",
-				telemetryEvent: "testIndex.workspace",
 				failureMessage: "Building workspace index failed.",
 			},
 			rebuildParent: {

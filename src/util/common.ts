@@ -334,7 +334,7 @@ export async function mapLimit<T, R>(
  * microtask would run before the host gets to service any of its pending IO or RPC, which is the
  * whole point of yielding here.
  */
-export function yieldToEventLoop(): Promise<void> {
+function yieldToEventLoop(): Promise<void> {
 	return new Promise((resolve) => {
 		setImmediate(resolve);
 	});
@@ -355,7 +355,7 @@ export function createTimeSlicer(budgetMs = 8): () => Promise<void> {
 	};
 }
 
-export interface WorkQueueOptions {
+interface WorkQueueOptions {
 	/** Checked before each item; a cancelled queue rejects and drops whatever it had left. */
 	token?: CancellationLike;
 }

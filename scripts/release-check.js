@@ -47,6 +47,8 @@ const path = require('path');
 const { readVersion } = require('./bump-version');
 const { isExempt } = require('./check-version');
 const { pullRequestsForCommit } = require('./pr-bullets');
+const { notice } = require('./lib/actions-log');
+const { parseFlags } = require('./lib/flags');
 
 const releaseBranch = 'release/version-bump';
 // The branch release.yml pushes when a release failed to publish. Its merge is a release too.
@@ -315,7 +317,7 @@ function evaluate(options = {}) {
 }
 
 function report(result) {
-	process.stdout.write(`::notice::${result.notice}\n`);
+	notice(result.notice);
 
 	const outputPath = process.env.GITHUB_OUTPUT;
 	if (outputPath) {
@@ -333,30 +335,17 @@ function report(result) {
 }
 
 function parseArgs(argv) {
-	const options = {
-		manual: false,
-		repo: process.env.GITHUB_REPOSITORY ?? '',
-		sha: process.env.GITHUB_SHA || 'HEAD',
-	};
-	for (let i = 0; i < argv.length; i++) {
-		const value = argv[i + 1];
-		switch (argv[i]) {
-			case '--manual':
-				options.manual = true;
-				break;
-			case '--repo':
-				options.repo = value;
-				i++;
-				break;
-			case '--sha':
-				options.sha = value;
-				i++;
-				break;
-			default:
-				break;
-		}
-	}
-	return options;
+	return parseFlags(argv, {
+		'--manual': { name: 'manual', value: true },
+		'--repo': 'repo',
+		'--sha': 'sha',
+	}, {
+		defaults: {
+			manual: false,
+			repo: process.env.GITHUB_REPOSITORY ?? '',
+			sha: process.env.GITHUB_SHA || 'HEAD',
+		},
+	});
 }
 
 function main() {

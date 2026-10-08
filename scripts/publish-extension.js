@@ -36,6 +36,9 @@
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 
+const { warn } = require('./lib/actions-log');
+const { parseFlags } = require('./lib/flags');
+
 // `before` is the pause, in seconds, taken before each attempt; a zero is no pause.
 const schedules = {
 	quick: { before: [0, 30, 60] },
@@ -145,39 +148,22 @@ function publish(options, deps = { publishOnce, sleep, reportTransient }) {
 			return false;
 		}
 		if (attempt === pauses.length) {
-			process.stdout.write(`::warning::Every attempt on ${label} failed on what looks like a registry or network hiccup.\n`);
+			warn(`Every attempt on ${label} failed on what looks like a registry or network hiccup.`);
 			deps.reportTransient();
 			return false;
 		}
-		process.stdout.write(`::warning::Attempt ${attempt} of ${pauses.length} on ${label} failed on what looks like a registry or network hiccup; trying again.\n`);
+		warn(`Attempt ${attempt} of ${pauses.length} on ${label} failed on what looks like a registry or network hiccup; trying again.`);
 	}
 	return false;
 }
 
 function parseArgs(argv) {
-	const options = { registry: '', vsix: '', preRelease: false, schedule: 'quick', pat: '' };
-	for (let i = 0; i < argv.length; i++) {
-		const value = argv[i + 1];
-		switch (argv[i]) {
-			case '--registry':
-				options.registry = value ?? '';
-				i++;
-				break;
-			case '--vsix':
-				options.vsix = value ?? '';
-				i++;
-				break;
-			case '--schedule':
-				options.schedule = value ?? '';
-				i++;
-				break;
-			case '--pre-release':
-				options.preRelease = true;
-				break;
-			default:
-				break;
-		}
-	}
+	const options = parseFlags(argv, {
+		'--registry': { name: 'registry', parse: (value) => value ?? '' },
+		'--vsix': { name: 'vsix', parse: (value) => value ?? '' },
+		'--schedule': { name: 'schedule', parse: (value) => value ?? '' },
+		'--pre-release': { name: 'preRelease', value: true },
+	}, { defaults: { registry: '', vsix: '', preRelease: false, schedule: 'quick', pat: '' } });
 	const registry = registries[options.registry];
 	if (registry) {
 		options.pat = process.env[registry.tokenVariable] ?? '';

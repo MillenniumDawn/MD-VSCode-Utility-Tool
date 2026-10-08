@@ -5,7 +5,6 @@ import { DDSViewProvider, TGAViewProvider } from './ddsviewprovider';
 import { registerModFile } from './util/modfile';
 import { worldMap } from './previewdef/worldmap';
 import { ViewType, ContextName } from './constants';
-import { registerTelemetryReporter, sendEvent } from './util/telemetry';
 import { registerScanReferencesCommand } from './util/dependency';
 import { registerHoiFs } from './util/hoifs';
 import { loadI18n } from './util/i18n';
@@ -32,10 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Must register this first because other component may use it.
     context.subscriptions.push(registerContextContainer(context));
-    context.subscriptions.push(registerTelemetryReporter());
     context.subscriptions.push(registerFeatureFlags());
-
-    sendEvent('extension.activate', { locale: locale ?? '', isWeb: IS_WEB_EXT.toString() });
 
     context.subscriptions.push(previewManager.register());
     context.subscriptions.push(registerModFile());

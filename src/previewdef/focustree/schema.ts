@@ -552,17 +552,6 @@ function collectFocusIds(focus: HOIPartial<FocusDef>, ids: string[]): void {
 	}
 }
 
-export function getFocusTree(
-	node: Node,
-	sharedFocusTrees: FocusTree[],
-	filePath: string,
-): FocusTree[] {
-	const constants = {};
-	const file = convertFocusFileNodeToJson(node, constants);
-
-	return getFocusTreeWithFocusFile(file, sharedFocusTrees, filePath, constants);
-}
-
 /**
  * A top-level shared_focus/joint_focus block can be a group container (`id = SH_group  focus =
  * { ... }  focus = { ... }`) instead of a single focus. A container has no real position of its

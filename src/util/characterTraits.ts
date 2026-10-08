@@ -41,7 +41,7 @@ export type TraitSource = "country_leader" | "unit_leader" | "scientist";
 // A named run of pairs out of a trait: a `non_shared_modifier` block, a per-role block, or one
 // equipment archetype. Formatted into a ModifierGroup by the payload builder, which is where the
 // titles get localised.
-export interface TraitModifierGroup {
+interface TraitModifierGroup {
 	// The block's own key -- `non_shared_modifier`, `field_marshal_modifier` -- or, for an
 	// equipment bonus, the archetype.
 	title: string;

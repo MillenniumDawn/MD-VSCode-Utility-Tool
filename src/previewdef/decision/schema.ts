@@ -39,7 +39,7 @@ export interface HOIDecisionCategoryRef {
 // `icon` is written either as a bare sprite token or as a repeatable
 // `icon = { key = ... trigger = ... }` block, first match winning. Both forms end up here; the
 // unconditional one carries `condition: true`.
-export interface DecisionIcon {
+interface DecisionIcon {
 	key: string;
 	condition: ConditionComplexExpr;
 }
@@ -53,14 +53,14 @@ export type DecisionEffectBlockName =
 	| "timeout_effect"
 	| "cancel_effect";
 
-export const decisionEffectBlockNames: readonly DecisionEffectBlockName[] = [
+const decisionEffectBlockNames: readonly DecisionEffectBlockName[] = [
 	"complete_effect",
 	"remove_effect",
 	"timeout_effect",
 	"cancel_effect",
 ];
 
-export interface DecisionEffectBlock {
+interface DecisionEffectBlock {
 	name: DecisionEffectBlockName;
 	effects: EffectTreeNode[];
 }
@@ -70,7 +70,7 @@ export interface DecisionEffectBlock {
 // states outright, and they are what makes a run of decisions readable as a chain.
 export type DecisionCallKind = "activate" | "unlock" | "remove";
 
-export interface DecisionCall {
+interface DecisionCall {
 	kind: DecisionCallKind;
 	target: string;
 	// The condition guarding this particular call, folded from every `if` / `else_if` / `else`
@@ -83,7 +83,7 @@ export interface DecisionCall {
 
 // `targets = { IRE 456 }` mixes country tags and state ids in one list, because which it is depends
 // on `state_target`. Kept as written rather than guessed at.
-export interface DecisionTargets {
+interface DecisionTargets {
 	values: string[];
 	arrays: string[];
 	isState: boolean;

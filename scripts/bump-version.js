@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { newBullets } = require('./changelog-bullets');
+const { parseFlags } = require('./lib/flags');
 
 const releaseTypes = ['patch', 'minor', 'major'];
 
@@ -560,47 +561,16 @@ function readBulletsFile(file) {
 }
 
 function parseArgs(argv) {
-	const options = {};
-	for (let i = 0; i < argv.length; i++) {
-		const arg = argv[i];
-		const value = argv[i + 1];
-		switch (arg) {
-			case '--type':
-				options.releaseType = value;
-				i++;
-				break;
-			case '--title':
-				options.title = value;
-				i++;
-				break;
-			case '--number':
-				options.number = value;
-				i++;
-				break;
-			case '--body':
-				options.body = value;
-				i++;
-				break;
-			case '--body-file':
-				options.body = value && fs.existsSync(value) ? fs.readFileSync(value, 'utf8') : '';
-				i++;
-				break;
-			case '--bullets-file':
-				options.bullets = readBulletsFile(value);
-				i++;
-				break;
-			case '--set-version':
-				options.version = value;
-				i++;
-				break;
-			case '--append':
-				options.append = true;
-				break;
-			default:
-				break;
-		}
-	}
-	return options;
+	return parseFlags(argv, {
+		'--type': 'releaseType',
+		'--title': 'title',
+		'--number': 'number',
+		'--body': 'body',
+		'--body-file': { name: 'body', parse: (file) => file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '' },
+		'--bullets-file': { name: 'bullets', parse: readBulletsFile },
+		'--set-version': 'version',
+		'--append': { name: 'append', value: true },
+	});
 }
 
 // The workflow redirects this straight into $GITHUB_OUTPUT, so every key is written once.
@@ -643,6 +613,7 @@ module.exports = {
 	changelogSection,
 	collectingSection,
 	compareVersions,
+	headingPattern,
 	higherVersion,
 	issueFromBody,
 	nextVersion,
@@ -653,6 +624,7 @@ module.exports = {
 	readBulletsFile,
 	readVersion,
 	rebuildChangelog,
+	sectionAt,
 	sections,
 	setVersion,
 	stableMinor,

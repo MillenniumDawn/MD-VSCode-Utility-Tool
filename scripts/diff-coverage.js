@@ -24,6 +24,9 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const { warn } = require('./lib/actions-log');
+const { parseFlags } = require('./lib/flags');
+
 const repoRoot = path.resolve(__dirname, '..');
 
 // c8 writes `SF:` relative to the working directory with the platform's separator on Windows, and
@@ -105,26 +108,20 @@ function evaluate(coverage, changed, minimum) {
 }
 
 function parseArgs(argv) {
-	const options = { base: 'origin/main...HEAD', lcov: path.join('coverage', 'lcov.info'), min: 80 };
-	for (let i = 0; i < argv.length; i += 2) {
-		const value = argv[i + 1];
-		if (value === undefined) {
-			throw new Error(`Missing value for ${argv[i]}`);
-		}
-		if (argv[i] === '--base') {
-			options.base = value;
-		} else if (argv[i] === '--lcov') {
-			options.lcov = value;
-		} else if (argv[i] === '--min') {
-			options.min = Number(value);
-			if (Number.isNaN(options.min)) {
-				throw new Error(`--min wants a number, got ${value}`);
-			}
-		} else {
-			throw new Error(`Unknown option ${argv[i]}`);
-		}
-	}
-	return options;
+	return parseFlags(argv, {
+		'--base': 'base',
+		'--lcov': 'lcov',
+		'--min': {
+			name: 'min',
+			parse(value) {
+				const minimum = Number(value);
+				if (Number.isNaN(minimum)) {
+					throw new Error(`--min wants a number, got ${value}`);
+				}
+				return minimum;
+			},
+		},
+	}, { defaults: { base: 'origin/main...HEAD', lcov: path.join('coverage', 'lcov.info'), min: 80 }, strict: true });
 }
 
 function main(argv) {
@@ -142,7 +139,7 @@ function main(argv) {
 	const result = evaluate(coverage, changedLines(diff), options.min);
 
 	for (const { file, line } of result.uncovered) {
-		console.log(`::warning file=${file},line=${line}::Changed line is not covered by a test`);
+		warn('Changed line is not covered by a test', { file, line });
 	}
 	const summary =
 		result.measured === 0
