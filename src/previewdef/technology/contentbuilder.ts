@@ -78,7 +78,7 @@ interface TechnologyFoldersRender {
 
 // One entry of the country dropdown. The label is resolved on this side, where the localisation
 // index lives; the page writes it as text.
-export interface CountryOption {
+interface CountryOption {
     tag: string;
     label: string;
 }

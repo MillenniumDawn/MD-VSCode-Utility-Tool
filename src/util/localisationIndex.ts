@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 import { getFlags } from "./featureflags";
 import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
-import { sendEvent } from "./telemetry";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { FileSourceOptions, ListFilesOptions } from "./fileloader";
 import {
@@ -48,10 +47,6 @@ const parentLocalisationFileMaps: Record<
 	Record<string, Set<string>>
 >[] = [];
 
-// Both halves report into this so the telemetry event carries the whole build's size. Reset per
-// build, since a build that failed and is retried would otherwise keep counting from where it left off.
-let estimatedSize: [number] = [0];
-
 const builder = createIndexBuilder({
 	name: "localisationIndex",
 	message: localize(
@@ -59,16 +54,12 @@ const builder = createIndexBuilder({
 		"Building Localisation index...",
 	),
 	build: async (progress) => {
-		estimatedSize = [0];
 		const context = await captureIndexBuildContext();
 		return Promise.all([
-			buildGlobalLocalisationIndex(estimatedSize, progress, context),
-			buildParentLocalisationIndex(estimatedSize, progress, context),
-			buildWorkspaceLocalisationIndex(estimatedSize, progress, context),
+			buildGlobalLocalisationIndex(progress, context),
+			buildParentLocalisationIndex(progress, context),
+			buildWorkspaceLocalisationIndex(progress, context),
 		]);
-	},
-	onSuccess: () => {
-		sendEvent("localisationIndex", { size: estimatedSize[0].toString() });
 	},
 });
 
@@ -151,7 +142,6 @@ const isLocalisationFile = (relativePath: string) =>
 	localisationFileFilter.test(relativePath);
 
 async function buildGlobalLocalisationIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
@@ -160,14 +150,12 @@ async function buildGlobalLocalisationIndex(
 		{ mod: false, hoi4: true, recursively: true },
 		globalLocalisationIndex,
 		globalLocalisationFileMap,
-		estimatedSize,
 		progress,
 		context,
 	);
 }
 
 async function buildParentLocalisationIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context?: IndexBuildContext,
 ): Promise<void> {
@@ -189,7 +177,6 @@ async function buildParentLocalisationIndex(
 				},
 				parentLocalisationIndexes[index]!,
 				fileMap,
-				estimatedSize,
 				progress,
 				buildContext,
 			);
@@ -198,7 +185,6 @@ async function buildParentLocalisationIndex(
 }
 
 async function buildWorkspaceLocalisationIndex(
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context?: IndexBuildContext,
 ): Promise<void> {
@@ -208,7 +194,6 @@ async function buildWorkspaceLocalisationIndex(
 		{ mod: true, parent: false, hoi4: false, recursively: true },
 		workspaceLocalisationIndex,
 		workspaceLocalisationFileMap,
-		estimatedSize,
 		progress,
 		buildContext,
 	);
@@ -219,7 +204,6 @@ async function buildLocalisationIndexHalf(
 	options: ListFilesOptions,
 	targetIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
-	estimatedSize: [number],
 	progress: IndexProgress,
 	context: IndexBuildContext,
 ): Promise<void> {
@@ -255,7 +239,6 @@ async function buildLocalisationIndexHalf(
 					targetIndex,
 					fileMap,
 					options,
-					estimatedSize,
 				);
 			},
 			// Each value is copied from the index rather than from the file, so a key two files define
@@ -289,7 +272,6 @@ async function fillLocalisationItems(
 	localisationIndex: LocalisationData,
 	fileMap: Record<string, Record<string, Set<string>>> | null,
 	options: FileSourceOptions,
-	estimatedSize?: [number],
 ): Promise<boolean> {
 	const filePath = localisationFile.path;
 	const fileBuffer = await readIndexFileContent(
@@ -321,13 +303,6 @@ async function fillLocalisationItems(
 				);
 			}
 
-			if (estimatedSize) {
-				estimatedSize[0] += Object.keys(languageLocalisations).reduce(
-					(sum, key) =>
-						sum + key.length + (languageLocalisations[key] ?? "").length,
-					0,
-				);
-			}
 		}
 		return true;
 	} catch (e) {
@@ -475,7 +450,6 @@ const watchers = createIndexWatchers({
 			"localisationIndex.workspace.building",
 			"Building workspace localisation index...",
 		),
-		telemetryEvent: "localisationIndex.workspace",
 		failureMessage: "Building workspace localisation index failed.",
 	},
 	rebuildParent: {

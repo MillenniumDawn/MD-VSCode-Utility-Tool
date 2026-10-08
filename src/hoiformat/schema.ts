@@ -1,7 +1,7 @@
 import { Node, Token, NodeValue, SymbolNode } from "./hoiparser";
 
 //#region Common
-export interface TokenObject {
+interface TokenObject {
 	_token: Token | undefined;
 }
 
@@ -37,7 +37,7 @@ export interface Raw extends TokenObject {
 	_raw: Node;
 }
 
-export type NumberUnit = "%" | "%%";
+type NumberUnit = "%" | "%%";
 
 /**
  * Reads a node value that may be written as a quoted string or as a bare token.
@@ -177,7 +177,7 @@ export const positionSchema: SchemaDef<Position> = {
 
 // Groups: 1 prefix, 2 scope, 3 var, 4 target, 5 default. Numbered rather than named because
 // this runs on nearly every bare symbol a schema converts; see the tokenizer in hoiparser.ts.
-export const variableRegex =
+const variableRegex =
 	/^(?:(\w+):)?((?:\w+\.)*)?(\w+)(?:@((?:\w+\.)*\w+))?(?:\?(\d+))?$/;
 // `^` indexes an array, as in `var:influence_array^0`. Without it in the character class the
 // whole scope fails to match and the block is read as a leaf effect instead of a scope switch,
@@ -186,7 +186,7 @@ export const variableRegexForScope =
 	/^(?:(?<prefix>\w+):)(?<scope>(?:\w+(?:\^\w+)*\.)*)?(?<var>\w+(?:\^\w+)*)(?:@(?<target>(?:\w+\.)*\w+))?$/;
 
 //#region Functions
-export function forEachNodeValue(
+function forEachNodeValue(
 	node: Node,
 	callback: (n: Node, index: number) => void,
 ): void {

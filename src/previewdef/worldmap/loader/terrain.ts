@@ -31,7 +31,7 @@ export class TerrainDefinitionLoader extends FolderLoader<Terrain[], Terrain[]> 
     constructor() {
         super('common/terrain', TerrainFileLoader);
     }
-    
+
     protected mergeLoadedFiles(fileResults: LoadResult<Terrain[], MapLoaderExtra>[], _session: LoaderSession): Promise<LoadResult<Terrain[], MapLoaderExtra>> {
         const { result: terrainMap, warnings } = mergeByNameWithDuplicateWarning(fileResults, 'first', (terrain, existingTerrain) => ({
             source: [],
@@ -52,7 +52,7 @@ export class TerrainDefinitionLoader extends FolderLoader<Terrain[], Terrain[]> 
     }
 }
 
-export class TerrainFileLoader extends FileLoader<Terrain[]> {
+class TerrainFileLoader extends FileLoader<Terrain[]> {
     protected async loadFromFile(): Promise<LoadResultOD<Terrain[]>> {
         return {
             result: await loadTerrains(this.file),

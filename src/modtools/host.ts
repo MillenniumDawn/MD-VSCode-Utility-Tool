@@ -12,7 +12,7 @@ import { modToolPacks } from './registry';
 // throw out of registration, and every call into a pack -- finding its mod, running a tool -- is
 // guarded on its own, so a broken pack costs its own tools and nothing more.
 
-export const modToolsSection = `${ConfigurationKey}.modTools`;
+const modToolsSection = `${ConfigurationKey}.modTools`;
 
 export interface ModToolHostEnvironment {
     /** The master switch, `modTools.enabled`. */
@@ -31,7 +31,7 @@ export interface AvailableModTool {
     readonly modRoot: vscode.Uri;
 }
 
-export function toolSettingKey(pack: ModToolPack, tool: ModTool): string {
+function toolSettingKey(pack: ModToolPack, tool: ModTool): string {
     return `modTools.${pack.id}.${tool.id}`;
 }
 

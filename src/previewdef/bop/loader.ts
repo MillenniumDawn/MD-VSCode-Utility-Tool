@@ -19,7 +19,7 @@ import { HOIDecision } from "../decision/schema";
 import { decisionSpriteName, getDecisionGfxFiles } from "../decision/loader";
 import { decisionItemWindowName, decisionsFolder, loadCategoryDecisions } from "./decisions";
 
-export interface BopWindowTemplates {
+interface BopWindowTemplates {
 	// The tick the game puts at every range boundary.
 	rangeBar?: HOIPartial<IconType>;
 	// The marker above a boundary, frame 1 lit for the active range.

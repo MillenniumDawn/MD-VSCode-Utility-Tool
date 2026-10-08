@@ -29,11 +29,11 @@ describe("util/promiseUtils", () => {
 
 		attachTaskWithErrorLogging(
 			Promise.reject(new Error("task failed")),
+			"build failed",
+			(message) => logs.push(message),
 			() => {
 				throw new Error("success callback must not run");
 			},
-			"build failed",
-			(message) => logs.push(message),
 		);
 
 		await new Promise((resolve) => setImmediate(resolve));
@@ -48,11 +48,11 @@ describe("util/promiseUtils", () => {
 
 		attachTaskWithErrorLogging(
 			Promise.resolve("ok"),
+			"should not log",
+			(message) => logs.push(message),
 			() => {
 				ran = true;
 			},
-			"should not log",
-			(message) => logs.push(message),
 		);
 
 		await new Promise((resolve) => setImmediate(resolve));

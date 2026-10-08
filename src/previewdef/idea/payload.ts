@@ -11,9 +11,7 @@ import { ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
 // The modifier shapes are written the same way by an idea and by a decision, so they live in
 // sharedpayload.ts alongside LocText and NavTarget.
 export {
-	LocText,
 	NavTarget,
-	ModifierTone,
 	ModifierLine,
 	ModifierGroup,
 } from "../sharedpayload";
@@ -21,7 +19,7 @@ import { LocText, NavTarget, ModifierLine, ModifierGroup, IconStyle } from "../s
 
 // The idea's icon, as a StyleTable class carrying the decoded image as a data URL, plus the size to
 // draw it at.
-export type IdeaIcon = IconStyle;
+type IdeaIcon = IconStyle;
 
 export interface IdeaCard {
 	id: string;

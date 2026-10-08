@@ -5,7 +5,6 @@ import { IndexProgress, withIndexProgress } from "./indexBuild";
 import { attachTaskWithErrorLogging, BuildGate } from "./promiseUtils";
 import { Logger } from "./logger";
 import { onDidChangeParentMods, ParentModsChangeEvent } from "./parentmods";
-import { sendEvent } from "./telemetry";
 
 /**
  * The path a workspace file is indexed under, or undefined when it is outside the workspace or
@@ -54,21 +53,19 @@ export interface IndexWatcherSpec {
 	rebuildWorkspace: {
 		/** Empties the workspace half before the rebuild starts. */
 		reset: () => void;
-		build: (size: [number], progress: IndexProgress) => Promise<void>;
+		build: (progress: IndexProgress) => Promise<void>;
 		/** Localised, shown in the progress notification. */
 		message: string;
-		/** Telemetry event name, e.g. `"gfxIndex.workspace"`. */
-		telemetryEvent: string;
 		/** Logged if the rebuild fails. */
 		failureMessage: string;
 	};
 	/**
 	 * The parent-mod half, rebuilt when the parent list changes. It shares the workspace rebuild's
-	 * message and telemetry: to the user it is the same kind of rebuild.
+	 * progress message: to the user it is the same kind of rebuild.
 	 */
 	rebuildParent?: {
 		reset: () => void;
-		build: (size: [number], progress: IndexProgress) => Promise<void>;
+		build: (progress: IndexProgress) => Promise<void>;
 	};
 }
 
@@ -104,14 +101,13 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	function rebuild(
 		halves: readonly {
 			reset: () => void;
-			build: (size: [number], progress: IndexProgress) => Promise<void>;
+			build: (progress: IndexProgress) => Promise<void>;
 		}[],
 	) {
 		if (!hasStarted()) {
 			return;
 		}
 
-		const folderChangeSize: [number] = [0];
 		// Reset only after the current build; occupy the gate now so events wait.
 		const task = gate.followOn(() => {
 			for (const half of halves) {
@@ -119,17 +115,12 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 			}
 			return withIndexProgress(spec.rebuildWorkspace.message, (progress) =>
 				Promise.all(
-					halves.map((half) => half.build(folderChangeSize, progress)),
+					halves.map((half) => half.build(progress)),
 				).then(() => undefined),
 			);
 		});
 		attachTaskWithErrorLogging(
 			task,
-			() => {
-				sendEvent(spec.rebuildWorkspace.telemetryEvent, {
-					size: folderChangeSize[0].toString(),
-				});
-			},
 			spec.rebuildWorkspace.failureMessage,
 			Logger.error,
 		);

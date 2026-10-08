@@ -13,7 +13,7 @@ import { feLocalize } from "./i18n";
 
 // `andnot` is NOT(a AND b) and `ornot` is NOT(a OR b), so with more than one item they read as
 // "not all of" and "none of" respectively. A bare "not" would be ambiguous for the first.
-export const foldLabels: Record<string, string> = {
+const foldLabels: Record<string, string> = {
 	and: "all of",
 	or: "any of",
 	ornot: "none of",
@@ -69,7 +69,7 @@ export function conditionToDom(
 	return list;
 }
 
-export function leafItem(text: string, scopeName: string): HTMLLIElement {
+function leafItem(text: string, scopeName: string): HTMLLIElement {
 	const item = document.createElement("li");
 	if (scopeName) {
 		const scope = document.createElement("span");

@@ -270,7 +270,7 @@ async function modifierFormatEntries(): Promise<{ entry: string; source: string 
 	];
 }
 
-export async function listModifierFormatFiles(): Promise<string[]> {
+async function listModifierFormatFiles(): Promise<string[]> {
 	const configured = await modifierFormatEntries();
 	const files: string[] = [];
 	for (const { entry, source } of configured) {
@@ -442,7 +442,7 @@ export function resolveDefinition(
  * The two localisation conventions, tried in order. Falls back to the key made readable, so a
  * modifier nothing localises still says something rather than showing a raw token.
  */
-export async function localiseModifierName(key: string): Promise<string> {
+async function localiseModifierName(key: string): Promise<string> {
 	if (!getFlags().localisationIndex) {
 		return key;
 	}
