@@ -10,7 +10,6 @@ import { feLocalize } from "../util/i18n";
 import { DivDropdown } from "../util/dropdown";
 import { BehaviorSubject, combineLatest, fromEvent } from "rxjs";
 import { Renderer } from "./renderer";
-import { sendEvent } from "../util/telemetry";
 import { applyIconState } from "../../src/previewdef/toolbaricons";
 
 export type ViewMode =
@@ -192,7 +191,6 @@ export class TopBar extends Subscriber {
 			fromEvent(showWarnings, "click").subscribe(() => {
 				this.warningsVisible = !this.warningsVisible;
 				if (this.warningsVisible) {
-					sendEvent("worldmap.openwarnings");
 					warningsContainer.style.display = "block";
 				} else {
 					warningsContainer.style.display = "none";
@@ -208,14 +206,12 @@ export class TopBar extends Subscriber {
 		this.addSubscription(
 			fromEvent<KeyboardEvent>(searchBox, "keypress").subscribe((e) => {
 				if (e.code === "Enter") {
-					sendEvent("worldmap.search", { keypress: "true" });
 					this.search(searchBox.value);
 				}
 			}),
 		);
 		this.addSubscription(
 			fromEvent(search, "click").subscribe(() => {
-				sendEvent("worldmap.search", { keypress: "false" });
 				this.search(searchBox.value);
 			}),
 		);
@@ -226,7 +222,6 @@ export class TopBar extends Subscriber {
 		this.addSubscription(
 			fromEvent(refresh, "click").subscribe(() => {
 				if (!refresh.disabled) {
-					sendEvent("worldmap.refresh");
 					this.loader.refresh();
 				}
 			}),
@@ -239,11 +234,6 @@ export class TopBar extends Subscriber {
 	}
 
 	private openMapItem(useHoverValue = false) {
-		sendEvent(
-			"worldmap.open." +
-				this.viewMode$.value +
-				(useHoverValue ? ".dblclick" : ""),
-		);
 		if (this.viewMode$.value === "state") {
 			const selected = useHoverValue
 				? this.hoverStateId$.value
@@ -355,7 +345,6 @@ export class TopBar extends Subscriber {
 					return;
 				}
 
-				sendEvent("worldmap.export");
 				const canvas = document.createElement("canvas");
 				canvas.width = Math.max(1, worldMap.width);
 				canvas.height = Math.max(1, worldMap.height);

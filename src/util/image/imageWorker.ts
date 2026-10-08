@@ -5,7 +5,7 @@
 import { parentPort } from 'worker_threads';
 import { PNG } from 'pngjs';
 import { DDS } from './dds';
-import { ddsToPng, tgaToPng } from './converter';
+import { ddsToPng, isPngBuffer, pngToPng, tgaToPng } from './converter';
 
 interface DecodeRequest {
     id: number;
@@ -23,7 +23,10 @@ function decode(request: DecodeRequest): void {
     try {
         let png: PNG;
         if (request.kind === 'dds') {
-            png = ddsToPng(DDS.parse(request.buffer, 0));
+            const buffer = Buffer.from(request.buffer);
+            png = isPngBuffer(buffer)
+                ? pngToPng(buffer)
+                : ddsToPng(DDS.parse(request.buffer, 0));
         } else {
             png = tgaToPng(Buffer.from(request.buffer));
         }

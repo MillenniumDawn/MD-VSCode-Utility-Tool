@@ -54,7 +54,7 @@ const METHOD_DEFLATED = 8;
 const U16_SENTINEL = 0xffff;
 const U32_SENTINEL = 0xffffffff;
 
-export interface ZipEntryInfo {
+interface ZipEntryInfo {
 	/** The name exactly as the central directory spells it, decoded as UTF-8. */
 	name: string;
 	/** Name-based, like adm-zip's: a trailing `/` or `\`. Nothing reads the MS-DOS attribute bit. */

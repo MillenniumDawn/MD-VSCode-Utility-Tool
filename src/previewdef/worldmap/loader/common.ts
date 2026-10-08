@@ -104,10 +104,6 @@ export async function shouldReloadDependencies<T>(
 export type LoadResult<T> = CommonLoadResult<T, MapLoaderExtra>;
 export type LoadResultOD<T> = CommonLoadResultOD<T, MapLoaderExtra>;
 
-export function pointEqual(a: Point, b: Point): boolean {
-	return a.x === b.x && a.y === b.y;
-}
-
 export function convertColor(color: DetailValue<Enum> | undefined): number {
 	if (!color) {
 		return 0;
@@ -184,7 +180,7 @@ export function sortItems<T extends { id: number }>(
 	};
 }
 
-export function mergeRegion<K extends string, T extends { [k in K]: number[] }>(
+function mergeRegion<K extends string, T extends { [k in K]: number[] }>(
 	input: T,
 	subRegionIdType: K,
 	subRegions: (Region | undefined | null)[],

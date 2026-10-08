@@ -3,9 +3,8 @@ import { enableDropdowns, numDropDownOpened$ } from "./dropdown";
 import { enableCheckboxes } from "./checkbox";
 import { feLocalize } from "./i18n";
 import { vscode } from "./vscode";
-import { sendException } from "./telemetry";
-import { forceError } from "../../src/util/common";
 import { iconButtonHtml } from "../../src/previewdef/toolbaricons";
+import { reportTryRunError } from "./tryRunError";
 export { arrayToMap } from "../../src/util/common";
 
 // True while the mouse is held down on the drag layer, i.e. while the view is being panned. A
@@ -124,15 +123,13 @@ export function tryRun<T extends (...args: any[]) => any>(
 			const result = func.apply(this, args);
 			if (result instanceof Promise) {
 				return result.catch((e) => {
-					console.error(e);
-					sendException(forceError(e));
+					reportTryRunError(e);
 				}) as ReturnType<T>;
 			}
 
 			return result;
 		} catch (e) {
-			console.error(e);
-			sendException(forceError(e));
+			reportTryRunError(e);
 		}
 
 		return undefined;

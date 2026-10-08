@@ -174,7 +174,7 @@ function badgesOf(idea: HOIIdea): string[] {
  * read -- would otherwise produce no run at all, so whatever is left over after the heads are
  * walked is started from as well.
  */
-export function buildChains(
+function buildChains(
 	swaps: IdeaSwap[],
 	idsInFile: Set<string>,
 ): IdeaChain[] {
@@ -233,7 +233,7 @@ export function buildChains(
 
 // Each predicate is exact: with the flag false, the control it gates produces the same output in
 // either position, so hiding it takes nothing away.
-export function toolbarFlagsOf(
+function toolbarFlagsOf(
 	cards: IdeaCard[],
 	chains: IdeaChain[],
 	swapsUnavailable: boolean,

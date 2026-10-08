@@ -4,8 +4,7 @@ import { error } from "../util/debug";
 import { UserError } from "../util/common";
 import { Logger } from "../util/logger";
 
-// error() used to reach only the console and telemetry, so the HOI4 Modding channel a user opens
-// to diagnose a failed preview showed none of it; and the channel was never disposed (issue #370).
+// Tests what error() writes to the HOI4 Modding channel for each error type and that the channel disposes.
 describe("util/logger", function () {
 	describe("error()", function () {
 		let messages: string[];
@@ -39,7 +38,7 @@ describe("util/logger", function () {
 			assert.deepStrictEqual(messages, ["Failed to get image gfx/foo.dds"]);
 		});
 
-		it("writes a UserError to the channel even though it skips telemetry", function () {
+		it("writes a UserError to the channel", function () {
 			error(new UserError("no mod descriptor"));
 			assert.strictEqual(messages.length, 1);
 			assert.ok(messages[0].includes("no mod descriptor"), messages[0]);

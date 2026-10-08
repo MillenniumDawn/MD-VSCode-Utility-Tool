@@ -15,7 +15,6 @@ import { worldMapPreviewDef } from './worldmap';
 import { eventPreviewDef } from './event';
 import minBy from 'lodash/minBy';
 import debounce from 'lodash/debounce';
-import { sendEvent } from '../util/telemetry';
 import { guiPreviewDef } from './gui';
 import { mioPreviewDef } from './mio';
 import { ideaPreviewDef } from './idea';
@@ -125,7 +124,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         this.updatePreviewItemsInSubscription(document.uri);
     }
-    
+
     private onFilesChanged(e: vscode.FileCreateEvent | vscode.FileDeleteEvent): void {
         for (const uri of e.files) {
             this.onFileAddedOrRemoved(uri);
@@ -231,10 +230,6 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         if ('onPreview' in previewProvider) {
             return previewProvider.onPreview(document);
-        }
-
-        if (!panel) {
-            sendEvent('preview.show.' + previewProvider.type);
         }
 
         const filename = basename(uri);

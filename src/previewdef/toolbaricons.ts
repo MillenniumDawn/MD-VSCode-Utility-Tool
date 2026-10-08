@@ -8,11 +8,11 @@ import type { __table } from "../../i18n/en";
 // Imported by webview bundles, so it must stay free of any runtime dependency -- no vscode, no
 // localisation index. The caller passes its own localize function.
 
-export type LocaleKey = keyof typeof __table;
+type LocaleKey = keyof typeof __table;
 export type Localizer = (key: LocaleKey, message: string) => string;
 
 // Where an icon is drawn. The guard test uses it to know which surfaces to render.
-export type IconSurface =
+type IconSurface =
 	| "focustree"
 	| "gui"
 	| "worldmap"
@@ -217,7 +217,7 @@ function action(id: IconActionId): IconAction {
 	return iconActions[id];
 }
 
-export function iconOf(id: IconActionId, on = true): string {
+function iconOf(id: IconActionId, on = true): string {
 	const icon = action(id).icon;
 	return typeof icon === "string" ? icon : on ? icon.on : icon.off;
 }
@@ -231,7 +231,7 @@ export function statusBarIcon(id: IconActionId): string {
 	return "$(" + iconOf(id) + ")";
 }
 
-export function tooltipOf(id: IconActionId, localize: Localizer, on = false): string {
+function tooltipOf(id: IconActionId, localize: Localizer, on = false): string {
 	const a = action(id);
 	if (on && a.tooltipOnKey !== undefined) {
 		return localize(a.tooltipOnKey, a.tooltipOn ?? "");

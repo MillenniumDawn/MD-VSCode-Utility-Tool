@@ -114,7 +114,6 @@ describe('previewdef/worldmap isWorldMapHostMessage', () => {
         assert.ok(isWorldMapHostMessage({ command: 'requestexportmap' }));
         assert.ok(isWorldMapHostMessage({ command: 'exportmap', data: new Uint8Array([0, 1, 2]) }));
         assert.ok(isWorldMapHostMessage({ command: 'exportmap', data: new ArrayBuffer(3) }));
-        assert.ok(isWorldMapHostMessage({ command: 'telemetry', telemetryType: 'event', args: ['open'] }));
     });
 
     it('rejects a field of the wrong type', () => {
@@ -125,8 +124,6 @@ describe('previewdef/worldmap isWorldMapHostMessage', () => {
         assert.ok(!isWorldMapHostMessage({ command: 'openfile', type: 'state', file: ['a.txt'], start: 0, end: 5 }));
         assert.ok(!isWorldMapHostMessage({ command: 'openfile', type: 'state', file: 'a.txt', start: 'x', end: 5 }));
         assert.ok(!isWorldMapHostMessage({ command: 'exportmap', data: 'data:image/png;base64,AAAA' }));
-        assert.ok(!isWorldMapHostMessage({ command: 'telemetry', telemetryType: 'other', args: [] }));
-        assert.ok(!isWorldMapHostMessage({ command: 'telemetry', telemetryType: 'event', args: 'open' }));
     });
 
     it('rejects an open-file type outside the three the host knows, including prototype names', () => {

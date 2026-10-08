@@ -306,7 +306,7 @@ async function buildPortrait(
 	};
 }
 
-export function pickPortrait(portraits: PortraitRef[]): string | undefined {
+function pickPortrait(portraits: PortraitRef[]): string | undefined {
 	for (const preference of portraitPreference) {
 		const match = portraits.find(
 			(p) => p.category === preference.category && p.size === preference.size,

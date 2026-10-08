@@ -7,7 +7,7 @@ import { LoaderPreview } from "../loaderpreview";
 import { BopLoader } from "./loader";
 import { getFlags } from "../../util/featureflags";
 
-export function canPreviewBop(document: vscode.TextDocument): number | undefined {
+function canPreviewBop(document: vscode.TextDocument): number | undefined {
 	if (!getFlags().bopPreview) {
 		return undefined;
 	}

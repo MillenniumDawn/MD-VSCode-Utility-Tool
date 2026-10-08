@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { html, loadingShellHtml, errorPageContent } from './util/html';
 import { StyleTable } from './util/styletable';
-import { sendEvent } from './util/telemetry';
 import { previewWebviewOptions, readFile } from './util/vsccommon';
 import { decodeImageToPng } from './util/image/imagedecoder';
 
@@ -32,8 +31,6 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
 
     public async resolveCustomEditor(document: vscode.CustomDocument, webviewPanel: vscode.WebviewPanel, token: vscode.CancellationToken): Promise<void> {
         try {
-            this.onOpen();
-
             // Show the shared loading spinner while the (potentially large) texture is read
             // and decoded. It is replaced by the rendered image as soon as decoding finishes.
             webviewPanel.webview.html = loadingShellHtml();
@@ -93,22 +90,13 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
         }
     }
 
-    protected abstract onOpen(): void;
     protected abstract readonly imageKind: 'dds' | 'tga';
 }
 
 export class DDSViewProvider extends CommonViewProvider {
     protected readonly imageKind: 'dds' | 'tga' = 'dds';
-
-    protected onOpen(): void {
-        sendEvent('preview.dds');
-    }
 }
 
 export class TGAViewProvider extends CommonViewProvider {
     protected readonly imageKind: 'dds' | 'tga' = 'tga';
-
-    protected onOpen(): void {
-        sendEvent('preview.tga');
-    }
 }

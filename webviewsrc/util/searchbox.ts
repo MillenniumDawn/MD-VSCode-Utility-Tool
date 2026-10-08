@@ -12,7 +12,7 @@ import { feLocalize } from "./i18n";
 // and something to put the hit classes on. The two elements are separate because the tree previews
 // dim the positioned wrapper on hover and highlight the card inside it, and neither should have to
 // win with !important.
-export interface SearchTarget {
+interface SearchTarget {
 	id: string;
 	element: HTMLElement;
 	highlight: HTMLElement;

@@ -21,7 +21,9 @@ import { describeParseFailure } from "../indexHalf";
 import { Logger } from "../logger";
 import { getGfxContainerFile } from "../gfxindex";
 import { getFlags } from "../featureflags";
+import { readPngHeaderDimensions } from "./converter";
 export { Sprite, Image };
+export { readPngHeaderDimensions };
 
 // Decoded PNG buffers are the heaviest thing in memory; bound the image and sprite caches by
 // total bytes (least-recently-accessed eviction) so large texture packs can't grow them without
@@ -206,29 +208,6 @@ async function getSpriteByGfxNameImpl(
 	return new Sprite(name, image, sprite.noofframes);
 }
 
-const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-
-// Reads width/height straight from the IHDR chunk (bytes 16-23) without inflating the image.
-// Returns undefined if the signature, the IHDR chunk type, or the buffer length don't check out,
-// so the caller can fall back to a full PNG.sync.read decode.
-export function readPngHeaderDimensions(
-	buffer: Buffer,
-): { width: number; height: number } | undefined {
-	if (buffer.length < 24) {
-		return undefined;
-	}
-	for (let i = 0; i < pngSignature.length; i++) {
-		if (buffer[i] !== pngSignature[i]) {
-			return undefined;
-		}
-	}
-	if (buffer.toString("ascii", 12, 16) !== "IHDR") {
-		return undefined;
-	}
-
-	return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
-}
-
 async function getImage(relativePath: string): Promise<Image | undefined> {
 	let readFileResult: [Buffer, vscode.Uri] | undefined = undefined;
 	try {
@@ -314,7 +293,7 @@ async function loadGfxMap(path: string): Promise<GfxMap> {
 	} catch (e) {
 		// The output channel is the only trace a broken .gfx leaves when the icon fallback scan or
 		// the inlay sprite scan reads through this cache (issue #182). This line names the file; the
-		// error call adds the stack to the channel and keeps the console/telemetry line.
+		// error call writes the stack to the channel and console.
 		Logger.error(`Cannot parse ${path}: ${describeParseFailure(e)}`);
 		error(e);
 	}
