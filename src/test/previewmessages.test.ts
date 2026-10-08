@@ -21,7 +21,7 @@ describe('previewdef/previewbase webview message validation', () => {
         }
     }
 
-    function makePreview() {
+    function makePreview(browserSmoke = false) {
         let handler: ((msg: unknown) => void) | undefined;
         const panel = {
             webview: {
@@ -29,7 +29,7 @@ describe('previewdef/previewbase webview message validation', () => {
             },
             onDidDispose: () => ({ dispose() { /* no-op */ } }),
         };
-        const preview = new TestPreview(uri, panel as any);
+        const preview = new TestPreview(uri, panel as any, browserSmoke);
         assert.ok(handler, 'expected the preview to subscribe to webview messages');
         return { preview, send: handler! };
     }
@@ -55,6 +55,29 @@ describe('previewdef/previewbase webview message validation', () => {
     afterEach(() => {
         (vscode.window as any).showTextDocument = originalShowTextDocument;
         restoreVscodeStubs();
+    });
+
+    it('resolves the opt-in browser smoke waiter with mounted event ids', async () => {
+        const { preview, send } = makePreview(true);
+        const rendered = preview.waitForBrowserSmokeRender(100);
+
+        send({ command: 'browserSmokeRendered', ids: ['browser_smoke.1'] });
+
+        assert.deepStrictEqual(await rendered, ['browser_smoke.1']);
+    });
+
+    it('uses an acknowledgement that arrived before the waiter was installed', async () => {
+        const { preview, send } = makePreview(true);
+        send({ command: 'browserSmokeRendered', ids: ['browser_smoke.1'] });
+
+        assert.deepStrictEqual(await preview.waitForBrowserSmokeRender(100), ['browser_smoke.1']);
+    });
+
+    it('does not accept browser render acknowledgements when smoke mode is disabled', async () => {
+        const { preview, send } = makePreview();
+        send({ command: 'browserSmokeRendered', ids: ['browser_smoke.1'] });
+
+        await assert.rejects(preview.waitForBrowserSmokeRender(5), /was not enabled/);
     });
 
     it('navigates the preview document on a well-formed message', () => {

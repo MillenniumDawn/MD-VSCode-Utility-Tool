@@ -242,6 +242,7 @@ function buildStub() {
         commands,
         env: { clipboard: { readText: async () => '', writeText: async () => undefined }, openExternal: async () => true },
         FileType,
+        ExtensionMode: { Production: 1, Development: 2, Test: 3 },
         ConfigurationTarget,
         ProgressLocation,
         StatusBarAlignment,

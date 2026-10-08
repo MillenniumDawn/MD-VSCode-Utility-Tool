@@ -1,4 +1,4 @@
-import { loadEntrypoint, useEntrypoint } from './setup';
+import { loadEntrypoint, takePostedMessages, useEntrypoint } from './setup';
 import * as assert from 'assert';
 import { waitFor } from '../waitfor';
 import { hoverDelay } from '../../../webviewsrc/util/hovertooltip';
@@ -1132,6 +1132,20 @@ describe('webview/eventtree rendering', () => {
         assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
         assert.strictEqual(content().querySelectorAll('.ev-card-event').length, 3);
         assert.strictEqual(content().querySelectorAll('.ev-card-option').length, 1);
+    });
+
+    it('reports event ids from the mounted DOM when browser smoke mode is enabled', async () => {
+        (window as any).browserSmokeRenderAck = true;
+        try {
+            eventtree.acknowledgeBrowserSmokeRender();
+            const renderedIds = Array.from(content().querySelectorAll('.ev-card-event .ev-id'), element => element.textContent ?? '');
+            const acknowledgement = takePostedMessages().find(message => message.command === 'browserSmokeRendered');
+
+            assert.ok(renderedIds.length > 0, 'the fixture must render at least one event card');
+            assert.deepStrictEqual(acknowledgement?.ids, renderedIds);
+        } finally {
+            delete (window as any).browserSmokeRenderAck;
+        }
     });
 
     it('announces a toggle that is on as checked', () => {

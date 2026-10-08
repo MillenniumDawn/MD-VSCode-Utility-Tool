@@ -1,0 +1,9 @@
+add_namespace = browser_smoke
+
+country_event = {
+	id = browser_smoke.1
+	title = browser_smoke.1.t
+	desc = browser_smoke.1.d
+	trigger = { always = yes }
+	option = { name = browser_smoke.1.a }
+}

@@ -74,6 +74,8 @@ export type LoaderRender = string | LoaderRenderResult;
 export interface RenderContentOptions {
 	partial: boolean;
 	dependencyChanged: boolean;
+	/** Enabled only by the browser smoke command. */
+	browserSmoke?: boolean;
 }
 
 export function normalizeRender(rendered: LoaderRender): LoaderRenderResult {
@@ -224,8 +226,8 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 		| (LoaderUpdateMessage & { type: "updateBody" })
 		| undefined = undefined;
 
-	constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
-		super(uri, panel);
+	constructor(uri: vscode.Uri, panel: vscode.WebviewPanel, browserSmoke = false) {
+		super(uri, panel, browserSmoke);
 		// Without retainContextWhenHidden the webview is torn down when hidden and reloaded from
 		// panel.webview.html on show. In-place updates don't touch that property, so flush the latest
 		// html into it when the panel goes hidden to keep the next show current.
@@ -316,7 +318,7 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 			document,
 			document.uri,
 			this.panel.webview,
-			{ partial: false, dependencyChanged },
+			{ partial: false, dependencyChanged, ...(this.browserSmoke ? { browserSmoke: true } : {}) },
 		);
 		if (this.isDisposed) {
 			return this.currentHtml();
@@ -352,7 +354,7 @@ export abstract class UpdateablePreviewBase extends PreviewBase {
 			document,
 			document.uri,
 			this.panel.webview,
-			{ partial: true, dependencyChanged },
+			{ partial: true, dependencyChanged, ...(this.browserSmoke ? { browserSmoke: true } : {}) },
 		);
 		if (this.isDisposed) {
 			return;
