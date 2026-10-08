@@ -94,3 +94,5 @@ jobs:
       # comes after the uploads so the .vsix and coverage are still there when this step fails.
       - name: Run integration smoke tests
         run: xvfb-run -a npm run test:integration
+      - name: Run browser smoke tests
+        run: npm run test:web

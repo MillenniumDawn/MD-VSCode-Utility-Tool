@@ -246,12 +246,15 @@ describe('scripts/compile-tests', function () {
         // cmd.exe, which is what npm runs scripts through on Windows, does not strip single quotes:
         // mocha would be handed a pattern with the quotes still in it and match no files at all.
         // Double quotes are stripped there and still keep sh from expanding the glob itself.
-        it('cleans the test output along with the build output', function () {
+        it('does not expose unused local and release workflow aliases', function () {
             const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
 
-            for (const project of compileTests.projects) {
-                const outDir = path.relative(repoRoot, compileTests.outputDir(project)).replace(/\\/g, '/');
-                assert.ok(pkg.scripts.clean.split(/\s+/).includes(outDir), `clean does not remove ${outDir}`);
+            for (const name of [
+                'web-ext', 'watch', 'clean', 'compile-test-webview', 'test:diff-coverage', 'check-version',
+                'prerelease-version', 'release-check', 'pr-bullets', 'bump',
+                'package:patch', 'package:minor', 'package:major',
+            ]) {
+                assert.strictEqual(pkg.scripts[name], undefined, `${name} is an unused script alias`);
             }
         });
 

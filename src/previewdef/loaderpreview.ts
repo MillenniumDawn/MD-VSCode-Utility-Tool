@@ -51,8 +51,9 @@ export abstract class LoaderPreview<
 			webview: vscode.Webview,
 			options?: RenderContentOptions,
 		) => Promise<LoaderRender>,
+		browserSmoke = false,
 	) {
-		super(uri, panel);
+		super(uri, panel, browserSmoke);
 		this.loader = createLoader(getRelativePathInWorkspace(this.uri), () =>
 			Promise.resolve(this.content ?? ""),
 		);

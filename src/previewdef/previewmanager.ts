@@ -43,7 +43,7 @@ interface PreviewProviderDefCommon {
 }
 
 interface PreviewProviderDefNormal extends PreviewProviderDefCommon {
-    previewConstructor: new (uri: vscode.Uri, panel: vscode.WebviewPanel) => PreviewBase;
+    previewConstructor: new (uri: vscode.Uri, panel: vscode.WebviewPanel, browserSmoke?: boolean) => PreviewBase;
 }
 
 interface PreviewProviderDefAlternative extends PreviewProviderDefCommon {
@@ -111,8 +111,8 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         }
     }
 
-    private showPreview(uri?: vscode.Uri): Promise<void> {
-        return this.showPreviewImpl(uri);
+    private showPreview(uri?: vscode.Uri, options?: { browserSmoke?: boolean }): Promise<unknown> {
+        return this.showPreviewImpl(uri, undefined, options);
     }
 
     private onCloseTextDocument(document: vscode.TextDocument): void {
@@ -174,7 +174,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         setVscodeContext(ContextName.Hoi4PreviewType, hoi4PreviewType);
     }
 
-    private async showPreviewImpl(requestUri?: vscode.Uri, panel?: vscode.WebviewPanel): Promise<void> {
+    private async showPreviewImpl(requestUri?: vscode.Uri, panel?: vscode.WebviewPanel, options?: { browserSmoke?: boolean }): Promise<unknown> {
         let document: vscode.TextDocument | undefined;
         if (requestUri === undefined) {
             document = vscode.window.activeTextEditor?.document;
@@ -250,7 +250,9 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             };
         }
 
-        const previewItem = new previewProvider.previewConstructor(uri, panel);
+        const browserSmoke = options?.browserSmoke === true && previewProvider.type === 'event'
+            && contextContainer.current?.extensionMode === vscode.ExtensionMode.Test;
+        const previewItem = new previewProvider.previewConstructor(uri, panel, browserSmoke);
         this._previews[key] = previewItem;
 
         previewItem.onDispose(() => {
@@ -266,6 +268,10 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
             this.addPreviewToSubscription(previewItem, newDep);
         });
 
+        if (browserSmoke) {
+            await previewItem.initializePanelContent(document);
+            return previewItem.waitForBrowserSmokeRender();
+        }
         void previewItem.initializePanelContent(document);
     }
 

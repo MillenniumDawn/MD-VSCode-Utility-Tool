@@ -152,7 +152,6 @@ const mainWebConfig = {
       path: require.resolve('path-browserify'),
       process: require.resolve('process/browser'),
       stream: require.resolve('stream-browserify'),
-      url: require.resolve('url/'),
       util: require.resolve('util'),
       zlib: require.resolve("browserify-zlib"),
     },

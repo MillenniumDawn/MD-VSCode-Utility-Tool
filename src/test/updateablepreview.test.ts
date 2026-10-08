@@ -100,7 +100,7 @@ describe('previewdef/updateablepreview extension points', () => {
     // Shared with beforeRenderAssign so the test can assert the hook runs BEFORE the write.
     let htmlSetCount = 0;
 
-    function makePreview(visible: boolean, onPost?: () => void) {
+    function makePreview(visible: boolean, onPost?: () => void, browserSmoke = false) {
         htmlSetCount = 0;
         let postCount = 0;
         let postDelivered = true;
@@ -131,7 +131,7 @@ describe('previewdef/updateablepreview extension points', () => {
             },
             onDidDispose: () => ({ dispose() { /* no-op */ } }),
         };
-        const preview = new TestPreview(vscode.Uri.file('/tmp/tree.txt'), panel as any);
+        const preview = new TestPreview(vscode.Uri.file('/tmp/tree.txt'), panel as any, browserSmoke);
         return {
             preview,
             posted,
@@ -329,6 +329,19 @@ describe('previewdef/updateablepreview extension points', () => {
 
         afterEach(() => {
             restoreVscodeStubs();
+        });
+
+        it('propagates initial render failures for the opted-in browser smoke', async () => {
+            stubVscode({ textDocuments: [document] });
+            const h = makePreview(true, undefined, true);
+            h.preview.failNext = true;
+            const consoleError = console.error;
+            console.error = () => undefined;
+            try {
+                await assert.rejects(h.preview.initializePanelContent(document), /render failed/);
+            } finally {
+                console.error = consoleError;
+            }
         });
 
         it('starts the next render only once the one in flight has finished', async () => {

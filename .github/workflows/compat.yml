@@ -1,15 +1,18 @@
-on:
-  # No branch filter, for the same reason as test.yml: a pull request into a branch with a "/" in
-  # its name would run nothing.
+---
+"on":
+  # No branch filter: a pull request into a branch with a "/" would run nothing.
   pull_request:
   workflow_dispatch:
 
 name: Compat
 
-# Runs every preview over the real mods in compat/mods.json. The unit tests only ever see fixtures
-# written by hand, which is how names only one mod has got into the extension unnoticed. A mod is
-# pinned to a commit and measured against compat/baseline/<id>.json, so only a problem this pull
-# request introduces fails it; moving a pin is its own pull request. compat/README.md has the rest.
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+# Runs every preview over the real mods in compat/mods.json. The unit tests only
+# ever see fixtures written by hand. A mod is pinned to a commit and measured
+# against compat/baseline/<id>.json, so only a new problem fails the check.
+# Moving a pin is its own pull request. compat/README.md has the rest.
 
 permissions:
   contents: read
@@ -25,49 +28,61 @@ jobs:
     outputs:
       matrix: ${{ steps.list.outputs.matrix }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version-file: .nvmrc
       - name: List mods
         id: list
         run: >-
           node -e "const mods = require('./compat/mods.json');
-          console.log('matrix=' + JSON.stringify({ include: mods.map(m => ({ id: m.id })) }))"
+          console.log('matrix=' + JSON.stringify({
+          include: mods.map(m => ({ id: m.id })) }))"
           >> "$GITHUB_OUTPUT"
 
   compat:
     needs: mods
     runs-on: ubuntu-latest
-    # A run over a large mod is a few minutes; a cold checkout adds about one more.
+    # A cold checkout adds about a minute to the preview run.
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.mods.outputs.matrix) }}
     name: compat (${{ matrix.id }})
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version-file: .nvmrc
           cache: "npm"
       - name: Install dependencies
         run: npm ci
-      # Keyed on the whole of mods.json, because a pinned parent moving changes the checkout too.
-      # The checkout script leaves a folder already at its pinned commit alone, so a hit is free.
+      # Keyed on all of mods.json, because a pinned parent moving changes the
+      # checkout too. The script leaves a folder at its pinned commit alone.
       - name: Cache mod checkout
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: compat-mods
           key: compat-mods-${{ matrix.id }}-${{ hashFiles('compat/mods.json') }}
-      # One runner argument per line, so a path is never split or re-parsed by the shell.
+      # One runner argument per line, so a path is never split by the shell.
       - name: Check out ${{ matrix.id }}
         env:
           MOD: ${{ matrix.id }}
-        run: node scripts/compat-checkout.js "$MOD" compat-mods > compat-args.txt
+        run: >-
+          node scripts/compat-checkout.js "$MOD" compat-mods > compat-args.txt
       - name: Run the previews
         env:
           MOD: ${{ matrix.id }}
         run: |
           mapfile -t args < compat-args.txt
-          npm run compat -- "${args[@]}" --label "$MOD" --baseline "compat/baseline/$MOD.json" --report compat-report.md
+          npm run compat -- "${args[@]}" --label "$MOD" \
+            --baseline "compat/baseline/$MOD.json" --report compat-report.md

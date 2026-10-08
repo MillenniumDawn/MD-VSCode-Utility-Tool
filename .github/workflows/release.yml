@@ -1,11 +1,14 @@
-on:
+---
+"on":
   push:
     branches:
-      - 'main'
+      - "main"
   workflow_dispatch:
     inputs:
       release_type:
-        description: 'How far to bump when a release pull request is opened. Ignored when the current version has no tag yet: that run publishes it instead.'
+        description: >-
+          How far to bump when a release pull request is opened. Ignored when
+          the current version has no tag yet: that run publishes it instead.
         type: choice
         default: patch
         options:
@@ -15,17 +18,15 @@ on:
 
 name: Release
 
-# Everything a push to main can lead to lives in this one workflow: the release pull request that
-# collects the merges, the pre-release build of each of them, and the release itself when that pull
-# request is merged. They used to be two workflows that each started with the same question --
-# "what is this push?" -- and answered it separately; now the question is asked once, in `check`,
-# and every job below reads the answer from its outputs. One run in the Actions list per push, and
-# a job graph that names which part broke instead of hiding it in a step log.
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+# One workflow handles the release pull request, pre-release builds, and the
+# release itself. The check job decides what this push needs; every other job
+# reads its outputs. One run in Actions, with a job graph naming failures.
 #
-# One run at a time. Two of these overlapping would race for the same tag, the same marketplace
-# version, or the same release branch. A superseded pre-release build used to be cancelled rather
-# than queued, which a release must never be, so everything shares the release's rule: a run
-# waits, it is not dropped.
+# Never cancel a publish or overlap two: they would race for the same tag,
+# marketplace version, or release branch. Each run waits for the one ahead.
 concurrency:
   group: publish
   cancel-in-progress: false
@@ -34,12 +35,9 @@ jobs:
   check:
     name: Check version
     runs-on: ubuntu-latest
-    # Every job here carries a time limit. Without one a job may sit for GitHub's six-hour default,
-    # and because this workflow never cancels a run, a stuck publish would park every release behind
-    # it for that long. The limits are several times what each job takes on a normal day.
+    # A stuck job must not park every release behind a six-hour default timeout.
     timeout-minutes: 5
-    # Reading which pull request a commit came from is how "did this merge the release pull
-    # request?" is answered.
+    # Read which pull request a commit came from to recognise a release merge.
     permissions:
       contents: read
       pull-requests: read
@@ -52,31 +50,29 @@ jobs:
       adopt: ${{ steps.check.outputs.adopt }}
       adoptedFrom: ${{ steps.check.outputs.adoptedFrom }}
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        fetch-depth: 0
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-    # `release` is true when this push merged the release pull request and its version has no tag
-    # yet, or when it merged the fix pull request that a failed publish opened below -- then the
-    # version goes out again, tag or no tag. `bump` is true when the extension itself changed since
-    # the last tag, so a release pull request has to carry the next version -- a branch that bumped
-    # package.json by itself has that bump carried into the release pull request rather than
-    # shipping on its own, so a run of merges becomes one release instead of one release each. Both
-    # false means only documentation and CI changed: a pre-release build and nothing else. The same
-    # answer for an untagged version that an earlier push merged from the release pull request --
-    # its publish failed, and the fix pull request is what publishes it, so it is neither published
-    # again from here nor adopted. The script owns that decision for every job in this file.
-    - name: Check version
-      id: check
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: node scripts/release-check.js ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+      # `release` means a release or failed-release fix merged. `bump`
+      # means extension changes need a release pull request. A hand bump
+      # is adopted into that pull request, never shipped directly. Both false
+      # means documentation and CI only: a pre-release, with no release pull
+      # request. After a failed publish, only its fix pull request retries it.
+      - name: Check version
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          node scripts/release-check.js
+          ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
 
-  # Every branch in main was green on its own, but what goes out is installed by real users, so it
-  # is checked again here. Once, for both channels: a release push and a pre-release push run the
-  # same suite over the same commit.
+  # Recheck what users install, once for both channels over the same commit.
   verify:
     name: Lint & test
     runs-on: ubuntu-latest
@@ -84,264 +80,275 @@ jobs:
     permissions:
       contents: read
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-        cache: 'npm'
-    - name: Install dependencies
-      run: npm ci
-    - name: Lint
-      run: npm run lint
-    # `test:coverage` has no pre hook of its own, so the tests are compiled first, as in test.yml.
-    - name: Compile tests
-      run: npm run pretest
-    - name: Test
-      run: npm run test:coverage
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      # test:coverage has no pre hook, so compile first, as in test.yml.
+      - name: Compile tests
+        run: npm run pretest
+      - name: Test
+        run: npm run test:coverage
 
-  # --- Release pull request: every push that changed what ships, until that pull request merges. ---
+  # --- Release pull request: collects changes until someone merges it. ---
 
-  # Runs beside the pre-release build, not after the tests: the release pull request it pushes gets
-  # the Test and Version workflows on its own merge commit, which is the run that matters. Skipped on
-  # a release push and on a documentation-only push, because `bump` is false for both.
+  # Runs beside the build. The bot's push tests the release pull request's own
+  # merge commit. A release or documentation-only push needs no pull request.
   release-pull-request:
     name: Release pull request
     needs: check
     if: ${{ needs.check.outputs.bump == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Everything below writes as the bot, through GH_TOKEN and the checkout token, so the
-    # workflow's own token needs nothing beyond reading the tree.
+    # Writes use the bot token, not the workflow's read-only token.
     permissions:
       contents: read
     env:
       RELEASE_BRANCH: release/version-bump
       RELEASE_TYPE: ${{ inputs.release_type || 'patch' }}
-      # Writes the changelog bullets in the wording CHANGELOG.md uses. Optional: without the key the
-      # bullets keep their pull request titles and nothing else changes.
+      # Without the optional model key, bullets keep their pull request titles.
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
     steps:
-    # Everything here is done as the MD Utilities Release Bot rather than as the workflow itself.
-    # A pull request opened with GITHUB_TOKEN starts no run by design, so the release used to
-    # reach the marketplace unchecked; a pull request opened with an App installation token does
-    # start one, against the merge commit, and unlike a personal access token it leaves no person
-    # as the author of the release.
-    - name: Mint the release bot token
-      id: app-token
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-      with:
-        # `app-id` is deprecated; GitHub accepts the App ID as a client id too, so it stays as the fallback.
-        client-id: ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
-        private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
-    # A job-level `env` cannot read the `steps` context, so the token every `gh` step below wants
-    # is exported once here instead. The action masks it, so it stays redacted in the log.
-    - name: Use the bot token for gh
-      env:
-        TOKEN: ${{ steps.app-token.outputs.token }}
-      run: echo "GH_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        fetch-depth: 0
-        token: ${{ steps.app-token.outputs.token }}
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-    # From the last version that shipped, which is the tag itself unless a branch bumped
-    # package.json by hand -- then that version has no tag yet and the range starts one release back.
-    #
-    # This is every pull request in the release, prefix and subsection included. Which of them
-    # still need a bullet written is decided per path below, because only the refresh path knows
-    # what the open pull request already covers.
-    #
-    # Scratch files go to $RUNNER_TEMP rather than the working tree, so a stray `git add` can
-    # never commit one.
-    - name: Collect the changelog bullets
-      id: bullets
-      env:
-        LAST_TAG: ${{ needs.check.outputs.lastTag }}
-      run: |
-        node scripts/pr-bullets.js --tag "$LAST_TAG" --output "$RUNNER_TEMP/all-bullets.json" >/dev/null
-        echo "prs=$(node -p "require('$RUNNER_TEMP/all-bullets.json').pullRequests.join(',')")" >> "$GITHUB_OUTPUT"
-    # Says in the log whether the key works, so a rejected or exhausted one is visible instead of
-    # looking exactly like a release whose bullets happened not to need rewriting.
-    - name: Check the release model key
-      run: node scripts/rewrite-bullets.js --check
-    - name: Look for an open release pull request
-      id: existing
-      run: |
-        number=$(gh pr list --head "$RELEASE_BRANCH" --state open --json number --jq '.[0].number // ""')
-        echo "number=$number" >> "$GITHUB_OUTPUT"
-    # The bot's own account, read from the token that was just minted rather than written out
-    # here, so renaming the App moves the commit author with it.
-    - name: Configure git
-      env:
-        SLUG: ${{ steps.app-token.outputs.app-slug }}
-      run: |
-        id=$(gh api "users/$SLUG%5Bbot%5D" --jq .id)
-        git config user.name "$SLUG[bot]"
-        git config user.email "$id+$SLUG[bot]@users.noreply.github.com"
+      # App tokens start tests on pull requests they open; GITHUB_TOKEN cannot.
+      - name: Mint the release bot token
+        id: app-token
+        # v3.2.0
+        uses: >-
+          actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          # GitHub still accepts the deprecated App ID as a client id.
+          client-id: >-
+            ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+      # Keep git authentication in the job environment, never in the checkout.
+      - name: Use the bot token for gh and git
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          header=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          echo "::add-mask::$header"
+          {
+            echo "GH_TOKEN=$TOKEN"
+            echo "GIT_CONFIG_COUNT=1"
+            echo "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader"
+            echo "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $header"
+          } >> "$GITHUB_ENV"
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+      # Collect every pull request since the last shipped tag. Only the refresh
+      # path knows which have bullets. Keep scratch files outside the tree.
+      - name: Collect the changelog bullets
+        id: bullets
+        env:
+          LAST_TAG: ${{ needs.check.outputs.lastTag }}
+        run: |
+          node scripts/pr-bullets.js --tag "$LAST_TAG" \
+            --output "$RUNNER_TEMP/all-bullets.json" >/dev/null
+          echo "prs=$(node -p \
+            "require('$RUNNER_TEMP/all-bullets.json')\
+          .pullRequests.join(',')")" \
+            >> "$GITHUB_OUTPUT"
+      # Make a rejected or exhausted model key visible in the log.
+      - name: Check the release model key
+        run: node scripts/rewrite-bullets.js --check
+      - name: Look for an open release pull request
+        id: existing
+        run: |
+          number=$(gh pr list --head "$RELEASE_BRANCH" --state open \
+            --json number --jq '.[0].number // ""')
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+      # Read the bot account from the token so an App rename moves its author.
+      - name: Configure git
+        env:
+          SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          id=$(gh api "users/$SLUG%5Bbot%5D" --jq .id)
+          git config user.name "${SLUG}[bot]"
+          git config user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
 
-    # --- No release pull request yet: bump, seed the changelog, open one. ---
-    - name: Bump the version and seed the changelog
-      id: bump
-      if: ${{ steps.existing.outputs.number == '' }}
-      env:
-        ADOPT: ${{ needs.check.outputs.adopt }}
-        ADOPTED_FROM: ${{ needs.check.outputs.adoptedFrom }}
-        VERSION: ${{ needs.check.outputs.version }}
-      run: |
-        git checkout -B "$RELEASE_BRANCH"
-        # The pull request that carried a hand-written bump already wrote its own changelog section
-        # on main, so it is listed in the body but seeds no second bullet from its title.
-        node scripts/select-bullets.js --bullets-file "$RUNNER_TEMP/all-bullets.json" --output "$RUNNER_TEMP/bullets.json" \
-          --skip "$ADOPTED_FROM" >/dev/null
-        node scripts/rewrite-bullets.js --bullets-file "$RUNNER_TEMP/bullets.json"
-        if [ "$ADOPT" = "true" ]; then
-          # Keep the version that branch bumped to and add the seeded bullets to the section it
-          # wrote, rather than bumping past a version that was never published.
-          node scripts/bump-version.js --append --bullets-file "$RUNNER_TEMP/bullets.json" >/dev/null
-          echo "next=$VERSION" >> "$GITHUB_OUTPUT"
-        else
-          node scripts/bump-version.js --type "$RELEASE_TYPE" --bullets-file "$RUNNER_TEMP/bullets.json" >> "$GITHUB_OUTPUT"
-        fi
-        git add package.json CHANGELOG.md
-        version=$(node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync('package.json', 'utf8'))")
-        if git diff --cached --quiet; then
-          # Adopting a version can leave nothing to commit, when the branch that bumped already
-          # wrote every bullet by hand. The pull request still has to exist for that version to
-          # reach the marketplace.
-          git commit --allow-empty -m "Release v$version"
-        else
-          git commit -m "Bump version to $version"
-        fi
-        # A leftover branch -- closed unmerged -- is started over, but only if it still is what the
-        # checkout fetched a moment ago. --force-with-lease refuses to overwrite a push that landed
-        # in between, where a bare --force would silently discard it.
-        git push --force-with-lease origin "HEAD:$RELEASE_BRANCH"
-        echo "pushed=true" >> "$GITHUB_OUTPUT"
-    - name: Open the release pull request
-      if: ${{ steps.existing.outputs.number == '' }}
-      env:
-        NEXT: ${{ steps.bump.outputs.next }}
-      run: |
-        node scripts/release-pr-body.js --version "$NEXT" --bullets-file "$RUNNER_TEMP/all-bullets.json" \
-          --output "$RUNNER_TEMP/release-pr-body.md"
-        gh pr create \
-          --base main \
-          --head "$RELEASE_BRANCH" \
-          --title "Release v$NEXT - collects every merge until you merge it" \
-          --body-file "$RUNNER_TEMP/release-pr-body.md"
+      # --- No open release pull request: bump, seed, and open one. ---
+      - name: Bump the version and seed the changelog
+        id: bump
+        if: ${{ steps.existing.outputs.number == '' }}
+        env:
+          ADOPT: ${{ needs.check.outputs.adopt }}
+          ADOPTED_FROM: ${{ needs.check.outputs.adoptedFrom }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          git checkout -B "$RELEASE_BRANCH"
+          # A hand bump already wrote its changelog, so seed no second bullet.
+          node scripts/select-bullets.js \
+            --bullets-file "$RUNNER_TEMP/all-bullets.json" \
+            --output "$RUNNER_TEMP/bullets.json" \
+            --skip "$ADOPTED_FROM" >/dev/null
+          node scripts/rewrite-bullets.js \
+            --bullets-file "$RUNNER_TEMP/bullets.json"
+          if [ "$ADOPT" = "true" ]; then
+            # Keep the adopted version rather than bumping an unshipped one.
+            node scripts/bump-version.js --append \
+              --bullets-file "$RUNNER_TEMP/bullets.json" >/dev/null
+            echo "next=$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            node scripts/bump-version.js --type "$RELEASE_TYPE" \
+              --bullets-file "$RUNNER_TEMP/bullets.json" >> "$GITHUB_OUTPUT"
+          fi
+          git add package.json CHANGELOG.md
+          version=$(node -p \
+            "require('./scripts/bump-version').readVersion(\
+          require('fs').readFileSync('package.json', 'utf8'))")
+          if git diff --cached --quiet; then
+            # Even an adopted version with no new bullets needs a pull request.
+            git commit --allow-empty -m "Release v$version"
+          else
+            git commit -m "Bump version to $version"
+          fi
+          # Replace a closed leftover only if nobody pushed since the checkout.
+          git push --force-with-lease origin "HEAD:$RELEASE_BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+      - name: Open the release pull request
+        if: ${{ steps.existing.outputs.number == '' }}
+        env:
+          NEXT: ${{ steps.bump.outputs.next }}
+        run: |
+          node scripts/release-pr-body.js --version "$NEXT" \
+            --bullets-file "$RUNNER_TEMP/all-bullets.json" \
+            --output "$RUNNER_TEMP/release-pr-body.md"
+          gh pr create \
+            --base main \
+            --head "$RELEASE_BRANCH" \
+            --title "Release v$NEXT - collects every merge until you merge it" \
+            --body-file "$RUNNER_TEMP/release-pr-body.md"
 
-    # --- One is already open: catch it up with main and add only the new bullets. ---
-    - name: Refresh the open release pull request
-      id: refresh
-      if: ${{ steps.existing.outputs.number != '' }}
-      env:
-        ADOPTED_FROM: ${{ needs.check.outputs.adoptedFrom }}
-        PR: ${{ steps.existing.outputs.number }}
-        PRS: ${{ steps.bullets.outputs.prs }}
-      run: |
-        git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
-        # readVersion refuses anything but a plain three-part version, so neither of these can
-        # carry a payload into the expressions and shell commands below.
-        ours=$(node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync('package.json', 'utf8'))")
-        theirs=$(git show origin/main:package.json | node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync(0, 'utf8'))")
-        # Before the merge, and not inside the conflict branch where it is used: a conflicted
-        # package.json holds merge markers, and node refuses to load any module from a directory
-        # whose package.json will not parse.
-        #
-        # Through the environment rather than interpolated into the expression: a version spliced
-        # into JS source is compiled, not read.
-        higher=$(OURS="$ours" THEIRS="$theirs" node -p "require('./scripts/bump-version').higherVersion(process.env.OURS, process.env.THEIRS)")
+      # --- One is open: catch up with main and add only the new bullets. ---
+      - name: Refresh the open release pull request
+        id: refresh
+        if: ${{ steps.existing.outputs.number != '' }}
+        env:
+          ADOPTED_FROM: ${{ needs.check.outputs.adoptedFrom }}
+          PR: ${{ steps.existing.outputs.number }}
+          PRS: ${{ steps.bullets.outputs.prs }}
+        run: |
+          git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+          # readVersion accepts only a plain version, never a payload.
+          ours=$(node -p \
+            "require('./scripts/bump-version').readVersion(\
+          require('fs').readFileSync('package.json', 'utf8'))")
+          theirs=$(git show origin/main:package.json | node -p \
+            "require('./scripts/bump-version').readVersion(\
+          require('fs').readFileSync(0, 'utf8'))")
+          # Read before merging: Node cannot load a conflicted package.json.
+          # Pass versions as data through the environment, not as JavaScript.
+          higher=$(OURS="$ours" THEIRS="$theirs" node -p \
+            "require('./scripts/bump-version').higherVersion(\
+          process.env.OURS, process.env.THEIRS)")
 
-        # The changelog is rebuilt from main's rather than merged with it: main's Unreleased section
-        # is taken as it stands under the version heading, and this branch adds only the bullets
-        # main never had -- the seeded ones. Telling those apart needs this branch's changelog and
-        # main's as it was when this branch last caught up, which is the merge base; both are read
-        # before the merge moves either.
-        git show origin/main:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
-        git show "$(git merge-base HEAD origin/main):CHANGELOG.md" > "$RUNNER_TEMP/previous-main-changelog.md"
-        cp CHANGELOG.md "$RUNNER_TEMP/release-changelog.md"
-        rebuild_changelog() {
-          node scripts/merge-changelog.js --main "$RUNNER_TEMP/main-changelog.md" \
-            --previous-main "$RUNNER_TEMP/previous-main-changelog.md" \
-            --release "$RUNNER_TEMP/release-changelog.md" --version "$higher" >/dev/null
-        }
+          # Rebuild from main, preserving only seeded bullets main never had.
+          # Read all three inputs before the merge moves the merge base.
+          git show origin/main:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
+          git show "$(git merge-base HEAD origin/main):CHANGELOG.md" \
+            > "$RUNNER_TEMP/previous-main-changelog.md"
+          cp CHANGELOG.md "$RUNNER_TEMP/release-changelog.md"
+          rebuild_changelog() {
+            node scripts/merge-changelog.js \
+              --main "$RUNNER_TEMP/main-changelog.md" \
+              --previous-main "$RUNNER_TEMP/previous-main-changelog.md" \
+              --release "$RUNNER_TEMP/release-changelog.md" \
+              --version "$higher" >/dev/null
+          }
 
-        if ! git merge --no-edit origin/main; then
-          # A branch that wrote under Unreleased on main collides with the section this pull request
-          # promoted, and a branch that also bumped the version collides in package.json as well.
-          # Both are resolved here rather than left for a hand merge.
-          conflicts=$(git diff --name-only --diff-filter=U | sort)
-          if printf '%s\n' "$conflicts" | grep -qvE '^(CHANGELOG\.md|package\.json)$'; then
-            git merge --abort || true
-            gh pr comment "$PR" --body "\`main\` moved on and this branch no longer merges cleanly. Resolve the conflict here and the next push to \`main\` will pick up from there."
+          if ! git merge --no-edit origin/main; then
+            # Resolve only changelog and version collisions.
+            conflicts=$(git diff --name-only --diff-filter=U | sort)
+            if printf '%s\n' "$conflicts" \
+              | grep -qvE '^(CHANGELOG\.md|package\.json)$'; then
+              git merge --abort || true
+              gh pr comment "$PR" --body "\`main\` moved on and this branch \
+          no longer merges cleanly. Resolve the conflict here and the next \
+          push to \
+          \`main\` will pick up from there."
+              exit 0
+            fi
+            # Take main's package changes; the rebuild writes our version back.
+            # Only conflicted paths can be checked out with --theirs.
+            for conflict in $conflicts; do
+              git checkout --theirs -- "$conflict"
+            done
+            rebuild_changelog
+            git add package.json CHANGELOG.md
+            git commit --no-edit
+          else
+            # A clean merge still needs main's changelog and the higher version.
+            rebuild_changelog
+          fi
+
+          # Send only genuinely new bullets to the model, not hand-edited ones.
+          gh pr view "$PR" --json body --jq .body \
+            > "$RUNNER_TEMP/current-body.md"
+          covered=$(sed -n 's/^Included pull requests: //p' \
+            "$RUNNER_TEMP/current-body.md" | head -1)
+          node scripts/select-bullets.js \
+            --bullets-file "$RUNNER_TEMP/all-bullets.json" \
+            --output "$RUNNER_TEMP/fresh.json" \
+            --skip "$ADOPTED_FROM" --covered "$covered" >/dev/null
+          node scripts/rewrite-bullets.js \
+            --bullets-file "$RUNNER_TEMP/fresh.json"
+          node scripts/bump-version.js --append \
+            --bullets-file "$RUNNER_TEMP/fresh.json" >/dev/null
+
+          git add package.json CHANGELOG.md
+          # Say nothing when main moved but this pull request already covers it.
+          if git diff --cached --quiet \
+            && git diff --quiet "origin/$RELEASE_BRANCH" HEAD; then
+            echo "::notice::The release pull request already covers everything \
+          on main."
             exit 0
           fi
-          # Only the paths that actually conflicted -- `checkout --theirs` fails on a path git
-          # merged cleanly. Both are main's: the changelog is rebuilt from main's just below, and
-          # the only thing this branch ever changed in package.json is the version, which the
-          # rebuild writes back, whereas taking ours wholesale would silently drop whatever a branch
-          # on main added to it -- a new command, a setting, a dependency.
-          for conflict in $conflicts; do
-            git checkout --theirs -- "$conflict"
-          done
-          rebuild_changelog
-          git add package.json CHANGELOG.md
-          git commit --no-edit
-        else
-          # No conflict, but the rebuild still runs: a clean merge is not a changelog main wrote,
-          # and main may carry a version this branch did not have, which it puts back.
-          rebuild_changelog
-        fi
+          git diff --cached --quiet || git commit -m "Catch up with main"
+          # Push first: a failed body update must never record unpushed bullets.
+          git push origin "HEAD:$RELEASE_BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
 
-        # The pull request body lists what is already covered, so a bullet reworded by hand is
-        # never rewritten and never sent to the model twice -- only genuinely new ones are added.
-        gh pr view "$PR" --json body --jq .body > "$RUNNER_TEMP/current-body.md"
-        covered=$(sed -n 's/^Included pull requests: //p' "$RUNNER_TEMP/current-body.md" | head -1)
-        node scripts/select-bullets.js --bullets-file "$RUNNER_TEMP/all-bullets.json" --output "$RUNNER_TEMP/fresh.json" \
-          --skip "$ADOPTED_FROM" --covered "$covered" >/dev/null
-        node scripts/rewrite-bullets.js --bullets-file "$RUNNER_TEMP/fresh.json"
-        node scripts/bump-version.js --append --bullets-file "$RUNNER_TEMP/fresh.json" >/dev/null
+          next=$(node -p \
+            "require('./scripts/bump-version').readVersion(\
+          require('fs').readFileSync('package.json', 'utf8'))")
+          gh pr edit "$PR" \
+            --title "Release v$next - collects every merge until you merge it"
 
-        git add package.json CHANGELOG.md
-        # Nothing new to say: main moved, but this pull request already covers all of it. Saying
-        # so on every merge is noise, so say nothing at all.
-        if git diff --cached --quiet && git diff --quiet "origin/$RELEASE_BRANCH" HEAD; then
-          echo "::notice::The release pull request already covers everything on main."
-          exit 0
-        fi
-        git diff --cached --quiet || git commit -m "Catch up with main"
-        # The push comes before the body is updated on purpose. If the API fails between the two,
-        # the next merge writes these bullets once more and the append drops the ones that
-        # repeat a sentence already there -- a duplicate that slips past that is visible
-        # in the pull request and one edit away. The other order would record pull requests as
-        # covered whose bullets never landed, and nothing would ever write them again.
-        git push origin "HEAD:$RELEASE_BRANCH"
-        echo "pushed=true" >> "$GITHUB_OUTPUT"
-
-        next=$(node -p "require('./scripts/bump-version').readVersion(require('fs').readFileSync('package.json', 'utf8'))")
-        gh pr edit "$PR" --title "Release v$next - collects every merge until you merge it"
-
-        gh pr view "$PR" --json body --jq .body > "$RUNNER_TEMP/current-body.md"
-        node scripts/release-pr-body.js --version "$next" --bullets-file "$RUNNER_TEMP/all-bullets.json" \
-          --existing "$RUNNER_TEMP/current-body.md" --output "$RUNNER_TEMP/updated-body.md"
-        gh pr edit "$PR" --body-file "$RUNNER_TEMP/updated-body.md"
-        gh pr comment "$PR" --body "Caught up with \`main\`, now releasing \`v$next\`. Included pull requests: $PRS"
-
-    # Nothing dispatches the tests: the release is what nobody has tested -- every branch in it was
-    # green on its own, but the collection of them runs nowhere else -- and the bot's push starts
-    # the Test and Version workflows against the merge commit by itself.
+          gh pr view "$PR" --json body --jq .body \
+            > "$RUNNER_TEMP/current-body.md"
+          node scripts/release-pr-body.js --version "$next" \
+            --bullets-file "$RUNNER_TEMP/all-bullets.json" \
+            --existing "$RUNNER_TEMP/current-body.md" \
+            --output "$RUNNER_TEMP/updated-body.md"
+          gh pr edit "$PR" --body-file "$RUNNER_TEMP/updated-body.md"
+          gh pr comment "$PR" --body "Caught up with \`main\`, now releasing \
+          \`v$next\`. Included pull requests: $PRS"
 
   # --- Pre-release: every push to main that is not itself a release. ---
 
-  # Skipped on the release push. That commit carries a version and a changelog and nothing else, so
-  # publishing it to the pre-release channel as well would ship the same code twice.
-  #
-  # Builds beside `verify` rather than after it: the two share no output, and waiting cost every
-  # push to main the length of the test suite before the build could start. Nothing is published
-  # until both are green -- the publish jobs below need them both.
+  # Build beside verify, but publish only when both pass. A release push already
+  # ships the same code, so it needs no pre-release.
   build-pre-release:
     name: "Pre-release: Build"
     needs: check
@@ -355,39 +362,42 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-        cache: 'npm'
-    - name: Install dependencies
-      run: npm ci
-    # Writes the version into package.json in this checkout only. Nothing is committed, and
-    # CHANGELOG.md is deliberately left alone -- a pre-release is not a release.
-    - name: Resolve the pre-release version
-      id: version
-      run: node scripts/prerelease-version.js --apply
-    - name: Package the pre-release VSIX
-      run: npm run package:pre-release
-    - name: Find VSIX
-      id: find_vsix
-      run: |
-        vsix=$(ls *.vsix 2>/dev/null | head -1)
-        if [ -z "$vsix" ]; then
-          echo "::error::No .vsix file found after packaging"
-          exit 1
-        fi
-        echo "vsix=$vsix" >> "$GITHUB_OUTPUT"
-    # The three publish jobs below run on their own runners, so the bytes have to travel as an
-    # artifact. All three get the same ones, which is what "the same build is on both registries"
-    # means.
-    - name: Upload the VSIX
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      with:
-        name: pre-release-vsix
-        path: ${{ steps.find_vsix.outputs.vsix }}
-        if-no-files-found: error
-        retention-days: 5
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      # Change this checkout's version only. Leave CHANGELOG alone.
+      - name: Resolve the pre-release version
+        id: version
+        run: node scripts/prerelease-version.js --apply
+      - name: Package the pre-release VSIX
+        run: npm run package:pre-release
+      - name: Find VSIX
+        id: find_vsix
+        run: |
+          packages=(*.vsix)
+          vsix=${packages[0]}
+          if [ ! -f "$vsix" ]; then
+            echo "::error::No .vsix file found after packaging"
+            exit 1
+          fi
+          echo "vsix=$vsix" >> "$GITHUB_OUTPUT"
+      # All three publish runners receive the same bytes.
+      - name: Upload the VSIX
+        # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pre-release-vsix
+          path: ${{ steps.find_vsix.outputs.vsix }}
+          if-no-files-found: error
+          retention-days: 5
 
   pre-release-marketplace:
     name: "Pre-release: VS Code Marketplace"
@@ -400,29 +410,30 @@ jobs:
       VSCE_PAT: ${{ secrets.VSCE_PAT }}
       VSIX: ${{ needs.build-pre-release.outputs.vsix }}
     steps:
-    # vsce is a dev dependency, so this job needs the tree even though it publishes a .vsix that
-    # was built elsewhere. The GitHub job needs neither a checkout nor node.
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-        cache: 'npm'
-    - name: Install dependencies
-      run: npm ci
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: pre-release-vsix
-    # The script checks the token, retries a gallery timeout, and treats a version that is already
-    # up as done. A missing token is an error that says what to create, never a green skip.
-    - name: Publish to VS Code Marketplace
-      run: node scripts/publish-extension.js --registry marketplace --vsix "$VSIX" --pre-release
+      # vsce is a dev dependency, even though the VSIX was built elsewhere.
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pre-release-vsix
+      # Missing tokens fail, duplicates pass, and transient failures retry.
+      - name: Publish to VS Code Marketplace
+        run: >-
+          node scripts/publish-extension.js --registry marketplace
+          --vsix "$VSIX" --pre-release
 
-  # The same script as the Marketplace, with ovsx behind it instead of vsce: a missing token is an
-  # error that says what to create (it used to skip the step and leave the job green, which is how
-  # the extension went months without ever reaching Open VSX while every run said success), and a
-  # registry that is briefly unwell is retried. No --pre-release here: ovsx reads the flag out of
-  # the manifest, where `vsce package --pre-release` already put it. Only the quick retries for a
-  # pre-release -- the next push to main supersedes it anyway.
+  # ovsx reads the pre-release flag from the manifest. Only quick retries here:
+  # the next main push supersedes this build.
   pre-release-open-vsx:
     name: "Pre-release: Open VSX"
     needs: [build-pre-release, verify]
@@ -434,59 +445,69 @@ jobs:
       OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
       VSIX: ${{ needs.build-pre-release.outputs.vsix }}
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-        cache: 'npm'
-    - name: Install dependencies
-      run: npm ci
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: pre-release-vsix
-    - name: Publish to Open VSX Registry
-      run: node scripts/publish-extension.js --registry open-vsx --vsix "$VSIX"
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pre-release-vsix
+      - name: Publish to Open VSX Registry
+        run: >-
+          node scripts/publish-extension.js --registry open-vsx --vsix "$VSIX"
 
   pre-release-github:
     name: "Pre-release: GitHub prerelease"
     needs: [build-pre-release, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The prerelease is created with the bot's token, so nothing here writes as the workflow.
+    # The bot creates the prerelease; the workflow token only reads.
     permissions:
       contents: read
     steps:
-    # Same identity as a release: what the automation publishes is published by the bot.
-    - name: Mint the release bot token
-      id: app-token
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-      with:
-        client-id: ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
-        private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: pre-release-vsix
-    # generate_release_notes would draw its notes from the previous stable tag, which is a whole
-    # release behind. The commit this was built from is the useful thing to say instead.
-    - name: Create GitHub prerelease
-      uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-      with:
-        token: ${{ steps.app-token.outputs.token }}
-        tag_name: ${{ needs.build-pre-release.outputs.tag }}
-        name: Pre-release ${{ needs.build-pre-release.outputs.version }}
-        target_commitish: ${{ github.sha }}
-        prerelease: true
-        body: |
-          Pre-release build of ${{ github.sha }}.
+      - name: Mint the release bot token
+        id: app-token
+        # v3.2.0
+        uses: >-
+          actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: >-
+            ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
+          permission-contents: write
+      # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pre-release-vsix
+      # Generated notes would start one release behind, at the stable tag.
+      - name: Create GitHub prerelease
+        # v3.0.3
+        uses: >-
+          softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          tag_name: ${{ needs.build-pre-release.outputs.tag }}
+          name: Pre-release ${{ needs.build-pre-release.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          body: |
+            Pre-release build of ${{ github.sha }}.
 
-          The same build is on the VS Code Marketplace and Open VSX on the pre-release channel, so
-          "Switch to Pre-Release Version" in the extension view gets you this without downloading
-          anything. The `.vsix` below is for installing it by hand.
-        files: ${{ needs.build-pre-release.outputs.vsix }}
+            The same build is on the VS Code Marketplace and Open VSX on the
+            pre-release channel. "Switch to Pre-Release Version" in the
+            extension view installs it; the `.vsix` below is for a hand install.
+          files: ${{ needs.build-pre-release.outputs.vsix }}
 
-  # --- Release: only the push that merged the release pull request. ---
+  # --- Release: only a release or failed-release fix merge. ---
 
-  # Like the pre-release build, beside `verify` rather than after it; the publish jobs need both.
   build-release:
     name: "Release: Build"
     needs: check
@@ -498,45 +519,41 @@ jobs:
     outputs:
       vsix: ${{ steps.find_vsix.outputs.vsix }}
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-        cache: 'npm'
-    - name: Install dependencies
-      run: npm ci
-    - name: Package VSIX
-      run: npm run package
-    - name: Find VSIX
-      id: find_vsix
-      run: |
-        vsix=$(ls *.vsix 2>/dev/null | head -1)
-        if [ -z "$vsix" ]; then
-          echo "::error::No .vsix file found after packaging"
-          exit 1
-        fi
-        echo "vsix=$vsix" >> "$GITHUB_OUTPUT"
-    - name: Upload the VSIX
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      with:
-        name: release-vsix
-        path: ${{ steps.find_vsix.outputs.vsix }}
-        if-no-files-found: error
-        retention-days: 5
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Package VSIX
+        run: npm run package
+      - name: Find VSIX
+        id: find_vsix
+        run: |
+          packages=(*.vsix)
+          vsix=${packages[0]}
+          if [ ! -f "$vsix" ]; then
+            echo "::error::No .vsix file found after packaging"
+            exit 1
+          fi
+          echo "vsix=$vsix" >> "$GITHUB_OUTPUT"
+      - name: Upload the VSIX
+        # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-vsix
+          path: ${{ steps.find_vsix.outputs.vsix }}
+          if-no-files-found: error
+          retention-days: 5
 
-  # The two registries below are deliberately siblings rather than steps in a row. Open VSX used to
-  # be a step after the Marketplace one, so a Marketplace outage took Open VSX and the GitHub release
-  # down with it; now one registry being unreachable costs exactly that registry, and re-running a
-  # single failed job republishes only that target. The GitHub release comes after both, because it
-  # is the tag: see release-github.
-  #
-  # A gallery timeout is retried rather than failed, and a version that is already up is a
-  # success, not a failure: it is what a re-run of this one job -- or the merge of the fix pull
-  # request -- answers once the version is there, which is what makes publishing a half-finished
-  # release again safe. A missing token is an error that says what to create, never a green skip.
-  # When even the retries fail on something that reads like an outage, the job says so in its
-  # `transient` output and release-marketplace-retry takes over; a failure that would only fail
-  # again (a rejected token) sets nothing.
+  # Sibling registry jobs keep an outage from taking the other registry down.
+  # Quick retries handle transient failures; patient jobs take over if needed.
+  # Duplicates pass so a half-finished release can safely be published again.
   release-marketplace:
     name: "Release: VS Code Marketplace"
     needs: [build-release, verify]
@@ -550,27 +567,35 @@ jobs:
     outputs:
       transient: ${{ steps.publish.outputs.transient }}
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-        cache: 'npm'
-    - name: Install dependencies
-      run: npm ci
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: release-vsix
-    - name: Publish to VS Code Marketplace
-      id: publish
-      run: node scripts/publish-extension.js --registry marketplace --vsix "$VSIX"
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-vsix
+      - name: Publish to VS Code Marketplace
+        id: publish
+        run: >-
+          node scripts/publish-extension.js --registry marketplace
+          --vsix "$VSIX"
 
-  # v1.1.37 failed to publish on the Marketplace answering 503 to all three quick attempts, and a
-  # fix pull request was opened for a build that had nothing wrong with it -- the patient retry
-  # below existed for Open VSX only. Same job, same reasoning: see release-open-vsx-retry.
+  # v1.1.37 exhausted quick retries on three 503s; Marketplace needs the same
+  # patient retry as Open VSX rather than a fix pull request for a good build.
   release-marketplace-retry:
     name: "Release: VS Code Marketplace (retry later)"
     needs: [build-release, release-marketplace]
-    if: ${{ always() && needs['release-marketplace'].result == 'failure' && needs['release-marketplace'].outputs.transient == 'true' }}
+    if: >-
+      ${{ always() && needs['release-marketplace'].result == 'failure' &&
+      needs['release-marketplace'].outputs.transient == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -579,25 +604,26 @@ jobs:
       VSCE_PAT: ${{ secrets.VSCE_PAT }}
       VSIX: ${{ needs.build-release.outputs.vsix }}
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-        cache: 'npm'
-    - name: Install dependencies
-      run: npm ci
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: release-vsix
-    - name: Publish to VS Code Marketplace, patiently
-      run: node scripts/publish-extension.js --registry marketplace --vsix "$VSIX" --schedule patient
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-vsix
+      - name: Publish to VS Code Marketplace, patiently
+        run: >-
+          node scripts/publish-extension.js --registry marketplace
+          --vsix "$VSIX" --schedule patient
 
-  # Both registries get the same bytes, out of the same artifact, through the same script: a
-  # missing token is an error that says what to create, a version Open VSX already has is done
-  # rather than an error (which is what the merge of the fix pull request does when it was another
-  # registry that failed), and a registry that is briefly unwell is retried. When even the retries
-  # fail on something that reads like an outage, the job says so in its `transient` output and
-  # the job below takes over; a failure that would only fail again (a rejected token) sets nothing.
   release-open-vsx:
     name: "Release: Open VSX"
     needs: [build-release, verify]
@@ -611,32 +637,35 @@ jobs:
     outputs:
       transient: ${{ steps.publish.outputs.transient }}
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-        cache: 'npm'
-    - name: Install dependencies
-      run: npm ci
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: release-vsix
-    - name: Publish to Open VSX Registry
-      id: publish
-      run: node scripts/publish-extension.js --registry open-vsx --vsix "$VSIX"
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-vsix
+      - name: Publish to Open VSX Registry
+        id: publish
+        run: >-
+          node scripts/publish-extension.js --registry open-vsx --vsix "$VSIX"
 
-  # v1.1.36 failed to publish on nothing but Open VSX answering 503 to one request, and a fix pull
-  # request was opened for a build that had nothing wrong with it. An outage there outlasts the
-  # minute of retries above, so this job asks again later -- five, ten and fifteen minutes on --
-  # and only when it gives up too does the fix pull request open. It waits inside the run rather
-  # than dispatching another one because a dispatched run would sit in the same `publish`
-  # concurrency group while it waited, so nothing would be gained; the cost is that a push to main
-  # in that half hour queues behind it, and is never cancelled. The Marketplace has the same job
-  # above, since v1.1.37 went the same way there.
+  # Wait five, ten, then fifteen minutes before giving up on a registry outage.
+  # This stays inside the run: dispatching would queue behind its own publish
+  # concurrency group. Main pushes queue while these patient retries wait.
   release-open-vsx-retry:
     name: "Release: Open VSX (retry later)"
     needs: [build-release, release-open-vsx]
-    if: ${{ always() && needs['release-open-vsx'].result == 'failure' && needs['release-open-vsx'].outputs.transient == 'true' }}
+    if: >-
+      ${{ always() && needs['release-open-vsx'].result == 'failure' &&
+      needs['release-open-vsx'].outputs.transient == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -645,198 +674,241 @@ jobs:
       OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
       VSIX: ${{ needs.build-release.outputs.vsix }}
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-      with:
-        node-version-file: .nvmrc
-        cache: 'npm'
-    - name: Install dependencies
-      run: npm ci
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: release-vsix
-    - name: Publish to Open VSX Registry, patiently
-      run: node scripts/publish-extension.js --registry open-vsx --vsix "$VSIX" --schedule patient
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-vsix
+      - name: Publish to Open VSX Registry, patiently
+        run: >-
+          node scripts/publish-extension.js --registry open-vsx
+          --vsix "$VSIX" --schedule patient
 
-  # Publishing again with the tag and release already there updates the release in place and
-  # replaces the .vsix on it (overwrite_files defaults to true), so this job needs no duplicate
-  # handling of its own.
-  #
-  # This is the job that writes the tag, and a tag says the version shipped. It used to run
-  # whatever the registries did, so a release both registries rejected still got its tag, and
-  # release-check.js then read that tag as "already released" while nobody could install it. Now
-  # it waits for both registries and runs only when at least one of them took the build: one
-  # registry down still costs only that registry, and the fix pull request republishes it, but a
-  # version that reached nobody keeps no tag, so the next release pull request takes it over
-  # instead of bumping past it. `!cancelled()` rather than `always()`: a run someone stopped by
-  # hand does not tag either. A patient retry counts as that registry taking the build, so a
-  # release one registry rejected and the other only accepted late still gets its tag.
+  # The release writes the tag, which says this version shipped. At least one
+  # registry must accept the build, including a patient retry. Never tag a run
+  # stopped by hand. A repeated publish updates the release and VSIX in place.
   release-github:
     name: "Release: GitHub release"
-    needs: [check, build-release, verify, release-marketplace, release-marketplace-retry, release-open-vsx, release-open-vsx-retry]
-    if: ${{ !cancelled() && needs.build-release.result == 'success' && (needs.release-marketplace.result == 'success' || needs.release-marketplace-retry.result == 'success' || needs.release-open-vsx.result == 'success' || needs.release-open-vsx-retry.result == 'success') }}
+    needs:
+      - check
+      - build-release
+      - verify
+      - release-marketplace
+      - release-marketplace-retry
+      - release-open-vsx
+      - release-open-vsx-retry
+    if: >-
+      ${{ !cancelled() && needs.build-release.result == 'success' &&
+      (needs.release-marketplace.result == 'success' ||
+      needs.release-marketplace-retry.result == 'success' ||
+      needs.release-open-vsx.result == 'success' ||
+      needs.release-open-vsx-retry.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The release itself is created with the bot's token, so nothing here writes as the workflow.
+    # The bot creates the release; the workflow token only reads.
     permissions:
       contents: read
     steps:
-    # The release and its tag are published by the MD Utilities Release Bot. Unlike GITHUB_TOKEN an
-    # App token does fire `release: published`, so close-fixed-issues.yml finally runs on a release
-    # -- its own guard keeps the pre-release builds out of that.
-    - name: Mint the release bot token
-      id: app-token
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-      with:
-        client-id: ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
-        private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
-    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: release-vsix
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-      with:
-        token: ${{ steps.app-token.outputs.token }}
-        tag_name: ${{ needs.check.outputs.tag }}
-        name: ${{ needs.check.outputs.tag }}
-        generate_release_notes: true
-        files: ${{ needs.build-release.outputs.vsix }}
+      # The App token fires release: published so close-fixed-issues runs.
+      - name: Mint the release bot token
+        id: app-token
+        # v3.2.0
+        uses: >-
+          actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: >-
+            ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
+          permission-contents: write
+      # v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: release-vsix
+      - name: Create GitHub Release
+        # v3.0.3
+        uses: >-
+          softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          tag_name: ${{ needs.check.outputs.tag }}
+          name: ${{ needs.check.outputs.tag }}
+          generate_release_notes: true
+          files: ${{ needs.build-release.outputs.vsix }}
 
-  # A failed release used to be a red run and nothing else. Now it leaves a branch and a draft pull
-  # request behind, so fixing it is a checkout rather than an archaeology dig through the log.
-  # Merging that pull request is the release: release-check.js recognises the branch name and
-  # publishes the version again, so the fix does not wait on a second release pull request.
-  #
-  # Only a release gets one. A pre-release runs on every push to main and the next push supersedes
-  # it, so a pull request per failed pre-release would be noise. And a registry outage gets one
-  # only once the patient retry has given up too: the first publish job going red is what starts
-  # that retry, not a problem to fix, so it counts here only when the retry did not succeed --
-  # failed, or skipped because the failure was never transient.
+  # A failed release leaves a branch and draft pull request to fix it on. Its
+  # merge retries the same version, without a second release pull request.
+  # Pre-releases need none; registry outages get one only after patient retries.
   release-failed:
     name: "Release: Open a fix pull request"
-    needs: [check, verify, build-release, release-marketplace, release-marketplace-retry, release-open-vsx, release-open-vsx-retry, release-github]
-    # `failure` only, and never `cancelled`: a run someone stopped by hand is not a problem to fix.
-    # `!cancelled()` rather than `always()`, because `always()` is also true on a cancelled run,
-    # and a retry that was cancelled mid-wait is "not success" -- the clause below would then read
-    # the first registry failure as a failed release and open a pull request for it.
-    # Folded, so the expression reaches the runner as one line: a more-indented line would keep
-    # its newline.
+    needs:
+      - check
+      - verify
+      - build-release
+      - release-marketplace
+      - release-marketplace-retry
+      - release-open-vsx
+      - release-open-vsx-retry
+      - release-github
+    # A cancelled retry must not open a fix for the first registry failure.
+    # Keep folded expression lines equally indented so no newline survives.
     if: >-
       ${{ !cancelled() && needs.check.outputs.release == 'true' &&
       (needs.verify.result == 'failure' ||
       needs['build-release'].result == 'failure' ||
       needs['release-github'].result == 'failure' ||
       needs['release-marketplace-retry'].result == 'failure' ||
-      (needs['release-marketplace'].result == 'failure' && needs['release-marketplace-retry'].result != 'success') ||
+      (needs['release-marketplace'].result == 'failure' &&
+      needs['release-marketplace-retry'].result != 'success') ||
       needs['release-open-vsx-retry'].result == 'failure' ||
-      (needs['release-open-vsx'].result == 'failure' && needs['release-open-vsx-retry'].result != 'success')) }}
+      (needs['release-open-vsx'].result == 'failure' &&
+      needs['release-open-vsx-retry'].result != 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Everything below writes as the bot, through GH_TOKEN and the checkout token.
+    # Writes use the bot; the workflow token reads the failure log.
     permissions:
       contents: read
+      actions: read
     env:
       TAG: ${{ needs.check.outputs.tag }}
       BRANCH: fix/release-v${{ needs.check.outputs.version }}
     steps:
-    - name: Mint the release bot token
-      id: app-token
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-      with:
-        client-id: ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
-        private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
-    # A job-level `env` cannot read the `steps` context, so the token every `gh` step below wants is
-    # exported once here instead. The action masks it, so it stays redacted in the log.
-    - name: Use the bot token for gh
-      env:
-        TOKEN: ${{ steps.app-token.outputs.token }}
-      run: echo "GH_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        fetch-depth: 0
-        token: ${{ steps.app-token.outputs.token }}
-    - name: Configure git
-      env:
-        SLUG: ${{ steps.app-token.outputs.app-slug }}
-      run: |
-        id=$(gh api "users/$SLUG%5Bbot%5D" --jq .id)
-        git config user.name "${SLUG}[bot]"
-        git config user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
-    # Which jobs failed, and a link straight to each log. Only those: the list used to name every
-    # job in the run, successes and skips included, and the one line that mattered was lost among
-    # them. What is not listed either passed or did not need to run, and the text says so. The
-    # one skip worth a word of its own is the GitHub release, which skips itself when neither
-    # registry took the build -- that is what says there is no tag -- so it gets a sentence rather
-    # than a bullet.
-    - name: Write the failure summary
-      id: summary
-      run: |
-        set -euo pipefail
-        body="$RUNNER_TEMP/release-failure.md"
-        jobs="$RUNNER_TEMP/jobs.json"
-        # Tolerated, not required: a rate-limited job list is no reason to withhold the branch.
-        gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" --paginate --jq '.jobs[]' > "$jobs" \
-          || : > "$jobs"
-        {
-          echo "Publishing **$TAG** failed."
-          echo
-          echo "This branch is here to fix it on. It carries one empty commit and nothing else, so"
-          echo "there is nothing to clean up -- push the fix, mark this ready and merge it. **That"
-          echo "merge publishes $TAG again**: every target treats a version it already has as done,"
-          echo "so only the ones that failed actually change. No release pull request is involved."
-          echo
-          echo "If the fix changes what ships -- anything outside \`.github/\` and documentation --"
-          echo "bump \`package.json\` and the \`Unreleased\` heading in \`CHANGELOG.md\` on this branch"
-          echo "first (\`node scripts/bump-version.js --type patch\`), so the new build goes out"
-          echo "under its own version instead of replacing $TAG on the targets that already have it."
-          echo
-          echo "### What failed"
-          echo
-          if [ -s "$jobs" ]; then
-            jq -r 'select(.conclusion == "failure") | "- [\(.name)](\(.html_url))"' "$jobs"
-          else
-            echo "- The job list could not be read; open the run below."
-          fi
-          echo
-          echo "Every job not listed here passed or did not need to run, so any other target is"
-          echo "already published. Re-running just a failed job from"
-          echo "[the run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
-          echo "republishes only that one; both registries treat a version that is already up as"
-          echo "done rather than as an error."
-          if jq -e 'select(.name == "Release: GitHub release" and .conclusion == "skipped")' "$jobs" >/dev/null; then
+      - name: Mint the release bot token
+        id: app-token
+        # v3.2.0
+        uses: >-
+          actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: >-
+            ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+      # Keep git authentication in the job environment, never in the checkout.
+      - name: Use the bot token for gh and git
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          header=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          echo "::add-mask::$header"
+          {
+            echo "GH_TOKEN=$TOKEN"
+            echo "GIT_CONFIG_COUNT=1"
+            echo "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader"
+            echo "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $header"
+          } >> "$GITHUB_ENV"
+      - name: Configure git
+        env:
+          SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          id=$(gh api "users/$SLUG%5Bbot%5D" --jq .id)
+          git config user.name "${SLUG}[bot]"
+          git config user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
+      # List only failed jobs, plus a note if no registry earned a release tag.
+      - name: Write the failure summary
+        id: summary
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          body="$RUNNER_TEMP/release-failure.md"
+          jobs="$RUNNER_TEMP/jobs.json"
+          # A rate-limited job list must not prevent opening the fix branch.
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" \
+            --paginate --jq '.jobs[]' > "$jobs" || : > "$jobs"
+          {
+            echo "Publishing **$TAG** failed."
             echo
-            echo "No GitHub release was created: neither registry took the build, so there is no"
-            echo "$TAG tag yet and nothing is published anywhere."
-          fi
-        } > "$body"
-        echo "body=$body" >> "$GITHUB_OUTPUT"
-    - name: Open or update the fix pull request
-      env:
-        BODY: ${{ steps.summary.outputs.body }}
-      run: |
-        set -euo pipefail
-        title="Release $TAG failed to publish"
+            echo "This branch is here to fix it on. It carries one empty \
+          commit \
+          and nothing else, so"
+            echo "there is nothing to clean up -- push the fix, mark this \
+          ready \
+          and merge it. **That"
+            echo "merge publishes $TAG again**: every target treats a version \
+          it already has as done,"
+            echo "so only the ones that failed actually change. \
+          No release pull request is involved."
+            echo
+            echo "If the fix changes what ships -- anything outside \
+          \`.github/\` and documentation --"
+            echo "bump \`package.json\` and the \`Unreleased\` heading in \
+          \`CHANGELOG.md\` on this branch"
+            echo "first (\`node scripts/bump-version.js --type patch\`), \
+          so the new build goes out"
+            echo "under its own version instead of replacing $TAG \
+          on the targets that already have it."
+            echo
+            echo "### What failed"
+            echo
+            if [ -s "$jobs" ]; then
+              jq -r \
+          'select(.conclusion == "failure") | "- [\(.name)](\(.html_url))"' \
+                "$jobs"
+            else
+              echo "- The job list could not be read; open the run below."
+            fi
+            echo
+            echo "Every job not listed here passed or did not need to run, \
+          so any other target is"
+            echo "already published. Re-running just a failed job from"
+            echo "[the run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/\
+          actions/runs/$GITHUB_RUN_ID)"
+            echo "republishes only that one; both registries treat a version \
+          that is already up as"
+            echo "done rather than as an error."
+            if jq -e \
+              'select(.name == "Release: GitHub release" and
+              .conclusion == "skipped")' \
+              "$jobs" >/dev/null; then
+              echo
+              echo "No GitHub release was created: neither registry took \
+          the build, so there is no"
+              echo "$TAG tag yet and nothing is published anywhere."
+            fi
+          } > "$body"
+          echo "body=$body" >> "$GITHUB_OUTPUT"
+      - name: Open or update the fix pull request
+        env:
+          BODY: ${{ steps.summary.outputs.body }}
+        run: |
+          set -euo pipefail
+          title="Release $TAG failed to publish"
 
-        # A branch with an open pull request belongs to whoever is fixing this version, and their
-        # commits are not ours to force over. The new run gets reported on their pull request
-        # instead. A branch with no open pull request is a leftover -- the merge deleted it, so
-        # what is left is one that was closed unmerged -- and `gh pr create` on it would fail
-        # with "no commits between main and the branch", so it is started over from this commit.
-        if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-          number=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$number" ]; then
-            gh pr comment "$number" --body-file "$BODY"
-            echo "::notice::$title -- reported on pull request #$number."
-            exit 0
+          # An open fix belongs to its author. Report this run, never overwrite
+          # their work. Restart a closed leftover with no open pull request.
+          if git ls-remote --exit-code --heads origin "$BRANCH" \
+            >/dev/null 2>&1; then
+            number=$(gh pr list --head "$BRANCH" --state open --json number \
+              --jq '.[0].number // empty')
+            if [ -n "$number" ]; then
+              gh pr comment "$number" --body-file "$BODY"
+              echo "::notice::$title -- reported on pull request #$number."
+              exit 0
+            fi
           fi
-        fi
-        git checkout -B "$BRANCH" "$GITHUB_SHA"
-        git commit --allow-empty -m "$title"
-        # Nobody has a pull request open on this branch, so what is on it is a leftover -- but only
-        # overwrite what the checkout fetched, never a push that landed since.
-        git push --force-with-lease origin "HEAD:$BRANCH"
+          git checkout -B "$BRANCH" "$GITHUB_SHA"
+          git commit --allow-empty -m "$title"
+          # Replace only what the checkout saw, never a push that landed since.
+          git push --force-with-lease origin "HEAD:$BRANCH"
 
-        # No labels: a label is what decides where a seeded changelog bullet lands, and this pull
-        # request is a workspace, not a change. Whatever fix lands on it labels itself.
-        url=$(gh pr create --draft --base main --head "$BRANCH" --title "$title" --body-file "$BODY")
-        echo "::notice::$title -- opened $url."
+          # The eventual fix labels itself; this draft is only a workspace.
+          url=$(gh pr create --draft --base main --head "$BRANCH" \
+            --title "$title" --body-file "$BODY")
+          echo "::notice::$title -- opened $url."
