@@ -121,6 +121,30 @@ describe('webview/focustree rendering', () => {
         assert.strictEqual(element.querySelector('#focus_first_focus'), null);
     });
 
+    // A shared focus may sit relative_position_id to a joint focus of the same file. The joint
+    // focus is not drawn in the <Shared focuses> tree, but it still has to place its dependents.
+    it('places a shared focus relative to an anchor from the other pseudo-tree', async () => {
+        const anchored = { ...focus('sh_anchored'), x: 0, y: 1, relativePositionId: 'joint_anchor' };
+        const plain = { ...focus('sh_plain'), x: 0, y: 1 };
+        const message = updateBody('sh_plain');
+        const tree = message.data.focusTrees[0];
+        tree.focuses = { sh_anchored: anchored, sh_plain: plain };
+        tree.isSharedFocues = true;
+        tree.anchorFocuses = { joint_anchor: { ...focus('joint_anchor'), x: 4, y: 0 } };
+        message.data.renderedFocus = {
+            sh_anchored: '<div id="focus_sh_anchored" class="focus"></div>',
+            sh_plain: '<div id="focus_sh_plain" class="focus"></div>',
+        };
+        const element = document.getElementById('focustreeplaceholder')!;
+        window.dispatchEvent(new (window as any).MessageEvent('message', { data: message }));
+        await rendered(element);
+        takePostedMessages();
+
+        const left = (id: string) => parseFloat(element.querySelector<HTMLElement>(`#${id}`)!.style.left);
+        assert.strictEqual(left('focus_sh_anchored') - left('focus_sh_plain'), 4 * 96);
+        assert.strictEqual(element.querySelector('#focus_joint_anchor'), null);
+    });
+
     // An inlay's `visible` trigger can only be met from the inlay conditions dropdown, which exists
     // only in condition mode. Outside it, ticking the window on is what shows it.
     describe('inlay window visible trigger', () => {

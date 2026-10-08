@@ -14,6 +14,10 @@ v1.1.41
 - [ Previews ] Filtering or collapsing a chain no longer forgets decisions or events already hidden along its arrows. Issue #492.
 - [ World Map ] Supply nodes with leading spaces or tabs now load at the correct province and level. Issue #494.
 - [ DDS ] PNG images saved with a .dds extension now show in previews and the DDS viewer instead of going missing. Issue #504.
+- [ Focus Tree Previewer ] Overlap warnings now account for an `offset` triggered by `has_focus_tree` for the tree on screen, so a shared branch moved aside in one tree is no longer reported as colliding with that tree's own focuses. Issue #514.
+- [ Focus Tree Previewer ] Shared focuses placed or unlocked relative to a `joint_focus` of the same file are now drawn at the right spot and no longer reported as overlapping, and a tree that imports the joint focus now shows the shared focuses that follow from it. Issue #515.
+- [ Focus Tree Previewer ] Focuses under different `allow_branch` gates, such as flags set by rival events, are no longer reported as overlapping: mods stack alternative branches on the same spot, and only one of them is ever shown. Overlaps are still reported for focuses that can show without such a gate, for gates that test something in common, and for gates that start open, like `NOT = { has_completed_focus = X }`. Issue #516.
+- [ Focus Tree Previewer ] In a file of shared focuses, focuses that no single `shared_focus` import brings in together are no longer checked against each other, so placeholder shared focuses that no tree uses stop raising overlap warnings. Issue #517.
 
 v1.1.40
 
