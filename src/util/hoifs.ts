@@ -163,7 +163,6 @@ class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
 		_uri: vscode.Uri,
 		_options: { recursive: boolean; excludes: string[] },
 	): vscode.Disposable {
-		// TODO empty implementation
 		return { dispose: () => {} };
 	}
 
@@ -182,9 +181,7 @@ class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
 	}
 
 	createDirectory(uri: vscode.Uri): void | Thenable<void> {
-		return vscode.workspace.fs.createDirectory(
-			vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, "/")),
-		);
+		throw vscode.FileSystemError.NoPermissions(uri);
 	}
 
 	readFile(uri: vscode.Uri): Uint8Array | Thenable<Uint8Array> {
@@ -195,49 +192,32 @@ class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
 
 	writeFile(
 		uri: vscode.Uri,
-		content: Uint8Array,
+		_content: Uint8Array,
 		_options: { create: boolean; overwrite: boolean },
 	): void | Thenable<void> {
-		return vscode.workspace.fs.writeFile(
-			vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, "/")),
-			content,
-		);
+		throw vscode.FileSystemError.NoPermissions(uri);
 	}
 
 	delete(
 		uri: vscode.Uri,
-		options: { recursive: boolean },
+		_options: { recursive: boolean },
 	): void | Thenable<void> {
-		return vscode.workspace.fs.delete(
-			vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, "/")),
-			options,
-		);
+		throw vscode.FileSystemError.NoPermissions(uri);
 	}
 
 	rename(
 		oldUri: vscode.Uri,
-		newUri: vscode.Uri,
-		options: { overwrite: boolean },
+		_newUri: vscode.Uri,
+		_options: { overwrite: boolean },
 	): void | Thenable<void> {
-		return vscode.workspace.fs.rename(
-			vscode.Uri.joinPath(getInstallPathUri(), trimStart(oldUri.path, "/")),
-			vscode.Uri.joinPath(getInstallPathUri(), trimStart(newUri.path, "/")),
-			options,
-		);
+		throw vscode.FileSystemError.NoPermissions(oldUri);
 	}
 
 	copy(
 		source: vscode.Uri,
-		destination: vscode.Uri,
-		options: { overwrite: boolean },
+		_destination: vscode.Uri,
+		_options: { overwrite: boolean },
 	): void | Thenable<void> {
-		return vscode.workspace.fs.copy(
-			vscode.Uri.joinPath(getInstallPathUri(), trimStart(source.path, "/")),
-			vscode.Uri.joinPath(
-				getInstallPathUri(),
-				trimStart(destination.path, "/"),
-			),
-			options,
-		);
+		throw vscode.FileSystemError.NoPermissions(source);
 	}
 }
