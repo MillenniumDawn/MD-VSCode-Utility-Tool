@@ -1022,7 +1022,8 @@ function getFocusPosition(
 	if (focus.relativePositionId !== undefined) {
 		focusStack.push(focus);
 		const relativeFocusPosition = getFocusPosition(
-			focusTree.focuses[focus.relativePositionId],
+			focusTree.focuses[focus.relativePositionId] ??
+				focusTree.anchorFocuses?.[focus.relativePositionId],
 			positionByFocusId,
 			focusTree,
 			focusStack,
@@ -1040,7 +1041,11 @@ function getFocusPosition(
 		}
 	}
 
-	positionByFocusId[focus.id] = position;
+	// An anchor from the file's other pseudo-tree is not drawn here, so it stays out of the map
+	// that also sizes the grid.
+	if (focus.id in focusTree.focuses) {
+		positionByFocusId[focus.id] = position;
+	}
 	return position;
 }
 

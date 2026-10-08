@@ -37,6 +37,10 @@ export interface FocusTree {
 	allowBranchOptions: string[];
 	conditionExprs: ConditionItem[];
 	isSharedFocues: boolean;
+	// The other pseudo-tree's focuses when a file defines both shared and joint focuses. The game
+	// treats both kinds as one pool, so a shared focus may sit relative_position_id to a joint one;
+	// these resolve such anchors and are never drawn or checked as part of this tree.
+	anchorFocuses?: Record<string, Focus>;
 	continuousFocusPositionX?: number;
 	continuousFocusPositionY?: number;
 	// The file and offset of the tree's `focus_tree` key, so the preview can write a dragged
@@ -321,61 +325,82 @@ export function getFocusTreeWithFocusFile(
 	constants: {},
 ): FocusTree[] {
 	const focusTrees: FocusTree[] = [];
-	if (file.shared_focus.length > 0) {
-		const conditionExprs: ConditionItem[] = [];
-		const warnings: FocusWarning[] = [];
-		const focuses = getFocuses(
-			flattenFocusGroups(file.shared_focus),
-			conditionExprs,
-			filePath,
-			warnings,
-			constants,
-		);
+	const sharedConditionExprs: ConditionItem[] = [];
+	const sharedWarnings: FocusWarning[] = [];
+	const sharedFocuses = getFocuses(
+		flattenFocusGroups(file.shared_focus),
+		sharedConditionExprs,
+		filePath,
+		sharedWarnings,
+		constants,
+	);
+	const jointConditionExprs: ConditionItem[] = [];
+	const jointWarnings: FocusWarning[] = [];
+	const jointFocuses = getFocuses(
+		flattenFocusGroups(file.joint_focus),
+		jointConditionExprs,
+		filePath,
+		jointWarnings,
+		constants,
+	);
+	const hasSharedFocuses = file.shared_focus.length > 0;
+	const hasJointFocuses = file.joint_focus.length > 0;
+	const ownPseudoTrees: FocusTree[] = [];
+	// Without useConditionInFocus no tree merges shared focuses, so the pseudo-trees are the only
+	// place their overlaps are checked, and every pair stays in.
+	const importRoots =
+		(hasSharedFocuses || hasJointFocuses) && getFlags().useConditionInFocus
+			? computeImportRoots({ ...jointFocuses, ...sharedFocuses })
+			: undefined;
 
-		runLayoutValidation(focuses, warnings, false);
+	if (hasSharedFocuses) {
+		const anchorFocuses = hasJointFocuses ? jointFocuses : undefined;
+		runLayoutValidation(sharedFocuses, sharedWarnings, false, {
+			anchorFocuses,
+			importRoots,
+		});
 
-		const sharedFocusTree = {
+		const sharedFocusTree: FocusTree = {
 			id: localize("focustree.sharedfocuses", "<Shared focuses>"),
-			focuses,
+			focuses: sharedFocuses,
 			inlayWindowRefs: [],
 			inlayWindows: [],
 			inlayConditionExprs: [],
-			allowBranchOptions: getAllowBranchOptions(focuses),
-			conditionExprs,
+			allowBranchOptions: getAllowBranchOptions(sharedFocuses),
+			conditionExprs: sharedConditionExprs,
 			isSharedFocues: true,
-			warnings,
+			...(anchorFocuses ? { anchorFocuses } : {}),
+			warnings: sharedWarnings,
 		};
 		focusTrees.push(sharedFocusTree);
-		sharedFocusTrees = [sharedFocusTree, ...sharedFocusTrees];
+		ownPseudoTrees.push(sharedFocusTree);
 	}
 
-	if (file.joint_focus.length > 0) {
-		const conditionExprs: ConditionItem[] = [];
-		const warnings: FocusWarning[] = [];
-		const focuses = getFocuses(
-			flattenFocusGroups(file.joint_focus),
-			conditionExprs,
-			filePath,
-			warnings,
-			constants,
-		);
+	if (hasJointFocuses) {
+		const anchorFocuses = hasSharedFocuses ? sharedFocuses : undefined;
+		runLayoutValidation(jointFocuses, jointWarnings, false, {
+			anchorFocuses,
+			importRoots,
+		});
 
-		runLayoutValidation(focuses, warnings, false);
-
-		focusTrees.push({
+		const jointFocusTree: FocusTree = {
 			id: getJointFocusTreeId(filePath),
-			focuses,
+			focuses: jointFocuses,
 			inlayWindowRefs: [],
 			inlayWindows: [],
 			inlayConditionExprs: [],
-			allowBranchOptions: getAllowBranchOptions(focuses),
-			conditionExprs,
+			allowBranchOptions: getAllowBranchOptions(jointFocuses),
+			conditionExprs: jointConditionExprs,
 			// isSharedFocues also gates loader.ts's cross-file synthetic-tree inclusion and the
 			// webview's always-allow-branch handling for pseudo-trees, both of which apply here too.
 			isSharedFocues: true,
-			warnings,
-		});
+			...(anchorFocuses ? { anchorFocuses } : {}),
+			warnings: jointWarnings,
+		};
+		focusTrees.push(jointFocusTree);
+		ownPseudoTrees.push(jointFocusTree);
 	}
+	sharedFocusTrees = [...ownPseudoTrees, ...sharedFocusTrees];
 
 	for (const focusTree of file.focus_tree) {
 		const conditionExprs: ConditionItem[] = [];
@@ -401,7 +426,7 @@ export function getFocusTreeWithFocusFile(
 			}
 		}
 
-		runLayoutValidation(focuses, warnings, true);
+		runLayoutValidation(focuses, warnings, true, { treeId: focusTree.id });
 
 		focusTrees.push({
 			id:
@@ -743,11 +768,27 @@ function addSharedFocus(
 	const sharedFocusTree = sharedFocusTrees.find(
 		(sft) => sharedFocusId in sft.focuses,
 	);
-	if (!sharedFocusTree) {
+	const requested = sharedFocusTree?.focuses[sharedFocusId];
+	if (!sharedFocusTree || !requested) {
 		return;
 	}
 
-	const sharedFocuses = sharedFocusTree.focuses;
+	// The game pulls in shared and joint focuses alike, so a file's two pseudo-trees form one
+	// donor pool: a shared focus whose prerequisite is a joint focus comes along with it.
+	const donorTrees = uniq(
+		sharedFocusTrees.filter(
+			(sft) =>
+				sft === sharedFocusTree ||
+				(sft.isSharedFocues &&
+					Object.values(sft.focuses).some((f) => f.file === requested.file)),
+		),
+	);
+	const merged = new Set<string>(sharedFocusId in focuses ? [] : [sharedFocusId]);
+	const sharedFocuses: Record<string, Focus> = Object.assign(
+		{},
+		...donorTrees.map((sft) => sft.focuses),
+		sharedFocusTree.focuses,
+	);
 
 	// Build reverse dependency map: focus -> focuses that depend on it
 	const dependents = new Map<string, string[]>();
@@ -833,6 +874,7 @@ function addSharedFocus(
 					});
 				}
 				focuses[dep] = focus;
+				merged.add(dep);
 				updateConditionExprsByFocus(focus, conditionExprs);
 				queue.push(dep);
 			}
@@ -843,8 +885,9 @@ function addSharedFocus(
 	// but layout warnings describe the donor's grid. This tree runs validateFocusLayout over the
 	// focuses it actually merged, on its own grid, so replaying the donor's would duplicate a line
 	// or name a focus that never came across.
-	for (const warning of sharedFocusTree.warnings) {
-		if (!warning.layout && warning.source in focuses) {
+	// Only for the focuses this import brought in: an earlier import already replayed its own.
+	for (const warning of donorTrees.flatMap((sft) => sft.warnings)) {
+		if (!warning.layout && merged.has(warning.source)) {
 			warnings.push(warning);
 		}
 	}
@@ -880,27 +923,112 @@ function getAllowBranchOptions(focuses: Record<string, Focus>): string[] {
 function resolveFocusPosition(
 	focus: Focus,
 	focuses: Record<string, Focus>,
+	context: LayoutContext,
 ): { x: number; y: number } {
-	// Mirrors the webview's getFocusPosition without the condition-dependent offset pass:
-	// the resolved position is the focus's own x/y plus the resolved position of the
-	// relative_position_id chain. Cycles are cut (validateRelativePositionId reports them).
-	let x = focus.x;
-	let y = focus.y;
-	const seen = new Set<string>([focus.id]);
-	let current =
-		focus.relativePositionId !== undefined
-			? focuses[focus.relativePositionId]
-			: undefined;
+	// Mirrors the webview's getFocusPosition: the focus's own x/y plus the resolved position of the
+	// relative_position_id chain, each link adding the offsets it would apply. Only offsets that
+	// depend on has_focus_tree alone are known here; every other offset is condition-dependent and
+	// ignored. Cycles are cut (validateRelativePositionId reports them).
+	let x = 0;
+	let y = 0;
+	const seen = new Set<string>();
+	let current: Focus | undefined = focus;
 	while (current !== undefined && !seen.has(current.id)) {
 		x += current.x;
 		y += current.y;
+		for (const offset of current.offset) {
+			if (isFocusTreeOffsetApplied(offset, context.treeId)) {
+				x += offset.x;
+				y += offset.y;
+			}
+		}
 		seen.add(current.id);
 		current =
 			current.relativePositionId !== undefined
-				? focuses[current.relativePositionId]
+				? (focuses[current.relativePositionId] ??
+					context.anchorFocuses?.[current.relativePositionId])
 				: undefined;
 	}
 	return { x, y };
+}
+
+/**
+ * Whether an offset whose trigger tests nothing but has_focus_tree applies in the tree being
+ * checked. Millennium Dawn moves a shared focus per importing tree this way, and the webview
+ * already applies it, because it treats `has_focus_tree = <selected tree>` as true. Under a
+ * country scope, like `GER = { has_focus_tree = X }`, it tests a tree this check does not know,
+ * so such an offset is condition-dependent and ignored.
+ */
+function isFocusTreeOffsetApplied(
+	offset: Offset,
+	treeId: string | undefined,
+): boolean {
+	if (treeId === undefined || offset.trigger === undefined) {
+		return false;
+	}
+	const leaves = extractConditionalExprs(offset.trigger);
+	return (
+		leaves.length > 0 &&
+		leaves.every(
+			(leaf) =>
+				leaf.scopeName === "" && /^has_focus_tree\s*=/.test(leaf.nodeContent),
+		) &&
+		applyCondition(offset.trigger, [
+			{ scopeName: "", nodeContent: "has_focus_tree = " + treeId },
+		])
+	);
+}
+
+/**
+ * What the layout checks know about a tree beyond its focuses.
+ */
+interface LayoutContext {
+	// The focus_tree's id, for offsets triggered by has_focus_tree. Pseudo-trees have none.
+	treeId?: string;
+	// Focuses that only resolve relative_position_id anchors (FocusTree.anchorFocuses).
+	anchorFocuses?: Record<string, Focus>;
+	// For a pseudo-tree: the import roots each focus arrives with (computeImportRoots).
+	importRoots?: Map<string, Set<string>>;
+}
+
+/**
+ * The roots a shared or joint focus is imported with. A tree imports a root with
+ * `shared_focus = <id>` and gets every focus whose prerequisites in the pool it then holds, so a
+ * root is a focus with no prerequisite in the pool, and a focus belongs to the roots of its
+ * prerequisites. The pseudo-trees draw every root on one grid, but two focuses with no root in
+ * common only meet in a tree that imports both, and that tree's own layout check covers them.
+ */
+function computeImportRoots(
+	pool: Record<string, Focus>,
+): Map<string, Set<string>> {
+	const roots = new Map<string, Set<string>>();
+	const inProgress = new Set<string>();
+	const rootsOf = (id: string): Set<string> => {
+		const cached = roots.get(id);
+		if (cached !== undefined) {
+			return cached;
+		}
+		const focus = pool[id];
+		if (focus === undefined || inProgress.has(id)) {
+			return new Set();
+		}
+		inProgress.add(id);
+		const prerequisites = flatten(focus.prerequisite).filter(
+			(p) => p !== id && p in pool,
+		);
+		const result = new Set<string>();
+		if (prerequisites.length === 0) {
+			result.add(id);
+		}
+		for (const prerequisite of prerequisites) {
+			rootsOf(prerequisite).forEach((root) => result.add(root));
+		}
+		inProgress.delete(id);
+		roots.set(id, result);
+		return result;
+	};
+	Object.keys(pool).forEach(rootsOf);
+	return roots;
 }
 
 /**
@@ -917,6 +1045,7 @@ function runLayoutValidation(
 	focuses: Record<string, Focus>,
 	warnings: FocusWarning[],
 	reportMissingRelativePositionTarget: boolean,
+	context: LayoutContext = {},
 ) {
 	const layoutWarnings: FocusWarning[] = [];
 	validateRelativePositionId(
@@ -924,7 +1053,7 @@ function runLayoutValidation(
 		layoutWarnings,
 		reportMissingRelativePositionTarget,
 	);
-	validateFocusLayout(focuses, layoutWarnings);
+	validateFocusLayout(focuses, layoutWarnings, context);
 	for (const warning of layoutWarnings) {
 		warnings.push({ ...warning, layout: true });
 	}
@@ -935,8 +1064,9 @@ function runLayoutValidation(
  * a prerequisite not positioned above its dependent (unless the two are row-mates in a mutually
  * exclusive row, see below), mutually exclusive focuses not sharing a row, and icons less than two
  * grid units apart on the same row (the sprites are two units wide, so they overlap). Positions are
- * resolved through relative_position_id chains like the preview does; condition-dependent offsets
- * are ignored.
+ * resolved through relative_position_id chains like the preview does. Of the offsets, only those
+ * triggered by has_focus_tree alone are applied, against the tree being checked; the rest are
+ * condition-dependent and ignored.
  *
  * Checked one defining file at a time, so a country tree flags the shared and joint focuses merged
  * into it instead of only its own. The two sets are never compared against each other: a merged
@@ -945,16 +1075,20 @@ function runLayoutValidation(
  *
  * Two focuses that allow_branch never shows at the same time are not checked for overlap either:
  * a pair of alternatives gated on `has_country_flag = X` and `NOT = { has_country_flag = X }` is
- * routinely drawn on one spot, and only one of them is ever on screen.
+ * routinely drawn on one spot, and only one of them is ever on screen. The same goes for two
+ * focuses that each sit under an allow_branch gate the other does not: that is how alternative
+ * branches are gated, on flags set by exclusive events or focuses. In a shared or joint pseudo-tree,
+ * two focuses no single `shared_focus` import brings in together are not checked either.
  */
 function validateFocusLayout(
 	focuses: Record<string, Focus>,
 	warnings: FocusWarning[],
+	context: LayoutContext,
 ) {
 	for (const [filePath, fileFocuses] of Object.entries(
 		groupBy(Object.values(focuses), "file"),
 	)) {
-		validateFocusLayoutOfFile(focuses, warnings, filePath, fileFocuses);
+		validateFocusLayoutOfFile(focuses, warnings, filePath, fileFocuses, context);
 	}
 }
 
@@ -963,12 +1097,13 @@ function validateFocusLayoutOfFile(
 	warnings: FocusWarning[],
 	filePath: string,
 	fileFocuses: Focus[],
+	context: LayoutContext,
 ) {
 	// Resolved against the whole tree, so a shared focus anchored to one of the host tree's own
 	// focuses lands where the preview draws it.
 	const entries = fileFocuses.map((focus) => ({
 		focus,
-		position: resolveFocusPosition(focus, focuses),
+		position: resolveFocusPosition(focus, focuses, context),
 	}));
 	const positions = new Map(
 		entries.map((entry) => [entry.focus.id, entry.position] as const),
@@ -1008,8 +1143,8 @@ function validateFocusLayoutOfFile(
 	// Two focuses overlap on screen only when the game can show both at once. Visibility follows
 	// the preview's own model (calculateFocusAllowed in the webview): a focus with allow_branch is
 	// shown when its condition holds, and a focus below one is shown when every prerequisite group
-	// has a shown option. Every true/false combination of the allow_branch conditions involved is
-	// tried; treating them as independent covers more cases than the game can reach, so a pair is
+	// has a shown option. Two focuses under different gates are taken as alternatives; otherwise
+	// every true/false combination of the allow_branch conditions involved is tried, and a pair is
 	// only excused when no combination shows both.
 	const visibleTogetherCache = new Map<string, boolean>();
 	const canBeVisibleTogether = (a: string, b: string): boolean => {
@@ -1018,7 +1153,9 @@ function validateFocusLayoutOfFile(
 		if (cached !== undefined) {
 			return cached;
 		}
-		const result = computeVisibleTogether(focuses, a, b);
+		const result =
+			shareImportRoot(context.importRoots, a, b) &&
+			computeVisibleTogether(focuses, a, b);
 		visibleTogetherCache.set(key, result);
 		return result;
 	};
@@ -1177,6 +1314,32 @@ function validateFocusLayoutOfFile(
 	}
 }
 
+// Outside a pseudo-tree every focus is on screen with the rest; inside one, only focuses sharing an
+// import root are. A focus whose roots are unknown, such as one caught in a prerequisite cycle, is
+// compared with everything.
+function shareImportRoot(
+	importRoots: Map<string, Set<string>> | undefined,
+	a: string,
+	b: string,
+): boolean {
+	const rootsOfA = importRoots?.get(a);
+	const rootsOfB = importRoots?.get(b);
+	if (
+		rootsOfA === undefined ||
+		rootsOfB === undefined ||
+		rootsOfA.size === 0 ||
+		rootsOfB.size === 0
+	) {
+		return true;
+	}
+	for (const root of rootsOfA) {
+		if (rootsOfB.has(root)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 // Past this many distinct allow_branch conditions the pair is assumed visible together (it keeps
 // its warning) rather than trying every one of 2^n combinations.
 const maxAllowBranchConditions = 12;
@@ -1186,10 +1349,12 @@ function computeVisibleTogether(
 	a: string,
 	b: string,
 ): boolean {
-	const roots = uniq([
-		...(focuses[a]?.inAllowBranch ?? []),
-		...(focuses[b]?.inAllowBranch ?? []),
-	]);
+	const rootsOfA = focuses[a]?.inAllowBranch ?? [];
+	const rootsOfB = focuses[b]?.inAllowBranch ?? [];
+	if (onlyUnderDistinctGates(focuses, a, b)) {
+		return false;
+	}
+	const roots = uniq([...rootsOfA, ...rootsOfB]);
 	if (roots.length === 0) {
 		return true;
 	}
@@ -1207,7 +1372,12 @@ function computeVisibleTogether(
 
 	for (let mask = 0; mask < 1 << conditions.length; mask++) {
 		const trueExprs = conditions.filter((_, i) => (mask & (1 << i)) !== 0);
-		const isHidden = hiddenByAllowBranch(focuses, trueExprs);
+		const isHidden = hiddenByAllowBranch(
+			focuses,
+			(focus) =>
+				focus.allowBranch === undefined ||
+				applyCondition(focus.allowBranch, trueExprs),
+		);
 		if (!isHidden(a) && !isHidden(b)) {
 			return true;
 		}
@@ -1216,13 +1386,74 @@ function computeVisibleTogether(
 }
 
 /**
+ * Whether a and b each depend on an allow_branch condition the other does not: that is how a mod
+ * draws alternative branches on one spot, gated on flags set by rival events or exclusive focuses,
+ * though nothing here can prove two such flags exclusive. Gates are compared by condition, so two
+ * gates testing the same thing count as one, and a focus only depends on a condition when closing
+ * every gate testing it hides the focus: an OR prerequisite with an ungated option keeps it shown.
+ *
+ * Only gates that start closed and test nothing in common count. A gate open by default, such as
+ * `NOT = { has_completed_focus = X }` on the obsolete-branch pattern or `always = yes`, shows its
+ * branch next to the other until something closes it; and a gate sharing a test with the other
+ * side, such as `has_dlc = X` against `has_dlc = X` plus another check, can be open with it.
+ */
+function onlyUnderDistinctGates(
+	focuses: Record<string, Focus>,
+	a: string,
+	b: string,
+): boolean {
+	const gateKey = (root: string) => JSON.stringify(focuses[root]?.allowBranch);
+	const keysOfA = new Set((focuses[a]?.inAllowBranch ?? []).map(gateKey));
+	const keysOfB = new Set((focuses[b]?.inAllowBranch ?? []).map(gateKey));
+	const onlyA = [...keysOfA].filter((key) => !keysOfB.has(key));
+	const onlyB = [...keysOfB].filter((key) => !keysOfA.has(key));
+	if (onlyA.length === 0 || onlyB.length === 0) {
+		return false;
+	}
+	const conditionByKey = new Map<string, ConditionComplexExpr | undefined>(
+		[...(focuses[a]?.inAllowBranch ?? []), ...(focuses[b]?.inAllowBranch ?? [])].map(
+			(root) => [gateKey(root), focuses[root]?.allowBranch] as const,
+		),
+	);
+	const closedByDefault = (key: string) => {
+		const condition = conditionByKey.get(key);
+		return condition !== undefined && !applyCondition(condition, []);
+	};
+	if (!onlyA.every(closedByDefault) || !onlyB.every(closedByDefault)) {
+		return false;
+	}
+	const leafKeys = (keys: string[]) =>
+		new Set(
+			keys.flatMap((key) => {
+				const condition = conditionByKey.get(key);
+				return condition === undefined
+					? []
+					: extractConditionalExprs(condition).map(
+							(leaf) => `${leaf.scopeName}
+${leaf.nodeContent}`,
+						);
+			}),
+		);
+	const leavesOfA = leafKeys(onlyA);
+	if ([...leafKeys(onlyB)].some((leaf) => leavesOfA.has(leaf))) {
+		return false;
+	}
+	const hiddenWhenClosed = (keys: string[]) =>
+		hiddenByAllowBranch(
+			focuses,
+			(focus) => !keys.includes(JSON.stringify(focus.allowBranch)),
+		);
+	return hiddenWhenClosed(onlyA)(a) && hiddenWhenClosed(onlyB)(b);
+}
+
+/**
  * The webview's calculateFocusAllowed as a lookup: a focus with allow_branch is hidden when its
- * condition fails, and any other focus is hidden when one of its prerequisite groups has every
+ * gate is closed, and any other focus is hidden when one of its prerequisite groups has every
  * option hidden. A prerequisite outside the tree, or a cycle, hides nothing.
  */
 function hiddenByAllowBranch(
 	focuses: Record<string, Focus>,
-	trueExprs: ConditionItem[],
+	isGateOpen: (focus: Focus) => boolean,
 ): (id: string) => boolean {
 	const memo = new Map<string, boolean>();
 	const inProgress = new Set<string>();
@@ -1237,8 +1468,7 @@ function hiddenByAllowBranch(
 		}
 		inProgress.add(id);
 		const hidden = focus.hasAllowBranch
-			? focus.allowBranch !== undefined &&
-				!applyCondition(focus.allowBranch, trueExprs)
+			? !isGateOpen(focus)
 			: focus.prerequisite.some(
 					(group) => group.length > 0 && group.every(isHidden),
 				);
