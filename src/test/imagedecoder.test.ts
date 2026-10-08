@@ -29,6 +29,24 @@ function makeTga(): Buffer {
 	return TGA.createTgaBuffer(2, 2, rgba as unknown as [], false);
 }
 
+function makePng(width: number, height: number): Buffer {
+	const png = new PNG({ width, height });
+	for (let i = 0; i < png.data.length; i++) {
+		png.data[i] = i & 0xff;
+	}
+	return PNG.sync.write(png);
+}
+
+function makePngHeader(width: number, height: number): Buffer {
+	const header = Buffer.alloc(24);
+	Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header);
+	header.writeUInt32BE(13, 8);
+	header.write("IHDR", 12, "ascii");
+	header.writeUInt32BE(width, 16);
+	header.writeUInt32BE(height, 20);
+	return header;
+}
+
 // A tiny uncompressed A8R8G8B8 (DDPF_RGB|DDPF_ALPHA, 32bpp) DDS. Header is 32 little-endian int32s
 // followed by width*height*4 bytes of pixel data.
 function makeDds(width: number, height: number): Buffer {
@@ -110,6 +128,19 @@ describe("util/image/imagedecoder", () => {
 			assertValidPng(result.pngBuffer, 4, 4);
 		});
 
+		it("decodes PNG content passed as a DDS buffer", () => {
+			const source = makePng(3, 2);
+			const result = decodeImageToPngSync(source, "dds");
+
+			assert.strictEqual(result.width, 3);
+			assert.strictEqual(result.height, 2);
+			assertValidPng(result.pngBuffer, 3, 2);
+			assert.deepStrictEqual(
+				PNG.sync.read(result.pngBuffer).data,
+				PNG.sync.read(source).data,
+			);
+		});
+
 		it("preserves uncompressed DDS pixel channels", () => {
 			const result = decodeImageToPngSync(makeDds(1, 1), "dds");
 			const decoded = PNG.sync.read(result.pngBuffer);
@@ -121,6 +152,23 @@ describe("util/image/imagedecoder", () => {
 			assert.throws(
 				() => decodeImageToPngSync(Buffer.alloc(8), "dds"),
 				(e: unknown) => e instanceof UserError && /truncated/.test(e.message),
+			);
+		});
+
+		it("rejects malformed PNG-signature bytes instead of treating them as DDS", () => {
+			const truncatedPng = makePng(1, 1).subarray(0, 16);
+			assert.throws(
+				() => decodeImageToPngSync(truncatedPng, "dds"),
+				(e: unknown) =>
+					e instanceof UserError && /Unsupported png format/.test(e.message),
+			);
+		});
+
+		it("rejects oversized PNG dimensions before decoding", () => {
+			assert.throws(
+				() => decodeImageToPngSync(makePngHeader(16_385, 1), "dds"),
+				(e: unknown) =>
+					e instanceof UserError && /exceeds the supported maximum/.test(e.message),
 			);
 		});
 	});
@@ -163,6 +211,47 @@ describe("util/image/imagedecoder", () => {
 			);
 		});
 
+		it("decodes PNG content passed as a DDS buffer", async () => {
+			const source = makePng(3, 2);
+			const result = await decodeImageToPng(source, "dds");
+
+			assert.strictEqual(result.width, 3);
+			assert.strictEqual(result.height, 2);
+			assertValidPng(result.pngBuffer, 3, 2);
+			assert.deepStrictEqual(
+				PNG.sync.read(result.pngBuffer).data,
+				PNG.sync.read(source).data,
+			);
+		});
+
+		it("rejects oversized PNG dimensions before decoding in the worker", async () => {
+			const originalConsoleError = console.error;
+			const loggedErrors: unknown[] = [];
+			console.error = (...args: unknown[]) => loggedErrors.push(...args);
+			let rejection: unknown;
+			try {
+				await decodeImageToPng(makePngHeader(16_385, 1), "dds");
+			} catch (e) {
+				rejection = e;
+			} finally {
+				console.error = originalConsoleError;
+			}
+
+			assert.ok(
+				loggedErrors.some(
+					(e) =>
+						e instanceof UserError &&
+						/exceeds the supported maximum/.test(e.message),
+				),
+				"worker should report its image dimension limit error",
+			);
+			assert.ok(
+				rejection instanceof UserError &&
+				/exceeds the supported maximum/.test(rejection.message),
+				"decode should reject when the sync fallback also enforces the image dimension limit",
+			);
+		});
+
 		it("routes concurrent jobs back to the right callers (id matching)", async () => {
 			const tga = makeTga();
 			const dds = makeDds(4, 4);
@@ -199,6 +288,41 @@ describe("util/image/imagedecoder", () => {
 			} finally {
 				console.error = originalConsoleError;
 			}
+		});
+
+		it("rejects a corrupt PNG via the worker and its sync fallback as a UserError", async () => {
+			const originalConsoleError = console.error;
+			const loggedErrors: unknown[] = [];
+			console.error = (...args: unknown[]) => loggedErrors.push(...args);
+			let rejection: unknown;
+			try {
+				await decodeImageToPng(makePng(1, 1).subarray(0, 16), "dds");
+			} catch (e) {
+				rejection = e;
+			} finally {
+				console.error = originalConsoleError;
+			}
+
+			// The worker classifies the malformed PNG payload itself, and the decode still rejects as a
+			// user error when its failed job goes through the sync fallback, so getImage treats a corrupt
+			// image as bad input rather than a tool failure on either path.
+			assert.ok(
+				loggedErrors.some(
+					(e) =>
+						e instanceof UserError &&
+						/Unsupported png format/.test(e.message),
+				),
+				"worker should report its png decode failure as a user error",
+			);
+			assert.ok(
+				rejection instanceof UserError &&
+					/Unsupported png format/.test(rejection.message),
+				"decode should reject with the sync fallback's user-error classification",
+			);
+			// Worker survives a decode error: a subsequent valid decode still succeeds.
+			const ok = await decodeImageToPng(makeTga(), "tga");
+			assert.strictEqual(ok.width, 2);
+			assert.strictEqual(_getLiveWorkerCountForTest(), _getWorkerCountForTest());
 		});
 
 		it("grows the pool under a concurrent decode burst", async () => {
@@ -262,6 +386,17 @@ describe("util/image/imagedecoder", () => {
 			assert.strictEqual(result.width, 4);
 			assert.strictEqual(result.height, 4);
 			assertValidPng(result.pngBuffer, 4, 4);
+		});
+
+		it("rejects a corrupt PNG through the sync fallback as a UserError too", async () => {
+			// The pool is given up on here, so the decode runs entirely in the sync path; its PNG
+			// classification inside a DDS buffer must match the worker's.
+			const truncatedPng = makePng(1, 1).subarray(0, 16);
+			await assert.rejects(
+				decodeImageToPng(truncatedPng, "dds"),
+				(e: unknown) =>
+					e instanceof UserError && /Unsupported png format/.test(e.message),
+			);
 		});
 
 		it("teardown waits for the doomed worker to exit, so nothing it logs escapes the block", async () => {

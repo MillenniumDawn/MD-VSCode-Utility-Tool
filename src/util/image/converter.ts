@@ -4,6 +4,48 @@ import { UserError } from "../common";
 import { assertImageDimensions } from "./imagelimits";
 const TGA = require("tga") as typeof import("tga");
 
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+function hasPngSignature(buffer: Buffer): boolean {
+	return (
+		buffer.length >= PNG_SIGNATURE.length &&
+		PNG_SIGNATURE.every((byte, index) => buffer[index] === byte)
+	);
+}
+
+export function isPngBuffer(buffer: Buffer): boolean {
+	return hasPngSignature(buffer);
+}
+
+// Reads dimensions without inflating the image. A missing or malformed header returns undefined so
+// the caller can use PNG.sync.read for full validation.
+export function readPngHeaderDimensions(
+	buffer: Buffer,
+): { width: number; height: number } | undefined {
+	if (buffer.length < 24 || !hasPngSignature(buffer)) {
+		return undefined;
+	}
+	if (buffer.toString("ascii", 12, 16) !== "IHDR") {
+		return undefined;
+	}
+
+	return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
+export function pngToPng(buffer: Buffer): PNG {
+	const dimensions = readPngHeaderDimensions(buffer);
+	if (dimensions) {
+		assertImageDimensions(dimensions.width, dimensions.height, "PNG");
+	}
+	// PNG.sync.read throws a plain Error for every malformed payload, which getImage would log as a
+	// tool failure instead of bad user input; classify it like tgaToPng does.
+	try {
+		return PNG.sync.read(buffer);
+	} catch (e) {
+		throw new UserError(`Unsupported png format: ${e instanceof Error ? e.message : String(e)}`);
+	}
+}
+
 export function ddsToPng(dds: DDS): PNG {
 	const img = dds.images[0];
 	if (img === undefined) {
