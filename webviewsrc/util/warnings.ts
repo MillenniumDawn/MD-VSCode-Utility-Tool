@@ -11,7 +11,7 @@ import { feLocalize } from "./i18n";
 // The warnings of a grid box tree -- a focus tree or a MIO -- as the webview shows them: a marker on
 // every node a warning names, and a panel listing them. `idPrefix` turns a node id into the id of its
 // grid box item element (`focus_` or `trait_`).
-export interface TreeWarning {
+interface TreeWarning {
 	text: string;
 	source: string;
 	relatedSources?: string[];
@@ -192,7 +192,7 @@ export function revealNode(elementId: string): void {
 	setTimeout(() => element.classList.remove(warningFlashClass), 1200);
 }
 
-export function hideWarningPanel(): void {
+function hideWarningPanel(): void {
 	const container = document.getElementById("warnings-container") as HTMLDivElement | null;
 	if (container) {
 		container.style.display = "none";
