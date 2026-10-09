@@ -1,5 +1,11 @@
 Unreleased
 
+v1.1.42
+
+  Functionality:
+
+- Describe this change.
+
 v1.1.41
 
   Functionality:
