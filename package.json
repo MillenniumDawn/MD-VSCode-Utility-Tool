@@ -572,7 +572,7 @@
 		"assert": "^2.1.0",
 		"browserify-zlib": "^0.2.0",
 		"buffer": "^6.0.3",
-		"js-yaml": "^5.4.2",
+		"js-yaml": "^5.4.3",
 		"lodash": "^4.17.21",
 		"path-browserify": "^1.0.1",
 		"pngjs": "^7.0.0",
