@@ -32,14 +32,7 @@ import {
 } from "../imagelimits";
 
 export class DDS {
-	private constructor(
-		readonly header: DDSHeader,
-		readonly headerDxt10: DDSHeaderDXT10 | undefined,
-		readonly images: Surface[],
-		readonly type: "texture" | "cubemap" | "volume",
-		readonly arraySize: number,
-		readonly mipmapCount: number,
-	) {}
+	private constructor(readonly images: Surface[]) {}
 
 	public static parse(buffer: ArrayBuffer, byteOffset: number): DDS {
 		if (
@@ -171,14 +164,7 @@ export class DDS {
 			);
 		}
 
-		return new DDS(
-			header,
-			undefined,
-			images,
-			cubeMap ? "cubemap" : volume ? "volume" : "texture",
-			1,
-			mipmapCount,
-		);
+		return new DDS(images);
 	}
 
 	private static parseDxt10(
@@ -260,14 +246,7 @@ export class DDS {
 			allImages.push(...images);
 		}
 
-		return new DDS(
-			header,
-			dxt10Header,
-			allImages,
-			cubeMap ? "cubemap" : volume ? "volume" : "texture",
-			arraySize,
-			mipmapCount,
-		);
+		return new DDS(allImages);
 	}
 }
 
@@ -296,36 +275,21 @@ function validateSurfaceWork(
 	validateCount(depth, "depth");
 	validateCount(faces, "cubemap face count");
 	validateCount(arraySize, "DX10 array size");
-	if (
-		mipmapCount < 0 ||
-		mipmapCount > Math.floor(Math.log2(Math.max(width, height)))
-	) {
+	if (mipmapCount > Math.floor(Math.log2(Math.max(width, height)))) {
 		throw new UserError(
 			`DDS mipmap count ${mipmapCount} is not valid for ${width}x${height}`,
 		);
 	}
 
+	// Every factor is bounded above, so the sum stays far inside the safe integers until the
+	// check below stops it.
 	let totalPixels = 0;
 	let levelWidth = width;
 	let levelHeight = height;
 	let levelDepth = depth;
 	for (let level = 0; level <= mipmapCount; level++) {
 		getImageSizeInBytes(pixelFormat, levelWidth, levelHeight);
-		const levelPixels = checkedProduct(
-			levelWidth,
-			levelHeight,
-			"DDS surface pixel count",
-		);
-		const surfacePixels = checkedProduct(
-			checkedProduct(levelPixels, levelDepth, "DDS surface pixel count"),
-			checkedProduct(faces, arraySize, "DDS surface count"),
-			"DDS surface pixel count",
-		);
-		totalPixels = checkedSum(
-			totalPixels,
-			surfacePixels,
-			"DDS decoded pixel work",
-		);
+		totalPixels += levelWidth * levelHeight * levelDepth * faces * arraySize;
 		if (totalPixels > MAX_IMAGE_PIXELS) {
 			throw new UserError(
 				`DDS decoded surface pixel work ${totalPixels} exceeds the supported maximum (${MAX_IMAGE_PIXELS} pixels)`,
@@ -347,32 +311,8 @@ function validateCount(value: number, name: string): void {
 	}
 }
 
-function checkedProduct(left: number, right: number, name: string): number {
-	if (
-		!Number.isSafeInteger(left) ||
-		!Number.isSafeInteger(right) ||
-		left < 0 ||
-		right < 0 ||
-		(left !== 0 && right > Number.MAX_SAFE_INTEGER / left)
-	) {
-		throw new UserError(`${name} is too large`);
-	}
-	return left * right;
-}
-
-function checkedSum(left: number, right: number, name: string): number {
-	if (
-		!Number.isSafeInteger(left) ||
-		!Number.isSafeInteger(right) ||
-		left > Number.MAX_SAFE_INTEGER - right
-	) {
-		throw new UserError(`${name} is too large`);
-	}
-	return left + right;
-}
-
 function extractHeader(headerArray: Int32Array): DDSHeader {
-	const value = (index: number): number => headerArray[index] ?? 0;
+	const value = (index: number): number => headerArray[index]!;
 	return {
 		dwFlags: value(2),
 		dwHeight: value(3),
@@ -395,7 +335,7 @@ function extractHeader(headerArray: Int32Array): DDSHeader {
 }
 
 function extractDxt10Header(dxt10HeaderArray: Int32Array): DDSHeaderDXT10 {
-	const value = (index: number): number => dxt10HeaderArray[index] ?? 0;
+	const value = (index: number): number => dxt10HeaderArray[index]!;
 	return {
 		dxgiFormat: value(0),
 		resourceDimension: value(1),
@@ -517,7 +457,7 @@ function parseVolumeTexture(
 				width,
 				height,
 				pixelFormat,
-				`Mipmap of #${i + 1} depth #${i + 1}`,
+				`Mipmap #${i + 1} depth #${j + 1}`,
 			);
 		}
 	}

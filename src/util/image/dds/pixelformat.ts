@@ -2,7 +2,6 @@ import {
 	DDSPixelFormat,
 	DDSHeaderDXT10,
 	DDPF_FOURCC,
-	FOURCC_DX10,
 	FOURCC_DXT1,
 	FOURCC_DXT2,
 	FOURCC_DXT3,
@@ -22,10 +21,8 @@ export enum PixelValueType {
 	float = 0x10,
 	uint = 0x20,
 	unorm = 0x22,
-	unorm_srgb = 0x26,
 	sint = 0x21,
 	snorm = 0x23,
-	shardedexp = 0x30,
 }
 
 export enum CompressFormat {
@@ -48,10 +45,7 @@ export enum ChannelFormat {
 	a = 7,
 	rg = 8,
 	r = 10,
-	g = 12,
 	d = 14,
-	ycbcr = 16,
-	ycbcra = 18,
 }
 
 interface PixelFormatBase {
@@ -81,22 +75,17 @@ export function convertPixelFormat(
 	ddsPixelFormat: DDSPixelFormat,
 	dxt10Header?: DDSHeaderDXT10,
 ): PixelFormat {
+	if (dxt10Header) {
+		return convertDx10PixelFormat(dxt10Header);
+	}
 	if (ddsPixelFormat.dwFlags & DDPF_FOURCC) {
-		if (ddsPixelFormat.dwFourCC === FOURCC_DX10) {
-			if (!dxt10Header) {
-				throw new UserError(
-					"dxt10Header should be provided when fourCC is DX10",
-				);
-			}
-			return convertDx10PixelFormat(dxt10Header);
-		} else {
-			return convertFourCCPixelFormat(ddsPixelFormat.dwFourCC);
-		}
+		return convertFourCCPixelFormat(ddsPixelFormat.dwFourCC);
 	}
 
 	return convertNormalPixelFormat(ddsPixelFormat);
 }
 
+// Width and height are already bounded by assertImageDimensions, so the products stay exact.
 export function getImageSizeInBytes(
 	pixelFormat: PixelFormat,
 	width: number,
@@ -105,11 +94,7 @@ export function getImageSizeInBytes(
 	if (pixelFormat.compressed) {
 		const blocksPerRow = Math.max(1, Math.ceil(width / 4));
 		const blocksPerColumn = Math.max(1, Math.ceil(height / 4));
-		return checkedProduct(
-			checkedProduct(blocksPerRow, blocksPerColumn, "DDS block count"),
-			getBlockSize(pixelFormat.compressFormat),
-			"DDS image size",
-		);
+		return blocksPerRow * blocksPerColumn * getBlockSize(pixelFormat.compressFormat);
 	}
 
 	if (
@@ -121,26 +106,7 @@ export function getImageSizeInBytes(
 			`DDS bits-per-pixel value ${pixelFormat.bitsPerPixel} is not valid`,
 		);
 	}
-	const bitsInRow = checkedProduct(
-		pixelFormat.bitsPerPixel,
-		width,
-		"DDS row bit count",
-	);
-	const bytesInARow = Math.ceil(bitsInRow / 8);
-	return checkedProduct(bytesInARow, height, "DDS image size");
-}
-
-function checkedProduct(left: number, right: number, name: string): number {
-	if (
-		!Number.isSafeInteger(left) ||
-		!Number.isSafeInteger(right) ||
-		left < 0 ||
-		right < 0 ||
-		(left !== 0 && right > Number.MAX_SAFE_INTEGER / left)
-	) {
-		throw new UserError(`${name} is too large`);
-	}
-	return left * right;
+	return Math.ceil((pixelFormat.bitsPerPixel * width) / 8) * height;
 }
 
 export function getBlockSize(compressFormat: CompressFormat): number {
@@ -148,32 +114,6 @@ export function getBlockSize(compressFormat: CompressFormat): number {
 		compressFormat === CompressFormat.bc4
 		? 8
 		: 16;
-}
-
-export function pixelFormatToString(pixelFormat: PixelFormat): string {
-	if (pixelFormat.compressed) {
-		return `Compressed BC${pixelFormat.compressFormat} ${PixelValueType[pixelFormat.valueType]}`;
-	} else {
-		const channelNames = ChannelFormat[pixelFormat.channelFormat].toUpperCase();
-		let name = "";
-		for (let i = pixelFormat.channelCount - 1; i >= 0; i--) {
-			const channelIndex = pixelFormat.channelOrderInPixel[i];
-			const channelLength =
-				channelIndex === undefined
-					? undefined
-					: pixelFormat.channelLengthInPixel[channelIndex];
-			if (
-				channelIndex === undefined ||
-				channelLength === undefined ||
-				channelNames[channelIndex] === undefined
-			) {
-				throw new UserError("Invalid channel layout");
-			}
-			name += channelNames[channelIndex] + channelLength;
-		}
-
-		return `Raw ${pixelFormat.bitsPerPixel}bits ${name} ${PixelValueType[pixelFormat.valueType]}`;
-	}
 }
 
 function convertFourCCPixelFormat(fourCC: number): PixelFormat {
@@ -332,10 +272,7 @@ const formatToChannelCount: Record<ChannelFormat, number> = {
 	[ChannelFormat.a]: 1,
 	[ChannelFormat.rg]: 2,
 	[ChannelFormat.r]: 1,
-	[ChannelFormat.g]: 1,
 	[ChannelFormat.d]: 1,
-	[ChannelFormat.ycbcr]: 3,
-	[ChannelFormat.ycbcra]: 4,
 };
 
 function rawPixelFormat(
@@ -345,14 +282,9 @@ function rawPixelFormat(
 	channelStartInPixel: number[],
 	channelLengthInPixel: number[],
 ): RawPixelFormat {
-	const channelIdStartLength: [number, number, number][] =
-		channelStartInPixel.map((v, i) => {
-			const length = channelLengthInPixel[i];
-			if (length === undefined) {
-				throw new UserError("Missing channel length");
-			}
-			return [i, v, length];
-		});
+	const channelIdStartLength = channelStartInPixel.map(
+		(start, id): [number, number, number] => [id, start, channelLengthInPixel[id]!],
+	);
 	channelIdStartLength.sort((a, b) => a[1] - b[1]);
 
 	if (
@@ -365,14 +297,14 @@ function rawPixelFormat(
 	) {
 		throw new UserError(
 			"Masks not compact: " +
-				channelIdStartLength.map((v) => ((1 << v[1]) - 1) << v[0]),
+				channelIdStartLength.map((v) => (2 ** v[2] - 1) * 2 ** v[1]),
 		);
 	}
 
 	return {
 		compressed: false,
 		channelFormat: format,
-		channelCount: formatToChannelCount[format] ?? 0,
+		channelCount: formatToChannelCount[format],
 		bitsPerPixel,
 		channelOrderInPixel: channelIdStartLength.map((v) => v[0]),
 		channelStartInPixel,
@@ -579,9 +511,10 @@ function getDxgiFormatMap(): Partial<Record<DxgiFormat, PixelFormat>> {
 			[0, 8, 16, 24],
 			[8, 8, 8, 8],
 		),
+		// An sRGB format reads as plain unorm: the PNG it is written to is sRGB as well.
 		[DxgiFormat.DXGI_FORMAT_R8G8B8A8_UNORM_SRGB]: rawPixelFormat(
 			ChannelFormat.rgba,
-			PixelValueType.unorm_srgb,
+			PixelValueType.unorm,
 			32,
 			[0, 8, 16, 24],
 			[8, 8, 8, 8],
@@ -826,13 +759,7 @@ function getDxgiFormatMap(): Partial<Record<DxgiFormat, PixelFormat>> {
 			[0],
 			[8],
 		),
-		[DxgiFormat.DXGI_FORMAT_R1_UNORM]: rawPixelFormat(
-			ChannelFormat.r,
-			PixelValueType.typeless,
-			1,
-			[0],
-			[1],
-		),
+		//    [DxgiFormat.DXGI_FORMAT_R1_UNORM]: rawPixelFormat(), // not supported because its bit order is not known
 		//    [DxgiFormat.DXGI_FORMAT_R9G9B9E5_SHAREDEXP]: rawPixelFormat(),  // not supported because we don't have rgbe
 		//    [DxgiFormat.DXGI_FORMAT_R8G8_B8G8_UNORM]: rawPixelFormat(),   // not support packed pixels
 		//    [DxgiFormat.DXGI_FORMAT_G8R8_G8B8_UNORM]: rawPixelFormat(),   // not support packed pixels
@@ -846,7 +773,7 @@ function getDxgiFormatMap(): Partial<Record<DxgiFormat, PixelFormat>> {
 		),
 		[DxgiFormat.DXGI_FORMAT_BC1_UNORM_SRGB]: compressedPixelFormat(
 			CompressFormat.bc1,
-			PixelValueType.unorm_srgb,
+			PixelValueType.unorm,
 		),
 		[DxgiFormat.DXGI_FORMAT_BC2_TYPELESS]: compressedPixelFormat(
 			CompressFormat.bc2,
@@ -858,7 +785,7 @@ function getDxgiFormatMap(): Partial<Record<DxgiFormat, PixelFormat>> {
 		),
 		[DxgiFormat.DXGI_FORMAT_BC2_UNORM_SRGB]: compressedPixelFormat(
 			CompressFormat.bc2,
-			PixelValueType.unorm_srgb,
+			PixelValueType.unorm,
 		),
 		[DxgiFormat.DXGI_FORMAT_BC3_TYPELESS]: compressedPixelFormat(
 			CompressFormat.bc3,
@@ -870,7 +797,7 @@ function getDxgiFormatMap(): Partial<Record<DxgiFormat, PixelFormat>> {
 		),
 		[DxgiFormat.DXGI_FORMAT_BC3_UNORM_SRGB]: compressedPixelFormat(
 			CompressFormat.bc3,
-			PixelValueType.unorm_srgb,
+			PixelValueType.unorm,
 		),
 		[DxgiFormat.DXGI_FORMAT_BC4_TYPELESS]: compressedPixelFormat(
 			CompressFormat.bc4,
@@ -969,7 +896,7 @@ function getDxgiFormatMap(): Partial<Record<DxgiFormat, PixelFormat>> {
 		),
 		[DxgiFormat.DXGI_FORMAT_BC7_UNORM_SRGB]: compressedPixelFormat(
 			CompressFormat.bc7,
-			PixelValueType.unorm_srgb,
+			PixelValueType.unorm,
 		),
 		[DxgiFormat.DXGI_FORMAT_AYUV]: rawPixelFormat(
 			ChannelFormat.yuva,
@@ -994,7 +921,7 @@ function getDxgiFormatMap(): Partial<Record<DxgiFormat, PixelFormat>> {
 		//    [DxgiFormat.DXGI_FORMAT_A8P8]: rawPixelFormat(),
 		[DxgiFormat.DXGI_FORMAT_B4G4R4A4_UNORM]: rawPixelFormat(
 			ChannelFormat.rgba,
-			PixelValueType.typeless,
+			PixelValueType.unorm,
 			16,
 			[8, 4, 0, 12],
 			[4, 4, 4, 4],

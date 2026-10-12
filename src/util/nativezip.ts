@@ -368,29 +368,24 @@ async function readCentralDirectoryLocation(
 	if (
 		delta === 0 ||
 		cdSize === 0 ||
-		(await hasCentralSignature(handle, offset, size, fsPath))
+		(await hasCentralSignature(handle, offset, fsPath))
 	) {
 		return { offset, size: cdSize, delta: 0 };
 	}
 	return { offset: offset + delta, size: cdSize, delta };
 }
 
-/** Whether a central directory record starts at `offset`; false rather than throwing if it cannot look. */
+/**
+ * Whether a central directory record starts at `offset`. Only asked when the declared offset sits
+ * before where the directory must be, so the four bytes are always inside the file.
+ */
 async function hasCentralSignature(
 	handle: import("node:fs/promises").FileHandle,
 	offset: number,
-	size: number,
 	fsPath: string,
 ): Promise<boolean> {
-	if (offset < 0 || offset + 4 > size) {
-		return false;
-	}
-	try {
-		const probe = await readExact(handle, offset, 4, fsPath);
-		return probe.readUInt32LE(0) === CENTRAL_HEADER_SIGNATURE;
-	} catch {
-		return false;
-	}
+	const probe = await readExact(handle, offset, 4, fsPath);
+	return probe.readUInt32LE(0) === CENTRAL_HEADER_SIGNATURE;
 }
 
 /**
