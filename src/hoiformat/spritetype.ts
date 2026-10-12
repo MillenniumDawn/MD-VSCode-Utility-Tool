@@ -32,7 +32,6 @@ interface CorneredTileSpriteTypeDef {
     noofframes: number;
     size: NumberPosition;
     bordersize: NumberPosition;
-    tilingCenter: boolean;
     _token: Token | undefined;
 }
 
@@ -49,7 +48,6 @@ export interface CorneredTileSpriteType {
     noofframes: number;
     size: NumberPosition;
     bordersize: NumberPosition;
-    tilingCenter: boolean;
     token: Token | undefined;
 }
 
@@ -72,7 +70,6 @@ const corneredTileSpriteTypeSchema: SchemaDef<CorneredTileSpriteTypeDef> = {
         x: "number",
         y: "number",
     },
-    tilingCenter: "boolean",
 };
 
 const spriteTypeSchema: SchemaDef<SpriteTypeDef> = {
@@ -166,7 +163,6 @@ export function getSpriteTypes(node: Node): (SpriteType | CorneredTileSpriteType
                         x: sprite.bordersize?.x ?? 0,
                         y: sprite.bordersize?.y ?? 0,
                     },
-                    tilingCenter: sprite.tilingCenter ?? false,
                     token: sprite.name!._startToken,
                 });
             }

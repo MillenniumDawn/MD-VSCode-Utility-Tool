@@ -57,12 +57,11 @@ jobs:
       # instead of blocking every branch that touches a file already carrying a clone.
       - name: Duplication
         run: npm run dupes
-      - name: Compile tests
-        run: npm run pretest
-      # The c8 thresholds in package.json sit a few points under the real figure, which leaves
-      # room for thousands of untested lines before they fail. This is the rule that matters: the
-      # lines a pull request adds or changes must themselves be covered. Skipped on a dispatch,
-      # which has no base to diff against.
+      # test:coverage compiles the tests first, through its pre hook. The c8 thresholds in
+      # package.json sit a few points under the real figure, which leaves room for thousands of
+      # untested lines before they fail. This is the rule that matters: the lines a pull request
+      # adds or changes must themselves be covered. Skipped on a dispatch, which has no base to
+      # diff against.
       - name: Test with coverage
         run: npm run test:coverage
       - name: Coverage on changed lines
@@ -89,9 +88,9 @@ jobs:
           name: md-vscode-utility-tool.vsix
           path: "*.vsix"
           retention-days: 5
-      # Runs against the production bundle `npm run package` wrote to dist/ and the test build
-      # `pretest` wrote to out-test/, so nothing is installed or compiled a second time for it. It
-      # comes after the uploads so the .vsix and coverage are still there when this step fails.
+      # Runs against the production bundle `npm run package` wrote to dist/ and the test build the
+      # coverage step wrote to out-test/, so nothing is installed or compiled a second time for it.
+      # It comes after the uploads so the .vsix and coverage are still there when this step fails.
       - name: Run integration smoke tests
         run: xvfb-run -a npm run test:integration
       - name: Run browser smoke tests

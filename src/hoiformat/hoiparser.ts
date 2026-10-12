@@ -105,20 +105,15 @@ function tokenizer(
 				.map((v) => v.length)
 				.map((v) => (sum = sum + v + 1));
 		}
+		// The last sum is one past the end of the input, so a position always lands on a line.
 		const sums = lineLengthSums;
 		const line = sums.findIndex((v) => v > calculatePos);
 		const column =
 			line > 0 ? calculatePos - (sums[line - 1] ?? 0) : calculatePos;
-		const lastSum = sums[sums.length - 1] ?? 0;
-		const previousSum = sums[sums.length - 2] ?? 0;
-		const posString =
-			line === -1
-				? ` at (${sums.length}, ${sums.length > 1 ? lastSum - previousSum + 1 : lastSum + 1})`
-				: ` at (${line + 1}, ${column + 1})`;
 		throw new UserError(
 			errorMessagePrefix +
 				message +
-				`${posString}: ` +
+				` at (${line + 1}, ${column + 1}): ` +
 				(input + "(EOF)").substring(
 					calculatePos,
 					Math.min(calculatePos + 30, input.length + 5),
@@ -164,8 +159,9 @@ const tokenRegexStrings: Record<HOITokenType, [string, number]> = {
 	// The trailing dot is the game's own tolerance, not a nicety: Millennium Dawn writes
 	// `nationalist_drift = 0.` in common/country_leader/00_traits.txt, and without it the whole file
 	// -- every politician trait in the mod -- fails to tokenise. The full-fraction branch is still
-	// first, so `2030.1` keeps its fraction.
-	number: ["-?\\d*\\.\\d+|-?\\d+\\.?|0x\\d+", 50],
+	// first, so `2030.1` keeps its fraction. Hex is ahead of both: behind them, the `0` of
+	// `color = 0xffffffff` was the whole number and `xffffffff` a stray entry after it.
+	number: ["0x[0-9a-fA-F]+|-?\\d*\\.\\d+|-?\\d+\\.?", 50],
 	unitnumber: ["(?:-?\\d*\\.\\d+|-?\\d+)(?:%%?)", 49],
 	eof: ["$", 1000],
 };

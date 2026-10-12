@@ -22,7 +22,7 @@ export interface EffectItem {
 	node: Node;
 }
 
-export interface RandomListEffect {
+interface RandomListEffect {
 	items: RandomListEffectItem[];
 }
 
@@ -31,7 +31,7 @@ interface RandomListEffectItem {
 	effect: EffectComplexExpr;
 }
 
-export interface EffectByCondition {
+interface EffectByCondition {
 	condition: ConditionComplexExpr;
 	items: EffectComplexExpr[];
 }
