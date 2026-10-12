@@ -1,8 +1,8 @@
 import * as assert from 'assert';
-import { parseHoi4File, resolveScriptVariables } from '../hoiformat/hoiparser';
-import { convertNodeToJson } from '../hoiformat/schema';
-import { GuiFile, guiFileSchema } from '../hoiformat/gui';
-import { buildFocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from '../previewdef/focustree/layout';
+import { parseHoi4File, resolveScriptVariables } from '../../../../hoiformat/hoiparser';
+import { convertNodeToJson } from '../../../../hoiformat/schema';
+import { GuiFile, guiFileSchema } from '../../../../hoiformat/gui';
+import { buildFocusTreeLayout, findFocusShortcutGui, focusTreeGridBoxFor, standardFocusTreeLayout } from '../../../../previewdef/focustree/layout';
 
 function parseGui(text: string) {
     return convertNodeToJson<GuiFile>(resolveScriptVariables(parseHoi4File(text)), guiFileSchema);
@@ -252,5 +252,48 @@ guiTypes = {
         const sprites = buildFocusTreeLayout([parseGui(moved)]).prerequisiteLink.sprites;
         assert.strictEqual(sprites.gfx.up_down, 'GFX_md_line');
         assert.strictEqual(sprites.gfx.up_right, 'GFX_focus_link_up_right');
+    });
+
+    it('reads a sprite named by quadTextureSprite the same as one named by spriteType', () => {
+        const moved = mdGui.replace(/spriteType =/g, 'quadTextureSprite =');
+        assert.notStrictEqual(moved, mdGui);
+        assert.deepStrictEqual(buildFocusTreeLayout([parseGui(moved)]), buildFocusTreeLayout([parseGui(mdGui)]));
+    });
+
+    it('reads a centre with one coordinate as 0 for the other', () => {
+        const centre = (position: string) =>
+            buildFocusTreeLayout([parseGui(mdGui.replace('position = { x = 130 y = 32 }', `position = { ${position} }`))]).center;
+        assert.deepStrictEqual(centre('x = 130'), { x: 130, y: 0 });
+        assert.deepStrictEqual(centre('y = 32'), { x: 0, y: 32 });
+    });
+
+    it('centres the name on its width alone when the name box declares no position', () => {
+        const moved = mdGui.replace('position = { x = 15 y = 58 }', '').replace('maxWidth = 147', 'maxWidth = 100');
+        const { item } = buildFocusTreeLayout([parseGui(moved)]);
+        // Half of 100 against half of the game's 147, from the same left edge.
+        assert.strictEqual(item.textOffsetX, standardFocusTreeLayout.item.textOffsetX - 23.5);
+        assert.strictEqual(item.textTop, standardFocusTreeLayout.item.textTop);
+    });
+
+    it('finds the shortcut item at any depth and the toggle button on nationalfocusview', () => {
+        const gui = parseGui(`guiTypes = {
+            containerWindowType = {
+                name = "nationalfocusview"
+                buttonType = { name = "toggle_shortcuts" quadTextureSprite = "GFX_toggle" }
+                containerWindowType = {
+                    name = "shortcuts"
+                    containerWindowType = { name = "focus_tree_shortcut_item" size = { width = 40 height = 40 } }
+                }
+            }
+        }`);
+
+        const found = findFocusShortcutGui([parseGui('guiTypes = { containerWindowType = { name = "unrelated" } }'), gui]);
+        assert.strictEqual(found.item?.name, 'focus_tree_shortcut_item');
+        assert.strictEqual(found.toggle?.quadtexturesprite, 'GFX_toggle');
+    });
+
+    it('finds no shortcut pieces in files that declare none', () => {
+        assert.deepStrictEqual(findFocusShortcutGui([]), { item: undefined, toggle: undefined });
+        assert.deepStrictEqual(findFocusShortcutGui([parseGui(mdGui)]), { item: undefined, toggle: undefined });
     });
 });
