@@ -5,6 +5,7 @@ v1.1.42
   Functionality:
 
 - Describe this change.
+- [ Testing ] Rewrite the core utility tests as pure tests.
 
   Bugfixes:
 - [ Previews ] A `count_triggers` block whose triggers are all `always = yes` now reads as met instead of never met.
