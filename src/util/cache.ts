@@ -49,11 +49,6 @@ const sweptCaches = new Set<SweepEntry>();
 let sweeperToken: NodeJS.Timeout | null = null;
 let sweeperInterval = 0;
 
-/** How many caches the shared sweeper is currently ticking. Used by the tests. */
-export function sweepingCacheCount(): number {
-	return sweptCaches.size;
-}
-
 function rescheduleSweeper(): void {
 	let shortest = Infinity;
 	for (const cache of sweptCaches) {
