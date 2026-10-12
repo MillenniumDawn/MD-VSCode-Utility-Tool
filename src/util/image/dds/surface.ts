@@ -70,9 +70,7 @@ export class Surface {
 		const channelStart = pixelFormat.channelStartInPixel;
 		const channelLengthByOrder = channelOrder.map((channel) => channelLength[channel]!);
 		const channelStartByOrder = channelOrder.map((channel) => channelStart[channel]!);
-		const channelValueRange = channelLength.map((l) =>
-			l === 32 ? 4294967295 : (1 << l) - 1,
-		);
+		const channelValueRange = channelLength.map((l) => 2 ** l - 1);
 
 		// It makes sense only when bitPerPixel <= 32.
 		const channelMaskByOrder = channelOrder.map(

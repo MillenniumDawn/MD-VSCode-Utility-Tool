@@ -104,6 +104,11 @@ describe("Surface.getFullRgba on uncompressed pixels", () => {
 			[255, 255, 255, 0, 0, 0, 0, 255],
 		],
 		[
+			"a 31-bit channel",
+			{ width: 2, flags: DDPF_LUMINANCE, bitsPerPixel: 32, masks: [0x7fffffff, 0, 0, 0], data: u32(0x7fffffff, 0x80000000) },
+			[255, 255, 255, 255, 0, 0, 0, 255],
+		],
+		[
 			"a 32-bit channel in a 40-bit pixel",
 			{ width: 1, flags: DDPF_LUMINANCE, bitsPerPixel: 40, masks: [0xffffffff, 0, 0, 0], data: [0xff, 0xff, 0xff, 0xff, 0] },
 			[255, 255, 255, 255],

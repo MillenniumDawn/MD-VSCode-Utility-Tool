@@ -281,6 +281,9 @@ function validateSurfaceWork(
 		);
 	}
 
+	// Called for its check of the format's bits per pixel.
+	getImageSizeInBytes(pixelFormat, width, height);
+
 	// Every factor is bounded above, so the sum stays far inside the safe integers until the
 	// check below stops it.
 	let totalPixels = 0;
@@ -288,7 +291,6 @@ function validateSurfaceWork(
 	let levelHeight = height;
 	let levelDepth = depth;
 	for (let level = 0; level <= mipmapCount; level++) {
-		getImageSizeInBytes(pixelFormat, levelWidth, levelHeight);
 		totalPixels += levelWidth * levelHeight * levelDepth * faces * arraySize;
 		if (totalPixels > MAX_IMAGE_PIXELS) {
 			throw new UserError(

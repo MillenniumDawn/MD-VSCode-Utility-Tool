@@ -2,9 +2,9 @@
 //
 // These are the paths that run over millions of tokens (the tokenizer), over every condition
 // leaf in a file (condition extraction), over every CSS rule and every escaped string in a
-// render, and over every pixel of a province bitmap. None of them are covered by a timing
-// assertion anywhere else, so a regression in one is invisible until someone reports the
-// editor feeling slow.
+// render, and over every pixel of a province bitmap or a texture. None of them are covered by
+// a timing assertion anywhere else, so a regression in one is invisible until someone reports
+// the editor feeling slow.
 //
 // Run:   npm run bench
 // Needs: out-test/ (npm run compile-test), because that build also carries the vscode stub
