@@ -398,14 +398,17 @@ export function simplifyCondition(
 		}
 	}
 
+	// Ahead of the empty check: a count whose items were all true has none left and still holds.
+	if (condition.type === "count" && amount <= 0) {
+		return true;
+	}
+
 	if (simplifiedItems.length === 0) {
 		return condition.type === "and" || condition.type === "ornot";
 	}
 
 	if (condition.type === "count") {
-		if (amount <= 0) {
-			return true;
-		} else if (amount > simplifiedItems.length) {
+		if (amount > simplifiedItems.length) {
 			return false;
 		} else if (amount === simplifiedItems.length) {
 			return simplifyCondition({ type: "and", items: simplifiedItems });
