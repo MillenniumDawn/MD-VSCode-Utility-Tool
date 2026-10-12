@@ -503,7 +503,7 @@
 		"dupes": "jscpd",
 		"bench": "npm run compile-test && node scripts/bench.js",
 		"pretest": "node scripts/compile-tests.js",
-		"test": "mocha --forbid-only \"out-test/src/test/unit/**/*.test.js\" && mocha --forbid-only --require ./out-test/src/test/_vscode_stub.js \"out-test/src/test/**/*.test.js\" \"out-test-webview/src/test/webview/**/*.test.js\" --exclude \"out-test/src/test/integration/**\" --exclude \"out-test/src/test/unit/**\"",
+		"test": "mocha --forbid-only --require ./out-test/src/test/unit/setup.js \"out-test/src/test/unit/**/*.test.js\" && mocha --forbid-only --require ./out-test/src/test/_vscode_stub.js \"out-test/src/test/**/*.test.js\" \"out-test-webview/src/test/webview/**/*.test.js\" --exclude \"out-test/src/test/integration/**\" --exclude \"out-test/src/test/unit/**\"",
 		"pretest:coverage": "node scripts/compile-tests.js",
 		"test:coverage": "c8 npm test --ignore-scripts",
 		"test:integration": "node ./out-test/src/test/integration/runTest.js",

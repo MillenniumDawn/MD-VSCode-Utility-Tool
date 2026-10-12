@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "./host";
 import { getFlags } from "./featureflags";
 import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
@@ -75,10 +76,10 @@ export async function getLocalisedTextQuick(
 	if (getFlags().previewLocalisation) {
 		return getLocalisedText(
 			localisationKey,
-			isoBySettingName[getFlags().previewLocalisation] ?? vscode.env.language,
+			isoBySettingName[getFlags().previewLocalisation] ?? host().env.language,
 		);
 	}
-	return getLocalisedText(localisationKey, vscode.env.language);
+	return getLocalisedText(localisationKey, host().env.language);
 }
 
 export async function getLocalisedText(
@@ -425,7 +426,7 @@ async function reindexWorkspaceLocalisationFile(
 }
 
 const watchers = createIndexWatchers({
-	enabled: getFlags().localisationIndex,
+	enabled: () => getFlags().localisationIndex,
 	extension: ".yml",
 	hasStarted: () => builder.hasStarted(),
 	gate: buildGate,

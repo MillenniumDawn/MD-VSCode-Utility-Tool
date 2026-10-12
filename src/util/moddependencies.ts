@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "./host";
 import { ConfigurationKey } from "../constants";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import { convertNodeToJson, Enum, SchemaDef } from "../hoiformat/schema";
@@ -57,12 +58,12 @@ interface ParsedDescriptor {
 
 const descriptorCache = new PromiseCache({
 	factory: parseDescriptor,
-	expireWhenChange: (key) => getLastModifiedAsync(vscode.Uri.parse(key)),
+	expireWhenChange: (key) => getLastModifiedAsync(host().Uri.parse(key)),
 	life: 60 * 1000,
 });
 
 async function parseDescriptor(uriString: string): Promise<ParsedDescriptor> {
-	const uri = vscode.Uri.parse(uriString);
+	const uri = host().Uri.parse(uriString);
 	const content = (await readFile(uri)).toString();
 	const node = parseHoi4File(
 		content,
@@ -95,11 +96,11 @@ async function readDescriptor(
 const userDataMarkers = ["dlc_load.json", "launcher-v2.sqlite"];
 
 async function isUserDataDir(dir: vscode.Uri): Promise<boolean> {
-	if (!(await isDirectory(vscode.Uri.joinPath(dir, "mod")))) {
+	if (!(await isDirectory(host().Uri.joinPath(dir, "mod")))) {
 		return false;
 	}
 	for (const marker of userDataMarkers) {
-		if (await isFile(vscode.Uri.joinPath(dir, marker))) {
+		if (await isFile(host().Uri.joinPath(dir, marker))) {
 			return true;
 		}
 	}
@@ -122,7 +123,7 @@ function folderKey(uri: vscode.Uri): string {
 // read it. Only a directory outside every workspace folder can be the user data directory.
 function isInsideWorkspace(dir: vscode.Uri): boolean {
 	const key = folderKey(dir);
-	return (vscode.workspace.workspaceFolders ?? []).some((folder) =>
+	return (host().workspace.workspaceFolders ?? []).some((folder) =>
 		key.startsWith(folderKey(folder.uri)),
 	);
 }
@@ -161,8 +162,8 @@ export function defaultUserDataDirs(
 	if (platform === "linux") {
 		return home
 			? [
-					vscode.Uri.joinPath(
-						vscode.Uri.file(home),
+					host().Uri.joinPath(
+						host().Uri.file(home),
 						".local",
 						"share",
 						"Paradox Interactive",
@@ -184,8 +185,8 @@ export function defaultUserDataDirs(
 	const seen = new Set<string>();
 	const dirs: vscode.Uri[] = [];
 	for (const parent of documentsParents) {
-		const dir = vscode.Uri.joinPath(
-			vscode.Uri.file(parent),
+		const dir = host().Uri.joinPath(
+			host().Uri.file(parent),
 			"Documents",
 			"Paradox Interactive",
 			"Hearts of Iron IV",
@@ -219,7 +220,7 @@ export async function findUserDataDir(
 	if (modFile !== undefined) {
 		starts.push(dirUri(modFile));
 	}
-	for (const folder of vscode.workspace.workspaceFolders ?? []) {
+	for (const folder of host().workspace.workspaceFolders ?? []) {
 		starts.push(folder.uri);
 	}
 	for (const start of starts) {
@@ -247,7 +248,7 @@ async function readEnabledMods(userDataDir: vscode.Uri): Promise<Set<string>> {
 	try {
 		const parsed = JSON.parse(
 			(
-				await readFile(vscode.Uri.joinPath(userDataDir, "dlc_load.json"))
+				await readFile(host().Uri.joinPath(userDataDir, "dlc_load.json"))
 			).toString(),
 		) as { enabled_mods?: unknown };
 		const enabled = Array.isArray(parsed.enabled_mods)
@@ -273,7 +274,7 @@ async function loadModRegistry(
 	userDataDir: vscode.Uri,
 ): Promise<Map<string, vscode.Uri>> {
 	const registry = new Map<string, vscode.Uri>();
-	const modDir = vscode.Uri.joinPath(userDataDir, "mod");
+	const modDir = host().Uri.joinPath(userDataDir, "mod");
 	let files: string[];
 	try {
 		files = (await readDir(modDir)).filter((f) => f.endsWith(".mod")).sort();
@@ -284,14 +285,14 @@ async function loadModRegistry(
 	const enabled = await readEnabledMods(userDataDir);
 	const decidedByLauncher = new Set<string>();
 	for (const file of files) {
-		const descriptor = await readDescriptor(vscode.Uri.joinPath(modDir, file));
+		const descriptor = await readDescriptor(host().Uri.joinPath(modDir, file));
 		if (descriptor?.name === undefined || descriptor.path === undefined) {
 			continue;
 		}
 
 		const folder = /^([a-zA-Z]:[\\/]|[\\/])/.test(descriptor.path)
-			? vscode.Uri.file(descriptor.path)
-			: vscode.Uri.joinPath(userDataDir, descriptor.path);
+			? host().Uri.file(descriptor.path)
+			: host().Uri.joinPath(userDataDir, descriptor.path);
 		if (!(await isDirectory(folder))) {
 			continue;
 		}
@@ -325,7 +326,7 @@ function warnNoUserDataDir(): void {
 	warnedNoUserDataDir = true;
 	const openSettings = localize("moddependencies.opensettings", "Open Settings");
 	void Promise.resolve(
-		vscode.window.showWarningMessage(
+		host().window.showWarningMessage(
 			localize(
 				"moddependencies.nouserdatadir",
 				"Can't find the Hearts of Iron IV user data directory, so the mods this .mod depends on can't be found. Set {0} to the folder that holds the launcher's mod folder.",
@@ -335,7 +336,7 @@ function warnNoUserDataDir(): void {
 		),
 	).then((choice) => {
 		if (choice === openSettings) {
-			void vscode.commands.executeCommand(
+			void host().commands.executeCommand(
 				"workbench.action.openSettings",
 				`${ConfigurationKey}.userDataPath`,
 			);
@@ -364,7 +365,7 @@ async function resolveDependencies(): Promise<void> {
 	// knows a different folder for it: the explicit path is the one the user chose.
 	const explicitNames = new Set<string>();
 	for (const parent of explicit) {
-		const descriptor = vscode.Uri.joinPath(parent, "descriptor.mod");
+		const descriptor = host().Uri.joinPath(parent, "descriptor.mod");
 		if (await isFile(descriptor)) {
 			const name = (await readDescriptor(descriptor))?.name;
 			if (name !== undefined) {

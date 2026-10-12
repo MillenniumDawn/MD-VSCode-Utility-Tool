@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { DecisionsLoader } from "./loader";
 import { localize } from "../../util/i18n";
 import { StyleTable } from "../../util/styletable";

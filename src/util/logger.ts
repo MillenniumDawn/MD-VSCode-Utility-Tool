@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import { host } from './host';
 
 enum LogLevel {
     DEBUG = 'DEBUG',
@@ -14,7 +15,7 @@ export class Logger {
     public static initialize(): vscode.Disposable {
         Logger.disposed = false;
         if (!Logger.outputChannel) {
-            Logger.outputChannel = vscode.window.createOutputChannel('HOI4 Modding');
+            Logger.outputChannel = host().window.createOutputChannel('HOI4 Modding');
         }
         return { dispose: () => Logger.dispose() };
     }

@@ -1,5 +1,6 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { ConfigurationKey } from '../constants';
+import { host } from './host';
 import { getConfiguration } from "./vsccommon";
 
 type Configuration = ReturnType<typeof getConfiguration>;
@@ -57,10 +58,12 @@ function readFlags(): FeatureFlags {
     };
 }
 
-let flags = readFlags();
+// Read on first use, not when this file loads: the settings are not there to read until the
+// extension has handed the host over.
+let flags: FeatureFlags | undefined;
 
 export function getFlags(): FeatureFlags {
-    return flags;
+    return flags ??= readFlags();
 }
 
 export function refreshFeatureFlags(): void {
@@ -68,7 +71,7 @@ export function refreshFeatureFlags(): void {
 }
 
 export function registerFeatureFlags(): vscode.Disposable {
-    return vscode.workspace.onDidChangeConfiguration(e => {
+    return host().workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration(ConfigurationKey)) {
             refreshFeatureFlags();
         }

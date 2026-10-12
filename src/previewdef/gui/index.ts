@@ -1,5 +1,5 @@
 import { localize } from '../../util/i18n';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { PreviewProviderDef } from '../previewmanager';
 import { LoaderPreview } from '../loaderpreview';
 import { GuiFileLoader } from './loader';

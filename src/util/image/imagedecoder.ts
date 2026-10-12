@@ -95,9 +95,10 @@ export function resolveWorkerPoolSize(configured: number | undefined): number {
 	);
 }
 
-// Runtime pool size: the configured cap, clamped to [1, MAX_WORKER_POOL_SIZE]. Stays 1 on the web
-// build (no worker).
-let workerPoolSize = 1;
+// Runtime pool size: the configured cap, clamped to [1, MAX_WORKER_POOL_SIZE]. Read when the pool
+// first wants to grow, not when this file loads: the settings are not there to read until the
+// extension has handed the host over. Never read on the web build, which has no worker to spawn.
+let workerPoolSize: number | undefined;
 
 // A worker wedged inside a CPU-bound decode never answers, so every job is given this long before
 // its caller is failed and the worker replaced. Generous because the mod ships full-size map
@@ -110,8 +111,6 @@ let ensureWorkers: (() => WorkerState[] | null) | null = null;
 let spawnWorker: (() => WorkerState | null) | null = null;
 
 if (!IS_WEB_EXT) {
-	workerPoolSize = resolveWorkerPoolSize(getConfiguration().imageDecodeWorkers);
-
 	spawnWorker = function spawnWorkerImpl(): WorkerState | null {
 		try {
 			const { Worker } =
@@ -310,10 +309,13 @@ function pickOrGrowWorker(): WorkerState {
 			allBusy = false;
 		}
 	}
-	if (allBusy && workers.length < workerPoolSize && spawnWorker) {
-		const spawned = spawnWorker();
-		if (spawned) {
-			return spawned;
+	if (allBusy && spawnWorker) {
+		workerPoolSize ??= resolveWorkerPoolSize(getConfiguration().imageDecodeWorkers);
+		if (workers.length < workerPoolSize) {
+			const spawned = spawnWorker();
+			if (spawned) {
+				return spawned;
+			}
 		}
 	}
 	return best;

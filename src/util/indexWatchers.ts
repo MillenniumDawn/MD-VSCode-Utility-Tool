@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "./host";
 import * as path from "path";
 import { debounceByInput } from "./common";
 import { IndexProgress, withIndexProgress } from "./indexBuild";
@@ -17,7 +18,7 @@ export function toWorkspaceRelativePath(
 	file: vscode.Uri,
 	rootPrefixes: string | readonly string[],
 ): string | undefined {
-	const wsFolder = vscode.workspace.getWorkspaceFolder(file);
+	const wsFolder = host().workspace.getWorkspaceFolder(file);
 	if (!wsFolder) {
 		return undefined;
 	}
@@ -37,8 +38,8 @@ export function toWorkspaceRelativePath(
 }
 
 export interface IndexWatcherSpec {
-	/** The index's feature flag. When false nothing is subscribed at all. */
-	enabled: boolean;
+	/** The index's feature flag, read on registration. When false nothing is subscribed at all. */
+	enabled: () => boolean;
 	/** Files this index cares about, e.g. `".gfx"`. */
 	extension: string;
 	/** Incremental events stay inert until something has actually asked for the index. */
@@ -223,20 +224,20 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 
 	return {
 		register(): vscode.Disposable {
-			if (!spec.enabled) {
-				return vscode.Disposable.from();
+			if (!spec.enabled()) {
+				return host().Disposable.from();
 			}
 
-			return vscode.Disposable.from(
-				vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
+			return host().Disposable.from(
+				host().workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
 				// The published list, not the raw setting: it changes once, after the `.mod`
 				// dependencies have been resolved against the new setting.
 				onDidChangeParentMods(onChangeParentMods),
-				vscode.workspace.onDidChangeTextDocument(onChangeTextDocument),
-				vscode.workspace.onDidCloseTextDocument(onCloseTextDocument),
-				vscode.workspace.onDidCreateFiles(onCreateFiles),
-				vscode.workspace.onDidDeleteFiles(onDeleteFiles),
-				vscode.workspace.onDidRenameFiles(onRenameFiles),
+				host().workspace.onDidChangeTextDocument(onChangeTextDocument),
+				host().workspace.onDidCloseTextDocument(onCloseTextDocument),
+				host().workspace.onDidCreateFiles(onCreateFiles),
+				host().workspace.onDidDeleteFiles(onDeleteFiles),
+				host().workspace.onDidRenameFiles(onRenameFiles),
 			);
 		},
 		handlers,

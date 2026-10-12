@@ -1,5 +1,5 @@
 import { localize } from "../../util/i18n";
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { renderGfxFile } from "./contentbuilder";
 import { PreviewProviderDef } from "../previewmanager";
 import { UpdateablePreviewBase, LoaderRender } from "../updateablepreview";

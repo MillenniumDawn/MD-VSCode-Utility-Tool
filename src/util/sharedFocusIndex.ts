@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 
 import { IndexFile, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
@@ -296,7 +296,7 @@ async function reindexWorkspaceFocusFile(file: vscode.Uri): Promise<void> {
 }
 
 const watchers = createIndexWatchers({
-	enabled: getFlags().sharedFocusIndex,
+	enabled: () => getFlags().sharedFocusIndex,
 	extension: ".txt",
 	hasStarted: () => builder.hasStarted(),
 	gate: buildGate,

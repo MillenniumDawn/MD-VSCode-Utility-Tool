@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import { host } from './host';
 import { UserError } from './common';
 import { localize } from './i18n';
 import { fileOrUriStringToUri, getConfiguration, isDirectory, uriToFilePathWhenPossible } from './vsccommon';
@@ -54,7 +55,7 @@ export async function checkInstallPath(): Promise<void> {
     }
 
     if (!(await isDirectory(installPath))) {
-        void vscode.window.showErrorMessage(
+        void host().window.showErrorMessage(
             localize('installpath.notdirectory', "Hearts of Iron IV install path does not exist: {0}", uriToFilePathWhenPossible(installPath)));
     }
 }

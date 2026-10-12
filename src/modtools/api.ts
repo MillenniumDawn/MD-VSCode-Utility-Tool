@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 
 // The contract between the extension and a mod's own tools. A pack is written and maintained by the
 // mod it belongs to, not by this extension: see README.md in this folder for what a pack has to meet

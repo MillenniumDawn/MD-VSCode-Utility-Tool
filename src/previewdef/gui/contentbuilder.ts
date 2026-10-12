@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { ContainerWindowType } from '../../hoiformat/gui';
 import { HOIPartial } from '../../hoiformat/schema';
 import { arrayToMap, jsonForScript } from '../../util/common';
