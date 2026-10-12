@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "./host";
 import * as path from "path";
 import { ConfigurationKey, Commands } from "../constants";
 import { PromiseCache } from "./cache";
@@ -40,20 +41,20 @@ let lastStatus: { modFile: vscode.Uri | undefined; error: boolean } = {
 export function registerModFile(): vscode.Disposable {
 	const disposables: vscode.Disposable[] = [];
 	disposables.push(
-		vscode.commands.registerCommand(Commands.SelectModFile, selectModFile),
+		host().commands.registerCommand(Commands.SelectModFile, selectModFile),
 	);
 	disposables.push(
-		(modFileStatusContainer.current = vscode.window.createStatusBarItem(
-			vscode.StatusBarAlignment.Left,
+		(modFileStatusContainer.current = host().window.createStatusBarItem(
+			host().StatusBarAlignment.Left,
 			50,
 		)),
 	);
 	disposables.push(
-		vscode.workspace.onDidChangeConfiguration(onChangeWorkspaceConfiguration),
+		host().workspace.onDidChangeConfiguration(onChangeWorkspaceConfiguration),
 	);
 	disposables.push(onDidChangeParentMods(redrawSelectedModFileStatus));
 	disposables.push(
-		new vscode.Disposable(() => {
+		new (host().Disposable)(() => {
 			modFileStatusContainer.current = null;
 		}),
 	);
@@ -62,7 +63,7 @@ export function registerModFile(): vscode.Disposable {
 	void checkAndUpdateModFileStatus(
 		fileOrUriStringToUri(getConfiguration().modFile),
 	);
-	return vscode.Disposable.from(...disposables);
+	return host().Disposable.from(...disposables);
 }
 
 export function updateSelectedModFileStatus(
@@ -157,7 +158,7 @@ async function checkAndUpdateModFileStatus(
 
 	updateSelectedModFileStatus(modFile, error);
 	if (error) {
-		void vscode.window.showErrorMessage(
+		void host().window.showErrorMessage(
 			localize("modfile.filenotexist", "Mod file not exist: {0}", modFile),
 		);
 	}
@@ -195,8 +196,9 @@ async function selectModFile(): Promise<void> {
 	let selected = selectedUri ? uriToFilePathWhenPossible(selectedUri) : "";
 
 	workspaceModFilesCache.clear();
-	if (vscode.workspace.workspaceFolders) {
-		for (const workspaceFolder of vscode.workspace.workspaceFolders) {
+	const workspaceFolders = host().workspace.workspaceFolders;
+	if (workspaceFolders) {
+		for (const workspaceFolder of workspaceFolders) {
 			const workspaceFolderPath = workspaceFolder.uri;
 			const mods = await workspaceModFilesCache.get(
 				workspaceFolderPath.toString(),
@@ -241,14 +243,14 @@ async function selectModFile(): Promise<void> {
 		selectModFile: true,
 	});
 
-	const selectResult = await vscode.window.showQuickPick(modsList, {
+	const selectResult = await host().window.showQuickPick(modsList, {
 		placeHolder: localize("modfile.selectworkingmod", "Select working mod"),
 	});
 
 	if (selectResult) {
 		let modPath = selectResult.detail;
 		if (selectResult.selectModFile) {
-			const result = await vscode.window.showOpenDialog({
+			const result = await host().window.showOpenDialog({
 				filters: { [localize("modfile.type", "Mod file")]: ["mod"] },
 			});
 			const selectedMod = result?.[0];
@@ -262,12 +264,12 @@ async function selectModFile(): Promise<void> {
 		const stored =
 			modPath === modFileInspect?.globalValue ? undefined : modPath;
 		try {
-			await conf.update("modFile", stored, vscode.ConfigurationTarget.Workspace);
+			await conf.update("modFile", stored, host().ConfigurationTarget.Workspace);
 		} catch (e) {
 			// With no workspace open the write rejects. The status bar used to be updated
 			// regardless, so it showed a mod that had never been stored.
 			error(e);
-			void vscode.window.showErrorMessage(
+			void host().window.showErrorMessage(
 				localize(
 					"modfile.savefailed",
 					"Couldn't save the working mod file: {0}",
@@ -294,8 +296,9 @@ export async function getSelectedModFileUri(): Promise<vscode.Uri | undefined> {
 		return fileOrUriStringToUri(conf.modFile);
 	}
 
-	if (vscode.workspace.workspaceFolders) {
-		for (const workspaceFolder of vscode.workspace.workspaceFolders) {
+	const workspaceFolders = host().workspace.workspaceFolders;
+	if (workspaceFolders) {
+		for (const workspaceFolder of workspaceFolders) {
 			const mods = await workspaceModFilesCache.get(
 				workspaceFolder.uri.toString(),
 			);
@@ -309,9 +312,9 @@ export async function getSelectedModFileUri(): Promise<vscode.Uri | undefined> {
 }
 
 async function getWorkspaceModFiles(uriString: string): Promise<vscode.Uri[]> {
-	const uri = vscode.Uri.parse(uriString);
+	const uri = host().Uri.parse(uriString);
 	const items = await readDir(uri);
 	return items
 		.filter((i) => i.endsWith(".mod"))
-		.map((i) => vscode.Uri.joinPath(uri, i));
+		.map((i) => host().Uri.joinPath(uri, i));
 }

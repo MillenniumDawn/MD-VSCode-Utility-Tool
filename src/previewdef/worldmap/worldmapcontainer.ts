@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import { host } from '../../util/host';
 import { Commands, WebviewType } from '../../constants';
 import { WorldMap } from './worldmap';
 import { contextContainer } from '../../context';
@@ -10,11 +11,11 @@ export class WorldMapContainer implements vscode.WebviewPanelSerializer {
 
     public register(): vscode.Disposable {
         const disposables: vscode.Disposable[] = [];
-        disposables.push(vscode.commands.registerCommand(Commands.PreviewWorld, this.openPreview, this));
-        disposables.push(vscode.window.registerWebviewPanelSerializer(WebviewType.PreviewWorldMap, this));
-        disposables.push(vscode.workspace.onDidCloseTextDocument(this.onCloseTextDocument, this));
-        disposables.push(vscode.workspace.onDidChangeTextDocument(this.onChangeTextDocument, this));
-        return vscode.Disposable.from(...disposables);
+        disposables.push(host().commands.registerCommand(Commands.PreviewWorld, this.openPreview, this));
+        disposables.push(host().window.registerWebviewPanelSerializer(WebviewType.PreviewWorldMap, this));
+        disposables.push(host().workspace.onDidCloseTextDocument(this.onCloseTextDocument, this));
+        disposables.push(host().workspace.onDidChangeTextDocument(this.onChangeTextDocument, this));
+        return host().Disposable.from(...disposables);
     }
 
     public openPreview(): Promise<void> {
@@ -33,10 +34,10 @@ export class WorldMapContainer implements vscode.WebviewPanelSerializer {
         }
 
         const webviewOptions = previewWebviewOptions();
-        panel = panel ?? vscode.window.createWebviewPanel(
+        panel = panel ?? host().window.createWebviewPanel(
             WebviewType.PreviewWorldMap,
             localize('worldmap.preview.title', 'Preview World Map'),
-            vscode.ViewColumn.Active,
+            host().ViewColumn.Active,
             {
                 ...webviewOptions,
                 retainContextWhenHidden: getConfiguration().worldMapRetainContextWhenHidden !== false,
@@ -54,8 +55,8 @@ export class WorldMapContainer implements vscode.WebviewPanelSerializer {
 
         if (contextContainer.current) {
             panel.iconPath = {
-                light: vscode.Uri.joinPath(contextContainer.current.extensionUri, 'static/preview-right-light.svg'),
-                dark: vscode.Uri.joinPath(contextContainer.current.extensionUri, 'static/preview-right-dark.svg'),
+                light: host().Uri.joinPath(contextContainer.current.extensionUri, 'static/preview-right-light.svg'),
+                dark: host().Uri.joinPath(contextContainer.current.extensionUri, 'static/preview-right-dark.svg'),
             };
         }
 

@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "../../util/host";
 import worldmapview from "./worldmapview.html";
 import worldmapviewstyles from "./worldmapview.css";
 import { localize, localizeText, i18nTableAsScript } from "../../util/i18n";
@@ -94,7 +95,7 @@ export class WorldMap {
 	);
 
 	public dispose() {
-		vscode.Disposable.from(...this.subscriptions).dispose();
+		host().Disposable.from(...this.subscriptions).dispose();
 		this.subscriptions = [];
 		this.panel = undefined;
 	}
@@ -350,7 +351,7 @@ export class WorldMap {
 	}
 
 	private async requestExportMap() {
-		const uri = await vscode.window.showSaveDialog({
+		const uri = await host().window.showSaveDialog({
 			filters: { [localize("pngfile", "PNG file")]: ["png"] },
 		});
 		this.lastRequestedExportUri = uri;
@@ -371,7 +372,7 @@ export class WorldMap {
 
 		const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
 		if (!bytes || bytes.byteLength === 0) {
-			void vscode.window.showErrorMessage(
+			void host().window.showErrorMessage(
 				localize(
 					"worldmap.export.error.imgformat",
 					"Can't export world map: Image is not in correct format.",
@@ -390,12 +391,12 @@ export class WorldMap {
 			if (this.lastRequestedExportRequestId === requestId) {
 				this.lastRequestedExportUri = undefined;
 			}
-			void vscode.window.showInformationMessage(
+			void host().window.showInformationMessage(
 				localize("worldmap.export.success", "Successfully exported world map."),
 			);
 		} catch (e) {
 			error(e);
-			void vscode.window.showErrorMessage(
+			void host().window.showErrorMessage(
 				localize("worldmap.export.error", "Can't export world map: {0}.", e),
 			);
 		} finally {

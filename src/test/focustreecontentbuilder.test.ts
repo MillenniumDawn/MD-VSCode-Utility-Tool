@@ -107,6 +107,14 @@ function minimalFocusTree(overrides: any = {}): any {
 }
 
 describe("previewdef/focustree contentbuilder", () => {
+	// The page embeds this setting, which always has a value in the editor. These tests used to
+	// get one from whatever featureflags.test.ts, since removed, happened to leave switched on.
+	before(() => {
+		stubVscode({ getConfiguration: () => ({ useConditionInFocus: true }) });
+		refreshFeatureFlags();
+		restoreVscodeStubs();
+	});
+
 	it("buildFocusTreePayload returns null for empty trees", async () => {
 		const payload = await buildFocusTreePayload(
 			loaderWithTrees([]),

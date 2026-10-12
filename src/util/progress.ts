@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "./host";
 import { localize } from "./i18n";
 
 /** What a long-running job reports into, and watches for a cancel, while it runs. */
@@ -55,9 +56,9 @@ export async function withCancellableProgress<T>(
 		markFinished = resolve;
 	});
 
-	void vscode.window.withProgress(
+	void host().window.withProgress(
 		{
-			location: vscode.ProgressLocation.Notification,
+			location: host().ProgressLocation.Notification,
 			title,
 			cancellable: true,
 		},

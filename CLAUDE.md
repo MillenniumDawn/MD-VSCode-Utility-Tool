@@ -233,3 +233,18 @@ builder returned.
 **Test it as the reader meets it.** One character with the same role three times; one
 trait carrying the nested block, not just the flat one; one constant defined in the
 fixture's own file; one quoted identifier; one dependency edit.
+
+## The editor API and the unit tests
+
+Only [src/extension.ts](src/extension.ts) imports `vscode` as a value. It hands the API to
+[src/util/host.ts](src/util/host.ts) as it activates. Every other file takes its types from
+`import type * as vscode from "vscode"` and makes its calls through `host()`. ESLint enforces it.
+
+Nothing may call `host()` while a file is still loading. Read a setting on first use, not into a
+module-level constant. `src/test/unit/loads.test.ts` loads every module with no editor and fails
+when one reaches for it.
+
+New tests go in `src/test/unit`, at the same path as the source file, and run with no `vscode`
+stub. A test that needs the editor hands over plain objects with `handOver` from
+`src/test/unit/host.ts`. The tests still outside `src/test/unit` are the old suite, which runs
+through `src/test/_vscode_stub.ts` until each area is rewritten.

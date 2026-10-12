@@ -1,5 +1,5 @@
-import * as vscode from "vscode";
 import * as path from "path";
+import { createEmitter } from "../emitter";
 import {
 	hoiFileExpiryToken,
 	listFilesFromModOrHOI4,
@@ -109,9 +109,9 @@ export type LoadResultOD<T, E = {}> = Omit<LoadResult<T, E>, "dependencies"> &
 export abstract class Loader<T, E = {}> {
 	private cachedValue: LoadResult<T, E> | undefined;
 
-	protected onProgressEmitter = new vscode.EventEmitter<string>();
+	protected onProgressEmitter = createEmitter<string>();
 	public onProgress = this.onProgressEmitter.event;
-	protected onLoadDoneEmitter = new vscode.EventEmitter<LoadResult<T, E>>();
+	protected onLoadDoneEmitter = createEmitter<LoadResult<T, E>>();
 	public onLoadDone = this.onLoadDoneEmitter.event;
 
 	private loadingPromise: Promise<LoadResult<T, E>> | undefined = undefined;

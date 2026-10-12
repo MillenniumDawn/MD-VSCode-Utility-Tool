@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { FocusTree, Focus, FocusTreeShortcut, focusTreesToDisplay } from './schema';
 import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconResolveStats } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';

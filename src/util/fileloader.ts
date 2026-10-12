@@ -1,6 +1,7 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import * as path from "path";
 import { PromiseCache } from "./cache";
+import { host } from "./host";
 import { isSamePath } from "./nodecommon";
 import {
 	getLastModifiedAsync,
@@ -136,7 +137,7 @@ let dlcZipCache: PromiseCache<DlcZip> | null = null;
 if (!IS_WEB_EXT) {
 	// The zip reader requires fs, which doesn't work on web.
 	async function getDlcZip(dlcZipUri: string): Promise<DlcZip> {
-		const uri = vscode.Uri.parse(dlcZipUri);
+		const uri = host().Uri.parse(dlcZipUri);
 		let fsPath: string;
 		if (uri.scheme === Hoi4FsSchema) {
 			// Resolve through the shared install path so this gets the same normalization (and
@@ -155,7 +156,7 @@ if (!IS_WEB_EXT) {
 
 	dlcZipCache = new PromiseCache({
 		factory: getDlcZip,
-		expireWhenChange: (key) => getLastModifiedAsync(vscode.Uri.parse(key)),
+		expireWhenChange: (key) => getLastModifiedAsync(host().Uri.parse(key)),
 		life: 10 * 60 * 1000,
 		// The default of 200ms re-stats every archive on nearly every lookup, and a stat through
 		// hoi4installpath: is two round trips. A DLC archive changes when the game updates, not
@@ -170,8 +171,8 @@ if (!IS_WEB_EXT) {
 // readFileFromPath) so edits show up immediately. The cached Buffer is shared across all callers
 // of a given path; treat it as read-only and never mutate it in place.
 const fileContentCache = new PromiseCache<[Buffer, vscode.Uri]>({
-	factory: (key) => readFileFromPathImpl(vscode.Uri.parse(key)),
-	expireWhenChange: (key) => expiryToken(vscode.Uri.parse(key)),
+	factory: (key) => readFileFromPathImpl(host().Uri.parse(key)),
+	expireWhenChange: (key) => expiryToken(host().Uri.parse(key)),
 	life: 60 * 1000,
 	maxSize: 100,
 	maxBytes: 32 * 1024 * 1024,
@@ -332,7 +333,7 @@ const getFilePathMemo = memoizeWithTtl(
 			hoi4: parsed[2] ?? undefined,
 			workspace: parsed[3] ?? undefined,
 			parent: parsed[4] ?? undefined,
-			parentModUris: parsed[5]?.map((uri) => vscode.Uri.parse(uri)),
+			parentModUris: parsed[5]?.map((uri) => host().Uri.parse(uri)),
 		});
 	},
 	{ ttl: 500, maxSize: 1000 },
@@ -387,9 +388,9 @@ async function getFilePathFromModOrHOI4Impl(
 
 	if (options?.mod !== false) {
 		// Find in opened workspace folders
-		if (options?.workspace !== false && vscode.workspace.workspaceFolders) {
-			for (const folder of vscode.workspace.workspaceFolders) {
-				const findPath = vscode.Uri.joinPath(folder.uri, relativePath);
+		if (options?.workspace !== false) {
+			for (const folder of host().workspace.workspaceFolders ?? []) {
+				const findPath = host().Uri.joinPath(folder.uri, relativePath);
 				if (await isFile(findPath)) {
 					absolutePath = findPath;
 					break;
@@ -398,7 +399,7 @@ async function getFilePathFromModOrHOI4Impl(
 
 			if (absolutePath !== undefined) {
 				// Opened document
-				const document = vscode.workspace.textDocuments.find((d) =>
+				const document = host().workspace.textDocuments.find((d) =>
 					isSameUri(d.uri, absolutePath!),
 				);
 				if (document) {
@@ -415,7 +416,7 @@ async function getFilePathFromModOrHOI4Impl(
 		// blocks vanilla only, a submod's replace_path never hides its parent's files.
 		if (options?.parent !== false) {
 			for (const parent of options?.parentModUris ?? getParentModUris()) {
-				const findPath = vscode.Uri.joinPath(parent, relativePath);
+				const findPath = host().Uri.joinPath(parent, relativePath);
 				if (await isFile(findPath)) {
 					return findPath;
 				}
@@ -438,9 +439,9 @@ async function getFilePathFromModOrHOI4Impl(
 	}
 
 	// Find in HOI4 install path
-	const installPath = vscode.Uri.parse(Hoi4FsSchema + ":/");
+	const installPath = host().Uri.parse(Hoi4FsSchema + ":/");
 	if (!absolutePath) {
-		const findPath = vscode.Uri.joinPath(installPath, relativePath);
+		const findPath = host().Uri.joinPath(installPath, relativePath);
 		if (await isFile(findPath)) {
 			absolutePath = findPath;
 		}
@@ -494,7 +495,7 @@ function probeDlcFolders(
 	exists: (uri: vscode.Uri) => Promise<boolean>,
 ): Promise<(vscode.Uri | null)[]> {
 	return mapLimit(dlcFolders, DLC_PROBE_CONCURRENCY, async (dlc) => {
-		const findPath = vscode.Uri.joinPath(dlc, relativePath);
+		const findPath = host().Uri.joinPath(dlc, relativePath);
 		return (await exists(findPath)) ? findPath : null;
 	});
 }
@@ -552,7 +553,7 @@ export async function hoiFilesExpiryToken(
 // take the Date.now() branch in expiryToken), so it can never make an edited document look unchanged.
 const EXPIRY_STAT_TTL = 500;
 const getLastModifiedMemo = memoizeWithTtl(
-	(key: string) => getLastModifiedAsync(vscode.Uri.parse(key)),
+	(key: string) => getLastModifiedAsync(host().Uri.parse(key)),
 	{ ttl: EXPIRY_STAT_TTL },
 );
 
@@ -691,7 +692,7 @@ let openedDocuments:
 	| undefined;
 
 function openedDocumentUriFor(uri: vscode.Uri): vscode.Uri | undefined {
-	if (!isFileScheme(uri) || vscode.workspace.textDocuments.length === 0) {
+	if (!isFileScheme(uri) || host().workspace.textDocuments.length === 0) {
 		return undefined;
 	}
 
@@ -701,7 +702,7 @@ function openedDocumentUriFor(uri: vscode.Uri): vscode.Uri | undefined {
 		now - openedDocuments.at >= EXPIRY_STAT_TTL
 	) {
 		const byPath = new Map<string, vscode.Uri>();
-		for (const document of vscode.workspace.textDocuments) {
+		for (const document of host().workspace.textDocuments) {
 			if (isFileScheme(document.uri)) {
 				byPath.set(document.uri.fsPath.toLowerCase(), document.uri);
 			}
@@ -828,7 +829,7 @@ const fileListCache = new PromiseCache<string[]>({
 			return listFilesFromModOrHOI4Impl(parsed[0], {
 				...options,
 				parentModUris: options.parentModUris.map((uri) =>
-					typeof uri === "string" ? vscode.Uri.parse(uri) : uri,
+					typeof uri === "string" ? host().Uri.parse(uri) : uri,
 				),
 			});
 		}
@@ -989,7 +990,7 @@ async function listDirectoryEntries(
 				relativePath: entry.relativePath,
 				// The real path, not a hoi4installpath: one: whoever reads this file next should reach
 				// the disk directly rather than back through the provider.
-				uri: vscode.Uri.file(entry.fsPath),
+				uri: host().Uri.file(entry.fsPath),
 				mtime: entry.mtime,
 			}));
 		} catch (cause) {
@@ -1011,7 +1012,7 @@ async function listDirectoryEntries(
 	// neither value readDirFilesRecursively tests for.
 	return names.map((relativePath) => ({
 		relativePath,
-		uri: vscode.Uri.joinPath(dir, relativePath),
+		uri: host().Uri.joinPath(dir, relativePath),
 		mtime: undefined,
 	}));
 }
@@ -1096,9 +1097,9 @@ async function visitFileSources(
 	let visitedParent = false;
 	if (options?.mod !== false) {
 		// Find in opened workspace folders
-		if (options?.workspace !== false && vscode.workspace.workspaceFolders) {
-			for (const folder of vscode.workspace.workspaceFolders) {
-				const findPath = vscode.Uri.joinPath(folder.uri, relativePath);
+		if (options?.workspace !== false) {
+			for (const folder of host().workspace.workspaceFolders ?? []) {
+				const findPath = host().Uri.joinPath(folder.uri, relativePath);
 				if (await isDirectory(findPath)) {
 					await visitor.directory(
 						findPath,
@@ -1111,7 +1112,7 @@ async function visitFileSources(
 		// Find in the mods this one extends
 		if (options?.parent !== false) {
 			for (const parent of options?.parentModUris ?? getParentModUris()) {
-				const findPath = vscode.Uri.joinPath(parent, relativePath);
+				const findPath = host().Uri.joinPath(parent, relativePath);
 				if (await isDirectory(findPath)) {
 					visitedParent = true;
 					await visitor.directory(
@@ -1138,9 +1139,9 @@ async function visitFileSources(
 
 	// Find in HOI4 install path
 	const conf = getConfiguration();
-	const installPath = vscode.Uri.parse(Hoi4FsSchema + ":/");
+	const installPath = host().Uri.parse(Hoi4FsSchema + ":/");
 	{
-		const findPath = vscode.Uri.joinPath(installPath, relativePath);
+		const findPath = host().Uri.joinPath(installPath, relativePath);
 		if (await isDirectory(findPath)) {
 			await visitor.directory(
 				findPath,
@@ -1185,11 +1186,11 @@ async function mapDlcFolders<T>(
 	installPath: string,
 	map: (dlcFolder: vscode.Uri, dlcFolderName: string) => Promise<T | null>,
 ): Promise<T[] | null> {
-	const root = vscode.Uri.parse(installPath);
+	const root = host().Uri.parse(installPath);
 	const dlcRoots = (
 		await Promise.all(
 			dlcRootFolders.map(async (dlcRootFolder) => {
-				const dlcPath = vscode.Uri.joinPath(root, dlcRootFolder);
+				const dlcPath = host().Uri.joinPath(root, dlcRootFolder);
 				return (await isDirectory(dlcPath)) ? dlcPath : null;
 			}),
 		)
@@ -1204,7 +1205,7 @@ async function mapDlcFolders<T>(
 			const dlcFolders = await readDir(dlcPath);
 			return await Promise.all(
 				dlcFolders.map((dlcFolder) =>
-					map(vscode.Uri.joinPath(dlcPath, dlcFolder), dlcFolder),
+					map(host().Uri.joinPath(dlcPath, dlcFolder), dlcFolder),
 				),
 			);
 		}),
@@ -1219,7 +1220,7 @@ function getDlcZipPaths(installPath: string): Promise<vscode.Uri[] | null> {
 			const files = await readDir(dlcZipFolder);
 			const zipFile = files.find((file) => file.endsWith(".zip"));
 			if (zipFile) {
-				return vscode.Uri.joinPath(dlcZipFolder, zipFile);
+				return host().Uri.joinPath(dlcZipFolder, zipFile);
 			}
 		}
 
@@ -1239,7 +1240,7 @@ function getDlcPaths(installPath: string): Promise<vscode.Uri[] | null> {
 
 const descriptorListsCache = new PromiseCache({
 	factory: getListsFromModFile,
-	expireWhenChange: (key) => getLastModifiedAsync(vscode.Uri.parse(key)),
+	expireWhenChange: (key) => getLastModifiedAsync(host().Uri.parse(key)),
 	life: 60 * 1000,
 });
 
@@ -1362,7 +1363,7 @@ async function getDescriptorList(
 
 	const merged = [...own[list]];
 	for (const parent of parents) {
-		const descriptor = vscode.Uri.joinPath(parent, "descriptor.mod");
+		const descriptor = host().Uri.joinPath(parent, "descriptor.mod");
 		try {
 			if (await isFile(descriptor)) {
 				merged.push(...(await descriptorListsCache.get(descriptor.toString()))[list]);
@@ -1394,7 +1395,7 @@ async function getOwnDescriptorLists(): Promise<DescriptorLists | undefined> {
 async function getListsFromModFile(
 	absolutePath: string,
 ): Promise<DescriptorLists> {
-	const content = (await readFile(vscode.Uri.parse(absolutePath))).toString();
+	const content = (await readFile(host().Uri.parse(absolutePath))).toString();
 	const node = parseHoi4File(
 		content,
 		localize("infile", "In file {0}:\n", absolutePath),

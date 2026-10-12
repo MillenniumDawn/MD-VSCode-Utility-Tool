@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "./host";
 import * as fs from "fs";
 import * as path from "path";
 import { dirUri, getDocumentByUri, mkdirs, writeFile } from "./vsccommon";
@@ -58,10 +59,10 @@ async function openDocumentAtRange(
 	end: number | undefined,
 	viewColumn: vscode.ViewColumn | undefined,
 ): Promise<void> {
-	await vscode.window.showTextDocument(document, {
+	await host().window.showTextDocument(document, {
 		selection:
 			start !== undefined && end !== undefined
-				? new vscode.Range(document.positionAt(start), document.positionAt(end))
+				? new (host().Range)(document.positionAt(start), document.positionAt(end))
 				: undefined,
 		viewColumn,
 	});
@@ -78,23 +79,24 @@ export async function openOrCopyHoiFile(
 		const filePathInModWithoutOpened = getHoiOpenedFileOriginalUri(filePathInMod);
 		const document =
 			getDocumentByUri(filePathInModWithoutOpened) ??
-			(await vscode.workspace.openTextDocument(filePathInModWithoutOpened));
+			(await host().workspace.openTextDocument(filePathInModWithoutOpened));
 		await openDocumentAtRange(document, start, end, options.viewColumn);
 		return;
 	}
 
-	if (!vscode.workspace.workspaceFolders?.length) {
-		await vscode.window.showErrorMessage(options.mustOpenFolderMessage);
+	const workspaceFolders = host().workspace.workspaceFolders;
+	if (!workspaceFolders?.length) {
+		await host().window.showErrorMessage(options.mustOpenFolderMessage);
 		return;
 	}
 
-	const firstWorkspaceFolder = vscode.workspace.workspaceFolders[0];
+	const firstWorkspaceFolder = workspaceFolders[0];
 	if (firstWorkspaceFolder === undefined) {
 		return;
 	}
 	let targetFolderUri = firstWorkspaceFolder.uri;
-	if (vscode.workspace.workspaceFolders.length > 1) {
-		const folder = await vscode.window.showWorkspaceFolderPick({
+	if (workspaceFolders.length > 1) {
+		const folder = await host().window.showWorkspaceFolderPick({
 			placeHolder: options.selectFolderMessage,
 		});
 		if (!folder) {
@@ -106,15 +108,15 @@ export async function openOrCopyHoiFile(
 
 	try {
 		const [buffer] = await readFileFromModOrHOI4(file);
-		const targetPath = vscode.Uri.joinPath(targetFolderUri, file);
+		const targetPath = host().Uri.joinPath(targetFolderUri, file);
 		await ensureCopyTargetIsInsideWorkspace(targetPath, targetFolderUri);
 		await mkdirs(dirUri(targetPath));
 		await writeFile(targetPath, buffer);
 
-		const document = await vscode.workspace.openTextDocument(targetPath);
+		const document = await host().workspace.openTextDocument(targetPath);
 		await openDocumentAtRange(document, start, end, options.viewColumn);
 	} catch (e) {
-		await vscode.window.showErrorMessage(
+		await host().window.showErrorMessage(
 			options.failedToOpenMessage(forceError(e).toString()),
 		);
 	}

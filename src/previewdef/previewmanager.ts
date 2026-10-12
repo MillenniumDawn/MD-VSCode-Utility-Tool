@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import { host } from '../util/host';
 import { focusTreePreviewDef } from './focustree';
 import { localize } from '../util/i18n';
 import { gfxPreviewDef } from './gfx';
@@ -74,22 +75,22 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
     public register(): vscode.Disposable {
         const disposables: vscode.Disposable[] = [];
-        disposables.push(vscode.commands.registerCommand(Commands.Preview, this.showPreview, this));
-        disposables.push(vscode.workspace.onDidCloseTextDocument(this.onCloseTextDocument, this));
-        disposables.push(vscode.workspace.onDidChangeTextDocument(this.onChangeTextDocument, this));
-        disposables.push(vscode.workspace.onDidCreateFiles(this.onFilesChanged, this));
-        disposables.push(vscode.workspace.onDidDeleteFiles(this.onFilesChanged, this));
-        const files = vscode.workspace.createFileSystemWatcher('**/*.txt', false, true, false);
+        disposables.push(host().commands.registerCommand(Commands.Preview, this.showPreview, this));
+        disposables.push(host().workspace.onDidCloseTextDocument(this.onCloseTextDocument, this));
+        disposables.push(host().workspace.onDidChangeTextDocument(this.onChangeTextDocument, this));
+        disposables.push(host().workspace.onDidCreateFiles(this.onFilesChanged, this));
+        disposables.push(host().workspace.onDidDeleteFiles(this.onFilesChanged, this));
+        const files = host().workspace.createFileSystemWatcher('**/*.txt', false, true, false);
         disposables.push(files, files.onDidCreate(uri => this.onFileAddedOrRemoved(uri)),
             files.onDidDelete(uri => this.onFileAddedOrRemoved(uri)));
-        disposables.push(vscode.window.onDidChangeActiveTextEditor(this.updateHoi4PreviewContextValue, this));
-        disposables.push(vscode.window.registerWebviewPanelSerializer(WebviewType.Preview, this));
-        disposables.push(new vscode.Disposable(() => this.refreshActiveEditorContext.cancel()));
+        disposables.push(host().window.onDidChangeActiveTextEditor(this.updateHoi4PreviewContextValue, this));
+        disposables.push(host().window.registerWebviewPanelSerializer(WebviewType.Preview, this));
+        disposables.push(new (host().Disposable)(() => this.refreshActiveEditorContext.cancel()));
 
         // Trigger context value setting
-        this.updateHoi4PreviewContextValue(vscode.window.activeTextEditor);
+        this.updateHoi4PreviewContextValue(host().window.activeTextEditor);
 
-        return vscode.Disposable.from(...disposables);
+        return host().Disposable.from(...disposables);
     }
 
     public async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: unknown): Promise<void> {
@@ -101,8 +102,8 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         }
 
         try {
-            const uri = vscode.Uri.parse(uriStr, true);
-            await vscode.workspace.openTextDocument(uri);
+            const uri = host().Uri.parse(uriStr, true);
+            await host().workspace.openTextDocument(uri);
             await this.showPreviewImpl(uri, panel);
         } catch (e) {
             error(e);
@@ -116,7 +117,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
     }
 
     private onCloseTextDocument(document: vscode.TextDocument): void {
-        if (!vscode.window.visibleTextEditors.some(e => e.document.uri.toString() === document.uri.toString())) {
+        if (!host().window.visibleTextEditors.some(e => e.document.uri.toString() === document.uri.toString())) {
             const key = document.uri.toString();
             this._previews[key]?.panel.dispose();
             debug(`dispose panel ${key} because text document closed`);
@@ -148,13 +149,13 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         // Several providers decide from the text, not the path, so an edit can make the active
         // file previewable or stop it being so without any change of editor.
-        if (e.contentChanges.length > 0 && key === vscode.window.activeTextEditor?.document.uri.toString()) {
+        if (e.contentChanges.length > 0 && key === host().window.activeTextEditor?.document.uri.toString()) {
             this.refreshActiveEditorContext();
         }
     }
 
     private refreshActiveEditorContext = debounce(
-        () => this.updateHoi4PreviewContextValue(vscode.window.activeTextEditor),
+        () => this.updateHoi4PreviewContextValue(host().window.activeTextEditor),
         500,
         { trailing: true });
 
@@ -177,7 +178,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
     private async showPreviewImpl(requestUri?: vscode.Uri, panel?: vscode.WebviewPanel, options?: { browserSmoke?: boolean }): Promise<unknown> {
         let document: vscode.TextDocument | undefined;
         if (requestUri === undefined) {
-            document = vscode.window.activeTextEditor?.document;
+            document = host().window.activeTextEditor?.document;
         } else {
             document = getDocumentByUri(requestUri);
             if (document === undefined) {
@@ -186,7 +187,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
                 // tab -- openTextDocument does not show one -- and lets the menu reach the same path
                 // the title-bar button does.
                 try {
-                    document = await vscode.workspace.openTextDocument(requestUri);
+                    document = await host().workspace.openTextDocument(requestUri);
                 } catch (e) {
                     error(e);
                 }
@@ -195,9 +196,9 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         if (document === undefined) {
             if (requestUri === undefined) {
-                void vscode.window.showErrorMessage(localize('preview.noactivedoc', "No active document."));
+                void host().window.showErrorMessage(localize('preview.noactivedoc', "No active document."));
             } else {
-                void vscode.window.showErrorMessage(localize('preview.cantfinddoc', "Can't find opened document {0}.", requestUri?.toString()));
+                void host().window.showErrorMessage(localize('preview.cantfinddoc', "Can't find opened document {0}.", requestUri?.toString()));
             }
             panel?.dispose();
             debug(`dispose panel ${requestUri} because document not opened`);
@@ -220,11 +221,11 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
                 .filter(p => p.isEnabled?.() !== false)
                 .map(p => p.displayName())
                 .join(', ');
-            void vscode.window.showInformationMessage(
+            void host().window.showInformationMessage(
                 localize('preview.cantpreviewfile', "Can't preview this file.\nValid types: {0}.", types));
             panel?.dispose();
             debug(`dispose panel ${uri} because no preview provider`);
-            this.updateHoi4PreviewContextValue(vscode.window.activeTextEditor);
+            this.updateHoi4PreviewContextValue(host().window.activeTextEditor);
             return;
         }
 
@@ -234,10 +235,10 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         const filename = basename(uri);
         const webviewOptions = previewWebviewOptions();
-        panel = panel ?? vscode.window.createWebviewPanel(
+        panel = panel ?? host().window.createWebviewPanel(
             WebviewType.Preview,
             localize('preview.viewtitle', "HOI4: {0}", filename),
-            vscode.ViewColumn.Beside,
+            host().ViewColumn.Beside,
             webviewOptions
         );
         // A panel restored from a session that predates the scoped roots carries the wide default.
@@ -245,13 +246,13 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         if (contextContainer.current) {
             panel.iconPath = {
-                light: vscode.Uri.joinPath(contextContainer.current.extensionUri, 'static/preview-right-light.svg'),
-                dark: vscode.Uri.joinPath(contextContainer.current.extensionUri, 'static/preview-right-dark.svg'),
+                light: host().Uri.joinPath(contextContainer.current.extensionUri, 'static/preview-right-light.svg'),
+                dark: host().Uri.joinPath(contextContainer.current.extensionUri, 'static/preview-right-dark.svg'),
             };
         }
 
         const browserSmoke = options?.browserSmoke === true && previewProvider.type === 'event'
-            && contextContainer.current?.extensionMode === vscode.ExtensionMode.Test;
+            && contextContainer.current?.extensionMode === host().ExtensionMode.Test;
         const previewItem = new previewProvider.previewConstructor(uri, panel, browserSmoke);
         this._previews[key] = previewItem;
 

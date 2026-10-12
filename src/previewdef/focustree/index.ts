@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import { host } from '../../util/host';
 import { buildFocusTreeHtml, buildNoFocusTreeHtml, buildFocusTreeErrorHtml, buildFocusTreePayload, loadFocusTreesOnly, FocusTreePayload } from './contentbuilder';
 import { matchPathEnd } from '../../util/nodecommon';
 import { UpdateablePreviewBase, LoaderRender, LoaderRenderResult, RenderContentOptions } from '../updateablepreview';
@@ -131,17 +132,17 @@ class FocusTreePreview extends UpdateablePreviewBase {
         }
 
         try {
-            const document = getDocumentByUri(this.uri) ?? await vscode.workspace.openTextDocument(this.uri);
+            const document = getDocumentByUri(this.uri) ?? await host().workspace.openTextDocument(this.uri);
             const edit = computeContinuousFocusEdit(document.getText(), start, treeId, x, y);
             if (!edit) {
-                void vscode.window.showWarningMessage(localize('focustree.continuousstale',
+                void host().window.showWarningMessage(localize('focustree.continuousstale',
                     'The focus tree changed since the preview was drawn. Drag the continuous focus box again.'));
                 return;
             }
 
-            const workspaceEdit = new vscode.WorkspaceEdit();
-            workspaceEdit.replace(document.uri, new vscode.Range(document.positionAt(edit.start), document.positionAt(edit.end)), edit.newText);
-            await vscode.workspace.applyEdit(workspaceEdit);
+            const workspaceEdit = new (host().WorkspaceEdit)();
+            workspaceEdit.replace(document.uri, new (host().Range)(document.positionAt(edit.start), document.positionAt(edit.end)), edit.newText);
+            await host().workspace.applyEdit(workspaceEdit);
         } catch (e) {
             error(e);
         }
