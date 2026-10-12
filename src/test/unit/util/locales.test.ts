@@ -1,5 +1,6 @@
 import * as assert from "assert";
 import * as fs from "fs";
+import * as path from "path";
 import {
 	defaultYmlSuffix,
 	isoBySettingName,
@@ -11,7 +12,9 @@ import {
 
 describe("util/locales", () => {
 	it("lists the languages the previewLocalisation setting offers, defaulting as it does", () => {
-		const settings = JSON.parse(fs.readFileSync("package.json", "utf8")).contributes.configuration.flatMap(
+		// From out-test/src/test/unit/util, where this file is compiled to.
+		const manifest = path.resolve(__dirname, "../../../../../package.json");
+		const settings = JSON.parse(fs.readFileSync(manifest, "utf8")).contributes.configuration.flatMap(
 			(section: { properties: Record<string, unknown> }) => Object.entries(section.properties),
 		);
 		const [, setting] = settings.find(([name]: [string]) => name === "mdHoi4Utilities.previewLocalisation");
