@@ -6,6 +6,7 @@ v1.1.42
 
 - Describe this change.
 - [ Testing ] Rewrite the core utility tests as pure tests.
+- Hand the editor API to modules at activation so they load without it.
 
   Bugfixes:
 - [ Previews ] A `count_triggers` block whose triggers are all `always = yes` now reads as met instead of never met.
