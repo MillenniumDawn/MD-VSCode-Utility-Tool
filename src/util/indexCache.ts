@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import { host } from './host';
 import { contextContainer } from '../context';
 import { Logger } from './logger';
 import { fnv1a64Hex } from './hash';
@@ -92,7 +93,7 @@ function cacheNamespace(parentModUris?: readonly vscode.Uri[]): string {
 
     let folders: string[] = [];
     try {
-        folders = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.toString());
+        folders = (host().workspace.workspaceFolders ?? []).map(f => f.uri.toString());
     } catch {
         folders = [];
     }
@@ -109,7 +110,7 @@ export function captureCacheScope(
     if (!ctx || IS_WEB_EXT) {
         return null;
     }
-    return vscode.Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT, cacheNamespace(parentModUris));
+    return host().Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT, cacheNamespace(parentModUris));
 }
 
 // Keyed on the directory rather than memoized once, because the namespace can change inside a
@@ -158,15 +159,15 @@ async function removeUnnamespacedCaches(): Promise<void> {
     }
 
     try {
-        const root = vscode.Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT);
-        const entries = await vscode.workspace.fs.readDirectory(root);
+        const root = host().Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT);
+        const entries = await host().workspace.fs.readDirectory(root);
         let removed = 0;
         for (const [name, type] of entries) {
-            if (type !== vscode.FileType.File || !name.endsWith('.json')) {
+            if (type !== host().FileType.File || !name.endsWith('.json')) {
                 continue;
             }
             try {
-                await vscode.workspace.fs.delete(vscode.Uri.joinPath(root, name));
+                await host().workspace.fs.delete(host().Uri.joinPath(root, name));
                 removed++;
             } catch {}
         }
@@ -185,13 +186,13 @@ async function removeUnnamespacedCaches(): Promise<void> {
  */
 async function removeSingleDocumentCaches(dir: vscode.Uri): Promise<void> {
     try {
-        const entries = await vscode.workspace.fs.readDirectory(dir);
+        const entries = await host().workspace.fs.readDirectory(dir);
         for (const [name, type] of entries) {
-            if (type !== vscode.FileType.File || !name.endsWith('.data.json')) {
+            if (type !== host().FileType.File || !name.endsWith('.data.json')) {
                 continue;
             }
             try {
-                await vscode.workspace.fs.delete(vscode.Uri.joinPath(dir, name));
+                await host().workspace.fs.delete(host().Uri.joinPath(dir, name));
             } catch {}
         }
     } catch {
@@ -207,7 +208,7 @@ export async function saveCacheManifest(indexName: string, filePaths: string[], 
             version,
             entries: filePaths.map(fp => ({ filePath: fp, mtime: mtimes.get(fp) ?? 0 })),
         };
-        const uri = vscode.Uri.joinPath(dir, `${indexName}.manifest.json`);
+        const uri = host().Uri.joinPath(dir, `${indexName}.manifest.json`);
         await writeFile(uri, Buffer.from(JSON.stringify(manifest)));
     } catch (e) {
         Logger.error(`Failed to save cache manifest for ${indexName}: ${e}`);
@@ -219,7 +220,7 @@ export async function loadCacheManifest(indexName: string, expectedVersion: numb
     const dir = scope === undefined ? captureCacheScope() : scope;
     if (!dir) { return null; }
     try {
-        const uri = vscode.Uri.joinPath(dir, `${indexName}.manifest.json`);
+        const uri = host().Uri.joinPath(dir, `${indexName}.manifest.json`);
         const data = (await readFile(uri)).toString();
         const manifest: CacheManifest = JSON.parse(data);
         if (manifest.version !== expectedVersion) { return null; }
@@ -268,7 +269,7 @@ export async function saveCacheRecords(indexName: string, records: readonly unkn
         lines.push(String(records.length));
         chunks.push(Buffer.from(lines.join('\n') + '\n'));
 
-        const uri = vscode.Uri.joinPath(dir, `${indexName}${CACHE_DATA_EXTENSION}`);
+        const uri = host().Uri.joinPath(dir, `${indexName}${CACHE_DATA_EXTENSION}`);
         await writeFile(uri, Buffer.concat(chunks));
     } catch (e) {
         Logger.error(`Failed to save cache data for ${indexName}: ${e}`);
@@ -285,7 +286,7 @@ export async function loadCacheRecords(indexName: string, scope?: CacheScope): P
     if (!dir) { return null; }
     let data: Buffer;
     try {
-        data = await readFile(vscode.Uri.joinPath(dir, `${indexName}${CACHE_DATA_EXTENSION}`));
+        data = await readFile(host().Uri.joinPath(dir, `${indexName}${CACHE_DATA_EXTENSION}`));
     } catch {
         return null;
     }

@@ -1,5 +1,6 @@
 import trimStart from "lodash/trimStart";
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "./host";
 import { Commands, ConfigurationKey, Hoi4FsSchema } from "../constants";
 import { forceError } from "./common";
 import { error } from "./debug";
@@ -18,11 +19,11 @@ import { getConfiguration, isFileScheme } from "./vsccommon";
 export function registerHoiFs(): vscode.Disposable {
 	const disposables: vscode.Disposable[] = [];
 	disposables.push(
-		vscode.commands.registerCommand(Commands.SelectHoiFolder, selectHoiFolder),
+		host().commands.registerCommand(Commands.SelectHoiFolder, selectHoiFolder),
 	);
 	try {
 		disposables.push(
-			vscode.workspace.registerFileSystemProvider(
+			host().workspace.registerFileSystemProvider(
 				Hoi4FsSchema,
 				new Hoi4UtilsFsProvider(),
 				{ isReadonly: true },
@@ -40,24 +41,24 @@ export function registerHoiFs(): vscode.Disposable {
 
 	if (!IS_WEB_EXT) {
 		disposables.push(
-			vscode.workspace.onDidChangeConfiguration(onChangeWorkspaceConfiguration),
+			host().workspace.onDidChangeConfiguration(onChangeWorkspaceConfiguration),
 		);
 		void checkInstallPath();
 	}
 
 	disposables.push(
-		vscode.workspace.onDidChangeConfiguration(onChangeParentModPaths),
+		host().workspace.onDidChangeConfiguration(onChangeParentModPaths),
 	);
 	disposables.push(
-		vscode.workspace.onDidSaveTextDocument(onSaveTextDocument),
+		host().workspace.onDidSaveTextDocument(onSaveTextDocument),
 	);
 	disposables.push(
-		vscode.workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
+		host().workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
 	);
 	void checkParentModPaths();
 	void refreshModDependencies();
 
-	return vscode.Disposable.from(...disposables);
+	return host().Disposable.from(...disposables);
 }
 
 async function selectHoiFolder(): Promise<void> {
@@ -68,7 +69,7 @@ async function selectHoiFolder(): Promise<void> {
 	};
 	// TODO proposed API
 	// dialogOptions.allowUIResources = true;
-	const result = await vscode.window.showOpenDialog(dialogOptions);
+	const result = await host().window.showOpenDialog(dialogOptions);
 	if (!result) {
 		return;
 	}
@@ -83,11 +84,11 @@ async function selectHoiFolder(): Promise<void> {
 			await conf.update(
 				"installPath",
 				uri.fsPath,
-				vscode.ConfigurationTarget.Global,
+				host().ConfigurationTarget.Global,
 			);
 		} catch (e) {
 			error(e);
-			void vscode.window.showErrorMessage(
+			void host().window.showErrorMessage(
 				localize(
 					"installpath.savefailed",
 					"Couldn't save the Hearts of Iron IV install path: {0}",
@@ -149,7 +150,7 @@ function onSaveTextDocument(document: vscode.TextDocument): void {
 }
 
 class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
-	private onDidChangeFileEventEmitter = new vscode.EventEmitter<
+	private onDidChangeFileEventEmitter = new (host().EventEmitter)<
 		vscode.FileChangeEvent[]
 	>();
 
@@ -164,26 +165,26 @@ class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
 	}
 
 	stat(uri: vscode.Uri): vscode.FileStat | Thenable<vscode.FileStat> {
-		return vscode.workspace.fs.stat(
-			vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, "/")),
+		return host().workspace.fs.stat(
+			host().Uri.joinPath(getInstallPathUri(), trimStart(uri.path, "/")),
 		);
 	}
 
 	readDirectory(
 		uri: vscode.Uri,
 	): [string, vscode.FileType][] | Thenable<[string, vscode.FileType][]> {
-		return vscode.workspace.fs.readDirectory(
-			vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, "/")),
+		return host().workspace.fs.readDirectory(
+			host().Uri.joinPath(getInstallPathUri(), trimStart(uri.path, "/")),
 		);
 	}
 
 	createDirectory(uri: vscode.Uri): void | Thenable<void> {
-		throw vscode.FileSystemError.NoPermissions(uri);
+		throw host().FileSystemError.NoPermissions(uri);
 	}
 
 	readFile(uri: vscode.Uri): Uint8Array | Thenable<Uint8Array> {
-		return vscode.workspace.fs.readFile(
-			vscode.Uri.joinPath(getInstallPathUri(), trimStart(uri.path, "/")),
+		return host().workspace.fs.readFile(
+			host().Uri.joinPath(getInstallPathUri(), trimStart(uri.path, "/")),
 		);
 	}
 
@@ -192,14 +193,14 @@ class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
 		_content: Uint8Array,
 		_options: { create: boolean; overwrite: boolean },
 	): void | Thenable<void> {
-		throw vscode.FileSystemError.NoPermissions(uri);
+		throw host().FileSystemError.NoPermissions(uri);
 	}
 
 	delete(
 		uri: vscode.Uri,
 		_options: { recursive: boolean },
 	): void | Thenable<void> {
-		throw vscode.FileSystemError.NoPermissions(uri);
+		throw host().FileSystemError.NoPermissions(uri);
 	}
 
 	rename(
@@ -207,7 +208,7 @@ class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
 		_newUri: vscode.Uri,
 		_options: { overwrite: boolean },
 	): void | Thenable<void> {
-		throw vscode.FileSystemError.NoPermissions(oldUri);
+		throw host().FileSystemError.NoPermissions(oldUri);
 	}
 
 	copy(
@@ -215,6 +216,6 @@ class Hoi4UtilsFsProvider implements vscode.FileSystemProvider {
 		_destination: vscode.Uri,
 		_options: { overwrite: boolean },
 	): void | Thenable<void> {
-		throw vscode.FileSystemError.NoPermissions(source);
+		throw host().FileSystemError.NoPermissions(source);
 	}
 }

@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { PreviewBase } from "./previewbase";
 import { fnv1a32, fnv1a32Value } from "../util/hash";
 

@@ -18,8 +18,12 @@ import { registerIndexStatusCommand } from "./util/indexBuild";
 import { disposeImageDecodeWorkers } from "./util/image/imagedecoder";
 import { registerAuditFocusTreesCommand } from "./previewdef/focustree/warningreport";
 import { registerModTools } from "./modtools/host";
+import { handOverHost } from "./util/host";
 
 export function activate(context: vscode.ExtensionContext) {
+    // First: everything below reaches the editor through what is handed over here.
+    handOverHost(vscode);
+
     let locale: string | undefined = context.extension?.packageJSON?.locale;
     if (locale === "%hoi4modutilities.locale%") {
         locale = 'en';

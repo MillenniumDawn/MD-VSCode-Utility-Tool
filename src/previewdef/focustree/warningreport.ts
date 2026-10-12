@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "../../util/host";
 import * as path from "path";
 import { Commands } from "../../constants";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
@@ -165,15 +166,15 @@ export async function copyTreeWarnings(msg: unknown, file: string, noWarningsMes
 		return;
 	}
 	if (msg.warnings.length === 0) {
-		void vscode.window.showInformationMessage(
+		void host().window.showInformationMessage(
 			noWarningsMessage ?? localize("focustree.copywarnings.none", "This focus tree has no warnings."),
 		);
 		return;
 	}
 	const treeId = msg.treeId;
 	const warnings = msg.warnings.map((w) => ({ treeId, source: w.source, text: w.text }));
-	await vscode.env.clipboard.writeText(formatFileWarnings({ file, warnings }));
-	void vscode.window.showInformationMessage(
+	await host().env.clipboard.writeText(formatFileWarnings({ file, warnings }));
+	void host().window.showInformationMessage(
 		localize("focustree.copywarnings.done", "Copied {0} warnings.", warnings.length),
 	);
 }
@@ -218,9 +219,9 @@ async function buildFocusTreeAuditReport(
 
 function reportFolderUri(folder: string): vscode.Uri {
 	if (path.isAbsolute(folder)) {
-		return vscode.Uri.file(folder);
+		return host().Uri.file(folder);
 	}
-	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+	const workspaceFolder = host().workspace.workspaceFolders?.[0];
 	if (workspaceFolder === undefined) {
 		throw new Error(
 			localize(
@@ -230,20 +231,20 @@ function reportFolderUri(folder: string): vscode.Uri {
 			),
 		);
 	}
-	return vscode.Uri.joinPath(workspaceFolder.uri, folder);
+	return host().Uri.joinPath(workspaceFolder.uri, folder);
 }
 
 async function showReport(report: string, folder: string): Promise<void> {
 	if (folder === "") {
-		const document = await vscode.workspace.openTextDocument({ language: "markdown", content: report });
-		await vscode.window.showTextDocument(document);
+		const document = await host().workspace.openTextDocument({ language: "markdown", content: report });
+		await host().window.showTextDocument(document);
 		return;
 	}
 	const folderUri = reportFolderUri(folder);
-	await vscode.workspace.fs.createDirectory(folderUri);
-	const reportUri = vscode.Uri.joinPath(folderUri, auditReportFileName);
-	await vscode.workspace.fs.writeFile(reportUri, Buffer.from(report, "utf8"));
-	await vscode.window.showTextDocument(reportUri);
+	await host().workspace.fs.createDirectory(folderUri);
+	const reportUri = host().Uri.joinPath(folderUri, auditReportFileName);
+	await host().workspace.fs.writeFile(reportUri, Buffer.from(report, "utf8"));
+	await host().window.showTextDocument(reportUri);
 }
 
 export async function auditFocusTrees(): Promise<void> {
@@ -262,12 +263,12 @@ export async function auditFocusTrees(): Promise<void> {
 		}
 	} catch (e) {
 		error(e);
-		void vscode.window.showErrorMessage(
+		void host().window.showErrorMessage(
 			localize("focustree.audit.failed", "Checking the focus trees failed: {0}", `${e instanceof Error ? e.message : e}`),
 		);
 	}
 }
 
 export function registerAuditFocusTreesCommand(): vscode.Disposable {
-	return vscode.commands.registerCommand(Commands.AuditFocusTrees, auditFocusTrees);
+	return host().commands.registerCommand(Commands.AuditFocusTrees, auditFocusTrees);
 }

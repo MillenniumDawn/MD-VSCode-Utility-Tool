@@ -1,5 +1,5 @@
 import { localize } from "../../util/i18n";
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { renderCharacterFile } from "./contentbuilder";
 import { matchPathEnd } from "../../util/nodecommon";
 import { PreviewProviderDef } from "../previewmanager";

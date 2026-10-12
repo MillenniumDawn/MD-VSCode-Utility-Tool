@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "./host";
 import { Commands } from "../constants";
 import { createWorkQueue, TimeoutError, withTimeout } from "./common";
 import { describeLiveIndexBuilds } from "./indexCache";
@@ -119,9 +120,9 @@ function openSession(): Promise<ProgressSession> {
 		lastRenderAt: 0,
 	};
 
-	void vscode.window.withProgress(
+	void host().window.withProgress(
 		{
-			location: vscode.ProgressLocation.Notification,
+			location: host().ProgressLocation.Notification,
 			title: localize("index.progress.title", "Indexing the workspace"),
 			cancellable: true,
 		},
@@ -311,7 +312,7 @@ export function createIndexBuilder<T>(
  * and shows the same line, so a report can be pasted straight out of the output channel.
  */
 export function registerIndexStatusCommand(): vscode.Disposable {
-	return vscode.commands.registerCommand(Commands.ShowIndexStatus, () => {
+	return host().commands.registerCommand(Commands.ShowIndexStatus, () => {
 		const live = describeLiveIndexBuilds();
 		const summary =
 			live.length === 0
@@ -322,6 +323,6 @@ export function registerIndexStatusCommand(): vscode.Disposable {
 						live.join("; "),
 					);
 		Logger.info(`[Index] status: ${summary}`);
-		void vscode.window.showInformationMessage(summary);
+		void host().window.showInformationMessage(summary);
 	});
 }

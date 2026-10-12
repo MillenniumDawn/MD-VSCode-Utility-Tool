@@ -284,6 +284,11 @@ const origResolve = (Module as any)._resolveFilename;
 (globalThis as any).EXTENSION_ID = 'test.test';
 
 const stub = buildStub();
+// Modules that reach the editor through util/host get the same object `vscode` resolves to here.
+require('../util/host').handOverHost(stub);
+// The flags used to be read as featureflags.ts loaded, from the settings above. These suites were
+// written against that, so read them now, before any suite swaps the settings out.
+require('../util/featureflags').getFlags();
 (require.cache as any)[path.join(__dirname, '__vscode_stub__')] = {
     id: 'vscode',
     filename: 'vscode',

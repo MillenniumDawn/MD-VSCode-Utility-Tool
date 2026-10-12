@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { BopLoader } from "./loader";
 import { localize } from "../../util/i18n";
 import { StyleTable } from "../../util/styletable";

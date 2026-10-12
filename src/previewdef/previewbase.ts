@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import { host } from '../util/host';
 import { localize } from '../util/i18n';
 import { error, debug } from '../util/debug';
 import { getDocumentByUri } from '../util/vsccommon';
@@ -13,10 +14,10 @@ import { waitForRenderAck } from './renderack';
 export abstract class PreviewBase {
     private cachedDependencies: string[] | undefined = undefined;
 
-    private dependencyChangedEmitter = new vscode.EventEmitter<string[]>();
+    private dependencyChangedEmitter = new (host().EventEmitter)<string[]>();
     public onDependencyChanged = this.dependencyChangedEmitter.event;
 
-    private disposeEmitter = new vscode.EventEmitter<undefined>();
+    private disposeEmitter = new (host().EventEmitter)<undefined>();
     public onDispose = this.disposeEmitter.event;
 
     private disposed = false;
@@ -86,7 +87,7 @@ export abstract class PreviewBase {
         if (this.disposed) {
             return;
         }
-        vscode.Disposable.from(...this.subscriptions).dispose();
+        host().Disposable.from(...this.subscriptions).dispose();
         this.subscriptions.length = 0;
         this.dependencyChangedEmitter.dispose();
         this.disposed = true;
@@ -155,9 +156,9 @@ export abstract class PreviewBase {
                                 return;
                             }
 
-                            void vscode.window.showTextDocument(this.uri, {
-                                selection: new vscode.Range(document.positionAt(msg.start), document.positionAt(msg.end ?? msg.start)),
-                                viewColumn: vscode.ViewColumn.One
+                            void host().window.showTextDocument(this.uri, {
+                                selection: new (host().Range)(document.positionAt(msg.start), document.positionAt(msg.end ?? msg.start)),
+                                viewColumn: host().ViewColumn.One
                             });
                         } else {
                             void this.openOrCopyFile(msg.file, msg.start, msg.end);
@@ -186,7 +187,7 @@ export abstract class PreviewBase {
         // a render reads are already refreshed by the time this runs.
         const keys = this.reloadOnConfigurationChange;
         if (keys.length > 0) {
-            this.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+            this.subscriptions.push(host().workspace.onDidChangeConfiguration(e => {
                 if (keys.some(key => e.affectsConfiguration(`${ConfigurationKey}.${key}`))) {
                     this.reload(this.configurationChangeForcesReload);
                 }
@@ -230,7 +231,7 @@ export abstract class PreviewBase {
 
     protected async openOrCopyFile(file: string, start: number | undefined, end: number | undefined): Promise<void> {
         await openOrCopyHoiFile(file, start, end, {
-            viewColumn: vscode.ViewColumn.One,
+            viewColumn: host().ViewColumn.One,
             mustOpenFolderMessage: localize('preview.mustopenafolder', 'Must open a folder before opening "{0}".', file),
             selectFolderMessage: localize('preview.selectafolder', 'Select a folder to copy "{0}"', file),
             failedToOpenMessage: (errorMessage) => localize('preview.failedtoopen', 'Failed to open file "{0}": {1}.', file, errorMessage),

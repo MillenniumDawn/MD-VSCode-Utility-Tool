@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { parseHoi4File } from "../hoiformat/hoiparser";
 import { getSpriteTypes } from "../hoiformat/spritetype";
 import { getFlags } from "./featureflags";
@@ -306,7 +306,7 @@ async function fillGfxItems(
 }
 
 const watchers = createIndexWatchers({
-	enabled: getFlags().gfxIndex,
+	enabled: () => getFlags().gfxIndex,
 	extension: ".gfx",
 	hasStarted: () => builder.hasStarted(),
 	gate: buildGate,

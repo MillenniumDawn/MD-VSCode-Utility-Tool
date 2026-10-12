@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { Loader, LoaderSession } from "../util/loader/loader";
 import { debug } from "../util/debug";
 import { DynamicScript, HtmlOptions, NonceOnly, html, previewedFileUriScript, errorPage } from "../util/html";

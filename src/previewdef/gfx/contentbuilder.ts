@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { getSpriteTypes, SpriteType } from "../../hoiformat/spritetype";
 import { getImageByPath } from "../../util/image/imagecache";

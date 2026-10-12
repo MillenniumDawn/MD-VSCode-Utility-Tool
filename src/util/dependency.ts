@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "./host";
 import { Commands, ContextName } from "../constants";
 import { localize } from "./i18n";
 import { contextContainer } from "../context";
@@ -49,16 +50,16 @@ export function getDependenciesFromText(text: string): Dependency[] {
 }
 
 export function registerScanReferencesCommand(): vscode.Disposable {
-	return vscode.commands.registerCommand(
+	return host().commands.registerCommand(
 		Commands.ScanReferences,
 		scanReferences,
 	);
 }
 
 async function scanReferences(): Promise<void> {
-	const editor = vscode.window.activeTextEditor;
+	const editor = host().window.activeTextEditor;
 	if (!editor) {
-		void vscode.window.showErrorMessage(
+		void host().window.showErrorMessage(
 			localize("scanref.noeditor", "No opened editor."),
 		);
 		return;
@@ -74,12 +75,12 @@ async function scanReferences(): Promise<void> {
 			);
 			// A cancel says nothing: the user pressed Cancel and already knows.
 			if (result === "done") {
-				void vscode.window.showInformationMessage(
+				void host().window.showInformationMessage(
 					localize("scanref.done", "Scan reference done."),
 				);
 			}
 		} else {
-			void vscode.window.showErrorMessage(
+			void host().window.showErrorMessage(
 				localize(
 					"scanref.unsupportedtype",
 					"Unsupported file type to scan references.",
@@ -88,7 +89,7 @@ async function scanReferences(): Promise<void> {
 		}
 	} catch (e) {
 		error(e);
-		void vscode.window.showErrorMessage(
+		void host().window.showErrorMessage(
 			localize("scanref.failed", "Scan references failed: {0}", `${e}`),
 		);
 	}
@@ -318,7 +319,7 @@ export async function scanReferencesForEvents(
 
 	await editor.edit((eb) => {
 		eb.insert(
-			new vscode.Position(0, 0),
+			new (host().Position)(0, 0),
 			moreEventDependencyContent + moreLocalizationDependencyContent,
 		);
 	});

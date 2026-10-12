@@ -1,4 +1,4 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { IndexFile, IndexListing, listIndexFiles } from "./indexListing";
 import { localize } from "./i18n";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
@@ -446,7 +446,7 @@ function reindexWorkspaceSwapFile(file: vscode.Uri): void {
 }
 
 const watchers = createIndexWatchers({
-	enabled: getFlags().ideaSwapIndex,
+	enabled: () => getFlags().ideaSwapIndex,
 	extension: ".txt",
 	hasStarted: () => builder.hasStarted(),
 	gate: buildGate,

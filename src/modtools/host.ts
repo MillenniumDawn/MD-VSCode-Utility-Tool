@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import { host } from '../util/host';
 import { Commands, ConfigurationKey, ContextName } from '../constants';
 import { setVscodeContext } from '../context';
 import { localize } from '../util/i18n';
@@ -45,7 +46,7 @@ function messageOf(e: unknown): string {
 
 async function findModRoot(pack: ModToolPack, env: ModToolHostEnvironment): Promise<vscode.Uri | undefined> {
     for (const folder of env.folders()) {
-        const found = await Promise.all(pack.detect.files.map(file => env.exists(vscode.Uri.joinPath(folder, file))));
+        const found = await Promise.all(pack.detect.files.map(file => env.exists(host().Uri.joinPath(folder, file))));
         if (found.length > 0 && found.every(Boolean)) {
             return folder;
         }
@@ -95,14 +96,14 @@ export async function runModTool({ pack, tool, modRoot }: AvailableModTool): Pro
     } catch (e) {
         Logger.error(`[Mod tools] ${pack.displayName} / ${tool.title} failed: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
         const report = localize('modtools.report', 'Report to {0}', pack.maintainer.name);
-        const choice = await vscode.window.showErrorMessage(
+        const choice = await host().window.showErrorMessage(
             localize('modtools.failed',
                 'Mod tool "{0}" failed: {1}. This tool is maintained by {2}, not by MD Utilities; please report it to them.',
                 tool.title, messageOf(e), pack.maintainer.name),
             report,
         );
         if (choice === report) {
-            await vscode.env.openExternal(vscode.Uri.parse(pack.maintainer.issues));
+            await host().env.openExternal(host().Uri.parse(pack.maintainer.issues));
         }
     }
 }
@@ -114,7 +115,7 @@ export function pickItems(available: readonly AvailableModTool[]): ModToolPickIt
     let lastPack: ModToolPack | undefined;
     for (const entry of available) {
         if (entry.pack !== lastPack) {
-            items.push({ label: entry.pack.displayName, kind: vscode.QuickPickItemKind.Separator });
+            items.push({ label: entry.pack.displayName, kind: host().QuickPickItemKind.Separator });
             lastPack = entry.pack;
         }
         items.push({ label: entry.tool.title, description: entry.tool.description, available: entry });
@@ -127,11 +128,11 @@ function vscodeEnvironment(): ModToolHostEnvironment {
         enabled: () => getConfiguration().get<boolean>('modTools.enabled', false) === true,
         toolEnabled: (pack, tool) => getConfiguration().get<boolean>(toolSettingKey(pack, tool), true) !== false,
         isWeb: IS_WEB_EXT,
-        isTrusted: () => vscode.workspace.isTrusted,
-        folders: () => (vscode.workspace.workspaceFolders ?? []).map(folder => folder.uri),
+        isTrusted: () => host().workspace.isTrusted,
+        folders: () => (host().workspace.workspaceFolders ?? []).map(folder => folder.uri),
         exists: async uri => {
             try {
-                await vscode.workspace.fs.stat(uri);
+                await host().workspace.fs.stat(uri);
                 return true;
             } catch {
                 return false;
@@ -164,30 +165,30 @@ export function registerModTools(
             }
         };
 
-        disposables.push(vscode.commands.registerCommand(Commands.RunModTool, async () => {
+        disposables.push(host().commands.registerCommand(Commands.RunModTool, async () => {
             const available = await findAvailableModTools(packs, env);
             if (available.length === 0) {
-                await vscode.window.showInformationMessage(localize('modtools.none',
+                await host().window.showInformationMessage(localize('modtools.none',
                     'No mod tools are available here. Switch them on under Settings > Mod tools, and open the mod they belong to.'));
                 return;
             }
-            const picked = await vscode.window.showQuickPick(pickItems(available), {
+            const picked = await host().window.showQuickPick(pickItems(available), {
                 placeHolder: localize('modtools.pick', 'Choose a mod tool. Mod tools are maintained by their mods, not by MD Utilities.'),
             });
             if (picked?.available) {
                 await runModTool(picked.available);
             }
         }));
-        disposables.push(vscode.workspace.onDidChangeConfiguration(e => {
+        disposables.push(host().workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration(modToolsSection)) {
                 void refresh();
             }
         }));
-        disposables.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void refresh()));
-        disposables.push(vscode.workspace.onDidGrantWorkspaceTrust(() => void refresh()));
+        disposables.push(host().workspace.onDidChangeWorkspaceFolders(() => void refresh()));
+        disposables.push(host().workspace.onDidGrantWorkspaceTrust(() => void refresh()));
         void refresh();
     } catch (e) {
         Logger.error(`[Mod tools] could not be set up: ${messageOf(e)}`);
     }
-    return vscode.Disposable.from(...disposables);
+    return host().Disposable.from(...disposables);
 }

@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import { host } from './util/host';
 
 interface ContextContainer {
     current: vscode.ExtensionContext | null;
@@ -7,7 +8,7 @@ interface ContextContainer {
 
 export function registerContextContainer(context: vscode.ExtensionContext): vscode.Disposable {
     contextContainer.current = context;
-    return new vscode.Disposable(() => contextContainer.current = null);
+    return { dispose: () => contextContainer.current = null };
 }
 
 export const contextContainer: ContextContainer = {
@@ -17,5 +18,5 @@ export const contextContainer: ContextContainer = {
 
 export function setVscodeContext(key: string, value: unknown): void {
     contextContainer.contextValue[key] = value;
-    void vscode.commands.executeCommand('setContext', key, value);
+    void host().commands.executeCommand('setContext', key, value);
 }

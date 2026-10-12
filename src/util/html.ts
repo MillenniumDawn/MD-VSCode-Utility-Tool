@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+import { host } from './host';
 import { contextContainer } from '../context';
 import { StyleTable } from './styletable';
 import { forceError, randomString, jsonForScript } from './common';
@@ -47,7 +48,7 @@ export function html(webview: vscode.Webview, body: string, scripts: (string | D
     const preparedScripts = [previewWheelScript(), ...scripts].map<[string, string]>(script => {
         if (typeof script === 'string') {
             const uri = contextContainer.current ?
-                webview.asWebviewUri(vscode.Uri.joinPath(contextContainer.current.extensionUri, 'static/' + script)) :
+                webview.asWebviewUri(host().Uri.joinPath(contextContainer.current.extensionUri, 'static/' + script)) :
                 "";
             return [
                 `<script src="${uri}"></script>`,
@@ -79,7 +80,7 @@ export function html(webview: vscode.Webview, body: string, scripts: (string | D
                 }
             } else {
                 const uri = contextContainer.current ?
-                    webview.asWebviewUri(vscode.Uri.joinPath(contextContainer.current.extensionUri, 'static/' + style)) :
+                    webview.asWebviewUri(host().Uri.joinPath(contextContainer.current.extensionUri, 'static/' + style)) :
                     "";
                 return `<link rel="stylesheet" href="${uri}"/>`;
             }

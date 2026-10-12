@@ -1,5 +1,6 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import * as path from 'path';
+import { host } from './host';
 import { localize } from './i18n';
 import { UserError, mapLimit } from './common';
 import { isSamePath } from './nodecommon';
@@ -8,15 +9,15 @@ import { defaultYmlSuffix, ymlSuffixBySettingName } from './locales';
 import { contextContainer } from '../context';
 
 export function getConfiguration() {
-    return vscode.workspace.getConfiguration(ConfigurationKey);
+    return host().workspace.getConfiguration(ConfigurationKey);
 }
 
 export function getDocumentByUri(uri: vscode.Uri): vscode.TextDocument | undefined {
-    return vscode.workspace.textDocuments.find(document => document.uri.toString() === uri.toString());
+    return host().workspace.textDocuments.find(document => document.uri.toString() === uri.toString());
 }
 
 export function getRelativePathInWorkspace(uri: vscode.Uri): string {
-    const folder = vscode.workspace.getWorkspaceFolder(uri);
+    const folder = host().workspace.getWorkspaceFolder(uri);
     if (folder) {
         return path.relative(folder.uri.path, uri.path).replace(/\\/g, '/');
     } else {
@@ -40,15 +41,15 @@ export function isSameUri(uriA: vscode.Uri, uriB: vscode.Uri) {
 }
 
 export async function getLastModifiedAsync(path: vscode.Uri): Promise<number> {
-    return (await vscode.workspace.fs.stat(path)).mtime;
+    return (await host().workspace.fs.stat(path)).mtime;
 }
 
 export async function readDir(dir: vscode.Uri): Promise<string[]> {
-    return (await vscode.workspace.fs.readDirectory(dir)).map(f => f[0]);
+    return (await host().workspace.fs.readDirectory(dir)).map(f => f[0]);
 }
 
 export async function readDirFiles(dir: vscode.Uri): Promise<string[]> {
-    return (await vscode.workspace.fs.readDirectory(dir)).filter(f => f[1] === vscode.FileType.File).map(f => f[0]);
+    return (await host().workspace.fs.readDirectory(dir)).filter(f => f[1] === host().FileType.File).map(f => f[0]);
 }
 
 /**
@@ -64,12 +65,12 @@ export async function readDirFilesRecursively(dir: vscode.Uri): Promise<string[]
 }
 
 async function readDirFilesRecursivelyImpl(dir: vscode.Uri, prefix: string): Promise<string[]> {
-    const items = await vscode.workspace.fs.readDirectory(dir);
+    const items = await host().workspace.fs.readDirectory(dir);
     const nested = await mapLimit(items, DIR_CONCURRENCY, async ([name, type]) => {
-        if (type === vscode.FileType.File) {
+        if (type === host().FileType.File) {
             return [prefix + name];
-        } else if (type === vscode.FileType.Directory) {
-            return readDirFilesRecursivelyImpl(vscode.Uri.joinPath(dir, name), prefix + name + '/');
+        } else if (type === host().FileType.Directory) {
+            return readDirFilesRecursivelyImpl(host().Uri.joinPath(dir, name), prefix + name + '/');
         }
         return [];
     });
@@ -83,20 +84,20 @@ async function readDirFilesRecursivelyImpl(dir: vscode.Uri, prefix: string): Pro
 }
 
 export async function readFile(path: vscode.Uri): Promise<Buffer> {
-    return Buffer.from(await vscode.workspace.fs.readFile(path));
+    return Buffer.from(await host().workspace.fs.readFile(path));
 }
 
 export async function writeFile(path: vscode.Uri, buffer: Buffer): Promise<void> {
-    return await vscode.workspace.fs.writeFile(path, buffer);
+    return await host().workspace.fs.writeFile(path, buffer);
 }
 
 export async function mkdirs(path: vscode.Uri): Promise<void> {
-    await vscode.workspace.fs.createDirectory(path);
+    await host().workspace.fs.createDirectory(path);
 }
 
 export async function isFile(path: vscode.Uri): Promise<boolean> {
     try {
-        return (await vscode.workspace.fs.stat(path)).type === vscode.FileType.File;
+        return (await host().workspace.fs.stat(path)).type === host().FileType.File;
     } catch (e) {
         return false;
     }
@@ -104,7 +105,7 @@ export async function isFile(path: vscode.Uri): Promise<boolean> {
 
 export async function isDirectory(path: vscode.Uri): Promise<boolean> {
     try {
-        return (await vscode.workspace.fs.stat(path)).type === vscode.FileType.Directory;
+        return (await host().workspace.fs.stat(path)).type === host().FileType.Directory;
     } catch (e) {
         return false;
     }
@@ -128,13 +129,13 @@ export function fileOrUriStringToUri(path: string | undefined): vscode.Uri | und
 
     try {
         if (/^[a-zA-Z]:[\\/]/.test(normalizedPath) || /^\\\\/.test(normalizedPath)) {
-            return vscode.Uri.file(normalizedPath);
+            return host().Uri.file(normalizedPath);
         }
 
         if (normalizedPath.indexOf(':') > 2) { // try to avoid prefix like "D:\"
-            return vscode.Uri.parse(normalizedPath);
+            return host().Uri.parse(normalizedPath);
         } else {
-            return vscode.Uri.file(normalizedPath);
+            return host().Uri.file(normalizedPath);
         }
     } catch (e) {
         return undefined;

@@ -1,4 +1,5 @@
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
+import { host } from "./host";
 import { localize } from "./i18n";
 import { Logger } from "./logger";
 import {
@@ -104,7 +105,7 @@ export function getParentModUris(): vscode.Uri[] {
 	}
 
 	const workspaceKeys = new Set(
-		(vscode.workspace.workspaceFolders ?? []).map((folder) =>
+		(host().workspace.workspaceFolders ?? []).map((folder) =>
 			uriKey(folder.uri),
 		),
 	);
@@ -161,7 +162,7 @@ export function onDidChangeParentMods(
 	listener: (e: ParentModsChangeEvent) => void,
 ): vscode.Disposable {
 	listeners.add(listener);
-	return new vscode.Disposable(() => {
+	return new (host().Disposable)(() => {
 		listeners.delete(listener);
 	});
 }
@@ -214,7 +215,7 @@ export function resetParentModsForTest(): void {
 export async function checkParentModPaths(): Promise<void> {
 	for (const parent of getExplicitParentModUris()) {
 		if (!(await isDirectory(parent))) {
-			void vscode.window.showErrorMessage(
+			void host().window.showErrorMessage(
 				localize(
 					"parentmods.notdirectory",
 					"Parent mod path does not exist: {0}",

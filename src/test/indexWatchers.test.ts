@@ -43,7 +43,7 @@ describe("util/indexWatchers folder-change rebuild", function () {
 		started = true;
 		gate = createBuildGate();
 		handlers = createIndexWatchers({
-			enabled: true,
+			enabled: () => true,
 			extension: ".txt",
 			hasStarted: () => started,
 			gate,
@@ -191,7 +191,7 @@ describe("util/indexWatchers parent list change", function () {
 			},
 		});
 		const watchers = createIndexWatchers({
-			enabled: true,
+			enabled: () => true,
 			extension: ".txt",
 			hasStarted: () => true,
 			gate: createBuildGate(),
