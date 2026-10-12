@@ -259,32 +259,21 @@ export function withTimeout<T>(
 	ms: number,
 	onTimeout?: () => Error | void,
 ): Promise<T> {
+	// Whichever settles first wins: settling a promise a second time does nothing, and a cleared
+	// timer never fires.
 	return new Promise<T>((resolve, reject) => {
-		let settled = false;
 		const timer = setTimeout(() => {
-			if (settled) {
-				return;
-			}
-			settled = true;
-			const err =
-				onTimeout?.() ?? new TimeoutError(`Operation timed out after ${ms}ms`);
-			reject(err);
+			reject(
+				onTimeout?.() ?? new TimeoutError(`Operation timed out after ${ms}ms`),
+			);
 		}, ms);
 
 		promise.then(
 			(value) => {
-				if (settled) {
-					return;
-				}
-				settled = true;
 				clearTimeout(timer);
 				resolve(value);
 			},
 			(error) => {
-				if (settled) {
-					return;
-				}
-				settled = true;
 				clearTimeout(timer);
 				reject(error);
 			},
