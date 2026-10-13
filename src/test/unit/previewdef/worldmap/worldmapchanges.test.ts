@@ -2,8 +2,8 @@
 /// <reference types="mocha" />
 
 import * as assert from "assert";
-import { WorldMapData } from "../previewdef/worldmap/definitions";
-import { buildWorldMapChangeMessages } from "../previewdef/worldmap/worldmapchanges";
+import { WorldMapData } from "../../../../previewdef/worldmap/definitions";
+import { buildWorldMapChangeMessages } from "../../../../previewdef/worldmap/worldmapchanges";
 
 function map(overrides: Partial<WorldMapData> = {}): WorldMapData {
 	return {

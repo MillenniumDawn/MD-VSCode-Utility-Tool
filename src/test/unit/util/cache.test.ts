@@ -1,6 +1,12 @@
 import * as assert from "assert";
 import { mock } from "node:test";
-import { Cache, CacheOptions, PromiseCache, PromiseCacheOptions } from "../../../util/cache";
+import type * as cacheModule from "../../../util/cache";
+import type { Cache, CacheOptions, PromiseCache, PromiseCacheOptions } from "../../../util/cache";
+import { fresh } from "../host";
+
+// Every cache in the process shares one sweep timer. The caches other modules keep must not share
+// this file's mocked clock, so it takes a copy of the module with a timer of its own.
+const caches = fresh<typeof cacheModule>("../../util/cache");
 
 // A value whose weight can change after it was cached, as an image's does once it is decoded.
 interface Sized {
@@ -15,7 +21,7 @@ describe("util/cache", () => {
 	let made: string[];
 
 	function cache<V = string>(options: Partial<CacheOptions<V>> = {}): Cache<V> {
-		const result = new Cache<V>({
+		const result = new caches.Cache<V>({
 			life: 0,
 			factory: (key) => {
 				made.push(key);
@@ -28,7 +34,7 @@ describe("util/cache", () => {
 	}
 
 	function promiseCache<V = string>(options: Partial<PromiseCacheOptions<V>> = {}): PromiseCache<V> {
-		const result = new PromiseCache<V>({
+		const result = new caches.PromiseCache<V>({
 			life: 0,
 			factory: async (key) => {
 				made.push(key);

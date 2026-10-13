@@ -1,7 +1,7 @@
 import * as assert from 'assert';
-import { Point, ProvinceEdgeGraph, WorldMapWarning } from '../previewdef/worldmap/definitions';
-import { concatEdges, fillEdges, validateProvince } from '../previewdef/worldmap/loader/provincebmp';
-import { localize } from '../util/i18n';
+import { Point, ProvinceEdgeGraph, WorldMapWarning } from '../../../../../previewdef/worldmap/definitions';
+import { concatEdges, fillEdges, validateProvince } from '../../../../../previewdef/worldmap/loader/provincebmp';
+import { localize } from '../../../../../util/i18n';
 
 function pt(x: number, y: number): Point {
     return { x, y };

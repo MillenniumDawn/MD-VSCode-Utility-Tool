@@ -1,9 +1,10 @@
 Unreleased
 
   Bugfixes:
-- [ Previews ] A `count_triggers` block whose triggers are all `always = yes` now reads as met instead of never met.
 - [ DDS ] DXT5 textures no longer lose part of their soft edges. Half-transparent pixels beside fully clear or fully solid ones were drawn more transparent than the game draws them.
 - [ DDS ] Textures saved as sRGB R8G8B8A8 no longer show too dark, and B4G4R4A4 textures now show instead of going missing.
+- [ Previews ] A `count_triggers` block whose triggers are all `always = yes` now reads as met instead of never met.
+- [ Previews ] Switching to or typing in a file that is not a `.txt`, such as a large localisation file, no longer scans its whole text to look for an event, technology, idea, character or balance of power preview. Only `.txt` files offer those previews now. Issue #488.
 
 v1.1.41
 
