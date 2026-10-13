@@ -74,3 +74,27 @@ export abstract class LoaderPreview<
 		}
 	}
 }
+
+// The whole of a preview that has nothing of its own but its loader, its render and the settings
+// its page goes stale on. One with more to it extends what this returns.
+export function loaderPreview<TLoader extends Loader<unknown, unknown>>(
+	loaderConstructor: new (file: string, contentProvider: () => Promise<string>) => TLoader,
+	render: (
+		loader: TLoader,
+		uri: vscode.Uri,
+		webview: vscode.Webview,
+		options?: RenderContentOptions,
+	) => Promise<LoaderRender>,
+	reloadOnConfigurationChange: readonly string[],
+): new (uri: vscode.Uri, panel: vscode.WebviewPanel, browserSmoke?: boolean) => LoaderPreview<TLoader> {
+	return class extends LoaderPreview<TLoader> {
+		constructor(uri: vscode.Uri, panel: vscode.WebviewPanel, browserSmoke = false) {
+			super(uri, panel, (file, contentProvider) => new loaderConstructor(file, contentProvider), render, browserSmoke);
+		}
+
+		// On the prototype, not a field: PreviewBase reads it from its own constructor.
+		protected override get reloadOnConfigurationChange(): readonly string[] {
+			return reloadOnConfigurationChange;
+		}
+	};
+}

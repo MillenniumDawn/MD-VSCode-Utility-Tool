@@ -1,6 +1,7 @@
 .vscode/**
 .vscode-test/**
 .claude/**
+.agents/**
 .superpowers/**
 out/**
 out-test/**
@@ -28,6 +29,7 @@ coverage/**
 .pi-subagents/**
 .pi-agent/**
 CLAUDE.md
+AGENTS.md
 eslint.config.cjs
 .jscpd.json
 knip.json
