@@ -67,6 +67,8 @@ export const previewFiles = {
 	},
 } satisfies Record<string, PreviewFiles>;
 
+export type PreviewType = keyof typeof previewFiles;
+
 // How strongly a preview claims a document: 0 for a file that is its own by where it is, the
 // offset of the match for one that is its own by what it says, nothing for any other. The lowest
 // number among the previews wins.
@@ -117,7 +119,7 @@ interface PreviewProviderDefAlternative extends PreviewProviderDefCommon {
 
 // What a preview has to say for itself. Whether it is on and which files are its own follow from
 // its entry in previewFiles.
-type PreviewOwn = { type: keyof typeof previewFiles } & Pick<PreviewProviderDefCommon, "displayName"> &
+type PreviewOwn = { type: PreviewType } & Pick<PreviewProviderDefCommon, "displayName"> &
 	(Pick<PreviewProviderDefNormal, "previewConstructor"> | Pick<PreviewProviderDefAlternative, "onPreview">);
 
 export function definePreview(own: PreviewOwn): PreviewProviderDef {
