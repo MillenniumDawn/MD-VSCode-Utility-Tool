@@ -13,7 +13,11 @@ function canPreviewEvent(document: vscode.TextDocument) {
     }
 
     const uri = document.uri;
-    if (matchPathEnd(uri.toString().toLowerCase(), ['events', '*']) && uri.path.toLowerCase().endsWith('.txt')) {
+    if (!uri.path.toLowerCase().endsWith('.txt')) {
+        return undefined;
+    }
+
+    if (matchPathEnd(uri.toString().toLowerCase(), ['events', '*'])) {
         return 0;
     }
 

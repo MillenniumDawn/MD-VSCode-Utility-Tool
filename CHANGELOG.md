@@ -2,6 +2,7 @@ Unreleased
 
   Bugfixes:
 - [ Previews ] A `count_triggers` block whose triggers are all `always = yes` now reads as met instead of never met.
+- [ Previews ] Switching to or typing in a file that is not a `.txt`, such as a large localisation file, no longer scans its whole text to look for an event, technology, idea, character or balance of power preview. Only `.txt` files offer those previews now. Issue #488.
 
 v1.1.41
 

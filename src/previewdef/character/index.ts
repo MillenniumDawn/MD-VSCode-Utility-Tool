@@ -13,10 +13,11 @@ function canPreviewCharacter(document: vscode.TextDocument) {
 	}
 
 	const uri = document.uri;
-	if (
-		matchPathEnd(uri.toString().toLowerCase(), ["common", "characters", "*"]) &&
-		uri.path.toLowerCase().endsWith(".txt")
-	) {
+	if (!uri.path.toLowerCase().endsWith(".txt")) {
+		return undefined;
+	}
+
+	if (matchPathEnd(uri.toString().toLowerCase(), ["common", "characters", "*"])) {
 		return 0;
 	}
 

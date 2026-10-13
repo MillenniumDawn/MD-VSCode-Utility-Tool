@@ -13,10 +13,11 @@ function canPreviewBop(document: vscode.TextDocument): number | undefined {
 	}
 
 	const uri = document.uri;
-	if (
-		matchPathEnd(uri.toString().toLowerCase(), ["common", "bop", "*"]) &&
-		uri.path.toLowerCase().endsWith(".txt")
-	) {
+	if (!uri.path.toLowerCase().endsWith(".txt")) {
+		return undefined;
+	}
+
+	if (matchPathEnd(uri.toString().toLowerCase(), ["common", "bop", "*"])) {
 		return 0;
 	}
 

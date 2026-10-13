@@ -10,7 +10,11 @@ import { getDocumentByUri } from '../../util/vsccommon';
 
 function canPreviewTechnology(document: vscode.TextDocument) {
     const uri = document.uri;
-    if (matchPathEnd(uri.toString().toLowerCase(), ['common', 'technologies', '*']) && uri.path.toLowerCase().endsWith('.txt')) {
+    if (!uri.path.toLowerCase().endsWith('.txt')) {
+        return undefined;
+    }
+
+    if (matchPathEnd(uri.toString().toLowerCase(), ['common', 'technologies', '*'])) {
         return 0;
     }
 

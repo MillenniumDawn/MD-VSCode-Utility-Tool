@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import { mock } from "node:test";
-import { Cache, CacheOptions, PromiseCache, PromiseCacheOptions } from "../../../util/cache";
+import type * as caches from "../../../util/cache";
+import { fresh } from "../host";
 
 // A value whose weight can change after it was cached, as an image's does once it is decoded.
 interface Sized {
@@ -9,13 +10,16 @@ interface Sized {
 }
 
 describe("util/cache", () => {
+	// Every cache in the process shares one sweep timer, so these get a copy of the module to
+	// themselves: a cache some other module made as it loaded would set the pace otherwise.
+	let own: typeof caches;
 	const open: { dispose(): void }[] = [];
 	// The file each key stands for: the cache asks for its version to know whether it changed.
 	let version: Record<string, number>;
 	let made: string[];
 
-	function cache<V = string>(options: Partial<CacheOptions<V>> = {}): Cache<V> {
-		const result = new Cache<V>({
+	function cache<V = string>(options: Partial<caches.CacheOptions<V>> = {}): caches.Cache<V> {
+		const result = new own.Cache<V>({
 			life: 0,
 			factory: (key) => {
 				made.push(key);
@@ -27,8 +31,8 @@ describe("util/cache", () => {
 		return result;
 	}
 
-	function promiseCache<V = string>(options: Partial<PromiseCacheOptions<V>> = {}): PromiseCache<V> {
-		const result = new PromiseCache<V>({
+	function promiseCache<V = string>(options: Partial<caches.PromiseCacheOptions<V>> = {}): caches.PromiseCache<V> {
+		const result = new own.PromiseCache<V>({
 			life: 0,
 			factory: async (key) => {
 				made.push(key);
@@ -47,6 +51,7 @@ describe("util/cache", () => {
 
 	beforeEach(() => {
 		mock.timers.enable({ apis: ["Date", "setInterval"] });
+		own = fresh<typeof caches>("../../util/cache");
 		version = {};
 		made = [];
 	});
