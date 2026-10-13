@@ -6,15 +6,11 @@ const TGA = require("tga") as typeof import("tga");
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
-function hasPngSignature(buffer: Buffer): boolean {
+export function isPngBuffer(buffer: Buffer): boolean {
 	return (
 		buffer.length >= PNG_SIGNATURE.length &&
 		PNG_SIGNATURE.every((byte, index) => buffer[index] === byte)
 	);
-}
-
-export function isPngBuffer(buffer: Buffer): boolean {
-	return hasPngSignature(buffer);
 }
 
 // Reads dimensions without inflating the image. A missing or malformed header returns undefined so
@@ -22,7 +18,7 @@ export function isPngBuffer(buffer: Buffer): boolean {
 export function readPngHeaderDimensions(
 	buffer: Buffer,
 ): { width: number; height: number } | undefined {
-	if (buffer.length < 24 || !hasPngSignature(buffer)) {
+	if (buffer.length < 24 || !isPngBuffer(buffer)) {
 		return undefined;
 	}
 	if (buffer.toString("ascii", 12, 16) !== "IHDR") {
@@ -104,9 +100,6 @@ export function tgaToPng(buffer: Buffer): PNG {
 		tga = new TGA(buffer, { dontFixAlpha: true });
 	} catch (e) {
 		throw new UserError(`Unsupported tga format: ${e instanceof Error ? e.message : String(e)}`);
-	}
-	if (!tga.pixels) {
-		throw new UserError("Unsupported tga format");
 	}
 
 	const png = new PNG({ width: tga.width, height: tga.height });

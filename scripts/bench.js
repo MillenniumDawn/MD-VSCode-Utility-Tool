@@ -2,9 +2,9 @@
 //
 // These are the paths that run over millions of tokens (the tokenizer), over every condition
 // leaf in a file (condition extraction), over every CSS rule and every escaped string in a
-// render, and over every pixel of a province bitmap. None of them are covered by a timing
-// assertion anywhere else, so a regression in one is invisible until someone reports the
-// editor feeling slow.
+// render, and over every pixel of a province bitmap or a texture. None of them are covered by
+// a timing assertion anywhere else, so a regression in one is invisible until someone reports
+// the editor feeling slow.
 //
 // Run:   npm run bench
 // Needs: out-test/ (npm run compile-test), because that build also carries the vscode stub
@@ -39,6 +39,7 @@ const { countryScope } = require(path.join(outDir, 'hoiformat', 'scope.js'));
 const { htmlEscape } = require(path.join(outDir, 'util', 'html.js'));
 const { StyleTable } = require(path.join(outDir, 'util', 'styletable.js'));
 const { fillEdges } = require(path.join(outDir, 'previewdef', 'worldmap', 'loader', 'provincebmp.js'));
+const { DDS } = require(path.join(outDir, 'util', 'image', 'dds', 'dds.js'));
 
 // --- fixtures ---------------------------------------------------------------------------
 
@@ -117,6 +118,37 @@ function generateProvinceGrid(width, height, provinceSize) {
 		}
 	}
 	return { provinces, colorToProvince, colorByPosition, width, height };
+}
+
+// A square DDS texture, block-compressed when given a FourCC and A8R8G8B8 otherwise. The bytes
+// are noise: what a decode costs depends on how many pixels there are, not on what they show.
+function generateDds(size, fourCC) {
+	const dataLength = fourCC ? (size / 4) * (size / 4) * 16 : size * size * 4;
+	const buf = Buffer.alloc(128 + dataLength);
+	buf.write('DDS ', 0, 'ascii');
+	buf.writeUInt32LE(124, 4);
+	buf.writeUInt32LE(0x1007, 8);
+	buf.writeUInt32LE(size, 12);
+	buf.writeUInt32LE(size, 16);
+	buf.writeUInt32LE(32, 76);
+	if (fourCC) {
+		buf.writeUInt32LE(0x4, 80);
+		buf.write(fourCC, 84, 'ascii');
+	} else {
+		buf.writeUInt32LE(0x41, 80);
+		buf.writeUInt32LE(32, 88);
+		buf.writeUInt32LE(0x00ff0000, 92);
+		buf.writeUInt32LE(0x0000ff00, 96);
+		buf.writeUInt32LE(0x000000ff, 100);
+		buf.writeUInt32LE(0xff000000, 104);
+	}
+	buf.writeUInt32LE(0x1000, 108);
+	let seed = 1;
+	for (let i = 128; i < buf.length; i++) {
+		seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+		buf[i] = seed >> 16;
+	}
+	return buf;
 }
 
 // --- timing -----------------------------------------------------------------------------
@@ -203,6 +235,15 @@ function main() {
 		const provinces = grid.provinces.map((p) => ({ color: p.color, warnings: [] }));
 		fillEdges(provinces, grid.colorByPosition, grid.width, grid.height);
 	}, { gc: true });
+
+	// 5. Texture decoding, the cost behind every icon a preview shows. DXT5 is what the game's
+	//    icons are saved as; A8R8G8B8 is the uncompressed format beside it.
+	for (const [label, fourCC] of [['DXT5', 'DXT5'], ['A8R8G8B8', undefined]]) {
+		const dds = generateDds(1024, fourCC);
+		bench(`DDS decode ${label}`, '1024x1024', 5, () => {
+			DDS.parse(dds.buffer, dds.byteOffset).images[0].getFullRgba();
+		});
+	}
 
 	console.log('\nMarkdown (paste into the pull request):\n');
 	console.log('| Benchmark | Time | Fixture |');

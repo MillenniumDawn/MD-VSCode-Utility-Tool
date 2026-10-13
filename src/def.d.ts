@@ -57,7 +57,7 @@ declare module 'tga' {
         parse(): void;
         width: number;
         height: number;
-        pixels: Uint8Array | undefined;
+        pixels: Uint8Array;
     }
     export = TGA;
 }

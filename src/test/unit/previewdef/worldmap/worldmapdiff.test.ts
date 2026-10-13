@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import isEqual from 'lodash/isEqual';
-import { createItemHasher, diffItemList, defaultHashItem } from '../previewdef/worldmap/worldmapdiff';
+import { createItemHasher, diffItemList, defaultHashItem } from '../../../../previewdef/worldmap/worldmapdiff';
 
 function buildProvince(id: number, pathPoints: number): any {
     return {
@@ -240,6 +240,27 @@ describe('previewdef/worldmap/worldmapdiff', () => {
             assert.strictEqual(diffItemList(list, cachedList, 0, list.length, defaultHashItem, 2), undefined);
             assert.deepStrictEqual(diffItemList(list, cachedList, 0, list.length, defaultHashItem, 3), full);
             assert.deepStrictEqual(diffItemList(list, cachedList, 0, list.length, defaultHashItem, 4), full);
+        });
+
+        it('cuts one long run of changes into ranges no longer than a message may carry', () => {
+            const length = 650;
+            const list = Array.from({ length }, (_, i) => buildProvince(i, 2));
+            const cachedList = Array.from({ length }, (_, i) => buildProvince(i, 1));
+
+            const actual = diffItemList(list, cachedList, 0, length);
+            assert.deepStrictEqual(actual, [{ start: 0, end: 300 }, { start: 300, end: 600 }, { start: 600, end: 650 }]);
+            assert.deepStrictEqual(actual, oldIsEqualDiff(list, cachedList, 0, length));
+        });
+
+        it('counts the pieces of a long run against the range limit', () => {
+            const list = Array.from({ length: 5 }, (_, i) => buildProvince(i, 2));
+            const cachedList = Array.from({ length: 5 }, (_, i) => buildProvince(i, 1));
+
+            assert.deepStrictEqual(
+                diffItemList(list, cachedList, 0, 5, defaultHashItem, 3, 2),
+                [{ start: 0, end: 2 }, { start: 2, end: 4 }, { start: 4, end: 5 }],
+            );
+            assert.strictEqual(diffItemList(list, cachedList, 0, 5, defaultHashItem, 1, 2), undefined);
         });
     });
 });

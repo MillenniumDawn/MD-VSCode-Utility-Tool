@@ -2,8 +2,8 @@ import * as assert from "assert";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs/promises";
-import { CancelledError } from "../util/common";
-import { walkFilesWithMtime, MAX_WALK_DEPTH } from "../util/nativewalk";
+import { CancelledError } from "../../../util/common";
+import { walkFilesWithMtime } from "../../../util/nativewalk";
 
 // The walk runs on node's own fs, so it is tested against a real directory rather than a fake one.
 // A fake would elide exactly the assumptions worth checking: that a Dirent carries no inode, that a
@@ -133,14 +133,12 @@ describe("util/nativewalk walkFilesWithMtime", function () {
 		assert.ok(warnings[0]!.includes("depth 3"), warnings[0]);
 	});
 
-	it("defaults the depth cap to MAX_WALK_DEPTH", async function () {
-		assert.strictEqual(MAX_WALK_DEPTH, 32);
+	it("finds a file eight levels down under the default depth cap", async function () {
 		const deep = Array.from({ length: 8 }, (_, i) => `d${i}`).join("/");
 		await writeFile(root, `${deep}/deep.txt`);
 
 		const entries = await walkFilesWithMtime(root, { recursively: true });
 
-		// Eight levels is nothing against the default cap, so the file is still found.
 		assert.deepStrictEqual(entries.map((e) => e.relativePath), [`${deep}/deep.txt`]);
 	});
 
@@ -206,6 +204,36 @@ describe("util/nativewalk walkFilesWithMtime", function () {
 		const entries = await walkFilesWithMtime(root, { recursively: true });
 
 		assert.deepStrictEqual(sorted(entries.map((e) => e.relativePath)), ["real.txt"]);
+	});
+
+	it("leaves out what it may not read, and names the folder it could not list", async function () {
+		if (isWindows || process.getuid?.() === 0) {
+			this.skip(); // neither honours the permission bits this takes away
+		}
+		await writeFile(root, "open.txt");
+		await writeFile(root, "closed/a.txt");
+		await writeFile(root, "listed/b.txt");
+		await writeFile(root, "listed/sub/c.txt");
+		const closed = path.join(root, "closed");
+		const listed = path.join(root, "listed");
+		// `closed` cannot be listed at all. `listed` can, but nothing in it can be reached.
+		await fs.chmod(closed, 0o000);
+		await fs.chmod(listed, 0o400);
+		const warnings: string[] = [];
+
+		try {
+			const entries = await walkFilesWithMtime(root, {
+				recursively: true,
+				onWarning: (m) => warnings.push(m),
+			});
+
+			assert.deepStrictEqual(entries.map((e) => e.relativePath), ["open.txt"]);
+			assert.strictEqual(warnings.length, 1);
+			assert.ok(warnings[0]!.startsWith(`Failed to read directory ${closed}`), warnings[0]);
+		} finally {
+			await fs.chmod(closed, 0o700);
+			await fs.chmod(listed, 0o700);
+		}
 	});
 
 	it("rejects with CancelledError rather than returning what it had", async function () {
