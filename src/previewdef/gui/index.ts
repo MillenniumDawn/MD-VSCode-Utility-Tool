@@ -1,30 +1,13 @@
 import { localize } from '../../util/i18n';
-import type * as vscode from 'vscode';
-import { PreviewProviderDef } from '../previewmanager';
-import { LoaderPreview } from '../loaderpreview';
+import { definePreview } from '../definition';
+import { loaderPreview } from '../loaderpreview';
 import { GuiFileLoader } from './loader';
 import { renderGuiFile } from './contentbuilder';
 
-function canPreviewGui(document: vscode.TextDocument) {
-    const uri = document.uri;
-    return uri.path.toLowerCase().endsWith('.gui') ? 0 : undefined;
-}
-
-class GuiPreview extends LoaderPreview<GuiFileLoader> {
-    constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
-        super(uri, panel, (file, contentProvider) => new GuiFileLoader(file, contentProvider), renderGuiFile);
-    }
-
-    // gfxIndex changes which sprites the window can draw; localisationIndex and
-    // previewLocalisation change the text inside it.
-    protected override get reloadOnConfigurationChange(): readonly string[] {
-        return ['gfxIndex', 'localisationIndex', 'previewLocalisation'];
-    }
-}
-
-export const guiPreviewDef: PreviewProviderDef = {
+export const guiPreviewDef = definePreview({
     type: 'gui',
     displayName: () => localize('preview.type.gui', 'Interface window (*.gui)'),
-    canPreview: canPreviewGui,
-    previewConstructor: GuiPreview,
-};
+    // gfxIndex changes which sprites the window can draw; localisationIndex and
+    // previewLocalisation change the text inside it.
+    previewConstructor: loaderPreview(GuiFileLoader, renderGuiFile, ['gfxIndex', 'localisationIndex', 'previewLocalisation']),
+});

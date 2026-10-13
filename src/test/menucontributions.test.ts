@@ -1,25 +1,25 @@
 import * as assert from "assert";
 import * as fs from "fs";
 import * as path from "path";
+import { PreviewFiles, previewFiles } from "../previewdef/definition";
 
 // The preview is reachable from the editor title bar, the editor and explorer context menus and
 // a keybinding. All four are manifest-only, so nothing in the compiler notices when a command id
 // is misspelled or a menu stops matching the files it is meant to match. Issue #203.
 
-// The folders the explorer entry offers Preview on. This list restates what each provider's
-// canPreview() checks, because a `when` clause cannot call into the extension -- so it is pinned
-// here, and a new preview type whose folder is missing fails this test rather than going quietly
-// absent from the menu.
-const previewFolders = [
-	"national_focus",
-	"events",
-	"technologies",
-	"ideas",
-	"decisions",
-	"characters",
-	"organizations",
-	"bop",
-];
+// What the explorer entry has to offer Preview on, read from the files each preview takes. A
+// `when` clause cannot call into the extension and so restates them; a new preview type the
+// clause leaves out fails this test rather than going quietly absent from the menu.
+const allPreviewFiles: PreviewFiles[] = Object.values(previewFiles);
+const previewFolders = allPreviewFiles.flatMap(
+	files => (files.extension === ".txt" && files.folder ? [files.folder[files.folder.length - 2]] : []),
+);
+const previewsByName = allPreviewFiles.flatMap(files => {
+	if (files.extension === ".txt") {
+		return [];
+	}
+	return [files.folder ? `resourceFilename == '${files.folder[files.folder.length - 1]}'` : `resourceExtname == '${files.extension}'`];
+});
 
 describe("package.json menu contributions", () => {
 	const packageJson = JSON.parse(
@@ -126,11 +126,8 @@ describe("package.json menu contributions", () => {
 		});
 
 		it("offers the sprite, gui and map files by name", () => {
-			for (const clause of [
-				"resourceExtname == '.gfx'",
-				"resourceExtname == '.gui'",
-				"resourceFilename == 'default.map'",
-			]) {
+			assert.ok(previewsByName.length > 0);
+			for (const clause of previewsByName) {
 				assert.ok(when.includes(clause), `the explorer entry is missing ${clause}`);
 			}
 		});

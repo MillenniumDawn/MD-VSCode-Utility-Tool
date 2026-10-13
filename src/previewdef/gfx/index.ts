@@ -1,13 +1,8 @@
 import { localize } from "../../util/i18n";
 import type * as vscode from "vscode";
 import { renderGfxFile } from "./contentbuilder";
-import { PreviewProviderDef } from "../previewmanager";
+import { definePreview } from "../definition";
 import { UpdateablePreviewBase, LoaderRender } from "../updateablepreview";
-
-function canPreviewGfx(document: vscode.TextDocument) {
-	const uri = document.uri;
-	return uri.path.toLowerCase().endsWith(".gfx") ? 0 : undefined;
-}
 
 // GfxPreview differs from the loader previews only in that it parses the .gfx content directly
 // (no Loader), so it extends UpdateablePreviewBase and renders via a plain function. Edits push an
@@ -23,9 +18,8 @@ export class GfxPreview extends UpdateablePreviewBase {
 	}
 }
 
-export const gfxPreviewDef: PreviewProviderDef = {
+export const gfxPreviewDef = definePreview({
 	type: "gfx",
 	displayName: () => localize("preview.type.gfx", "Sprites (*.gfx)"),
-	canPreview: canPreviewGfx,
 	previewConstructor: GfxPreview,
-};
+});
