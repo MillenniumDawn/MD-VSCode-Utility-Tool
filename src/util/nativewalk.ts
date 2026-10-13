@@ -39,7 +39,7 @@ export interface NativeWalkOptions {
  * Deeper than any real HOI4 or mod tree comes close to -- the deepest vanilla path is about six --
  * and shallow enough that a tree which somehow escapes the cycle guard still terminates.
  */
-export const MAX_WALK_DEPTH = 32;
+const MAX_WALK_DEPTH = 32;
 
 /**
  * Pure syscalls on libuv's threadpool, so past a small multiple of the pool size more concurrency

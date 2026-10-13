@@ -3,7 +3,7 @@ import * as path from "path";
 import * as os from "os";
 import * as fs from "fs/promises";
 import * as zlib from "zlib";
-import { crc32Table, MAX_ENTRY_SIZE, openZipIndex } from "../util/nativezip";
+import { crc32Table, MAX_ENTRY_SIZE, openZipIndex } from "../../../util/nativezip";
 
 // The reader runs on node's own fs against real archives, so it is tested against real files. Two
 // fixture builders, because they cover different ground: adm-zip writes archives shaped the way the
@@ -30,6 +30,8 @@ interface FixtureEntry {
 	sizesInDescriptor?: boolean;
 	/** Write 0xFFFFFFFF for the local header offset and put the real one in a zip64 extra field. */
 	zip64Offset?: boolean;
+	/** The same for the two sizes. */
+	zip64Sizes?: boolean;
 	/** Corrupt the stored bytes after they are compressed, leaving the sizes intact. */
 	corruptData?: boolean;
 	/** Write a local header signature that is not one. */
@@ -128,14 +130,19 @@ function buildZip(
 		}
 
 		let extra = centralExtra;
-		if (entry.zip64Offset) {
+		// The payload carries only the fields that overflowed, in this order. With the offset alone
+		// it is one 8 byte field, and a reader that expects the offset at a fixed position in the
+		// payload reads past its end.
+		const zip64Fields = [
+			...(entry.zip64Sizes ? [raw.length, compressed.length] : []),
+			...(entry.zip64Offset ? [localHeaderOffset] : []),
+		];
+		if (zip64Fields.length > 0) {
 			anyZip64 = true;
-			// Only the offset overflowed, so the payload carries exactly one 8 byte field. A reader
-			// that expects the offset at a fixed position in the payload reads past its end here.
-			const zip64 = Buffer.alloc(12);
+			const zip64 = Buffer.alloc(4 + 8 * zip64Fields.length);
 			zip64.writeUInt16LE(0x0001, 0);
-			zip64.writeUInt16LE(8, 2);
-			zip64.writeBigUInt64LE(BigInt(localHeaderOffset), 4);
+			zip64.writeUInt16LE(8 * zip64Fields.length, 2);
+			zip64Fields.forEach((value, i) => zip64.writeBigUInt64LE(BigInt(value), 4 + 8 * i));
 			extra = Buffer.concat([extra, zip64]);
 		}
 
@@ -146,8 +153,8 @@ function buildZip(
 		header.writeUInt16LE(flags, 8);
 		header.writeUInt16LE(method, 10);
 		header.writeUInt32LE(crc, 16);
-		header.writeUInt32LE(compressed.length, 20);
-		header.writeUInt32LE(raw.length, 24);
+		header.writeUInt32LE(entry.zip64Sizes ? 0xffffffff : compressed.length, 20);
+		header.writeUInt32LE(entry.zip64Sizes ? 0xffffffff : raw.length, 24);
 		header.writeUInt16LE(name.length, 28);
 		header.writeUInt16LE(extra.length, 30);
 		header.writeUInt32LE(
@@ -203,6 +210,20 @@ function buildZip(
 
 	return Buffer.concat([options.prepend ?? Buffer.alloc(0), ...parts]);
 }
+
+/** Overwrites one field of the first central directory record, `field` bytes into it. */
+function patchCentral(raw: Buffer, field: number, value: number, bytes: 2 | 4 = 4): Buffer {
+	const at = raw.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02])) + field;
+	if (bytes === 2) {
+		raw.writeUInt16LE(value, at);
+	} else {
+		raw.writeUInt32LE(value, at);
+	}
+	return raw;
+}
+
+/** An extra field record that is not the zip64 one: an id, a length of five, five bytes. */
+const otherExtra = Buffer.from([0x55, 0x54, 5, 0, 1, 2, 3, 4, 5]);
 
 describe("util/nativezip crc32Table", function () {
 	// The reader prefers node's own zlib.crc32 and only falls back to this table on a node older
@@ -714,4 +735,84 @@ describe("util/nativezip openZipIndex", function () {
 		const file = await write("badoffset.zip", raw);
 		await assert.rejects(() => openZipIndex(file), /past the end/);
 	});
+
+	it("reads an entry whose sizes and offset all live in the zip64 extra field, behind another record", async function () {
+		const payload = Buffer.from("every field of this one overflowed".repeat(10));
+		const index = await openZipIndex(
+			await write(
+				"zip64sizes.zip",
+				buildZip([
+					{ name: "a.txt", data: Buffer.from("first") },
+					{ name: "b.txt", data: payload, method: 8, zip64Sizes: true, zip64Offset: true, centralExtra: otherExtra },
+				]),
+			),
+		);
+		assert.deepStrictEqual(await index.readEntry("b.txt"), payload);
+	});
+
+	it("refuses an entry that claims bytes but holds none", async function () {
+		const raw = patchCentral(buildZip([{ name: "a.txt", data: Buffer.from("hello") }]), 20, 0);
+		const index = await openZipIndex(await write("hollow.zip", raw));
+		await assert.rejects(() => index.readEntry("a.txt"), /holds no compressed data but claims 5 bytes/);
+	});
+
+	const one = { name: "a.txt", data: Buffer.from("x") };
+	// With a zip64 end record and no comment, the archive ends: record (56), locator (20), end record (22).
+	const zip64Archive = () => buildZip([one], { zip64Eocd: true });
+	const unreadable: [name: string, archive: () => Buffer, message: RegExp][] = [
+		[
+			"a directory record that runs past the directory",
+			() => patchCentral(buildZip([one]), 28, 0xffff, 2),
+			/central directory record at 0 that runs past the directory's \d+ bytes/,
+		],
+		[
+			"a zip64 locator that points at something else",
+			() => {
+				const raw = zip64Archive();
+				raw.writeUInt32LE(0, raw.length - 98);
+				return raw;
+			},
+			/no zip64 end of central directory record at \d+/,
+		],
+		[
+			"a zip64 locator that points past the end of the file",
+			() => {
+				const raw = zip64Archive();
+				raw.writeBigUInt64LE(BigInt(raw.length + 100), raw.length - 34);
+				return raw;
+			},
+			/ended after 0 of the 56 bytes expected/,
+		],
+		[
+			"a zip64 offset too large to address",
+			() => {
+				const raw = buildZip([{ ...one, zip64Offset: true }]);
+				// Past the 46 byte record, the five byte name and the extra record's own header.
+				raw.writeBigUInt64LE(BigInt("1152921504606846976"), raw.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02])) + 55);
+				return raw;
+			},
+			/local header offset of a\.txt of 1152921504606846976, which is too large/,
+		],
+		[
+			"an extra field record that runs past the field",
+			() => buildZip([{ ...one, zip64Offset: true, centralExtra: Buffer.from([0x99, 0x99, 0xff, 0xff]) }]),
+			/needs 8 bytes of zip64 extended information/,
+		],
+		[
+			"an overflowed offset with no zip64 record to hold it",
+			() => patchCentral(buildZip([{ ...one, centralExtra: otherExtra }]), 42, 0xffffffff),
+			/needs 8 bytes of zip64 extended information/,
+		],
+		[
+			"an overflowed disk number the zip64 record has no room for",
+			() => patchCentral(buildZip([{ ...one, zip64Offset: true }]), 34, 0xffff, 2),
+			/needs 12 bytes of zip64 extended information/,
+		],
+	];
+	for (const [name, archive, message] of unreadable) {
+		it(`throws for ${name}`, async function () {
+			const file = await write("unreadable.zip", archive());
+			await assert.rejects(() => openZipIndex(file), message);
+		});
+	}
 });

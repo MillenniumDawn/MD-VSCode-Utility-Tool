@@ -1,6 +1,6 @@
 import * as assert from "assert";
-import { parseBmp } from "../util/image/bmp/bmpparser";
-import { UserError } from "../util/common";
+import { parseBmp } from "../../../../../util/image/bmp/bmpparser";
+import { UserError } from "../../../../../util/common";
 
 // A minimal BMP: 14-byte file header, a 40-byte BITMAPINFOHEADER the parser reads width, height,
 // bits-per-pixel and compression from, and `pixelBytes` bytes of pixel data at `dataOffset`.

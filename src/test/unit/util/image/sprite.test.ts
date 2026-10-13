@@ -1,22 +1,20 @@
 import * as assert from "assert";
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import { PNG } from "pngjs";
 import {
 	Image,
 	Sprite,
 	CorneredTileSprite,
 	effectiveFrameCount,
-} from "../util/image/sprite";
+} from "../../../../util/image/sprite";
+
+// A sprite only carries the path along, so any value stands in for it.
+const texturePath = { path: "/gfx/interface/test.png" } as vscode.Uri;
 
 function makeImage(width: number, height: number): Image {
 	const png = new PNG({ width, height });
 	png.data.fill(0x7f);
-	return new Image(
-		PNG.sync.write(png),
-		width,
-		height,
-		vscode.Uri.file("gfx/interface/test.png"),
-	);
+	return new Image(PNG.sync.write(png), width, height, texturePath);
 }
 
 function sum(images: Image[]): number {
@@ -104,12 +102,7 @@ describe("util/image/sprite frames", () => {
 				png.data[idx + 3] = 255;
 			}
 		}
-		return new Image(
-			PNG.sync.write(png),
-			width,
-			height,
-			vscode.Uri.file("gfx/interface/test.png"),
-		);
+		return new Image(PNG.sync.write(png), width, height, texturePath);
 	}
 
 	function columns(image: Image): number[] {
@@ -124,6 +117,7 @@ describe("util/image/sprite frames", () => {
 	it("floors the frame width when the texture does not divide evenly", () => {
 		const sprite = new Sprite("s", makeColumnImage(10, 2), 3);
 		assert.strictEqual(sprite.width, 3);
+		assert.strictEqual(sprite.height, 2);
 
 		const frames = sprite.frames;
 		assert.strictEqual(frames.length, 3);
@@ -156,5 +150,43 @@ describe("util/image/sprite frames", () => {
 		assert.strictEqual(effectiveFrameCount(Infinity, 10), 1);
 		assert.strictEqual(effectiveFrameCount(2.7, 10), 2);
 		assert.strictEqual(effectiveFrameCount(5, 0), 1);
+	});
+
+	function tileSprite(image: Image, frames: number, border: number): CorneredTileSprite {
+		return new CorneredTileSprite("s", image, frames, { x: image.width, y: image.height }, { x: border, y: border });
+	}
+
+	function sizes(tiles: Image[]): string[] {
+		return tiles.map((tile) => `${tile.width}x${tile.height}`);
+	}
+
+	it("cuts a frame into corners, edges and a middle, row by row", () => {
+		const tiles = tileSprite(makeColumnImage(8, 6), 1, 2).getTiles();
+		assert.deepStrictEqual(sizes(tiles), ["2x2", "4x2", "2x2", "2x2", "4x2", "2x2", "2x2", "4x2", "2x2"]);
+		assert.deepStrictEqual(tiles.slice(0, 3).map(columns), [[0, 1], [2, 3, 4, 5], [6, 7]]);
+	});
+
+	it("shrinks a border that would leave no middle", () => {
+		assert.deepStrictEqual(
+			sizes(tileSprite(makeColumnImage(6, 4), 1, 3).getTiles()).slice(0, 3),
+			["2x1", "2x1", "2x1"],
+		);
+		// One pixel has no room for a border at all.
+		assert.deepStrictEqual(
+			sizes(tileSprite(makeColumnImage(1, 1), 1, 1).getTiles()),
+			["0x0", "1x0", "0x0", "0x1", "1x1", "0x1", "0x0", "1x0", "0x0"],
+		);
+	});
+
+	it("cuts the tiles of the frame asked for, and of the first frame for one the sprite does not have", () => {
+		const sprite = tileSprite(makeColumnImage(8, 4), 2, 1);
+		const first = sprite.getTiles(0);
+		assert.deepStrictEqual(columns(sprite.getTiles(1)[1]!), [5, 6]);
+		assert.deepStrictEqual(columns(first[1]!), [1, 2]);
+		for (const frame of [2, 7, -1]) {
+			assert.strictEqual(sprite.getTiles(frame), first, `frame ${frame}`);
+		}
+		// Between two frames there is nothing to cut.
+		assert.deepStrictEqual(sprite.getTiles(0.5), []);
 	});
 });

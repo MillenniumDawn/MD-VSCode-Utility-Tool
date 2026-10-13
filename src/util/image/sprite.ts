@@ -71,7 +71,7 @@ export class Sprite {
 		const result: Image[] = [];
 		const path = this.image.path;
 
-		for (var i = 0; i < this.noOfFrames; i++) {
+		for (let i = 0; i < this.noOfFrames; i++) {
 			png.bitblt(framePng, i * frameWidth, 0, frameWidth, png.height, 0, 0);
 			result.push(
 				new Image(PNG.sync.write(framePng), frameWidth, png.height, path),
@@ -126,7 +126,7 @@ export class CorneredTileSprite extends Sprite {
 	}
 
 	public getTiles(frameId: number = 0): Image[] {
-		if (frameId > this.noOfFrames) {
+		if (frameId < 0 || frameId >= this.noOfFrames) {
 			frameId = 0;
 		}
 
@@ -135,9 +135,6 @@ export class CorneredTileSprite extends Sprite {
 			return cached;
 		}
 
-		if (frameId < 0 || frameId >= this.frames.length) {
-			frameId = 0;
-		}
 		const frame = this.frames[frameId];
 		if (frame === undefined) {
 			return [];
@@ -164,10 +161,10 @@ export class CorneredTileSprite extends Sprite {
 				tiles.push(
 					extractImageFromPng(
 						backPng,
-						xPos[x] ?? 0,
-						yPos[y] ?? 0,
-						(xPos[x + 1] ?? 0) - (xPos[x] ?? 0),
-						(yPos[y + 1] ?? 0) - (yPos[y] ?? 0),
+						xPos[x]!,
+						yPos[y]!,
+						xPos[x + 1]! - xPos[x]!,
+						yPos[y + 1]! - yPos[y]!,
 						path,
 					),
 				);
