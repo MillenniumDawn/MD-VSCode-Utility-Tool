@@ -2,6 +2,7 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { PreviewManager } from "../previewdef/previewmanager";
 import { PreviewBase } from "../previewdef/previewbase";
+import { previewFiles } from "../previewdef/definition";
 import { contextContainer } from "../context";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
 import { refreshFeatureFlags } from "../util/featureflags";
@@ -15,6 +16,14 @@ import { refreshFeatureFlags } from "../util/featureflags";
 describe("previewdef/previewmanager PreviewManager", function () {
 	afterEach(function () {
 		restoreVscodeStubs();
+	});
+
+	it("asks every preview in previewFiles, each under its own name, in that order", function () {
+		const manager = new PreviewManager() as any;
+		assert.deepStrictEqual(
+			manager._previewProviders.map((provider: { type: string }) => provider.type),
+			Object.keys(previewFiles),
+		);
 	});
 
 	it("register() installs a webview panel serializer and tears it down on dispose", function () {
