@@ -1,64 +1,23 @@
 import { localize } from "../../util/i18n";
-import type * as vscode from "vscode";
 import { renderIdeaFile } from "./contentbuilder";
-import { matchPathEnd } from "../../util/nodecommon";
-import { PreviewProviderDef } from "../previewmanager";
-import { LoaderPreview } from "../loaderpreview";
+import { definePreview } from "../definition";
+import { loaderPreview } from "../loaderpreview";
 import { IdeasLoader } from "./loader";
-import { getFlags } from "../../util/featureflags";
 
-function canPreviewIdea(document: vscode.TextDocument) {
-	if (!getFlags().ideaPreview) {
-		return undefined;
-	}
-
-	const uri = document.uri;
-	if (!uri.path.toLowerCase().endsWith(".txt")) {
-		return undefined;
-	}
-
-	if (matchPathEnd(uri.toString().toLowerCase(), ["common", "ideas", "*"])) {
-		return 0;
-	}
-
-	// An ideas file kept somewhere else still previews, as long as it opens with the `ideas` block
-	// the game reads. Anchored to the start of a line so a stray `swap_ideas = {` in a focus file
-	// does not claim the preview.
-	const text = document.getText();
-	return /^\s*ideas\s*=\s*{/m.exec(text)?.index;
-}
-
-class IdeaPreview extends LoaderPreview<IdeasLoader> {
-	constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
-		super(
-			uri,
-			panel,
-			(file, contentProvider) => new IdeasLoader(file, contentProvider),
-			renderIdeaFile,
-		);
-	}
-
+export const ideaPreviewDef = definePreview({
+	type: "idea",
+	displayName: () => localize("preview.type.idea", "Ideas (common/ideas/*.txt)"),
 	// previewLocalisation changes the text in the payload; localisationIndex changes whether
 	// there is any text to show, and so whether the localisation toggle is offered at all;
 	// gfxIndex changes which icons resolve; ideaSwapIndex changes whether chains are found;
 	// ideaPlaceholderIcon changes what an icon that does not resolve is drawn with;
 	// modifierFormatFiles changes how modifier values read.
-	protected override get reloadOnConfigurationChange(): readonly string[] {
-		return [
-			"previewLocalisation",
-			"localisationIndex",
-			"gfxIndex",
-			"ideaSwapIndex",
-			"ideaPlaceholderIcon",
-			"modifierFormatFiles",
-		];
-	}
-}
-
-export const ideaPreviewDef: PreviewProviderDef = {
-	type: "idea",
-	displayName: () => localize("preview.type.idea", "Ideas (common/ideas/*.txt)"),
-	isEnabled: () => getFlags().ideaPreview,
-	canPreview: canPreviewIdea,
-	previewConstructor: IdeaPreview,
-};
+	previewConstructor: loaderPreview(IdeasLoader, renderIdeaFile, [
+		"previewLocalisation",
+		"localisationIndex",
+		"gfxIndex",
+		"ideaSwapIndex",
+		"ideaPlaceholderIcon",
+		"modifierFormatFiles",
+	]),
+});

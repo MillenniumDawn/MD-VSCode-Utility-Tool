@@ -1,57 +1,22 @@
 import { localize } from "../../util/i18n";
-import type * as vscode from "vscode";
 import { renderCharacterFile } from "./contentbuilder";
-import { matchPathEnd } from "../../util/nodecommon";
-import { PreviewProviderDef } from "../previewmanager";
-import { LoaderPreview } from "../loaderpreview";
+import { definePreview } from "../definition";
+import { loaderPreview } from "../loaderpreview";
 import { CharactersLoader } from "./loader";
-import { getFlags } from "../../util/featureflags";
 
-function canPreviewCharacter(document: vscode.TextDocument) {
-	if (!getFlags().characterPreview) {
-		return undefined;
-	}
-
-	const uri = document.uri;
-	if (!uri.path.toLowerCase().endsWith(".txt")) {
-		return undefined;
-	}
-
-	if (matchPathEnd(uri.toString().toLowerCase(), ["common", "characters", "*"])) {
-		return 0;
-	}
-
-	// A characters file kept somewhere else still previews, as long as it opens with the
-	// `characters` block the game reads. Anchored to the start of a line so a `characters = {`
-	// nested inside an effect does not claim the preview.
-	const text = document.getText();
-	return /^\s*characters\s*=\s*{/m.exec(text)?.index;
-}
-
-class CharacterPreview extends LoaderPreview<CharactersLoader> {
-	constructor(uri: vscode.Uri, panel: vscode.WebviewPanel) {
-		super(
-			uri,
-			panel,
-			(file, contentProvider) => new CharactersLoader(file, contentProvider),
-			renderCharacterFile,
-		);
-	}
-
+export const characterPreviewDef = definePreview({
+	type: "character",
+	displayName: () => localize("preview.type.character", "Characters (common/characters/*.txt)"),
 	// previewLocalisation changes the text in the payload; localisationIndex changes whether
 	// there is any text to show, and so whether the localisation toggle is offered at all;
 	// gfxIndex changes which of the GFX_-named portraits resolve; characterTraitStructuralKeys
 	// changes which trait keys are drawn as modifier lines; modifierFormatFiles changes how modifier
 	// values read.
-	protected override get reloadOnConfigurationChange(): readonly string[] {
-		return ["previewLocalisation", "localisationIndex", "gfxIndex", "characterTraitStructuralKeys", "modifierFormatFiles"];
-	}
-}
-
-export const characterPreviewDef: PreviewProviderDef = {
-	type: "character",
-	displayName: () => localize("preview.type.character", "Characters (common/characters/*.txt)"),
-	isEnabled: () => getFlags().characterPreview,
-	canPreview: canPreviewCharacter,
-	previewConstructor: CharacterPreview,
-};
+	previewConstructor: loaderPreview(CharactersLoader, renderCharacterFile, [
+		"previewLocalisation",
+		"localisationIndex",
+		"gfxIndex",
+		"characterTraitStructuralKeys",
+		"modifierFormatFiles",
+	]),
+});

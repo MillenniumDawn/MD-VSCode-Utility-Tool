@@ -1,9 +1,8 @@
 import type * as vscode from 'vscode';
 import { host } from '../../util/host';
 import { buildFocusTreeHtml, buildNoFocusTreeHtml, buildFocusTreeErrorHtml, buildFocusTreePayload, loadFocusTreesOnly, FocusTreePayload } from './contentbuilder';
-import { matchPathEnd } from '../../util/nodecommon';
 import { UpdateablePreviewBase, LoaderRender, LoaderRenderResult, RenderContentOptions } from '../updateablepreview';
-import { PreviewProviderDef } from '../previewmanager';
+import { definePreview } from '../definition';
 import { FocusTreeLoader } from './loader';
 import { FocusTree } from './schema';
 import { copyTreeWarnings } from './warningreport';
@@ -20,15 +19,6 @@ import { computeStructuralFingerprint, computeIconSourceFingerprint, computeTree
 // A render taking longer than this is treated as stuck. The underlying load keeps running
 // in the background, but the user gets a recoverable panel instead of an endless spinner.
 const focusTreeRenderTimeout = 60 * 1000;
-
-function canPreviewFocusTree(document: vscode.TextDocument) {
-    const uri = document.uri;
-    if (matchPathEnd(uri.toString().toLowerCase(), ['common', 'national_focus', '*']) && uri.path.toLowerCase().endsWith('.txt')) {
-        return 0;
-    }
-
-    return undefined;
-}
 
 // The shared in-place update machinery (the render fingerprint skip, the post-versus-assign
 // decision, the loaded-page capability tracking and the hidden-panel html flush) lives in
@@ -430,9 +420,8 @@ class FocusTreePreview extends UpdateablePreviewBase {
     }
 }
 
-export const focusTreePreviewDef: PreviewProviderDef = {
+export const focusTreePreviewDef = definePreview({
     type: 'focustree',
     displayName: () => localize('preview.type.focustree', 'Focus tree (common/national_focus/*.txt)'),
-    canPreview: canPreviewFocusTree,
     previewConstructor: FocusTreePreview,
-};
+});

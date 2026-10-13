@@ -22,34 +22,7 @@ import { ideaPreviewDef } from './idea';
 import { decisionPreviewDef } from './decision';
 import { characterPreviewDef } from './character';
 import { bopPreviewDef } from './bop';
-
-export type PreviewProviderDef = PreviewProviderDefNormal | PreviewProviderDefAlternative;
-
-interface PreviewProviderDefCommon {
-    type: string;
-    /**
-     * What the "can't preview this file" message calls this preview, naming the paths it
-     * recognises -- that is the half of the answer the reader can act on.
-     *
-     * A function rather than a string: these defs are module-level constants, and a localize()
-     * call at module load would freeze the English text in before extension.ts runs loadI18n().
-     */
-    displayName(): string;
-    /**
-     * False when the preview's feature-flag setting is off, so the message does not offer a type
-     * that would refuse the file anyway. Omitted by the previews that are always on.
-     */
-    isEnabled?(): boolean;
-    canPreview(document: vscode.TextDocument): number | undefined;
-}
-
-interface PreviewProviderDefNormal extends PreviewProviderDefCommon {
-    previewConstructor: new (uri: vscode.Uri, panel: vscode.WebviewPanel, browserSmoke?: boolean) => PreviewBase;
-}
-
-interface PreviewProviderDefAlternative extends PreviewProviderDefCommon {
-    onPreview(document: vscode.TextDocument): Promise<void>;
-}
+import { PreviewProviderDef } from './definition';
 
 export class PreviewManager implements vscode.WebviewPanelSerializer {
     private _previews: Record<string, PreviewBase> = {};
