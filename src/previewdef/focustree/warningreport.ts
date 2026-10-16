@@ -83,7 +83,15 @@ function* collectFocusWarningSteps(
 ): Generator<void, FileWarnings[]> {
 	const treesByFile = new Map<string, FocusTree[]>();
 	for (const { path: filePath, file } of parsed) {
-		treesByFile.set(filePath, getFocusTreeWithFocusFile(file, [], filePath, {}, useConditionInFocus));
+		const importsShared = useConditionInFocus && file.focus_tree.some(
+			(tree) => extractOrListIds(tree.shared_focus).length > 0,
+		);
+		// Missing IDs consume randomness even in discarded trees; keep their original first pass.
+		const deferLocalTrees = importsShared && file.focus_tree.every(
+			(tree) => tree.focus.every((focus) => focus.id !== undefined && focus.id !== null),
+		);
+		const firstPass = deferLocalTrees ? { ...file, focus_tree: [] } : file;
+		treesByFile.set(filePath, getFocusTreeWithFocusFile(firstPass, [], filePath, {}, useConditionInFocus));
 		yield;
 	}
 
