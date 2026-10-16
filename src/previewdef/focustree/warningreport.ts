@@ -245,7 +245,7 @@ async function buildFocusTreeAuditReport(
 			if (progress.token.isCancellationRequested) {
 				return undefined;
 			}
-			const node = parseHoi4File(buffer.toString());
+			const node = parseHoi4File(buffer.toString(), "", { keepTokens: false });
 			return { path: filePath, file: convertFocusFileNodeToJson(node, {}) };
 		} catch (e) {
 			return { path: filePath, parseError: e instanceof Error ? e.message : String(e) };

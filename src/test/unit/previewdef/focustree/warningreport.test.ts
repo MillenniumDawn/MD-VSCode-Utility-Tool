@@ -7,8 +7,8 @@ import { collectFocusWarnings, collectFocusWarningsAsync, formatFocusWarningRepo
 import { refreshFeatureFlags } from "../../../../util/featureflags";
 import { handOver } from "../../host";
 
-function parsed(path: string, text: string): ParsedFocusFile {
-	return { path, file: convertFocusFileNodeToJson(parseHoi4File(text), {}) };
+function parsed(path: string, text: string, keepTokens = true): ParsedFocusFile {
+	return { path, file: convertFocusFileNodeToJson(parseHoi4File(text, "", { keepTokens }), {}) };
 }
 function configure(useConditionInFocus: boolean): void {
 	handOver({ workspace: { getConfiguration: () => ({ useConditionInFocus }) } });
@@ -88,10 +88,10 @@ describe("focus audit baseline equivalence", () => {
 			configure(enabled);
 			const original = Math.random;
 			try {
-				for (const asynchronous of [false, true]) {
+				for (const [asynchronous, keepTokens] of [[false, true], [true, true], [false, false], [true, false]]) {
 					let draws = 0;
 					Math.random = () => ((++draws * 17) % 61) / 62;
-					const input = auditFixtures.map(([path, text]) => parsed(path, text));
+					const input = auditFixtures.map(([path, text]) => parsed(path, text, keepTokens));
 					const warnings = asynchronous ? await collectFocusWarningsAsync(input) : collectFocusWarnings(input);
 					assert.ok(warnings);
 					const report = formatFocusWarningReport(warnings, input.length);
@@ -101,6 +101,20 @@ describe("focus audit baseline equivalence", () => {
 			} finally {
 				Math.random = original;
 			}
+		});
+	}
+});
+
+
+describe("audit-only token-free parsing", () => {
+	for (const text of ["focus_tree = {", "focus_tree = { focus = { id = \"unterminated }", "}"]) {
+		it(`preserves parse errors for ${JSON.stringify(text)}`, () => {
+			const message = (keepTokens: boolean): string => {
+				try { parseHoi4File(text, "", { keepTokens }); }
+				catch (e) { return (e as Error).message; }
+				throw new Error("expected invalid syntax");
+			};
+			assert.strictEqual(message(false), message(true));
 		});
 	}
 });
