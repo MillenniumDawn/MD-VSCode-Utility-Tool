@@ -1,6 +1,9 @@
 Unreleased
 
   Bugfixes:
+- [ Focus Tree ] Checking all focus trees uses less memory for the report without changing navigation in previews. Issue #539.
+- [ Focus Tree ] Checking all focus trees does less repeated work for trees that import shared focuses. Issue #538.
+- [ Focus Tree ] Checking all focus trees keeps the editor responsive while collecting warnings and honors cancellation before showing the report. Issue #537.
 - [ DDS ] DXT5 textures no longer lose part of their soft edges. Half-transparent pixels beside fully clear or fully solid ones were drawn more transparent than the game draws them.
 - [ DDS ] Textures saved as sRGB R8G8B8A8 no longer show too dark, and B4G4R4A4 textures now show instead of going missing.
 - [ Previews ] A `count_triggers` block whose triggers are all `always = yes` now reads as met instead of never met.

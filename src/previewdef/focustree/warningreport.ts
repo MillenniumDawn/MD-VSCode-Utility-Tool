@@ -12,7 +12,8 @@ import {
 } from "../../util/fileloader";
 import { localize } from "../../util/i18n";
 import { isRecord } from "../../util/messageguards";
-import { ProgressReport, withCancellableProgress } from "../../util/progress";
+import { createTimeSlicer } from "../../util/common";
+import { ProgressReport, uncancelledToken, withCancellableProgress } from "../../util/progress";
 import { getConfiguration } from "../../util/vsccommon";
 import {
 	convertFocusFileNodeToJson,
@@ -50,14 +51,53 @@ export const auditReportFileName = "focus-tree-audit.md";
  * the defining file instead, it is listed once, where it has to be fixed.
  */
 export function collectFocusWarnings(parsed: ParsedFocusFile[]): FileWarnings[] {
+	const work = collectFocusWarningSteps(parsed, getFlags().useConditionInFocus);
+	let next = work.next();
+	while (!next.done) {
+		next = work.next();
+	}
+	return next.value;
+}
+
+export async function collectFocusWarningsAsync(
+	parsed: ParsedFocusFile[],
+	token: Pick<vscode.CancellationToken, "isCancellationRequested"> = uncancelledToken,
+): Promise<FileWarnings[] | undefined> {
+	const work = collectFocusWarningSteps(parsed, getFlags().useConditionInFocus);
+	const slice = createTimeSlicer();
+	while (!token.isCancellationRequested) {
+		const next = work.next();
+		if (next.done) {
+			// Even a small audit must service a pending cancel before publishing its report.
+			await new Promise<void>((resolve) => setImmediate(resolve));
+			return token.isCancellationRequested ? undefined : next.value;
+		}
+		await slice();
+	}
+	return undefined;
+}
+
+function* collectFocusWarningSteps(
+	parsed: ParsedFocusFile[],
+	useConditionInFocus: boolean,
+): Generator<void, FileWarnings[]> {
 	const treesByFile = new Map<string, FocusTree[]>();
 	for (const { path: filePath, file } of parsed) {
-		treesByFile.set(filePath, getFocusTreeWithFocusFile(file, [], filePath, {}));
+		const importsShared = useConditionInFocus && file.focus_tree.some(
+			(tree) => extractOrListIds(tree.shared_focus).length > 0,
+		);
+		// Missing IDs consume randomness even in discarded trees; keep their original first pass.
+		const deferLocalTrees = importsShared && file.focus_tree.every(
+			(tree) => tree.focus.every((focus) => focus.id !== undefined && focus.id !== null),
+		);
+		const firstPass = deferLocalTrees ? { ...file, focus_tree: [] } : file;
+		treesByFile.set(filePath, getFocusTreeWithFocusFile(firstPass, [], filePath, {}, useConditionInFocus));
+		yield;
 	}
 
 	// The preview merges a tree's shared focuses only with conditions on; without them the first
 	// pass is already what it shows.
-	if (getFlags().useConditionInFocus) {
+	if (useConditionInFocus) {
 		const sharedTrees = [...treesByFile.entries()].flatMap(([filePath, trees]) =>
 			trees.filter((tree) => tree.isSharedFocues).map((tree) => ({ filePath, tree })),
 		);
@@ -67,7 +107,8 @@ export function collectFocusWarnings(parsed: ParsedFocusFile[]): FileWarnings[] 
 			);
 			if (usesSharedFocuses) {
 				const donors = sharedTrees.filter((s) => s.filePath !== filePath).map((s) => s.tree);
-				treesByFile.set(filePath, getFocusTreeWithFocusFile(file, donors, filePath, {}));
+				treesByFile.set(filePath, getFocusTreeWithFocusFile(file, donors, filePath, {}, useConditionInFocus));
+				yield;
 			}
 		}
 	}
@@ -100,6 +141,7 @@ export function collectFocusWarnings(parsed: ParsedFocusFile[]): FileWarnings[] 
 					}
 				}
 			}
+			yield;
 		}
 	}
 
@@ -189,6 +231,10 @@ async function buildFocusTreeAuditReport(
 		.filter((file) => file.toLowerCase().endsWith(".txt"))
 		.map((file) => `${focusFolder}/${file}`);
 
+	if (progress.token.isCancellationRequested) {
+		return undefined;
+	}
+
 	let done = 0;
 	const loaded = await loadBounded(files, async (filePath) => {
 		if (progress.token.isCancellationRequested) {
@@ -196,7 +242,10 @@ async function buildFocusTreeAuditReport(
 		}
 		try {
 			const [buffer] = await readFileFromModOrHOI4(filePath, options);
-			const node = parseHoi4File(buffer.toString());
+			if (progress.token.isCancellationRequested) {
+				return undefined;
+			}
+			const node = parseHoi4File(buffer.toString(), "", { keepTokens: false });
 			return { path: filePath, file: convertFocusFileNodeToJson(node, {}) };
 		} catch (e) {
 			return { path: filePath, parseError: e instanceof Error ? e.message : String(e) };
@@ -214,7 +263,11 @@ async function buildFocusTreeAuditReport(
 		.filter((f): f is { path: string; parseError: string } => "parseError" in f)
 		.map((f) => ({ file: f.path, warnings: [], parseError: f.parseError }));
 
-	return formatFocusWarningReport([...collectFocusWarnings(parsed), ...failed], files.length);
+	const warnings = await collectFocusWarningsAsync(parsed, progress.token);
+	if (warnings === undefined || progress.token.isCancellationRequested) {
+		return undefined;
+	}
+	return formatFocusWarningReport([...warnings, ...failed], files.length);
 }
 
 function reportFolderUri(folder: string): vscode.Uri {
@@ -234,17 +287,27 @@ function reportFolderUri(folder: string): vscode.Uri {
 	return host().Uri.joinPath(workspaceFolder.uri, folder);
 }
 
-async function showReport(report: string, folder: string): Promise<void> {
+async function showReport(report: string, folder: string, token: vscode.CancellationToken): Promise<void> {
+	if (token.isCancellationRequested) {
+		return;
+	}
 	if (folder === "") {
 		const document = await host().workspace.openTextDocument({ language: "markdown", content: report });
-		await host().window.showTextDocument(document);
+		if (!token.isCancellationRequested) {
+			await host().window.showTextDocument(document);
+		}
 		return;
 	}
 	const folderUri = reportFolderUri(folder);
 	await host().workspace.fs.createDirectory(folderUri);
+	if (token.isCancellationRequested) {
+		return;
+	}
 	const reportUri = host().Uri.joinPath(folderUri, auditReportFileName);
 	await host().workspace.fs.writeFile(reportUri, Buffer.from(report, "utf8"));
-	await host().window.showTextDocument(reportUri);
+	if (!token.isCancellationRequested) {
+		await host().window.showTextDocument(reportUri);
+	}
 }
 
 export async function auditFocusTrees(): Promise<void> {
@@ -253,13 +316,17 @@ export async function auditFocusTrees(): Promise<void> {
 	const includeVanilla = config.get<boolean>("auditor.includeVanilla") ?? false;
 
 	try {
+		let token = uncancelledToken;
 		const report = await withCancellableProgress(
 			localize("focustree.audit.progress", "Checking focus trees"),
-			(progress) => buildFocusTreeAuditReport(progress, includeVanilla),
+			(progress) => {
+				token = progress.token;
+				return buildFocusTreeAuditReport(progress, includeVanilla);
+			},
 		);
 		// A cancel says nothing: the reader pressed Cancel and already knows.
 		if (report !== undefined) {
-			await showReport(report, folder);
+			await showReport(report, folder, token);
 		}
 	} catch (e) {
 		error(e);
