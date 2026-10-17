@@ -55,8 +55,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
       # `release` means a release or failed-release fix merged. `bump`
@@ -84,8 +84,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: "npm"
@@ -119,9 +119,9 @@ jobs:
       # App tokens start tests on pull requests they open; GITHUB_TOKEN cannot.
       - name: Mint the release bot token
         id: app-token
-        # v3.2.0
+        # v3.3.0
         uses: >-
-          actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+          actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
         with:
           # GitHub still accepts the deprecated App ID as a client id.
           client-id: >-
@@ -149,8 +149,8 @@ jobs:
             echo "GIT_CONFIG_KEY_0=http.https://github.com/.extraheader"
             echo "GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $header"
           } >> "$GITHUB_ENV"
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
       # Collect every pull request since the last shipped tag. Only the refresh
@@ -363,8 +363,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: "npm"
@@ -388,8 +388,8 @@ jobs:
           echo "vsix=$vsix" >> "$GITHUB_OUTPUT"
       # All three publish runners receive the same bytes.
       - name: Upload the VSIX
-        # v7.0.1
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: pre-release-vsix
           path: ${{ steps.find_vsix.outputs.vsix }}
@@ -412,15 +412,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: "npm"
       - name: Install dependencies
         run: npm ci
-      # v8.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pre-release-vsix
       # Missing tokens fail, duplicates pass, and transient failures retry.
@@ -446,15 +446,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: "npm"
       - name: Install dependencies
         run: npm ci
-      # v8.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pre-release-vsix
       - name: Publish to Open VSX Registry
@@ -472,16 +472,16 @@ jobs:
     steps:
       - name: Mint the release bot token
         id: app-token
-        # v3.2.0
+        # v3.3.0
         uses: >-
-          actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+          actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
         with:
           client-id: >-
             ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
           private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
           permission-contents: write
-      # v8.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pre-release-vsix
       # Generated notes would start one release behind, at the stable tag.
@@ -520,8 +520,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: "npm"
@@ -540,8 +540,8 @@ jobs:
           fi
           echo "vsix=$vsix" >> "$GITHUB_OUTPUT"
       - name: Upload the VSIX
-        # v7.0.1
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        # v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-vsix
           path: ${{ steps.find_vsix.outputs.vsix }}
@@ -568,15 +568,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: "npm"
       - name: Install dependencies
         run: npm ci
-      # v8.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-vsix
       - name: Publish to VS Code Marketplace
@@ -605,15 +605,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: "npm"
       - name: Install dependencies
         run: npm ci
-      # v8.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-vsix
       - name: Publish to VS Code Marketplace, patiently
@@ -638,15 +638,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: "npm"
       - name: Install dependencies
         run: npm ci
-      # v8.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-vsix
       - name: Publish to Open VSX Registry
@@ -675,15 +675,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      # v7.0.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: "npm"
       - name: Install dependencies
         run: npm ci
-      # v8.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-vsix
       - name: Publish to Open VSX Registry, patiently
@@ -719,16 +719,16 @@ jobs:
       # The App token fires release: published so close-fixed-issues runs.
       - name: Mint the release bot token
         id: app-token
-        # v3.2.0
+        # v3.3.0
         uses: >-
-          actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+          actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
         with:
           client-id: >-
             ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
           private-key: ${{ secrets.RELEASE_PR_APP_PRIVATE_KEY }}
           permission-contents: write
-      # v8.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-vsix
       - name: Create GitHub Release
@@ -781,9 +781,9 @@ jobs:
     steps:
       - name: Mint the release bot token
         id: app-token
-        # v3.2.0
+        # v3.3.0
         uses: >-
-          actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+          actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
         with:
           client-id: >-
             ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
