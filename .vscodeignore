@@ -19,6 +19,7 @@ node_modules/**
 i18n/**
 icon.xcf
 scripts/**
+evidence/**
 webviewsrc/**
 resource/**
 .github/**

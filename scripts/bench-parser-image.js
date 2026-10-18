@@ -54,13 +54,32 @@ async function child(job) {
 			maxRssKiB: process.resourceUsage().maxRSS, after: memory() };
 	}
 
+	const temp = job.fixtureDir;
+	const trace = [];
+	const starts = new BigInt64Array(new SharedArrayBuffer(8192 * 8));
+	const clock = () => Number(process.hrtime.bigint()) / 1e6;
+	if (job.suite === "dispatch") {
+		const workerEntry = path.join(temp, "observed-worker.js");
+		fs.writeFileSync(workerEntry, `const { parentPort, workerData } = require('worker_threads');
+			const starts = new BigInt64Array(workerData.starts);
+			const on = parentPort.on;
+			parentPort.on = function(type, handler) {
+				return on.call(this, type, type === 'message' ? (request) => {
+					Atomics.store(starts, request.id, process.hrtime.bigint());
+					handler(request);
+				} : handler);
+			};
+			require(workerData.entry);`);
+		const threads = require("worker_threads");
+		threads.Worker = require("./image-dispatch-experiment").observeDispatch(threads.Worker,
+			{ bounded: job.bounded, record: (event) => trace.push(event), now: clock, workerEntry, starts: starts.buffer });
+	}
 	const decoder = require(sourcePath(job.root, "util/image/imagedecoder.js"));
 	require(sourcePath(job.root, "util/host.js")).handOverHost({
 		workspace: { getConfiguration: () => ({ imageDecodeWorkers: job.pool }) },
 		window: { createOutputChannel: () => ({ appendLine() {}, dispose() {} }) },
 	});
 	console.error = () => undefined;
-	const temp = fs.mkdtempSync(path.join(os.tmpdir(), "md-image-bench-"));
 	const realWorker = sourcePath(job.root, "util/image/imageWorker.js");
 	let syncCalls = 0;
 	const converters = require(sourcePath(job.root, "util/image/converter.js"));
@@ -101,14 +120,17 @@ async function child(job) {
 			decoder._setImageJobTimeoutForTest(150);
 		}
 		global.gc();
+		trace.length = 0;
+		starts.fill(0n);
 		const ready = memory();
 		let peakRss = ready.rss;
 		const sampler = setInterval(() => { peakRss = Math.max(peakRss, memory().rss); }, 5);
 		const start = performance.now();
 		const latencies = [];
+		const settledAt = [];
 		const promises = Array.from({ length: job.jobs }, (_, i) => decoder.decodeImageToPng(i % 2 ? tga : dds, i % 2 ? "tga" : "dds")
-			.then((r) => { latencies.push(performance.now() - start); return r; },
-				(e) => { latencies.push(performance.now() - start); throw e; }));
+			.then((r) => { settledAt[i] = clock(); latencies.push(performance.now() - start); return r; },
+				(e) => { settledAt[i] = clock(); latencies.push(performance.now() - start); throw e; }));
 		const submitMs = performance.now() - start;
 		const submitted = memory();
 		peakRss = Math.max(peakRss, submitted.rss);
@@ -116,6 +138,15 @@ async function child(job) {
 		const ms = performance.now() - start;
 		clearInterval(sampler);
 		peakRss = Math.max(peakRss, memory().rss);
+		const admissions = trace.filter((event) => event.type === "enqueue");
+		const queueMs = [];
+		const neverStartedWaitMs = [];
+		for (const [i, event] of admissions.entries()) {
+			const began = Number(Atomics.load(starts, event.id)) / 1e6;
+			if (began) { queueMs.push(began - event.at); }
+			else { neverStartedWaitMs.push(settledAt[i] - event.at); }
+		}
+		const posted = trace.filter((event) => event.type === "dispatch").length;
 		const workerSyncCalls = syncCalls;
 		const workersAfter = decoder._getWorkerCountForTest();
 		const disabledAfter = decoder._isWorkerPoolDisabledForTest();
@@ -130,7 +161,9 @@ async function child(job) {
 		decoder._setImageWorkerPathForTest(realWorker);
 		decoder._setImageJobTimeoutForTest(30_000);
 		const recovery = await decoder.decodeImageToPng(tga, "tga");
-		return { ms, submitMs, latencies, bytesTransferred: job.jobs * (dds.length + tga.length) / 2,
+		const inputBytes = job.jobs * (dds.length + tga.length) / 2;
+		return { ms, submitMs, latencies, queueMs, neverStartedWaitMs, posted,
+			...(job.suite === "dispatch" ? { inputSnapshotBytes: inputBytes } : { bytesTransferred: inputBytes }),
 			before, ready, submitted, peakRss, after: memory(), maxRssKiB: process.resourceUsage().maxRSS,
 			errors, workerSyncCalls, workersAfter, disabledAfter, parity, outputHash,
 			sourceIntact: hash(tga) === sourceHashes[0] && hash(dds) === sourceHashes[1], recovery: recovery.width === job.size };
@@ -143,7 +176,10 @@ async function child(job) {
 
 function run(job, timeout) {
 	return new Promise((resolve, reject) => {
-		const proc = fork(__filename, ["--child", JSON.stringify(job)], { execArgv: ["--expose-gc"], silent: true });
+		const fixtureDir = ["image", "dispatch"].includes(job.suite)
+			? fs.mkdtempSync(path.join(os.tmpdir(), "md-image-bench-")) : undefined;
+		const cleanup = () => { if (fixtureDir) { fs.rmSync(fixtureDir, { recursive: true, force: true }); } };
+		const proc = fork(__filename, ["--child", JSON.stringify({ ...job, fixtureDir })], { execArgv: ["--expose-gc"], silent: true });
 		let result;
 		let stderr = "";
 		let lastFile;
@@ -160,9 +196,10 @@ function run(job, timeout) {
 			if (message.progress) { lastFile = message.progress; reset(); }
 			if (message.result) { result = message.result; }
 		});
-		proc.on("error", (e) => { clearTimeout(timer); reject(e); });
+		proc.on("error", (e) => { clearTimeout(timer); cleanup(); reject(e); });
 		proc.on("close", (code, signal) => {
 			clearTimeout(timer);
+			cleanup();
 			if (killed) { resolve({ watchdog: timeout, lastFile, signal }); }
 			else if (code !== 0 || !result) { reject(new Error(`child failed: ${code} ${signal} ${stderr}`)); }
 			else { resolve(result); }
@@ -172,8 +209,8 @@ function run(job, timeout) {
 
 async function main() {
 	const [suite, baseline, candidate, output, mod] = process.argv.slice(2);
-	if (!["parser", "corpus", "image"].includes(suite) || !output) {
-		throw new Error("Usage: node scripts/bench-parser-image.js parser|corpus|image BASELINE CANDIDATE OUTPUT [MOD]");
+	if (!["parser", "corpus", "image", "dispatch"].includes(suite) || !output) {
+		throw new Error("Usage: node scripts/bench-parser-image.js parser|corpus|image|dispatch BASELINE CANDIDATE OUTPUT [MOD]");
 	}
 	const records = [];
 	const scenarios = suite === "parser" ? [10, 14, 18, 60].map((pairs) => ({ pairs }))
@@ -187,13 +224,14 @@ async function main() {
 		for (let rep = 0; rep < repeats; rep++) {
 			// AB/BA alternation limits monotonic cache/load/thermal bias. Each run is a fresh process.
 			for (const variant of rep % 2 ? ["candidate", "baseline"] : ["baseline", "candidate"]) {
-				const job = { suite, ...scenario, root: path.resolve(variant === "baseline" ? baseline : candidate), mod,
+				const job = { suite, ...scenario, bounded: suite === "dispatch" && variant === "candidate",
+					root: path.resolve(variant === "baseline" ? baseline : candidate), mod,
 					manifest: `${output}.${variant}.${rep}.manifest.json` };
 				const result = await run(job, suite === "parser" ? 3000 : suite === "corpus" ? 10_000 : 60_000);
 				if (result.watchdog && !(suite === "parser" && variant === "baseline" && scenario.pairs === 60)) {
 					throw new Error(`unexpected watchdog: ${JSON.stringify({ job, result })}`);
 				}
-				if (suite === "image" && (!result.parity || !result.sourceIntact || !result.recovery || result.workerSyncCalls !== 0 ||
+				if ((suite === "image" || suite === "dispatch") && (!result.parity || !result.sourceIntact || !result.recovery || result.workerSyncCalls !== 0 ||
 					(scenario.blocked ? result.errors.length !== scenario.jobs || result.errors.some((e) => e !== "ImageDecodeTimeoutError")
 						: result.errors.length !== 0))) {
 					throw new Error(`image parity/recovery failed: ${JSON.stringify({ job, result })}`);
