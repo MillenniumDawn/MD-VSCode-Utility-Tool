@@ -28,7 +28,8 @@ search a tree by focus id.
 **Event chains.** An events file becomes a graph of which event fires which, with every arrow
 labelled by its condition, delay and `random_list` weight. `FROM` resolves to the event that
 actually fired the call. Filter by event kind, show or hide hidden events, search by id or title,
-and use **Scan References** to find every place in the mod that fires an event.
+and use **Scan References** to find every place in the mod that fires an event. See
+[dependency markers](docs/dependency-markers.md) for adding explicit file references to previews.
 
 **Decisions.** Decision categories, decisions and missions drawn as a graph, with the localised
 names from your mod.
