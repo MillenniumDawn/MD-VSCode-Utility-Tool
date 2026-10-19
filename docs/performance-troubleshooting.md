@@ -1,0 +1,45 @@
+# Preview performance and troubleshooting
+
+The extension has separate paths for image decoding and workspace indexes. On desktop, `.dds` and `.tga` decoding can use a pool of worker threads; indexes parse on the extension host through a shared queue. In vscode.dev, image decoding is synchronous on the extension host and indexes rebuild during each browser session. Tuning image workers does not speed up indexing, and indexing settings do not change image decoding.
+
+## Image decoding
+
+`mdHoi4Utilities.imageDecodeWorkers` defaults to `4` and accepts values from `1` through `16`. The pool starts small and grows only when concurrent decodes need more capacity. On desktop, a setting of `1` keeps conversion on one worker; increasing it can improve a burst of `.dds` or `.tga` conversions on a machine with spare CPU, but each worker is a separate V8 isolate with its own memory overhead and working image buffers. A larger pool can therefore increase CPU and memory use, especially for large textures, and will not help when the workload is already limited by another part of rendering.
+
+`.png` files are passed through without conversion when their PNG header contains valid dimensions. The worker pool handles `.dds` and `.tga` to PNG conversion. It is desktop-only: web builds decode synchronously. If a worker cannot start, all workers fail, or an individual worker job fails, the decoder logs the error and retries that image synchronously. A worker job that runs for 30 seconds is treated as timed out; that image request fails instead of retrying synchronously, since the timed-out decode could otherwise freeze the extension host. A bad image may consequently be absent from the preview while the rest of the preview continues.
+
+If an image is missing, first confirm its `texturefile` path resolves to an existing supported `.dds`, `.tga`, or `.png` file and inspect the VS Code **Output** panel's **HOI4 Modding** channel for `Failed to get image` or an image worker error. A synchronous retry can also fail on malformed or unsupported image data; raising the worker count does not repair an invalid file. For slow image-heavy previews, compare the workload with `imageDecodeWorkers` set to a lower or higher value within its supported range and watch CPU and memory use. After changing the setting, run **Developer: Reload Window** before each comparison: the worker cap is read once when the pool first needs to grow, and an existing pool does not re-read the setting or shrink. The README's browser support note describes the web synchronous path.
+
+## Index settings
+
+The index settings have distinct tradeoffs:
+
+| Setting | Default | Effect and cost |
+|---|---:|---|
+| `mdHoi4Utilities.sharedFocusIndex` | `true` | Indexes shared focus definitions so other trees can use them. The index is built lazily when first needed. |
+| `mdHoi4Utilities.ideaSwapIndex` | `false` | Scans `common` and `events` for `swap_ideas`, allowing the idea preview to draw swap chains. |
+| `mdHoi4Utilities.gfxIndex` | `false` | Indexes sprite definitions for faster icon lookup. It uses memory for the index. |
+| `mdHoi4Utilities.localisationIndex` | `false` | Indexes localisation for translated labels. It uses memory for the index. |
+
+Indexes are built lazily on first use. On desktop, their cache is under the extension's VS Code global storage, namespaced by the selected mod file, workspace folders, and resolved parent mods. The cache has a manifest with source file modification times; unchanged records can be reused and added, changed, or removed files are reconciled on a later build. Browser builds do not use the on-disk cache, so index data is rebuilt during each web session. Index watchers update already-built indexes as source files change.
+
+Index parsing uses a shared queue of four tasks on the extension host. Parsing is synchronous work on that host thread, so increasing image workers cannot accelerate it, and running more index parses concurrently would contend with editor messages rather than create more CPU capacity. The queue also yields between files so the editor can continue to respond. Native file walking helps list files; it does not change the parse queue or make the indexes memory-free. Disabling optional indexes can reduce their retained data and avoid builds some previews do not need, at the cost of the related lookup feature.
+
+## Diagnose a slow or stale preview
+
+Use **Show Index Status** from the command palette while indexing seems slow. It reports whether an index build is active and includes its phase and progress when available. The same line is written to the **HOI4 Modding** output channel. A running line means the build is progressing or waiting on work; no active build means the delay is elsewhere in preview loading/rendering. Index builds have a five-minute caller timeout that logs the index name and live phases; it stops that caller from waiting, but does not cancel the underlying build. The cancellable indexing notification is the action that cancels a build.
+
+For a slow first preview, allow the initial index build to complete and use the progress notification or **Show Index Status** to identify the active phase. The `HOI4 Modding` output channel records cache directory selection, index build start/completion/failure, and timer phase breakdowns when a build finishes. On later desktop builds, unchanged cached files can be reused. In vscode.dev, a new web session rebuilds indexes. No cache-clear command is provided by the extension; do not use an assumed setting or command to clear index state.
+
+If a preview stays stale after editing a dependency file, confirm that the preview actually loaded that file as a dependency; only dependencies reported by the loader are watched. Editing the preview file itself follows its normal document refresh path. For image lookup problems, check the file path and image error logs as described above. For indexing problems, capture the exact line from **Show Index Status** and the relevant `[Index]` or `[Timer]` lines from **HOI4 Modding** when reporting the issue.
+
+## Source
+
+- [Settings and defaults](../package.json)
+- [Image decoding, worker limits and timeout](../src/util/image/imagedecoder.ts)
+- [PNG passthrough and image errors](../src/util/image/imagecache.ts)
+- [Index parse queue, timeout and status command](../src/util/indexBuild.ts)
+- [Index work queue](../src/util/common.ts)
+- [Cache lifecycle and stale-file checks](../src/util/indexCache.ts)
+- [Index timing and logs](../src/util/logger.ts)
+- [Browser support in the README](../README.md#browser-support)
