@@ -1,6 +1,5 @@
 import "./setup";
 import * as assert from "assert";
-import { waitFor } from "../waitfor";
 import {
 	EffectTooltipOptions,
 	clampBelowToolbar,
@@ -22,11 +21,54 @@ const sections = [
 	},
 ];
 
-// The panel waits out a hover delay before it appears. A test that expects it polls until it is
-// there; a test that expects nothing has to wait the delay out, with a margin, since there is no
-// moment at which "nothing appeared" becomes true. The margin is wide because a loaded CI runner
-// can fire a timer well past its due time.
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+function withClock(run: (advance: (ms: number) => void) => void): void {
+	const previousGlobalSetTimeout = globalThis.setTimeout;
+	const previousGlobalClearTimeout = globalThis.clearTimeout;
+	const previousWindowSetTimeout = window.setTimeout;
+	const previousWindowClearTimeout = window.clearTimeout;
+	let now = 0;
+	let nextId = 1;
+	const timers = new Map<number, { due: number; callback: () => void }>();
+	const setTimeout = ((callback: TimerHandler, delay = 0) => {
+		const id = nextId++;
+		timers.set(id, { due: now + Number(delay), callback: callback as () => void });
+		return id;
+	}) as typeof globalThis.setTimeout;
+	const clearTimeout = ((id?: number) => {
+		if (id !== undefined) {
+			timers.delete(id);
+		}
+	}) as typeof globalThis.clearTimeout;
+	const advance = (ms: number) => {
+		const target = now + ms;
+		while (true) {
+			const next = [...timers.entries()]
+				.filter(([, timer]) => timer.due <= target)
+				.sort(([, a], [, b]) => a.due - b.due)[0];
+			if (!next) {
+				break;
+			}
+			const [id, timer] = next;
+			timers.delete(id);
+			now = timer.due;
+			timer.callback();
+		}
+		now = target;
+	};
+
+	(globalThis as any).setTimeout = setTimeout;
+	(globalThis as any).clearTimeout = clearTimeout;
+	(window as any).setTimeout = setTimeout;
+	(window as any).clearTimeout = clearTimeout;
+	try {
+		run(advance);
+	} finally {
+		(globalThis as any).setTimeout = previousGlobalSetTimeout;
+		(globalThis as any).clearTimeout = previousGlobalClearTimeout;
+		(window as any).setTimeout = previousWindowSetTimeout;
+		(window as any).clearTimeout = previousWindowClearTimeout;
+	}
+}
 
 describe("webview/util/hovertooltip", () => {
 	let previousBody = "";
@@ -47,63 +89,72 @@ describe("webview/util/hovertooltip", () => {
 	});
 
 	const panels = () => document.querySelectorAll("." + options.className);
-	const opened = () => waitFor(() => panels().length > 0, { message: "the panel never opened" });
 	const enter = () => host.dispatchEvent(new (window as any).Event("mouseenter"));
 	const leave = () => host.dispatchEvent(new (window as any).Event("mouseleave"));
 
-	it("keeps the panel closed until the hover has been held", async () => {
-		wireEffectTooltip(host, sections, options);
+	it("keeps the panel closed until the hover delay, then opens it", () => {
+		withClock((advance) => {
+			wireEffectTooltip(host, sections, options);
+			enter();
+			advance(hoverDelay - 1);
+			assert.strictEqual(panels().length, 0);
 
-		enter();
-		assert.strictEqual(panels().length, 0);
-
-		await opened();
-		assert.strictEqual(panels().length, 1);
+			advance(1);
+			assert.strictEqual(panels().length, 1);
+		});
 	});
 
-	it("typesets the panel like a condition panel and heads each block", async () => {
-		wireEffectTooltip(host, sections, options);
-		enter();
-		await opened();
+	it("typesets the panel like a condition panel and heads each block", () => {
+		withClock((advance) => {
+			wireEffectTooltip(host, sections, options);
+			enter();
+			advance(hoverDelay);
 
-		const panel = panels()[0]!;
-		assert.ok(panel.classList.contains("ev-cond"));
-		assert.strictEqual(panel.querySelector(".ev-cond-head")?.textContent, "Immediate effects");
-		assert.ok(panel.textContent?.includes("add_political_power = 50"));
-		// Placed before it is shown, so it never flashes at the top left of the window.
-		assert.strictEqual((panel as HTMLDivElement).style.visibility, "");
+			const panel = panels()[0]!;
+			assert.ok(panel.classList.contains("ev-cond"));
+			assert.strictEqual(panel.querySelector(".ev-cond-head")?.textContent, "Immediate effects");
+			assert.ok(panel.textContent?.includes("add_political_power = 50"));
+			// Placed before it is shown, so it never flashes at the top left of the window.
+			assert.strictEqual((panel as HTMLDivElement).style.visibility, "");
+		});
 	});
 
-	it("takes the panel away when the pointer leaves", async () => {
-		wireEffectTooltip(host, sections, options);
-		enter();
-		await opened();
-		assert.strictEqual(panels().length, 1);
+	it("takes the panel away when the pointer leaves", () => {
+		withClock((advance) => {
+			wireEffectTooltip(host, sections, options);
+			enter();
+			advance(hoverDelay);
+			assert.strictEqual(panels().length, 1);
 
-		leave();
-		assert.strictEqual(panels().length, 0);
+			leave();
+			assert.strictEqual(panels().length, 0);
+		});
 	});
 
-	it("opens nothing when the pointer left before the delay was up", async () => {
-		wireEffectTooltip(host, sections, options);
+	it("cancels the pending panel when the pointer leaves before the delay", () => {
+		withClock((advance) => {
+			wireEffectTooltip(host, sections, options);
+			enter();
+			advance(hoverDelay - 1);
+			assert.strictEqual(panels().length, 0);
 
-		enter();
-		leave();
-		await wait(hoverDelay + 100);
-
-		assert.strictEqual(panels().length, 0);
+			leave();
+			advance(1);
+			assert.strictEqual(panels().length, 0);
+		});
 	});
 
 	// A re-render replaces every card, and the pointer resting on one leaves this timer behind.
 	// Without the guard the panel of a card that is no longer on screen opens over the new graph.
-	it("opens nothing for a card the re-render took away mid-hover", async () => {
-		wireEffectTooltip(host, sections, options);
+	it("opens nothing for a card the re-render took away mid-hover", () => {
+		withClock((advance) => {
+			wireEffectTooltip(host, sections, options);
+			enter();
+			host.remove();
+			advance(hoverDelay);
 
-		enter();
-		host.remove();
-		await wait(hoverDelay + 100);
-
-		assert.strictEqual(panels().length, 0);
+			assert.strictEqual(panels().length, 0);
+		});
 	});
 
 	describe("clampBelowToolbar", () => {

@@ -1,0 +1,123 @@
+{
+  "node": "v24.19.0",
+  "cpu": "AMD EPYC 9V45 96-Core Processor",
+  "repeats": 7,
+  "revisions": {
+    "baseline": "73106ef4bfce52af9b788e2a6232253546d815e8",
+    "candidate": "95183ce5b82c5bd41d56ada98a3c8a5b2d3c582b"
+  },
+  "records": [
+    {
+      "variant": "baseline",
+      "rep": 0,
+      "wallMs": 1370.326499,
+      "suiteMs": 976,
+      "maxRssKiB": 153244,
+      "passes": 7
+    },
+    {
+      "variant": "candidate",
+      "rep": 0,
+      "wallMs": 425.983743,
+      "suiteMs": 19,
+      "maxRssKiB": 153324,
+      "passes": 7
+    },
+    {
+      "variant": "candidate",
+      "rep": 1,
+      "wallMs": 462.9573449999998,
+      "suiteMs": 23,
+      "maxRssKiB": 152792,
+      "passes": 7
+    },
+    {
+      "variant": "baseline",
+      "rep": 1,
+      "wallMs": 1373.6299769999996,
+      "suiteMs": 971,
+      "maxRssKiB": 153324,
+      "passes": 7
+    },
+    {
+      "variant": "baseline",
+      "rep": 2,
+      "wallMs": 1337.7536349999996,
+      "suiteMs": 970,
+      "maxRssKiB": 153736,
+      "passes": 7
+    },
+    {
+      "variant": "candidate",
+      "rep": 2,
+      "wallMs": 388.22533099999964,
+      "suiteMs": 18,
+      "maxRssKiB": 153076,
+      "passes": 7
+    },
+    {
+      "variant": "candidate",
+      "rep": 3,
+      "wallMs": 400.27881499999967,
+      "suiteMs": 19,
+      "maxRssKiB": 154196,
+      "passes": 7
+    },
+    {
+      "variant": "baseline",
+      "rep": 3,
+      "wallMs": 1351.9756029999999,
+      "suiteMs": 969,
+      "maxRssKiB": 153612,
+      "passes": 7
+    },
+    {
+      "variant": "baseline",
+      "rep": 4,
+      "wallMs": 1346.9016169999995,
+      "suiteMs": 970,
+      "maxRssKiB": 152960,
+      "passes": 7
+    },
+    {
+      "variant": "candidate",
+      "rep": 4,
+      "wallMs": 376.1276770000004,
+      "suiteMs": 18,
+      "maxRssKiB": 153132,
+      "passes": 7
+    },
+    {
+      "variant": "candidate",
+      "rep": 5,
+      "wallMs": 385.85369900000114,
+      "suiteMs": 18,
+      "maxRssKiB": 153568,
+      "passes": 7
+    },
+    {
+      "variant": "baseline",
+      "rep": 5,
+      "wallMs": 1338.1762199999994,
+      "suiteMs": 970,
+      "maxRssKiB": 152692,
+      "passes": 7
+    },
+    {
+      "variant": "baseline",
+      "rep": 6,
+      "wallMs": 1332.8236049999996,
+      "suiteMs": 971,
+      "maxRssKiB": 153440,
+      "passes": 7
+    },
+    {
+      "variant": "candidate",
+      "rep": 6,
+      "wallMs": 396.52944899999966,
+      "suiteMs": 19,
+      "maxRssKiB": 152852,
+      "passes": 7
+    }
+  ]
+}
