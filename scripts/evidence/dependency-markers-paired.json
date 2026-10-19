@@ -1,0 +1,1659 @@
+{
+  "node": "v24.19.0",
+  "cpu": "AMD EPYC 9V45 96-Core Processor",
+  "repeats": 7,
+  "roots": {
+    "baseline": "/workspace/MD-Utility-baseline",
+    "candidate": "/workspace/md-batch/dependency"
+  },
+  "revisions": {
+    "baseline": "73106ef4bfce52af9b788e2a6232253546d815e8",
+    "candidate": "b8ec0f3e6459cf67e3218097a5a52cb3a486aa6b"
+  },
+  "compiledHashes": {
+    "baseline": "7255c02a07c5e06f97c653c86c1d104ca87980b3a2721479646f2ff428a550e3",
+    "candidate": "09ead324671f7b89afc9cf3d7ef8de8cae5efc7131b94fdc914788a51110f05b"
+  },
+  "records": [
+    {
+      "variant": "baseline",
+      "rep": 0,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 25.329144,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41582592,
+          "heapTotal": 12054528,
+          "heapUsed": 6353976,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41844736,
+          "heapTotal": 12054528,
+          "heapUsed": 6376936,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 40864
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 0,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 0.011846999999995944,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41881600,
+          "heapTotal": 12054528,
+          "heapUsed": 6355312,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42012672,
+          "heapTotal": 12054528,
+          "heapUsed": 6378448,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41088
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 1,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 0.012839000000006706,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41889792,
+          "heapTotal": 12054528,
+          "heapUsed": 6355360,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42020864,
+          "heapTotal": 12054528,
+          "heapUsed": 6378496,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41216
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 1,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 25.004489999999997,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42205184,
+          "heapTotal": 12054528,
+          "heapUsed": 6346584,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41885696,
+          "heapTotal": 12054528,
+          "heapUsed": 6377016,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41600
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 2,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 24.516001000000003,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41762816,
+          "heapTotal": 12054528,
+          "heapUsed": 6354080,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42024960,
+          "heapTotal": 12054528,
+          "heapUsed": 6377040,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41216
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 2,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 0.01184700000000305,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42397696,
+          "heapTotal": 12054528,
+          "heapUsed": 6347544,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42528768,
+          "heapTotal": 12054528,
+          "heapUsed": 6370680,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41532
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 3,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 0.01117699999999644,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42352640,
+          "heapTotal": 12054528,
+          "heapUsed": 6355440,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42483712,
+          "heapTotal": 12054528,
+          "heapUsed": 6378576,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41488
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 3,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 25.040673999999996,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42520576,
+          "heapTotal": 12054528,
+          "heapUsed": 6354080,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42782720,
+          "heapTotal": 12054528,
+          "heapUsed": 6377040,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41780
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 4,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 24.127531000000005,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42057728,
+          "heapTotal": 12054528,
+          "heapUsed": 6345552,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42188800,
+          "heapTotal": 12054528,
+          "heapUsed": 6368512,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41216
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 4,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 0.011065999999999576,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41758720,
+          "heapTotal": 11792384,
+          "heapUsed": 6355312,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41889792,
+          "heapTotal": 11792384,
+          "heapUsed": 6378448,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41344
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 5,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 0.010675999999996577,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42061824,
+          "heapTotal": 12054528,
+          "heapUsed": 6355360,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42192896,
+          "heapTotal": 12054528,
+          "heapUsed": 6378496,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41600
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 5,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 24.485516000000004,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42156032,
+          "heapTotal": 12054528,
+          "heapUsed": 6353312,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42287104,
+          "heapTotal": 12054528,
+          "heapUsed": 6376272,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41344
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 6,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 24.384976,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41943040,
+          "heapTotal": 12054528,
+          "heapUsed": 6346384,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41869312,
+          "heapTotal": 12054528,
+          "heapUsed": 6376816,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41088
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 6,
+      "scenario": {
+        "kind": "malformed",
+        "length": 8000
+      },
+      "result": {
+        "ms": 0.010635999999998091,
+        "inputBytes": 8008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42246144,
+          "heapTotal": 11530240,
+          "heapUsed": 6355312,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42377216,
+          "heapTotal": 11530240,
+          "heapUsed": 6378448,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41384
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 0,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 377.011997,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42287104,
+          "heapTotal": 12054528,
+          "heapUsed": 6346680,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41824256,
+          "heapTotal": 12054528,
+          "heapUsed": 6401112,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41424
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 0,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 0.03976000000000113,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41967616,
+          "heapTotal": 11792384,
+          "heapUsed": 6356216,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42098688,
+          "heapTotal": 11792384,
+          "heapUsed": 6403352,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41472
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 1,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 0.02765099999999876,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42860544,
+          "heapTotal": 11792384,
+          "heapUsed": 6347568,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42319872,
+          "heapTotal": 11792384,
+          "heapUsed": 6402176,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41984
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 1,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 377.36449200000004,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42086400,
+          "heapTotal": 12054528,
+          "heapUsed": 6354144,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42217472,
+          "heapTotal": 12054528,
+          "heapUsed": 6401104,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41344
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 2,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 394.144597,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42467328,
+          "heapTotal": 11792384,
+          "heapUsed": 6346816,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42057728,
+          "heapTotal": 12054528,
+          "heapUsed": 6400272,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41600
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 2,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 0.040700999999998544,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42598400,
+          "heapTotal": 12054528,
+          "heapUsed": 6347384,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42729472,
+          "heapTotal": 12054528,
+          "heapUsed": 6394520,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41728
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 3,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 0.028142000000002554,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41652224,
+          "heapTotal": 12054528,
+          "heapUsed": 6355128,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41783296,
+          "heapTotal": 12054528,
+          "heapUsed": 6402264,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 40960
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 3,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 385.647054,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42119168,
+          "heapTotal": 12054528,
+          "heapUsed": 6354072,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42381312,
+          "heapTotal": 12054528,
+          "heapUsed": 6401032,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41388
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 4,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 380.97587699999997,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42147840,
+          "heapTotal": 12054528,
+          "heapUsed": 6354096,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42409984,
+          "heapTotal": 12054528,
+          "heapUsed": 6401056,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41416
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 4,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 0.02752100000000013,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41721856,
+          "heapTotal": 12054528,
+          "heapUsed": 6355040,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41852928,
+          "heapTotal": 12054528,
+          "heapUsed": 6402176,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 40872
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 5,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 0.026128999999997404,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41660416,
+          "heapTotal": 12054528,
+          "heapUsed": 6347536,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41922560,
+          "heapTotal": 12054528,
+          "heapUsed": 6394672,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 40960
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 5,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 383.105456,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42336256,
+          "heapTotal": 12054528,
+          "heapUsed": 6346672,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42201088,
+          "heapTotal": 12054528,
+          "heapUsed": 6401104,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41600
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 6,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 387.376336,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41799680,
+          "heapTotal": 11792384,
+          "heapUsed": 6346032,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41930752,
+          "heapTotal": 11792384,
+          "heapUsed": 6392992,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41344
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 6,
+      "scenario": {
+        "kind": "malformed",
+        "length": 32000
+      },
+      "result": {
+        "ms": 0.08292399999999844,
+        "inputBytes": 32008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42156032,
+          "heapTotal": 11792384,
+          "heapUsed": 6347648,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42287104,
+          "heapTotal": 12054528,
+          "heapUsed": 6393624,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41296
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 0,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 3657.444139,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42242048,
+          "heapTotal": 12054528,
+          "heapUsed": 6354128,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42373120,
+          "heapTotal": 12054528,
+          "heapUsed": 6469088,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41984
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 0,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 0.07347000000000037,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41705472,
+          "heapTotal": 12054528,
+          "heapUsed": 6355496,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42098688,
+          "heapTotal": 12054528,
+          "heapUsed": 6470632,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41112
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 1,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 0.06901299999999821,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41627648,
+          "heapTotal": 12054528,
+          "heapUsed": 6355448,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41889792,
+          "heapTotal": 12054528,
+          "heapUsed": 6470584,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 40908
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 1,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 3738.3614279999997,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42188800,
+          "heapTotal": 11792384,
+          "heapUsed": 6354024,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42319872,
+          "heapTotal": 11792384,
+          "heapUsed": 6468984,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41344
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 2,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 3676.297701,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42815488,
+          "heapTotal": 12054528,
+          "heapUsed": 6355848,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42946560,
+          "heapTotal": 12054528,
+          "heapUsed": 6470808,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41940
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 2,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 0.0695739999999958,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42078208,
+          "heapTotal": 12054528,
+          "heapUsed": 6355312,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42340352,
+          "heapTotal": 12054528,
+          "heapUsed": 6470448,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41348
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 3,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 0.07011500000000126,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41771008,
+          "heapTotal": 11792384,
+          "heapUsed": 6354920,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41902080,
+          "heapTotal": 11792384,
+          "heapUsed": 6470056,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 40920
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 3,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 3810.029104,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41791488,
+          "heapTotal": 12054528,
+          "heapUsed": 6346168,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42053632,
+          "heapTotal": 12054528,
+          "heapUsed": 6461128,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41068
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 4,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 3694.228713,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41431040,
+          "heapTotal": 12054528,
+          "heapUsed": 6345944,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41693184,
+          "heapTotal": 12054528,
+          "heapUsed": 6460904,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 40716
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 4,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 0.07478199999999902,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42024960,
+          "heapTotal": 12054528,
+          "heapUsed": 6347296,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42287104,
+          "heapTotal": 12054528,
+          "heapUsed": 6462432,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41472
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 5,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 0.06577800000000167,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42065920,
+          "heapTotal": 12054528,
+          "heapUsed": 6355328,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42196992,
+          "heapTotal": 12054528,
+          "heapUsed": 6470464,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41384
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 5,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 3867.158633,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41775104,
+          "heapTotal": 11792384,
+          "heapUsed": 6345496,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 41906176,
+          "heapTotal": 11792384,
+          "heapUsed": 6460456,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 40960
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 6,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 4020.0695090000004,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 41967616,
+          "heapTotal": 12054528,
+          "heapUsed": 6345856,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42229760,
+          "heapTotal": 12054528,
+          "heapUsed": 6460816,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41240
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 6,
+      "scenario": {
+        "kind": "malformed",
+        "length": 100000
+      },
+      "result": {
+        "ms": 0.12838100000000452,
+        "inputBytes": 100008,
+        "count": 0,
+        "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "before": {
+          "rss": 42004480,
+          "heapTotal": 11792384,
+          "heapUsed": 6355640,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 42266624,
+          "heapTotal": 12054528,
+          "heapUsed": 6470200,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 41276
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 0,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 2.6727559999999997,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43098112,
+          "heapTotal": 12173312,
+          "heapUsed": 6725784,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 46669824,
+          "heapTotal": 16900096,
+          "heapUsed": 11097568,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 46080
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 0,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 2.3253070000000022,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43311104,
+          "heapTotal": 12173312,
+          "heapUsed": 6727600,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 45252608,
+          "heapTotal": 16900096,
+          "heapUsed": 9366056,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 44700
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 1,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 2.295133,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43327488,
+          "heapTotal": 12173312,
+          "heapUsed": 6729288,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 45461504,
+          "heapTotal": 17162240,
+          "heapUsed": 9369056,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 44904
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 1,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 2.4454470000000015,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 42840064,
+          "heapTotal": 12435456,
+          "heapUsed": 6726056,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 46551040,
+          "heapTotal": 17162240,
+          "heapUsed": 11097456,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 45968
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 2,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 2.6594459999999955,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43008000,
+          "heapTotal": 12435456,
+          "heapUsed": 6726024,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 46641152,
+          "heapTotal": 17162240,
+          "heapUsed": 11097352,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 46056
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 2,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 2.360680000000002,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43245568,
+          "heapTotal": 12435456,
+          "heapUsed": 6727480,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 44933120,
+          "heapTotal": 17162240,
+          "heapUsed": 9363312,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 44392
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 3,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 1.7978610000000046,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43028480,
+          "heapTotal": 12435456,
+          "heapUsed": 6727408,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 45383680,
+          "heapTotal": 17162240,
+          "heapUsed": 9382320,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 44700
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 3,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 3.2010040000000046,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43327488,
+          "heapTotal": 12435456,
+          "heapUsed": 6725280,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 46915584,
+          "heapTotal": 17162240,
+          "heapUsed": 11097408,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 46320
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 4,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 2.3779559999999975,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43098112,
+          "heapTotal": 12173312,
+          "heapUsed": 6726216,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 46690304,
+          "heapTotal": 16900096,
+          "heapUsed": 11097584,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 46104
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 4,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 1.8724419999999995,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43245568,
+          "heapTotal": 12435456,
+          "heapUsed": 6727416,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 45137920,
+          "heapTotal": 17162240,
+          "heapUsed": 9387904,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 44592
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 5,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 1.6937560000000005,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43282432,
+          "heapTotal": 12435456,
+          "heapUsed": 6727408,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 45416448,
+          "heapTotal": 17162240,
+          "heapUsed": 9406264,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 44864
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 5,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 2.1303979999999996,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43298816,
+          "heapTotal": 12435456,
+          "heapUsed": 6725696,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 47243264,
+          "heapTotal": 17162240,
+          "heapUsed": 11097672,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 46516
+      }
+    },
+    {
+      "variant": "baseline",
+      "rep": 6,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 2.3969140000000024,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43397120,
+          "heapTotal": 12435456,
+          "heapUsed": 6725008,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 47394816,
+          "heapTotal": 17162240,
+          "heapUsed": 11097640,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 46792
+      }
+    },
+    {
+      "variant": "candidate",
+      "rep": 6,
+      "scenario": {
+        "kind": "valid",
+        "length": 10000
+      },
+      "result": {
+        "ms": 2.647466999999999,
+        "inputBytes": 378890,
+        "count": 10000,
+        "hash": "6fc869bfa92643d81dd1e2e96616543d45369e715c77ff853044974d977cd420",
+        "before": {
+          "rss": 43241472,
+          "heapTotal": 12435456,
+          "heapUsed": 6727480,
+          "external": 2398412,
+          "arrayBuffers": 143611
+        },
+        "after": {
+          "rss": 45424640,
+          "heapTotal": 17162240,
+          "heapUsed": 9402400,
+          "external": 2398416,
+          "arrayBuffers": 143611
+        },
+        "maxRssKiB": 44740
+      }
+    }
+  ],
+  "corpus": {
+    "baseline": {
+      "files": 10814,
+      "bytes": 458971865,
+      "markerFiles": 0,
+      "output": [],
+      "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "candidate": {
+      "files": 10814,
+      "bytes": 458971865,
+      "markerFiles": 0,
+      "output": [],
+      "hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  }
+}
