@@ -23,7 +23,6 @@ import { getGfxContainerFile } from "../gfxindex";
 import { getFlags } from "../featureflags";
 import { readPngHeaderDimensions } from "./converter";
 export { Sprite, Image };
-export { readPngHeaderDimensions };
 
 // Decoded PNG buffers are the heaviest thing in memory; bound the image and sprite caches by
 // total bytes (least-recently-accessed eviction) so large texture packs can't grow them without
