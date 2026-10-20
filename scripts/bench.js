@@ -13,7 +13,8 @@
 // Fixture data is generated, so the numbers are comparable between machines only against
 // themselves. Compare a before and an after on one machine; do not compare across machines.
 // Point BENCH_FOCUS_FILE at a real focus file to run the parser and condition scenarios over
-// mod content instead of the generated stand-in.
+// mod content instead of the generated stand-in, and BENCH_PROVINCES_BMP at a real
+// map/provinces.bmp to run the province color pass over a real map.
 
 'use strict';
 
@@ -38,7 +39,8 @@ const { extractConditionValue } = require(path.join(outDir, 'hoiformat', 'condit
 const { countryScope } = require(path.join(outDir, 'hoiformat', 'scope.js'));
 const { htmlEscape } = require(path.join(outDir, 'util', 'html.js'));
 const { StyleTable } = require(path.join(outDir, 'util', 'styletable.js'));
-const { fillEdges } = require(path.join(outDir, 'previewdef', 'worldmap', 'loader', 'provincebmp.js'));
+const { fillEdges, getProvincesByPosition } = require(path.join(outDir, 'previewdef', 'worldmap', 'loader', 'provincebmp.js'));
+const { parseBmp } = require(path.join(outDir, 'util', 'image', 'bmp', 'bmpparser.js'));
 const { DDS } = require(path.join(outDir, 'util', 'image', 'dds', 'dds.js'));
 
 // --- fixtures ---------------------------------------------------------------------------
@@ -118,6 +120,29 @@ function generateProvinceGrid(width, height, provinceSize) {
 		}
 	}
 	return { provinces, colorToProvince, colorByPosition, width, height };
+}
+
+// A 24-bit bitmap the size of the game's map, or the file BENCH_PROVINCES_BMP names.
+function loadProvinceBmp() {
+	const override = process.env.BENCH_PROVINCES_BMP;
+	if (override) {
+		const buffer = fs.readFileSync(override);
+		const image = parseBmp(buffer.buffer, buffer.byteOffset);
+		return { label: `${path.basename(override)} ${image.width}x${image.height}`, image };
+	}
+	const width = 5632;
+	const height = 2048;
+	const grid = generateProvinceGrid(width, height, 24);
+	const data = Buffer.alloc(width * height * 3);
+	grid.colorByPosition.forEach((color, i) => {
+		data[i * 3] = color & 0xff;
+		data[i * 3 + 1] = (color >> 8) & 0xff;
+		data[i * 3 + 2] = color >> 16;
+	});
+	return {
+		label: `generated ${width}x${height}, ${grid.provinces.length} provinces`,
+		image: { width, height, bitsPerPixel: 24, bytesPerRow: width * 3, data },
+	};
 }
 
 // A square DDS texture, block-compressed when given a FourCC and A8R8G8B8 otherwise. The bytes
@@ -234,6 +259,11 @@ function main() {
 		// fillEdges mutates province.edges, so hand it a fresh set each run.
 		const provinces = grid.provinces.map((p) => ({ color: p.color, warnings: [] }));
 		fillEdges(provinces, grid.colorByPosition, grid.width, grid.height);
+	}, { gc: true });
+
+	const provinceBmp = loadProvinceBmp();
+	bench('getProvincesByPosition', provinceBmp.label, 5, () => {
+		getProvincesByPosition(provinceBmp.image);
 	}, { gc: true });
 
 	// 5. Texture decoding, the cost behind every icon a preview shows. DXT5 is what the game's

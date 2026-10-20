@@ -104,7 +104,7 @@ function byColor<T extends ColorContainer>(provinces: T[]): Record<number, T> {
 	return result;
 }
 
-function getProvincesByPosition(provinceMapImage: BMP): {
+export function getProvincesByPosition(provinceMapImage: BMP): {
 	colorByPosition: Uint32Array;
 	provinces: ColorContainer[];
 } {
@@ -139,9 +139,9 @@ function getProvincesByPosition(provinceMapImage: BMP): {
 	);
 	const bitmapData = provinceMapImage.data;
 	const provinces: ColorContainer[] = [];
-	const colorToProvince: Record<number, ColorContainer> = {};
+	const seenColors = new Set<number>();
+	// Most pixels repeat the one before them, so only a color change needs the set.
 	let previousColor = -1;
-	let previousProvince: ColorContainer | undefined;
 
 	for (
 		let y = provinceMapImage.height - 1,
@@ -159,17 +159,11 @@ function getProvincesByPosition(provinceMapImage: BMP): {
 			const green = bitmapData[sx + 1] ?? 0;
 			const red = bitmapData[sx] ?? 0;
 			const color = (blue << 16) | (green << 8) | red;
-			let province =
-				color === previousColor
-					? previousProvince
-					: colorToProvince[color];
-			if (province === undefined) {
-				province = { color };
-				provinces.push(province);
-				colorToProvince[color] = province;
+			if (color !== previousColor && !seenColors.has(color)) {
+				seenColors.add(color);
+				provinces.push({ color });
 			}
 			previousColor = color;
-			previousProvince = province;
 			colorByPosition[dx] = color;
 		}
 	}

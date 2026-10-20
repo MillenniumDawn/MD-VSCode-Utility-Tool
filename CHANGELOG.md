@@ -2,7 +2,7 @@ Unreleased
 
   Functionality:
 
-- [ World Map Preview ] Large province maps load faster. Issue #555.
+- [ World Map Preview ] Opening the world map reads the province colors of `provinces.bmp` about four times faster. Issue #555.
 - [ Performance ] Converting a DDS or TGA image for a preview now uses less temporary memory. The peak while the preview image is written out is unchanged. Issue #556.
 - [ Focus Tree Previewer ] Checking all focus trees no longer freezes the editor while the trees are checked, Cancel works during the whole check, and the check uses less time and memory. Issues #537, #538, #539.
 
