@@ -1,6 +1,5 @@
-import { loadEntrypoint, takePostedMessages, useEntrypoint } from './setup';
+import { installWindowClock, loadEntrypoint, takePostedMessages, useEntrypoint } from './setup';
 import * as assert from 'assert';
-import { waitFor } from '../waitfor';
 import { hoverDelay } from '../../../webviewsrc/util/hovertooltip';
 import { ConditionComplexExpr } from '../../hoiformat/condition';
 import {
@@ -1068,12 +1067,8 @@ describe('webview/eventtree rendering', () => {
 
     const content = () => document.getElementById('eventtreecontent')!;
     const toggle = (id: string) => document.getElementById(id) as HTMLInputElement;
-    // The effects panel waits out a hover delay before it appears. A test that expects it polls
-    // until it is there; a test that expects nothing has to wait the delay out, with a margin.
-    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const panelOpened = () => waitFor(
-        () => document.querySelectorAll('.ev-effects-tip').length > 0,
-        { message: 'the effects panel never opened' });
+    // The effects panel waits out the hover delay on this clock.
+    let clock: ReturnType<typeof installWindowClock>;
 
     function setToggle(id: string, value: boolean): void {
         const input = toggle(id);
@@ -1126,6 +1121,14 @@ describe('webview/eventtree rendering', () => {
 
     after(() => {
         document.body.innerHTML = previousBody;
+    });
+
+    beforeEach(() => {
+        clock = installWindowClock();
+    });
+
+    afterEach(() => {
+        clock.restore();
     });
 
     it('renders a card per node', () => {
@@ -1309,7 +1312,7 @@ describe('webview/eventtree rendering', () => {
         assert.strictEqual(content().querySelectorAll('.ev-node').length, 4);
     });
 
-    it('marks a card that has effects and shows them on hover', async () => {
+    it('marks a card that has effects and shows them on hover', () => {
         const tips = () => document.querySelectorAll('.ev-effects-tip').length;
         const hover = (type: string) => content()
             .querySelector('.ev-card-option')!
@@ -1319,8 +1322,9 @@ describe('webview/eventtree rendering', () => {
         assert.ok(content().querySelector('.ev-card-option .ev-effects-dot'), 'the option must be marked');
 
         hover('mouseenter');
+        clock.advance(hoverDelay - 1);
         assert.strictEqual(tips(), 0, 'nothing may appear before the hover delay');
-        await panelOpened();
+        clock.advance(1);
         assert.strictEqual(tips(), 1, 'the panel must appear once the delay is up');
         const panel = document.querySelector('.ev-effects-tip')!;
         assert.ok(panel.textContent!.includes('Effects'));
@@ -1330,13 +1334,13 @@ describe('webview/eventtree rendering', () => {
         assert.strictEqual(tips(), 0, 'the panel must go away again');
     });
 
-    it('drops the dot and the panel when effects are off', async () => {
+    it('drops the dot and the panel when effects are off', () => {
         setToggle('show-effects', false);
         assert.strictEqual(content().querySelectorAll('.ev-effects-dot').length, 0);
 
         content().querySelector('.ev-card-option')!.parentElement!
             .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
-        await wait(hoverDelay + 100);
+        clock.advance(hoverDelay);
         assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
 
         setToggle('show-effects', true);
@@ -1345,10 +1349,10 @@ describe('webview/eventtree rendering', () => {
 
     // The panel is a <body> child placed by hand, and the toolbar strip is drawn over it, so a panel
     // put under the strip would simply be invisible.
-    it('keeps the effects panel clear of the toolbar strip', async () => {
+    it('keeps the effects panel clear of the toolbar strip', () => {
         content().querySelector('.ev-card-option')!.parentElement!
             .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
-        await panelOpened();
+        clock.advance(hoverDelay);
         const panel = document.querySelector('.ev-effects-tip') as HTMLElement;
         assert.ok(panel, 'the panel must be open');
         assert.ok(parseFloat(panel.style.top) >= 52, `panel placed at ${panel.style.top}`);
@@ -1357,10 +1361,10 @@ describe('webview/eventtree rendering', () => {
             .dispatchEvent(new (window as any).MouseEvent('mouseleave'));
     });
 
-    it('leaves no panel behind when the file is re-rendered mid-hover', async () => {
+    it('leaves no panel behind when the file is re-rendered mid-hover', () => {
         content().querySelector('.ev-card-option')!.parentElement!
             .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
-        await panelOpened();
+        clock.advance(hoverDelay);
         assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
 
         window.dispatchEvent(new (window as any).MessageEvent('message', {
@@ -1404,10 +1408,10 @@ describe('webview/eventtree rendering', () => {
             assert.ok(!document.body.classList.contains('panning'));
         });
 
-        it('opens no effects panel for a card the drag passes under', async () => {
+        it('opens no effects panel for a card the drag passes under', () => {
             press();
             hover('mouseenter');
-            await wait(hoverDelay + 100);
+            clock.advance(hoverDelay);
             assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
         });
 
@@ -1417,20 +1421,20 @@ describe('webview/eventtree rendering', () => {
             assert.strictEqual(content().querySelectorAll('.ev-node.ev-dim').length, 0);
         });
 
-        it('closes a panel that was already open when the drag starts', async () => {
+        it('closes a panel that was already open when the drag starts', () => {
             hover('mouseenter');
-            await panelOpened();
+            clock.advance(hoverDelay);
             assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
 
             press();
             assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
         });
 
-        it('hovers normally again once the button is released', async () => {
+        it('hovers normally again once the button is released', () => {
             press();
             release();
             hover('mouseenter');
-            await panelOpened();
+            clock.advance(hoverDelay);
             assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
         });
 
@@ -1654,11 +1658,11 @@ describe('webview/eventtree rendering', () => {
             assert.strictEqual(chip.textContent, 'ANQ · 5 hour(s) · after');
         });
 
-        it('shows what the after block does under its own heading', async () => {
+        it('shows what the after block does under its own heading', () => {
             push(afterPayload);
             const wrapper = content().querySelector('.ev-card-event')!.parentElement!;
             wrapper.dispatchEvent(new (window as any).MouseEvent('mouseenter'));
-            await panelOpened();
+            clock.advance(hoverDelay);
 
             const panel = document.querySelector('.ev-effects-tip')!;
             assert.ok(panel, 'the event card must have a panel');
