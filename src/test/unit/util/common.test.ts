@@ -185,6 +185,34 @@ describe("util/common", () => {
 				}
 			}), /third/);
 		});
+
+		for (const reason of [new Error("first failed"), undefined]) {
+			it(`stops starting items after a worker fails with ${reason instanceof Error ? "an Error" : "a falsy reason"}`, async () => {
+				const active = deferred<number>();
+				const failure = deferred<number>();
+				const started: number[] = [];
+				const result = mapLimit([1, 2, 3, 4], 2, async (item) => {
+					started.push(item);
+					if (item === 1) {
+						return active.promise;
+					}
+					if (item === 2) {
+						return failure.promise;
+					}
+					return item;
+				});
+
+				failure.reject(reason);
+				if (reason instanceof Error) {
+					await assert.rejects(result, /first failed/);
+				} else {
+					await assert.rejects(result);
+				}
+				active.resolve(1);
+				await settle();
+				assert.deepStrictEqual(started, [1, 2]);
+			});
+		}
 	});
 
 	describe("createTimeSlicer", () => {
