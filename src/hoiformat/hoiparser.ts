@@ -155,7 +155,8 @@ const tokenRegexStrings: Record<HOITokenType, [string, number]> = {
 	// second dot: `date > 1936.1.1` read as `1936.1` plus a stray `.1` node, and a
 	// `1939.1.1 = { ... }` history block hung off a node named `.1`.
 	date: ["\\d+(?:\\.\\d+){2,}", 45],
-	string: ['"(?:\\\\"|\\\\\\\\|[^"])*"', 10],
+	// Backslashes belong only to the escape branch, so a missing quote cannot backtrack over pairs.
+	string: ['"(?:\\\\[\\s\\S]|[^"\\\\])*"', 10],
 	// The trailing dot is the game's own tolerance, not a nicety: Millennium Dawn writes
 	// `nationalist_drift = 0.` in common/country_leader/00_traits.txt, and without it the whole file
 	// -- every politician trait in the mod -- fails to tokenise. The full-fraction branch is still

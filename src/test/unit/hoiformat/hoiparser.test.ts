@@ -1,4 +1,6 @@
 import * as assert from "assert";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import {
 	Node,
 	NodeValue,
@@ -41,6 +43,27 @@ function tokensOf(node: Node): (Token | null)[] {
 }
 
 describe("hoiformat/hoiparser", () => {
+	it("rejects an unterminated escaped string without blocking the caller", async function () {
+		this.timeout(5000);
+		// Mocha cannot interrupt a synchronous regex; the parent must be able to kill the parser.
+		const { stdout } = await promisify(execFile)(process.execPath, ["-e", `
+			const { parseHoi4File } = require(process.argv[1]);
+			try {
+				parseHoi4File('a = "' + '\\\\'.repeat(120));
+				process.exitCode = 1;
+			} catch (e) {
+				if (e.name !== 'UserError' || !e.message.includes('Invalid token')) {
+					throw e;
+				}
+				process.stdout.write(e.name);
+			}
+		`, require.resolve("../../../hoiformat/hoiparser")], {
+			timeout: 3000,
+			killSignal: "SIGKILL",
+		});
+		assert.strictEqual(stdout, "UserError");
+	});
+
 	describe("a value", () => {
 		const values: [string, NodeValue][] = [
 			["1", 1],
@@ -57,6 +80,9 @@ describe("hoiformat/hoiparser", () => {
 			['""', ""],
 			['"say \\"hi\\""', 'say "hi"'],
 			['"C:\\\\mods"', "C:\\mods"],
+			['"C:\\mods\\new"', "C:\\mods\\new"],
+			['"ends in \\\\"', "ends in \\"],
+			['"unknown \\q escape"', "unknown \\q escape"],
 			['"two\nlines"', "two\nlines"],
 			['"# not a comment"', "# not a comment"],
 			["yes", sym("yes")],
@@ -194,6 +220,7 @@ describe("hoiformat/hoiparser", () => {
 	describe("a file that cannot be read", () => {
 		const failures: [string, string, string][] = [
 			["a character no token starts with", "a = ~", "Invalid token at (1, 4)"],
+			["an escaped quote without a closing quote", 'a = "mods\\"', "Invalid token at (1, 4)"],
 			["an operator where a name belongs", "= 1", "Expect name to be symbol, string or number at (1, 1)"],
 			["a percentage where a name belongs", "50% = 1", "Expect name to be symbol, string or number at (1, 1)"],
 			["a closing brace where a value belongs", "a = }", "Expect string, number, symbol, or { at (1, 4)"],

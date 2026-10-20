@@ -256,18 +256,30 @@ describe("util/image/graphicsloader (headless)", function () {
 		}
 	});
 
-	it("logs a genuine decode failure to console.error", async function () {
-		// Too short to hold a TGA header, so the tga library throws a plain RangeError rather than a UserError.
+	it("returns undefined for a truncated TGA without logging a tool failure", async function () {
 		files["gfx/interface/goals/corrupt.tga"] = Buffer.alloc(4);
 		const spy = spyConsoleError();
 		try {
 			const image = await getImageByPath("gfx/interface/goals/corrupt.tga");
 			assert.strictEqual(image, undefined);
-			assert.ok(
-				spy.calls.length > 0,
-				"a real decode failure should still be logged to console.error",
-			);
+			assert.deepStrictEqual(spy.calls, []);
 		} finally {
+			spy.restore();
+		}
+	});
+
+	it("logs an unexpected decoder failure to console.error", async function () {
+		const decoder = require("../util/image/imagedecoder") as typeof import("../util/image/imagedecoder");
+		const original = decoder.decodeImageToPng;
+		const failure = new Error("unexpected decoder failure");
+		decoder.decodeImageToPng = async () => { throw failure; };
+		files["gfx/interface/goals/broken.tga"] = makeTga();
+		const spy = spyConsoleError();
+		try {
+			assert.strictEqual(await getImageByPath("gfx/interface/goals/broken.tga"), undefined);
+			assert.ok(spy.calls.some((args) => args.includes(failure)));
+		} finally {
+			decoder.decodeImageToPng = original;
 			spy.restore();
 		}
 	});

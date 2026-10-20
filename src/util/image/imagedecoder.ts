@@ -3,9 +3,9 @@
 // host. The pool grows on demand: a single DDS view spawns one worker, while a render that queues
 // many decodes at once (a focus tree) widens the pool so the CPU-bound DDS/TGA->PNG conversion
 // parallelizes across cores instead of serializing on one thread. On the web build (or when no
-// worker can be spawned, after every worker crashes, or whenever a queued job comes back failed) it
-// falls back to a synchronous decode that is byte-for-byte identical to the original inline getImage
-// path.
+// worker can be spawned, after every worker crashes, or when a job fails on its worker for a reason
+// other than bad input or a timeout) it falls back to a synchronous decode that is byte-for-byte
+// identical to the original inline getImage path.
 //
 // worker_threads and every other node-only require live strictly inside `if (!IS_WEB_EXT)` blocks
 // (mirroring fileloader.ts) so terser dead-code-eliminates them from the web bundle.
@@ -365,9 +365,8 @@ export async function decodeImageToPng(
 			try {
 				return await postJob(buffer, kind);
 			} catch (e) {
-				// A decode that did not finish on a worker would freeze the extension host if it were
-				// retried synchronously here; let the caller treat the image as missing instead.
-				if (e instanceof Error && e.name === TIMEOUT_ERROR_NAME) {
+				// Bad input and timed-out decodes must not be retried on the extension host.
+				if (e instanceof UserError || (e instanceof Error && e.name === TIMEOUT_ERROR_NAME)) {
 					throw e;
 				}
 				// `new Worker` reports a missing entry file asynchronously, so a pool that can never
