@@ -21,9 +21,8 @@ const sections = [
 	},
 ];
 
-function withClock(run: (advance: (ms: number) => void) => void): void {
-	const previousGlobalSetTimeout = globalThis.setTimeout;
-	const previousGlobalClearTimeout = globalThis.clearTimeout;
+// `run` returns undefined, not void, so an async callback fails to compile: the clock would be restored before its first await.
+function withClock(run: (advance: (ms: number) => void) => undefined): void {
 	const previousWindowSetTimeout = window.setTimeout;
 	const previousWindowClearTimeout = window.clearTimeout;
 	let now = 0;
@@ -56,15 +55,11 @@ function withClock(run: (advance: (ms: number) => void) => void): void {
 		now = target;
 	};
 
-	(globalThis as any).setTimeout = setTimeout;
-	(globalThis as any).clearTimeout = clearTimeout;
 	(window as any).setTimeout = setTimeout;
 	(window as any).clearTimeout = clearTimeout;
 	try {
 		run(advance);
 	} finally {
-		(globalThis as any).setTimeout = previousGlobalSetTimeout;
-		(globalThis as any).clearTimeout = previousGlobalClearTimeout;
 		(window as any).setTimeout = previousWindowSetTimeout;
 		(window as any).clearTimeout = previousWindowClearTimeout;
 	}
