@@ -17,6 +17,7 @@ v1.1.42
 - [ Testing ] Make hover tooltip timing tests deterministic. Issue #568.
 - Clear the unused-code check on main.
 - [ Testing ] Test dependency markers in the unit suite only. Issue #593.
+- [ Testing ] Run the event tree effects-panel tests on a fake clock. Issue #591.
 
   Bugfixes:
 - [ CI ] Empty release-note seeds no longer add placeholder text. Issue #535.
