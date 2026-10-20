@@ -132,6 +132,48 @@ export function useEntrypoint(listeners: EntrypointListeners): void {
     after(() => listeners.detach());
 }
 
+// Replaces window.setTimeout and window.clearTimeout with a clock that moves only on `advance`, so a
+// test of a delay neither sleeps through it nor races it.
+export function installWindowClock(): { advance: (ms: number) => void; restore: () => void } {
+    const previousSetTimeout = window.setTimeout;
+    const previousClearTimeout = window.clearTimeout;
+    let now = 0;
+    let nextId = 1;
+    const timers = new Map<number, { due: number; callback: () => void }>();
+    (window as any).setTimeout = (callback: () => void, delay = 0) => {
+        const id = nextId++;
+        timers.set(id, { due: now + Number(delay), callback });
+        return id;
+    };
+    (window as any).clearTimeout = (id?: number) => {
+        if (id !== undefined) {
+            timers.delete(id);
+        }
+    };
+    return {
+        advance: (ms: number) => {
+            const target = now + ms;
+            while (true) {
+                const next = [...timers.entries()]
+                    .filter(([, timer]) => timer.due <= target)
+                    .sort(([, a], [, b]) => a.due - b.due)[0];
+                if (!next) {
+                    break;
+                }
+                const [id, timer] = next;
+                timers.delete(id);
+                now = timer.due;
+                timer.callback();
+            }
+            now = target;
+        },
+        restore: () => {
+            (window as any).setTimeout = previousSetTimeout;
+            (window as any).clearTimeout = previousClearTimeout;
+        },
+    };
+}
+
 // Mock acquireVsCodeApi for webview tests. The real `setState` replaces the persisted state
 // wholesale, so this one does too. The object lives for the whole mocha run, so a test that needs
 // a clean slate calls `resetWebviewState()` rather than relying on an earlier file to clear it.

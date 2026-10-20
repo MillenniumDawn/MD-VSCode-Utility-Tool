@@ -190,10 +190,6 @@ function collect(options) {
 			+ bare.map(({ sha, subject }) => `${sha.slice(0, 7)} "${subject}"`).join(', '));
 	}
 
-	if (result.bullets.length === 0) {
-		result.bullets.push(bulletFor(''));
-	}
-
 	return result;
 }
 

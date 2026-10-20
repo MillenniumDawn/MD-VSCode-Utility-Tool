@@ -4,6 +4,7 @@ v1.1.42
 
   Functionality:
 
+- [ World Map Preview ] Opening the world map reads the province colors of `provinces.bmp` about four times faster. Issue #555.
 - [ Performance ] Converting a DDS or TGA image for a preview now uses less temporary memory. The peak while the preview image is written out is unchanged. Issue #556.
 - [ Focus Tree Previewer ] Checking all focus trees no longer freezes the editor while the trees are checked, Cancel works during the whole check, and the check uses less time and memory. Issues #537, #538, #539.
 - Describe this change.
@@ -18,9 +19,10 @@ v1.1.42
 - [ Testing ] Test dependency markers in the unit suite only. Issue #593.
 
   Bugfixes:
+- [ CI ] Empty release-note seeds no longer add placeholder text. Issue #535.
 - [ Previews ] A dependency marker with spaces or tabs after its path now loads its file instead of being ignored. Issue #546.
 - [ Previews ] A malformed `#!` marker line no longer stalls the editor, however long it is. Issue #576.
-- [ Previews ] An unfinished quoted string containing backslashes no longer freezes the editor. Issue #569.
+- [ Previews ] An unfinished quoted string containing backslashes no longer freezes the editor. Issues #569, #592.
 - [ DDS ] A corrupt or unsupported image is no longer decoded twice. Issue #550.
 - [ GFX ] The sprite filter now updates right away after a right-click paste or cut, instead of showing results for the old text. Issue #549.
 - [ Performance ] An older failed or empty file read no longer removes the newer result after a file changes. Issue #552.

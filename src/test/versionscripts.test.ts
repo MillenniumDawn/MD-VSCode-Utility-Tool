@@ -19,6 +19,7 @@ const issueVersionTriage = require('../../../scripts/issue-version-triage');
 const closeFixedIssues = require('../../../scripts/close-fixed-issues');
 const prereleaseVersion = require('../../../scripts/prerelease-version');
 const publishExtension = require('../../../scripts/publish-extension');
+const childProcess = require('child_process');
 const { createBudget } = require('../../../scripts/lib/openrouter');
 
 describe('scripts/bump-version', function () {
@@ -106,8 +107,8 @@ describe('scripts/bump-version', function () {
             assert.strictEqual(bumpVersion.bulletFor('Fix the thing', 42), '- Fix the thing. Issue #42.');
         });
 
-        it('falls back when there is no title', function () {
-            assert.strictEqual(bumpVersion.bulletFor(''), '- Describe this change.');
+        it('returns no bullet when there is no title', function () {
+            assert.strictEqual(bumpVersion.bulletFor(''), '');
         });
     });
 
@@ -131,10 +132,14 @@ describe('scripts/bump-version', function () {
                 'v1.0.0\n\n  Functionality:\n\n- First thing.\n- Second thing.\n');
         });
 
-        it('falls back to a placeholder for an empty list', function () {
+        it('does not invent a bullet for an empty list', function () {
             assert.strictEqual(
                 bumpVersion.prependChangelog('', '1.0.0', []),
-                'v1.0.0\n\n  Functionality:\n\n- Describe this change.\n');
+                'v1.0.0\n\n');
+        });
+
+        it('does not invent a bullet for an empty title', function () {
+            assert.strictEqual(bumpVersion.prependChangelog('', '1.0.0', ''), 'v1.0.0\n\n');
         });
     });
 
@@ -1516,6 +1521,41 @@ describe('scripts/publish-extension', function () {
 });
 
 describe('scripts/pr-bullets', function () {
+    it('does not seed a placeholder when the only merged pull request is a dependency bump', function () {
+        const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pr-bullets-')));
+        const cwd = process.cwd();
+        const git = (...args: string[]) => childProcess.execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+
+        try {
+            git('init', '-q', '-b', 'main');
+            git('config', 'user.email', 'test@example.com');
+            git('config', 'user.name', 'Tester');
+            fs.writeFileSync(path.join(dir, 'file.txt'), 'base\n');
+            git('add', '-A');
+            git('commit', '-qm', 'Base');
+            git('tag', 'v1.0.0');
+            git('commit', '--allow-empty', '-qm', 'Dependency bump');
+
+            process.chdir(dir);
+            mock.method(childProcess, 'execFileSync', (command: string) => {
+                assert.strictEqual(command, 'gh');
+                return JSON.stringify([{
+                    number: 40,
+                    title: 'Bump webpack from 5.1 to 5.2',
+                    body: '',
+                    user: { login: 'dependabot[bot]' },
+                }]);
+            });
+            assert.deepStrictEqual(prBullets.collect({ tag: 'v1.0.0', repo: 'a/b' }), {
+                bullets: [], pullRequests: [], entries: [],
+            });
+        } finally {
+            mock.restoreAll();
+            process.chdir(cwd);
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     describe('bulletsFromPullRequests', function () {
         it('makes one bullet per pull request, in order', function () {
             const result = prBullets.bulletsFromPullRequests([
