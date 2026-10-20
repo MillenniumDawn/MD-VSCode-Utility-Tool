@@ -140,6 +140,8 @@ function getProvincesByPosition(provinceMapImage: BMP): {
 	const bitmapData = provinceMapImage.data;
 	const provinces: ColorContainer[] = [];
 	const colorToProvince: Record<number, ColorContainer> = {};
+	let previousColor = -1;
+	let previousProvince: ColorContainer | undefined;
 
 	for (
 		let y = provinceMapImage.height - 1,
@@ -157,16 +159,18 @@ function getProvincesByPosition(provinceMapImage: BMP): {
 			const green = bitmapData[sx + 1] ?? 0;
 			const red = bitmapData[sx] ?? 0;
 			const color = (blue << 16) | (green << 8) | red;
-			const province = colorToProvince[color];
+			let province =
+				color === previousColor
+					? previousProvince
+					: colorToProvince[color];
 			if (province === undefined) {
-				const newProvince: ColorContainer = { color };
-
-				provinces.push(newProvince);
-				colorToProvince[color] = newProvince;
-				colorByPosition[dx] = color;
-			} else {
-				colorByPosition[dx] = province.color;
+				province = { color };
+				provinces.push(province);
+				colorToProvince[color] = province;
 			}
+			previousColor = color;
+			previousProvince = province;
+			colorByPosition[dx] = color;
 		}
 	}
 
