@@ -4,26 +4,27 @@ The extension has separate paths for image decoding and workspace indexes. On de
 
 ## Image decoding
 
-`mdHoi4Utilities.imageDecodeWorkers` defaults to `4` and accepts values from `1` through `16`. The pool starts small and grows only when concurrent decodes need more capacity. On desktop, a setting of `1` keeps conversion on one worker; increasing it can improve a burst of `.dds` or `.tga` conversions on a machine with spare CPU, but each worker is a separate V8 isolate with its own memory overhead and working image buffers. A larger pool can therefore increase CPU and memory use, especially for large textures, and will not help when the workload is already limited by another part of rendering.
+`mdHoi4Utilities.imageDecodeWorkers` defaults to `4` and accepts values from `1` through `16`. The pool starts small and grows only when concurrent decodes need more capacity. On desktop, a setting of `1` keeps conversion on one worker. A higher value can speed up a burst of `.dds` or `.tga` conversions on a machine with spare CPU. Each worker is a separate V8 isolate with its own memory overhead and working image buffers. A larger pool can use more CPU and memory, especially for large textures. It will not help when another part of rendering is the limit.
 
-`.png` files are passed through without conversion when their PNG header contains valid dimensions. The worker pool handles `.dds` and `.tga` to PNG conversion. It is desktop-only: web builds decode synchronously. If a worker cannot start, all workers fail, or an individual worker job fails, the decoder logs the error and retries that image synchronously. A worker job that runs for 30 seconds is treated as timed out; that image request fails instead of retrying synchronously, since the timed-out decode could otherwise freeze the extension host. A bad image may consequently be absent from the preview while the rest of the preview continues.
+The worker pool converts `.dds` and `.tga` files to PNG. It is desktop-only, and web builds decode synchronously. `.png` files are never converted. They are passed through as they are, and the PNG header is only used to read their dimensions.
 
-If an image is missing, first confirm its `texturefile` path resolves to an existing supported `.dds`, `.tga`, or `.png` file and inspect the VS Code **Output** panel's **HOI4 Modding** channel for `Failed to get image` or an image worker error. A synchronous retry can also fail on malformed or unsupported image data; raising the worker count does not repair an invalid file. For slow image-heavy previews, compare the workload with `imageDecodeWorkers` set to a lower or higher value within its supported range and watch CPU and memory use. After changing the setting, run **Developer: Reload Window** before each comparison: the worker cap is read once when the pool first needs to grow, and an existing pool does not re-read the setting or shrink. The README's browser support note describes the web synchronous path.
+If a worker cannot start, all workers fail, or a single worker job fails, the decoder logs the error and retries that image synchronously. A worker job that runs for 30 seconds is treated as timed out. That image request then fails and is not retried synchronously, because the timed-out decode could freeze the extension host. A bad image can therefore be missing from the preview while the rest of the preview continues.
+
+If an image is missing, first confirm that its `texturefile` path resolves to an existing `.dds`, `.tga` or `.png` file. A missing file is a user error. It goes to `debug()`, which writes to the console, and not to the **HOI4 Modding** channel. Unsupported or malformed image data is usually reported the same way.
+
+`Failed to get image` appears in the **Output** panel's **HOI4 Modding** channel only for other failures, together with any image worker error. A synchronous retry can fail on bad image data, and raising the worker count does not repair an invalid file.
+
+For slow image-heavy previews, compare the workload with `imageDecodeWorkers` set to a lower or higher value within its supported range. Watch CPU and memory use. After changing the setting, run **Developer: Reload Window** before each comparison. The worker cap is read once when the pool first needs to grow, and an existing pool does not re-read the setting or shrink. The README's browser support note describes the web synchronous path.
 
 ## Index settings
 
-The index settings have distinct tradeoffs:
-
-| Setting | Default | Effect and cost |
-|---|---:|---|
-| `mdHoi4Utilities.sharedFocusIndex` | `true` | Indexes shared focus definitions so other trees can use them. The index is built lazily when first needed. |
-| `mdHoi4Utilities.ideaSwapIndex` | `false` | Scans `common` and `events` for `swap_ideas`, allowing the idea preview to draw swap chains. |
-| `mdHoi4Utilities.gfxIndex` | `false` | Indexes sprite definitions for faster icon lookup. It uses memory for the index. |
-| `mdHoi4Utilities.localisationIndex` | `false` | Indexes localisation for translated labels. It uses memory for the index. |
+The README lists the index settings and what each one does under **Indexes and performance** in [Settings](../README.md#settings). Their defaults are in [package.json](../package.json).
 
 Indexes are built lazily on first use. On desktop, their cache is under the extension's VS Code global storage, namespaced by the selected mod file, workspace folders, and resolved parent mods. The cache has a manifest with source file modification times; unchanged records can be reused and added, changed, or removed files are reconciled on a later build. Browser builds do not use the on-disk cache, so index data is rebuilt during each web session. Index watchers update already-built indexes as source files change.
 
-Index parsing uses a shared queue of four tasks on the extension host. Parsing is synchronous work on that host thread, so increasing image workers cannot accelerate it, and running more index parses concurrently would contend with editor messages rather than create more CPU capacity. The queue also yields between files so the editor can continue to respond. Native file walking helps list files; it does not change the parse queue or make the indexes memory-free. Disabling optional indexes can reduce their retained data and avoid builds some previews do not need, at the cost of the related lookup feature.
+Index parsing uses a shared queue of four tasks on the extension host. Parsing is synchronous work on that host thread, so increasing image workers cannot speed it up. Running more index parses at once would contend with editor messages instead of adding CPU capacity. The queue also yields between files so the editor keeps responding.
+
+Native file walking helps list files. It does not change the parse queue or make the indexes memory-free. Turning off an optional index can reduce the data it holds and skip builds some previews do not need. The cost is the lookup feature that index provides.
 
 ## Diagnose a slow or stale preview
 
@@ -38,8 +39,8 @@ If a preview stays stale after editing a dependency file, confirm that the previ
 - [Settings and defaults](../package.json)
 - [Image decoding, worker limits and timeout](../src/util/image/imagedecoder.ts)
 - [PNG passthrough and image errors](../src/util/image/imagecache.ts)
-- [Index parse queue, timeout and status command](../src/util/indexBuild.ts)
+- [Index parse queue, timeout, status command and `[Index]` logs](../src/util/indexBuild.ts)
 - [Index work queue](../src/util/common.ts)
-- [Cache lifecycle and stale-file checks](../src/util/indexCache.ts)
-- [Index timing and logs](../src/util/logger.ts)
+- [Cache lifecycle, stale-file checks and `[Timer]` logs](../src/util/indexCache.ts)
+- [HOI4 Modding output channel](../src/util/logger.ts)
 - [Browser support in the README](../README.md#browser-support)
