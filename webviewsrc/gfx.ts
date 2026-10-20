@@ -72,10 +72,7 @@ window.addEventListener(
 			filterChange(this.value);
 		};
 
+		element.addEventListener("input", changeFunc);
 		element.addEventListener("change", changeFunc);
-		element.addEventListener("keypress", changeFunc);
-		element.addEventListener("keyup", changeFunc);
-		element.addEventListener("paste", changeFunc);
-		element.addEventListener("cut", changeFunc);
 	}),
 );
