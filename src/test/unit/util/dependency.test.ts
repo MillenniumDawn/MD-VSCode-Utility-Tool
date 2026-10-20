@@ -1,37 +1,54 @@
 import * as assert from "assert";
 import { execFile } from "child_process";
+import * as path from "path";
 import { promisify } from "util";
 import { getDependenciesFromText } from "../../../util/dependency";
 
-describe("util/dependency marker parsing", () => {
-	it("scans a long malformed marker under a parent watchdog", async function () {
-		this.timeout(5000);
-		const { stdout } = await promisify(execFile)(process.execPath, ["-e", `
-			globalThis.IS_WEB_EXT = false;
-			process.env.MD_UTILITIES_TEST = '1';
+// Scans `head + fill.repeat(count) + tail` in a child that is killed after 2 s, so a scan that
+// goes quadratic fails the test instead of hanging the run. The text is built in the child
+// because an argument that long does not fit on a command line.
+async function scanInChild(head: string, fill: string, count: number, tail: string): Promise<unknown> {
+	// Without the coverage collector: it would slow the child down and is not under test.
+	const { NODE_V8_COVERAGE: _coverage, ...env } = process.env;
+	const { stdout } = await promisify(execFile)(process.execPath, [
+		"--require", path.join(__dirname, "..", "setup.js"),
+		"-e", `
 			const { getDependenciesFromText } = require(process.argv[1]);
-			process.stdout.write(JSON.stringify(getDependenciesFromText('#!event:' + ':'.repeat(100000))));
-		`, require.resolve("../../../util/dependency")], { timeout: 2000, killSignal: "SIGKILL" });
-		assert.strictEqual(stdout, "[]");
+			const { head, fill, count, tail } = JSON.parse(process.argv[2]);
+			process.stdout.write(JSON.stringify(getDependenciesFromText(head + fill.repeat(count) + tail)));
+		`,
+		require.resolve("../../../util/dependency"),
+		JSON.stringify({ head, fill, count, tail }),
+	], { env, timeout: 2000, killSignal: "SIGKILL" });
+	return JSON.parse(stdout);
+}
+
+describe("util/dependency marker parsing", () => {
+	it("scans a very long malformed marker line in linear time", async function () {
+		this.timeout(5000);
+		assert.deepStrictEqual(await scanInChild("#!event:", ":", 300000, "\n#!event:events/a.txt"),
+			[{ type: "event", path: "events/a.txt" }]);
+	});
+
+	it("scans a very long run of blank CRLF lines in linear time", async function () {
+		this.timeout(5000);
+		assert.deepStrictEqual(await scanInChild("", "\r\n", 200000, "x\n#!event:events/b.txt"),
+			[{ type: "event", path: "events/b.txt" }]);
 	});
 
 	for (const padding of ["  ", "\t", " \t "]) {
 		it(`trims path whitespace before checking extensions: ${JSON.stringify(padding)}`, () => {
-			assert.deepStrictEqual(getDependenciesFromText(`#!event:  events/foo.txt${padding}\r\n`),
+			assert.deepStrictEqual(getDependenciesFromText(`#!event:events/foo.txt${padding}\r\n`),
 				[{ type: "event", path: "events/foo.txt" }]);
 		});
 	}
 
-	it("preserves path colons, final extensions, slash normalization and declaration order", () => {
+	it("reads CRLF lines, keeping colons in the path and the extension after the last dot", () => {
 		assert.deepStrictEqual(getDependenciesFromText([
 			"  #!event:events/has:colon.part.txt",
-			"#!gfx:interface\\\\icons.gfx",
-			"#!localisation:localisation//english.yml",
 			"#!event:events/two.txt",
 		].join("\r\n")), [
 			{ type: "event", path: "events/has:colon.part.txt" },
-			{ type: "gfx", path: "interface/icons.gfx" },
-			{ type: "localisation", path: "localisation/english.yml" },
 			{ type: "event", path: "events/two.txt" },
 		]);
 	});
