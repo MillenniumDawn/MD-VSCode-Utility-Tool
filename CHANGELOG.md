@@ -9,6 +9,10 @@ v1.1.42
 - [ Testing ] Rewrite the core utility tests as pure tests.
 - Hand the editor API to modules at activation so they load without it.
 - [ Testing ] Move the world map and focus tree data tests into the pure suite.
+- Document dependency marker syntax and scope.
+- Document preview performance troubleshooting.
+- Document focused validation commands.
+- [ Testing ] Make hover tooltip timing tests deterministic. Issue #568.
 
   Bugfixes:
 - [ Previews ] A dependency marker with spaces or tabs after its path now loads its file instead of being ignored. Issue #546.
