@@ -1,4 +1,4 @@
-import "./setup";
+import { installWindowClock } from "./setup";
 import * as assert from "assert";
 import {
 	EffectTooltipOptions,
@@ -23,45 +23,11 @@ const sections = [
 
 // `run` returns undefined, not void, so an async callback fails to compile: the clock would be restored before its first await.
 function withClock(run: (advance: (ms: number) => void) => undefined): void {
-	const previousWindowSetTimeout = window.setTimeout;
-	const previousWindowClearTimeout = window.clearTimeout;
-	let now = 0;
-	let nextId = 1;
-	const timers = new Map<number, { due: number; callback: () => void }>();
-	const setTimeout = ((callback: TimerHandler, delay = 0) => {
-		const id = nextId++;
-		timers.set(id, { due: now + Number(delay), callback: callback as () => void });
-		return id;
-	}) as typeof globalThis.setTimeout;
-	const clearTimeout = ((id?: number) => {
-		if (id !== undefined) {
-			timers.delete(id);
-		}
-	}) as typeof globalThis.clearTimeout;
-	const advance = (ms: number) => {
-		const target = now + ms;
-		while (true) {
-			const next = [...timers.entries()]
-				.filter(([, timer]) => timer.due <= target)
-				.sort(([, a], [, b]) => a.due - b.due)[0];
-			if (!next) {
-				break;
-			}
-			const [id, timer] = next;
-			timers.delete(id);
-			now = timer.due;
-			timer.callback();
-		}
-		now = target;
-	};
-
-	(window as any).setTimeout = setTimeout;
-	(window as any).clearTimeout = clearTimeout;
+	const clock = installWindowClock();
 	try {
-		run(advance);
+		run(clock.advance);
 	} finally {
-		(window as any).setTimeout = previousWindowSetTimeout;
-		(window as any).clearTimeout = previousWindowClearTimeout;
+		clock.restore();
 	}
 }
 
