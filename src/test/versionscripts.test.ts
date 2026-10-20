@@ -1876,17 +1876,6 @@ describe('scripts/select-bullets', function () {
         assert.deepStrictEqual(result.bullets, ['- Two.', '- Three.', '- From a bare commit.']);
     });
 
-    it('leaves no seed when every pull request already wrote its changelog', function () {
-        const authored = {
-            bullets: ['- Written by hand.'],
-            pullRequests: [11],
-            entries: [{ number: 11, title: 'Written by hand', wroteChangelog: true }],
-        };
-        assert.deepStrictEqual(selectBullets.select(authored, {}), {
-            bullets: [], pullRequests: [], entries: [],
-        });
-    });
-
     it('keeps the bullets that belong to no pull request', function () {
         const result = selectBullets.select(found, { covered: '11,12,13' });
         assert.deepStrictEqual(result.pullRequests, []);

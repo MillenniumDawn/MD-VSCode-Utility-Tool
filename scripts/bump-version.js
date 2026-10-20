@@ -478,10 +478,7 @@ function bumpedChangelog(changelogText, version, titleOrBullets, issue) {
 	if (promoted === changelogText) {
 		return prependChangelog(changelogText, version, titleOrBullets, issue);
 	}
-	// A promoted section already says what shipped, so an empty seed adds nothing to it.
-	const seeded = Array.isArray(titleOrBullets)
-		? titleOrBullets
-		: (String(titleOrBullets ?? '').trim() ? [bulletFor(titleOrBullets, issue)] : []);
+	const seeded = Array.isArray(titleOrBullets) ? titleOrBullets : toBullets(titleOrBullets, issue);
 	return appendBullets(promoted, version, seeded);
 }
 
