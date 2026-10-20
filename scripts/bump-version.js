@@ -86,7 +86,7 @@ function issueFromBody(body) {
 function bulletFor(title, issue) {
 	let text = String(title ?? '').trim();
 	if (!text) {
-		text = 'Describe this change.';
+		return '';
 	}
 	if (!/[.!?]$/.test(text)) {
 		text += '.';
@@ -121,10 +121,10 @@ function normalizeBullet(bullet) {
 // One title plus issue number, or a ready-made list of bullets -- both end up as a list here.
 function toBullets(titleOrBullets, issue) {
 	if (Array.isArray(titleOrBullets)) {
-		const bullets = titleOrBullets.map(normalizeBullet).filter(Boolean);
-		return bullets.length > 0 ? bullets : [bulletFor('')];
+		return titleOrBullets.map(normalizeBullet).filter(Boolean);
 	}
-	return [bulletFor(titleOrBullets, issue)];
+	const bullet = bulletFor(titleOrBullets, issue);
+	return bullet ? [bullet] : [];
 }
 
 // The same list, grouped by subsection and keeping each group's original order. An entry that is a
@@ -149,11 +149,6 @@ function bySection(titleOrBullets, issue) {
 
 function changelogSection(version, titleOrBullets, issue) {
 	const grouped = bySection(titleOrBullets, issue);
-	// An empty list still produces a section, the way it always has: a placeholder bullet under
-	// Functionality is more useful than a heading-less version number.
-	if (grouped.size === 0) {
-		grouped.set(sections[0], toBullets(titleOrBullets, issue));
-	}
 
 	const body = sections
 		.filter((name) => grouped.has(name))
@@ -483,8 +478,7 @@ function bumpedChangelog(changelogText, version, titleOrBullets, issue) {
 	if (promoted === changelogText) {
 		return prependChangelog(changelogText, version, titleOrBullets, issue);
 	}
-	// A promoted section already says what shipped, so an empty seed adds nothing to it -- unlike a
-	// fresh section, which would rather carry a placeholder than stand there with no bullet at all.
+	// A promoted section already says what shipped, so an empty seed adds nothing to it.
 	const seeded = Array.isArray(titleOrBullets)
 		? titleOrBullets
 		: (String(titleOrBullets ?? '').trim() ? [bulletFor(titleOrBullets, issue)] : []);
