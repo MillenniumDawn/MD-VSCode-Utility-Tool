@@ -335,6 +335,24 @@ describe("previewdef/previewmanager PreviewManager", function () {
 			assert.strictEqual(subscriptions.size, 0);
 		});
 
+		it("lists a preview once when an edit matches several of its dependencies", function () {
+			const manager = new PreviewManager() as any;
+			const technology = { name: "technology" };
+			const other = { name: "other" };
+
+			manager.addPreviewToSubscription(technology, [
+				"common/units/equipment/infantry.txt",
+				"common/units/equipment/air/jet.txt",
+				"common/units/equipment/*",
+				"common/units/equipment/*/*",
+			]);
+			manager.addPreviewToSubscription(other, ["common/units/equipment/*"]);
+
+			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/units/equipment/infantry.txt"), [technology, other]);
+			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/units/equipment/air/jet.txt"), [technology]);
+			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/units/equipment/air/new.txt"), [technology]);
+		});
+
 		it("watches external .txt additions and deletions for dependency refreshes", function () {
 			let created: ((uri: vscode.Uri) => void) | undefined;
 			let deleted: ((uri: vscode.Uri) => void) | undefined;
