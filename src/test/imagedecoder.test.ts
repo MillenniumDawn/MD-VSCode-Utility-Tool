@@ -237,18 +237,11 @@ describe("util/image/imagedecoder", () => {
 				console.error = originalConsoleError;
 			}
 
-			assert.ok(
-				loggedErrors.some(
-					(e) =>
-						e instanceof UserError &&
-						/exceeds the supported maximum/.test(e.message),
-				),
-				"worker should report its image dimension limit error",
-			);
+			assert.deepStrictEqual(loggedErrors, [], "bad input should not be logged as a tool failure");
 			assert.ok(
 				rejection instanceof UserError &&
 				/exceeds the supported maximum/.test(rejection.message),
-				"decode should reject when the sync fallback also enforces the image dimension limit",
+				"decode should preserve the worker image dimension limit error",
 			);
 		});
 
@@ -290,7 +283,7 @@ describe("util/image/imagedecoder", () => {
 			}
 		});
 
-		it("rejects a corrupt PNG via the worker and its sync fallback as a UserError", async () => {
+		it("rejects a corrupt PNG via the worker as a UserError", async () => {
 			const originalConsoleError = console.error;
 			const loggedErrors: unknown[] = [];
 			console.error = (...args: unknown[]) => loggedErrors.push(...args);
@@ -303,21 +296,11 @@ describe("util/image/imagedecoder", () => {
 				console.error = originalConsoleError;
 			}
 
-			// The worker classifies the malformed PNG payload itself, and the decode still rejects as a
-			// user error when its failed job goes through the sync fallback, so getImage treats a corrupt
-			// image as bad input rather than a tool failure on either path.
-			assert.ok(
-				loggedErrors.some(
-					(e) =>
-						e instanceof UserError &&
-						/Unsupported png format/.test(e.message),
-				),
-				"worker should report its png decode failure as a user error",
-			);
+			assert.deepStrictEqual(loggedErrors, [], "bad input should not be logged as a tool failure");
 			assert.ok(
 				rejection instanceof UserError &&
 					/Unsupported png format/.test(rejection.message),
-				"decode should reject with the sync fallback's user-error classification",
+				"decode should preserve the worker's user-error classification",
 			);
 			// Worker survives a decode error: a subsequent valid decode still succeeds.
 			const ok = await decodeImageToPng(makeTga(), "tga");
