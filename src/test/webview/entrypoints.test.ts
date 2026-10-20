@@ -361,6 +361,24 @@ describe("webview entrypoints", () => {
 		);
 	});
 
+	it("filters the GFX sprites on input and shows them all again when cleared", () => {
+		installGfxShell();
+		withQuietScrolling(() => run(gfx, "load", new Event("load")));
+		const filter = document.getElementById("filter") as HTMLInputElement;
+		const display = (id: string) =>
+			(document.getElementById(id) as HTMLDivElement).style.display;
+
+		filter.value = "keep";
+		filter.dispatchEvent(new Event("input"));
+		assert.strictEqual(display("KeepMe"), "inline-block");
+		assert.strictEqual(display("other"), "none");
+
+		filter.value = "";
+		filter.dispatchEvent(new Event("input"));
+		assert.strictEqual(display("KeepMe"), "inline-block");
+		assert.strictEqual(display("other"), "inline-block");
+	});
+
 	it("wires GFX navigators when the page loads", () => {
 		installGfxShell();
 		const navigator = document.getElementById("KeepMe")!;
