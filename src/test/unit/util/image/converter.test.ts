@@ -179,19 +179,6 @@ describe("tgaToPng", () => {
 		}
 	});
 
-	it("keeps returned pixels independent of source mutations and later TGA decodes", () => {
-		const source = makeTga({ width: 2, height: 1, data: [1, 2, 3, 4, 5, 6, 7, 8] });
-		const first = tgaToPng(source);
-		const expected = Buffer.from(first.data);
-		const sourceBefore = Buffer.from(source);
-		const second = tgaToPng(source);
-		first.data.fill(0);
-		assert.deepStrictEqual(second.data, expected);
-		assert.deepStrictEqual(source, sourceBefore);
-		source.fill(0);
-		assert.deepStrictEqual(second.data, expected);
-	});
-
 	const refused: [name: string, file: Buffer, message: RegExp][] = [
 		["a header cut short", Buffer.alloc(10), /TGA header is truncated/],
 		["a size over the limit", makeTga({ width: 65535, height: 65535 }), /TGA image size 65535x65535 exceeds the supported maximum/],

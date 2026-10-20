@@ -1,7 +1,8 @@
 import { UserError } from "../common";
 
-// Millennium Dawn's largest images are about 20 Mpx. At this limit the PNG, source RGBA, and
-// conversion copy can coexist at about 288 MB, with modest headroom for valid images.
+// Millennium Dawn's largest images are about 20 Mpx. At the 24 Mpx limit the RGBA raster is 96 MB
+// and PNG encoding builds an equal-sized filtered copy of it, so about 192 MB coexist at the encode
+// peak, before the compressed output (as large again for noise). Valid images keep modest headroom.
 export const MAX_IMAGE_DIMENSION = 16384;
 export const MAX_IMAGE_PIXELS = 24_000_000;
 
