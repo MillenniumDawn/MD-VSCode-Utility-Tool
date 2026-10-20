@@ -1,8 +1,9 @@
 # Validation guide
 
 Use the Node version in `.nvmrc` (currently 24), then install the locked dependencies with
-`npm ci`. The commands below are the same scripts used by the repository's CI workflows; they
-check different layers and do not all launch VS Code.
+`npm ci`. CI runs most of the commands below (see [`test.yml`](../.github/workflows/test.yml)). Two
+differ: CI runs `npm run test:coverage`, which wraps `npm test`, and no workflow runs
+`npm run compile-ts`. The commands check different layers, and not all of them launch VS Code.
 
 ## Fast local checks
 
@@ -42,11 +43,14 @@ npm run package
 npm run smoke:webviews
 ```
 
-`compile-ts` checks the extension's production TypeScript project. `test:coverage` compiles and runs
-the normal unit and jsdom suites through c8; thresholds are configured in `package.json`. The
-changed-line command checks the generated `coverage/lcov.info` against the named Git base and
-requires 80% coverage for executable changed lines. CI uses the pull request merge commit's first
-parent (`HEAD^1`) as its base.
+`compile-ts` type-checks the extension's production TypeScript project, but it also emits JavaScript
+and declaration files into `out/`, so it is not a check-only command. CI does not run it. CI
+type-checks that project in the ts-loader step of the webpack build behind `npm run package`.
+
+`test:coverage` compiles and runs the normal unit and jsdom suites through c8. Thresholds are
+configured in `package.json`. The changed-line command checks the generated `coverage/lcov.info`
+against the named Git base and requires 80% coverage for executable changed lines. CI uses the pull
+request merge commit's first parent (`HEAD^1`) as its base.
 
 `package` builds the installable VSIX, including the production webpack bundles. `smoke:webviews`
 evaluates the generated production webview bundles to catch load-time failures; it is a bundle
@@ -66,15 +70,11 @@ through `@vscode/test-electron`. The browser runner uses Chromium through `@vsco
 its commit pinned in `src/test/integration/runWebTest.ts`; it runs against the browser smoke
 fixture. Both runners need their corresponding VS Code or browser build available, so the first
 run may download several hundred megabytes. On Linux, the editor runner needs a display server;
-CI provides one with `xvfb-run -a npm run test:integration`. No `--no-sandbox` flag is configured
-by these runners. Do not add it to a local command unless the runner or environment specifically
-requires it and the change is understood.
+CI provides one with `xvfb-run -a npm run test:integration`.
 
-The editor and browser commands exercise a small integration smoke suite, not the full extension
-inside every supported VS Code release or browser. For extension packaging, CI runs lint, Knip,
-duplication detection, coverage, changed-line coverage, VSIX packaging, production webview bundle
-smoke, editor integration, and browser smoke in that order. See `.github/workflows/test.yml` for
-the current workflow.
+The editor and browser commands run a small integration smoke suite, not the full extension inside
+every supported VS Code release or browser. [`test.yml`](../.github/workflows/test.yml) lists the CI
+steps and their order.
 
 ## Compatibility checks against real mods
 
@@ -94,9 +94,8 @@ maintenance.
 
 ## Continuous integration
 
-Pull requests run the test workflow above. A separate compatibility workflow checks the pinned
-real-mod set. Release verification also runs lint and the normal coverage test before packaging;
-the exact jobs and conditions live in `.github/workflows/test.yml`, `.github/workflows/compat.yml`,
-and `.github/workflows/release.yml`. Passing `npm test` locally therefore confirms the unit and
-jsdom suites, but does not by itself confirm VSIX packaging, production bundle loading, the editor
+Pull requests run [`test.yml`](../.github/workflows/test.yml). The pinned real-mod set is checked
+by [`compat.yml`](../.github/workflows/compat.yml), and releases are verified and published by
+[`release.yml`](../.github/workflows/release.yml). Passing `npm test` locally confirms the unit and
+jsdom suites. It does not by itself confirm VSIX packaging, production bundle loading, the editor
 or browser smoke suites, or real-mod compatibility.
