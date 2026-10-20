@@ -10,8 +10,6 @@ import {
 	_resetImageWorkerPathForTest,
 	_terminateImageWorkerForTest,
 	_getWorkerCountForTest,
-	_setImageJobTimeoutForTest,
-	_isWorkerPoolDisabledForTest,
 	_getLiveWorkerCountForTest,
 } from "../util/image/imagedecoder";
 import { UserError } from "../util/common";
@@ -186,128 +184,6 @@ describe("util/image/imagedecoder", () => {
 			_resetImageWorkerPathForTest();
 		});
 
-		it("round-trips a TGA decode through the worker, matching the sync result", async () => {
-			const tga = makeTga();
-			const viaWorker = await decodeImageToPng(tga, "tga");
-			const viaSync = decodeImageToPngSync(tga, "tga");
-			assert.strictEqual(viaWorker.width, viaSync.width);
-			assert.strictEqual(viaWorker.height, viaSync.height);
-			assert.ok(
-				viaWorker.pngBuffer.equals(viaSync.pngBuffer),
-				"worker PNG should equal sync PNG",
-			);
-			assertValidPng(viaWorker.pngBuffer, 2, 2);
-		});
-
-		it("round-trips a DDS decode through the worker, matching the sync result", async () => {
-			const dds = makeDds(4, 4);
-			const viaWorker = await decodeImageToPng(dds, "dds");
-			const viaSync = decodeImageToPngSync(dds, "dds");
-			assert.strictEqual(viaWorker.width, viaSync.width);
-			assert.strictEqual(viaWorker.height, viaSync.height);
-			assert.ok(
-				viaWorker.pngBuffer.equals(viaSync.pngBuffer),
-				"worker PNG should equal sync PNG",
-			);
-		});
-
-		it("decodes PNG content passed as a DDS buffer", async () => {
-			const source = makePng(3, 2);
-			const result = await decodeImageToPng(source, "dds");
-
-			assert.strictEqual(result.width, 3);
-			assert.strictEqual(result.height, 2);
-			assertValidPng(result.pngBuffer, 3, 2);
-			assert.deepStrictEqual(
-				PNG.sync.read(result.pngBuffer).data,
-				PNG.sync.read(source).data,
-			);
-		});
-
-		it("rejects oversized PNG dimensions before decoding in the worker", async () => {
-			const originalConsoleError = console.error;
-			const loggedErrors: unknown[] = [];
-			console.error = (...args: unknown[]) => loggedErrors.push(...args);
-			let rejection: unknown;
-			try {
-				await decodeImageToPng(makePngHeader(16_385, 1), "dds");
-			} catch (e) {
-				rejection = e;
-			} finally {
-				console.error = originalConsoleError;
-			}
-
-			assert.deepStrictEqual(loggedErrors, [], "bad input should not be logged as a tool failure");
-			assert.ok(
-				rejection instanceof UserError &&
-				/exceeds the supported maximum/.test(rejection.message),
-				"decode should preserve the worker image dimension limit error",
-			);
-		});
-
-		it("routes concurrent jobs back to the right callers (id matching)", async () => {
-			const tga = makeTga();
-			const dds = makeDds(4, 4);
-			const [a, b, c] = await Promise.all([
-				decodeImageToPng(tga, "tga"),
-				decodeImageToPng(dds, "dds"),
-				decodeImageToPng(tga, "tga"),
-			]);
-			assert.strictEqual(a.width, 2);
-			assert.strictEqual(b.width, 4);
-			assert.strictEqual(c.width, 2);
-			assert.ok(
-				a.pngBuffer.equals(c.pngBuffer),
-				"same input should yield identical PNG",
-			);
-		});
-
-		it("rejects a malformed DDS via the worker without killing the worker", async () => {
-			const originalConsoleError = console.error;
-			console.error = () => undefined;
-			try {
-				await assert.rejects(
-					decodeImageToPng(Buffer.alloc(8), "dds"),
-					(e: unknown) => e instanceof UserError && /truncated/.test(e.message),
-				);
-				// Worker survives a decode error: a subsequent valid decode still succeeds.
-				const ok = await decodeImageToPng(makeTga(), "tga");
-				assert.strictEqual(ok.width, 2);
-				// A decode error is not a crash: the pool and the live-thread set still agree.
-				assert.strictEqual(
-					_getLiveWorkerCountForTest(),
-					_getWorkerCountForTest(),
-				);
-			} finally {
-				console.error = originalConsoleError;
-			}
-		});
-
-		it("rejects a corrupt PNG via the worker as a UserError", async () => {
-			const originalConsoleError = console.error;
-			const loggedErrors: unknown[] = [];
-			console.error = (...args: unknown[]) => loggedErrors.push(...args);
-			let rejection: unknown;
-			try {
-				await decodeImageToPng(makePng(1, 1).subarray(0, 16), "dds");
-			} catch (e) {
-				rejection = e;
-			} finally {
-				console.error = originalConsoleError;
-			}
-
-			assert.deepStrictEqual(loggedErrors, [], "bad input should not be logged as a tool failure");
-			assert.ok(
-				rejection instanceof UserError &&
-					/Unsupported png format/.test(rejection.message),
-				"decode should preserve the worker's user-error classification",
-			);
-			// Worker survives a decode error: a subsequent valid decode still succeeds.
-			const ok = await decodeImageToPng(makeTga(), "tga");
-			assert.strictEqual(ok.width, 2);
-			assert.strictEqual(_getLiveWorkerCountForTest(), _getWorkerCountForTest());
-		});
-
 		it("grows the pool under a concurrent decode burst", async () => {
 			const tga = makeTga();
 			const dds = makeDds(4, 4);
@@ -413,8 +289,8 @@ describe("util/image/imagedecoder", () => {
 	});
 
 	describe("decodeImageToPng (hanging worker)", () => {
-		// Both paths log through error(); silence it for the block the same way the unusable-worker
-		// block does, since the eviction can land after the `it` has returned.
+		// Dispose logs through error(); silence it for the block the same way the unusable-worker
+		// block does, since that log can land after the `it` has returned.
 		let originalConsoleError: typeof console.error;
 
 		before(() => {
@@ -422,8 +298,6 @@ describe("util/image/imagedecoder", () => {
 			console.error = () => undefined;
 		});
 
-		// Each case re-arms the pool: the dispose case leaves it disabled, and the timeout case
-		// leaves it empty.
 		beforeEach(() => {
 			_setImageWorkerPathForTest(
 				path.resolve(__dirname, "hangingImageWorker.js"),
@@ -454,35 +328,6 @@ describe("util/image/imagedecoder", () => {
 				"disposed decode should fall back to the sync PNG",
 			);
 			assert.strictEqual(_getWorkerCountForTest(), 0);
-		});
-
-		it("rejects a decode that times out and evicts the wedged worker without disabling the pool", async function () {
-			this.timeout(5000);
-			_setImageJobTimeoutForTest(50);
-			const tga = makeTga();
-			const dds = makeDds(4, 4);
-
-			// Two concurrent jobs: the pool may spread them over two wedged workers or queue both on
-			// one; either way each caller is failed and no worker is left behind.
-			const results = await Promise.allSettled([
-				decodeImageToPng(tga, "tga"),
-				decodeImageToPng(dds, "dds"),
-			]);
-			for (const r of results) {
-				assert.strictEqual(r.status, "rejected");
-				if (r.status === "rejected") {
-					assert.ok(r.reason instanceof Error);
-					assert.strictEqual(r.reason.name, "ImageDecodeTimeoutError");
-					assert.match(r.reason.message, /timed out/);
-				}
-			}
-
-			assert.strictEqual(_getWorkerCountForTest(), 0);
-			assert.strictEqual(
-				_isWorkerPoolDisabledForTest(),
-				false,
-				"a timeout should evict one worker, not give up on the pool",
-			);
 		});
 	});
 });

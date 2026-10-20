@@ -120,6 +120,7 @@ describe("util/image/imagedecoder fallback", () => {
 			assert.strictEqual(decoder._getWorkerCountForTest(), 1);
 			assert.strictEqual((await decoder.decodeImageToPng(tga, "tga")).width, 4);
 			assert.deepStrictEqual(syncCalls, []);
+			assert.strictEqual(decoder._getLiveWorkerCountForTest(), decoder._getWorkerCountForTest());
 		});
 	}
 
@@ -159,7 +160,9 @@ describe("util/image/imagedecoder fallback", () => {
 		for (const result of results) {
 			assert.strictEqual(result.status, "rejected");
 			if (result.status === "rejected") {
+				assert.ok(result.reason instanceof Error);
 				assert.strictEqual(result.reason.name, "ImageDecodeTimeoutError");
+				assert.match(result.reason.message, /timed out/);
 			}
 		}
 		assert.deepStrictEqual(syncCalls, []);
