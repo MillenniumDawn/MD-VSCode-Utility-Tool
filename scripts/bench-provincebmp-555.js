@@ -46,6 +46,10 @@ const HEIGHT = 2048;
 const PROVINCE_COUNT = 11500;
 const PAIRS = Number(process.env.BENCH_PAIRS || 11);
 const WARMUPS = 2;
+if (!Number.isInteger(PAIRS) || PAIRS < 2) {
+	console.error('Set BENCH_PAIRS to an integer of at least 2 to calculate sample standard deviation.');
+	process.exit(1);
+}
 
 // Original implementation at base 65b1430. Keep this copy fixed so later runs continue to
 // compare the candidate against the exact issue base after the production source has changed.
@@ -175,6 +179,15 @@ function median(values) {
 	return sorted[Math.floor(sorted.length / 2)];
 }
 
+function sampleStandardDeviation(values) {
+	const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+	const squaredDifferences = values.reduce(
+		(sum, value) => sum + (value - mean) ** 2,
+		0,
+	);
+	return Math.sqrt(squaredDifferences / (values.length - 1));
+}
+
 function timed(fn, bmp) {
 	global.gc();
 	const started = process.hrtime.bigint();
@@ -230,12 +243,12 @@ function main() {
 	console.log(`Correctness: exact province ordering and byte-identical colorByPosition on the large fixture and on a 256x256 fixture with 65,536 unique colors.`);
 	console.log(`Samples: ${PAIRS} baseline/candidate pairs per candidate, alternating order; ${WARMUPS} untimed warmups each.`);
 	console.log(`Memory estimate: output Uint32Array is ${(WIDTH * HEIGHT * 4 / 1048576).toFixed(1)} MiB in all; paged table about ${(tableBytes / 1048576).toFixed(2)} MiB for this palette.`);
-	console.log('\n| Implementation | Paired baseline samples (ms) | Candidate samples (ms) | Median baseline | Median candidate | Paired speedup | Baseline range | Candidate range | Memory tradeoff |');
-	console.log('|---|---|---|---:|---:|---:|---:|---:|---|');
+	console.log('\n| Implementation | n | Paired baseline samples (ms) | Candidate samples (ms) | Median baseline | Median candidate | Paired speedup | Baseline SD | Candidate SD | Baseline range | Candidate range | Memory tradeoff |');
+	console.log('|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|');
 	for (const implementation of implementations) {
 		const { baseline: baseValues, candidate: candidateValues } = samples.get(implementation.name);
 		const pairedSpeedups = candidateValues.map((value, index) => baseValues[index] / value - 1);
-		console.log(`| ${implementation.name} | ${baseValues.map((v) => v.toFixed(2)).join(', ')} | ${candidateValues.map((v) => v.toFixed(2)).join(', ')} | ${median(baseValues).toFixed(2)} ms | ${median(candidateValues).toFixed(2)} ms | ${(median(pairedSpeedups) * 100).toFixed(1)}% | ${Math.min(...baseValues).toFixed(2)}–${Math.max(...baseValues).toFixed(2)} ms | ${Math.min(...candidateValues).toFixed(2)}–${Math.max(...candidateValues).toFixed(2)} ms | ${implementation.memory} |`);
+		console.log(`| ${implementation.name} | ${baseValues.length} | ${baseValues.map((v) => v.toFixed(2)).join(', ')} | ${candidateValues.map((v) => v.toFixed(2)).join(', ')} | ${median(baseValues).toFixed(2)} ms | ${median(candidateValues).toFixed(2)} ms | ${(median(pairedSpeedups) * 100).toFixed(1)}% | ${sampleStandardDeviation(baseValues).toFixed(2)} ms | ${sampleStandardDeviation(candidateValues).toFixed(2)} ms | ${Math.min(...baseValues).toFixed(2)}–${Math.max(...baseValues).toFixed(2)} ms | ${Math.min(...candidateValues).toFixed(2)}–${Math.max(...candidateValues).toFixed(2)} ms | ${implementation.memory} |`);
 	}
 	console.log('Input generation is outside the timer; output and lookup allocations are timed. GC runs before, not during, each sample.');
 }
