@@ -82,6 +82,7 @@ describe("hoiformat/hoiparser", () => {
 			['"C:\\\\mods"', "C:\\mods"],
 			['"C:\\mods\\new"', "C:\\mods\\new"],
 			['"ends in \\\\"', "ends in \\"],
+			['"ends in \\"', "ends in \\"],
 			['"unknown \\q escape"', "unknown \\q escape"],
 			['"two\nlines"', "two\nlines"],
 			['"# not a comment"', "# not a comment"],
@@ -220,7 +221,7 @@ describe("hoiformat/hoiparser", () => {
 	describe("a file that cannot be read", () => {
 		const failures: [string, string, string][] = [
 			["a character no token starts with", "a = ~", "Invalid token at (1, 4)"],
-			["an escaped quote without a closing quote", 'a = "mods\\"', "Invalid token at (1, 4)"],
+			["an escaped quote without a later closing quote", 'a = "mods\\"~', "Invalid token at (1, 12)"],
 			["an operator where a name belongs", "= 1", "Expect name to be symbol, string or number at (1, 1)"],
 			["a percentage where a name belongs", "50% = 1", "Expect name to be symbol, string or number at (1, 1)"],
 			["a closing brace where a value belongs", "a = }", "Expect string, number, symbol, or { at (1, 4)"],

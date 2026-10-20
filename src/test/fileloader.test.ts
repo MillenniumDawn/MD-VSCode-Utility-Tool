@@ -13,6 +13,8 @@ import {
 	parseHoi4FileCached,
 	parseAndResolveHoi4FileCached,
 	readFileFromModOrHOI4,
+	getDescriptorFocusOverlayGfx,
+	getDescriptorIdeaPlaceholderIcon,
 } from "../util/fileloader";
 import { CancelledError, UserError } from "../util/common";
 import { Node, SymbolNode } from "../hoiformat/hoiparser";
@@ -1424,7 +1426,7 @@ describe("util/fileloader parent mods", function () {
 	it("honours the parent's own descriptor.mod replace_path against vanilla", async function () {
 		await write(
 			nodePath.join(parentDir, "descriptor.mod"),
-			'name="parent"\nreplace_path="interface"\n',
+			'name="parent"\nreplace_path="interface"\nfocus_overlay_gfx = { "interface/goals.gfx" }\nidea_placeholder_icon = "gfx/icons/placeholder' + "\\" + '"',
 		);
 		await clearDlcZipCache();
 
@@ -1440,6 +1442,8 @@ describe("util/fileloader parent mods", function () {
 			(await listFilesFromModOrHOI4("interface")).sort(),
 			["chain.gfx", "override.gfx", "shared.gfx", "subonly.gfx"],
 		);
+		assert.deepStrictEqual(await getDescriptorFocusOverlayGfx(), ["interface/goals.gfx"]);
+		assert.deepStrictEqual(await getDescriptorIdeaPlaceholderIcon(), ["gfx/icons/placeholder\\"]);
 	});
 
 	it("treats a parent without a descriptor as replacing nothing", async function () {
