@@ -9,6 +9,24 @@ import {
 } from "../../../../util/image/converter";
 import { isUserError, makeDds, parseDds } from "../../dds";
 
+const TGA = require("tga") as typeof import("tga");
+
+function withoutRasterAllocation(convert: () => PNG, rasterBytes: number): PNG {
+	const original = Buffer.alloc;
+	const sizes: number[] = [];
+	Buffer.alloc = (size, fill?, encoding?) => {
+		sizes.push(size);
+		return original(size, fill, encoding);
+	};
+	try {
+		const png = convert();
+		assert.ok(!sizes.includes(rasterBytes), "the PNG must not allocate an unused RGBA canvas");
+		return png;
+	} finally {
+		Buffer.alloc = original;
+	}
+}
+
 function makePng(width: number, height: number, rgba: number[]): Buffer {
 	const png = new PNG({ width, height });
 	png.data = Buffer.from(rgba);
@@ -85,6 +103,36 @@ describe("ddsToPng", () => {
 	it("refuses a DDS that holds no image", () => {
 		assert.throws(() => ddsToPng({ images: [] } as never), isUserError(/DDS contains no images/));
 	});
+
+	it("uses the decoded view's exact backing storage without a PNG canvas or pixel copy", () => {
+		const dds = parseDds(makeDds({ width: 16, height: 16, data: 16 * 16 * 4 }));
+		const pixels = new Uint8Array(16 * 16 * 4 + 23).subarray(7, 7 + 16 * 16 * 4);
+		pixels.fill(41);
+		dds.images[0].getFullRgba = () => pixels;
+		const png = withoutRasterAllocation(() => ddsToPng(dds), pixels.byteLength);
+		assert.strictEqual(png.data.buffer, pixels.buffer);
+		assert.strictEqual(png.data.byteOffset, pixels.byteOffset);
+		assert.strictEqual(png.data.byteLength, pixels.byteLength);
+		assert.deepStrictEqual(PNG.sync.write(png), makePng(16, 16, Array.from(pixels)));
+	});
+
+	for (const compressed of [false, true]) {
+		it(`keeps ${compressed ? "compressed" : "raw"} conversions independent of their source and later conversions`, () => {
+			const source = makeDds(compressed
+				? { width: 4, height: 4, fourCC: "DXT1", data: [0, 0xf8, 0, 0, 0, 0, 0, 0] }
+				: { width: 4, height: 4, data: Uint8Array.from({ length: 64 }, (_, i) => i) });
+			const dds = parseDds(source);
+			const first = ddsToPng(dds);
+			const expected = Buffer.from(first.data);
+			const sourceBefore = Buffer.from(source);
+			const second = ddsToPng(dds);
+			first.data.fill(0);
+			assert.deepStrictEqual(second.data, expected);
+			assert.deepStrictEqual(source, sourceBefore);
+			source.fill(0);
+			assert.deepStrictEqual(second.data, expected);
+		});
+	}
 });
 
 describe("tgaToPng", () => {
@@ -110,6 +158,26 @@ describe("tgaToPng", () => {
 			assert.deepStrictEqual([png.width, png.height, ...png.data], [fixture.width, fixture.height, ...rgba]);
 		});
 	}
+
+	it("retains the decoder-owned pixels without allocating a PNG canvas or pixel copy", () => {
+		const source = makeTga({ width: 16, height: 16, data: new Array<number>(16 * 16 * 4).fill(37) });
+		const parse = TGA.prototype.parse;
+		let pixels: Uint8Array | undefined;
+		TGA.prototype.parse = function () {
+			parse.call(this);
+			pixels = this.pixels;
+		};
+		try {
+			const png = withoutRasterAllocation(() => tgaToPng(source), 16 * 16 * 4);
+			assert.ok(pixels);
+			assert.strictEqual(png.data.buffer, pixels.buffer);
+			assert.strictEqual(png.data.byteOffset, pixels.byteOffset);
+			assert.strictEqual(png.data.byteLength, pixels.byteLength);
+			assert.deepStrictEqual(PNG.sync.write(png), makePng(16, 16, Array.from(pixels)));
+		} finally {
+			TGA.prototype.parse = parse;
+		}
+	});
 
 	const refused: [name: string, file: Buffer, message: RegExp][] = [
 		["a header cut short", Buffer.alloc(10), /TGA header is truncated/],

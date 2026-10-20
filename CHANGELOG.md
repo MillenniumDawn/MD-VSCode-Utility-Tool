@@ -4,6 +4,7 @@ v1.1.42
 
   Functionality:
 
+- [ Performance ] Converting a DDS or TGA image for a preview now uses less temporary memory. The peak while the preview image is written out is unchanged. Issue #556.
 - Describe this change.
 - [ Testing ] Rewrite the core utility tests as pure tests.
 - Hand the editor API to modules at activation so they load without it.
