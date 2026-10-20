@@ -28,7 +28,8 @@ search a tree by focus id.
 **Event chains.** An events file becomes a graph of which event fires which, with every arrow
 labelled by its condition, delay and `random_list` weight. `FROM` resolves to the event that
 actually fired the call. Filter by event kind, show or hide hidden events, search by id or title,
-and use **Scan References** to find every place in the mod that fires an event.
+and use **Scan References** to find every place in the mod that fires an event. See
+[dependency markers](docs/dependency-markers.md) for adding explicit file references to previews.
 
 **Decisions.** Decision categories, decisions and missions drawn as a graph, with the localised
 names from your mod.
@@ -133,13 +134,16 @@ The Settings editor lists them under the extension in these sections.
 
 **Indexes and performance**
 
+See [performance and troubleshooting](docs/performance-troubleshooting.md) for index and image
+worker tradeoffs, browser behavior, and diagnostics.
+
 | Setting | What it does |
 |---|---|
 | `mdHoi4Utilities.sharedFocusIndex` | Index shared focuses so other trees can pull them in. |
 | `mdHoi4Utilities.ideaSwapIndex` | Scan `common` and `events` for `swap_ideas` so the idea preview can draw idea chains. |
 | `mdHoi4Utilities.gfxIndex` | Index every sprite definition. Faster icon lookups, more memory. |
 | `mdHoi4Utilities.localisationIndex` | Index localisation so previews show translated text. Uses more memory. |
-| `mdHoi4Utilities.imageDecodeWorkers` | Threads used to decode `.dds` / `.tga` images. More is faster on icon-heavy trees. |
+| `mdHoi4Utilities.imageDecodeWorkers` | Desktop worker threads for `.dds` / `.tga` conversion (default 4, range 1–16). Higher values can speed up concurrent decoding when CPU is available, with added CPU and memory use. |
 
 **Auditor**
 
@@ -181,6 +185,8 @@ Suggestions and bug reports are welcome on the
 
 For local checks, use the Node version in `.nvmrc`, then run `npm ci`, `npm run lint`,
 `npm run knip`, `npm test`, `npm run package`, and `npm run smoke:webviews`.
+See the [validation guide](docs/contributing-validation.md) for focused test commands, coverage,
+editor and browser smoke tests, and compatibility checks.
 
 [marketplace]: https://marketplace.visualstudio.com/items?itemName=MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026
 [openvsx]: https://open-vsx.org/extension/MilleniumDawnModTeam/hearts-of-iron-iv-utilities-2026
