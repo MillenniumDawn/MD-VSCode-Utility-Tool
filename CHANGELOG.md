@@ -7,6 +7,7 @@ Unreleased
 - [ Focus Tree Previewer ] Checking all focus trees no longer freezes the editor while the trees are checked, Cancel works during the whole check, and the check uses less time and memory. Issues #537, #538, #539.
 
   Bugfixes:
+- [ CI ] Empty release-note seeds no longer add placeholder text. Issue #535.
 - [ Previews ] A dependency marker with spaces or tabs after its path now loads its file instead of being ignored. Issue #546.
 - [ Previews ] A malformed `#!` marker line no longer stalls the editor, however long it is. Issue #576.
 - [ Previews ] An unfinished quoted string containing backslashes no longer freezes the editor. Issue #569.
