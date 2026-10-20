@@ -392,6 +392,7 @@ export function disposeImageDecodeWorkers(): void {
 export function _setImageWorkerPathForTest(newPath: string): void {
 	workerPath = newPath;
 	workerUnavailable = false;
+	workerPoolSize = undefined;
 	workers.length = 0;
 	pendingJobs.clear();
 	nextJobId = 1;
