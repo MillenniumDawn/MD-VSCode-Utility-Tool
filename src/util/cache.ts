@@ -266,8 +266,7 @@ export class PromiseCache<V> extends Cache<Promise<V>> {
 		super({
 			...rest,
 			factory: (key) => {
-				let wrapped: Promise<V>;
-				wrapped = options.factory(key).then(
+				const wrapped: Promise<V> = options.factory(key).then(
 					(value) => {
 						if ((value === null || value === undefined) && this._cache[key]?.value === wrapped) {
 							this.remove(key);

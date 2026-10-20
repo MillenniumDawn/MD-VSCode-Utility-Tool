@@ -227,13 +227,13 @@ describe("util/cache", () => {
 		it("keeps a replacement when an expired pending value settles empty or fails", async () => {
 			for (const outcome of ["reject", "null", "undefined"] as const) {
 				const old = deferred<unknown>();
-				const fresh = deferred<unknown>();
+				const replacement = deferred<unknown>();
 				let calls = 0;
 				let token = 0;
 				const c = promiseCache<unknown>({
 					expireWhenChange: () => token,
 					nonExpireLife: 200,
-					factory: () => (++calls === 1 ? old.promise : fresh.promise),
+					factory: () => (++calls === 1 ? old.promise : replacement.promise),
 				});
 
 				const oldValue = c.get("a");
@@ -251,7 +251,7 @@ describe("util/cache", () => {
 					await oldValue;
 				}
 
-				fresh.resolve("new value");
+				replacement.resolve("new value");
 				assert.strictEqual(await newValue, "new value");
 				assert.strictEqual(await c.get("a"), "new value");
 				assert.strictEqual(calls, 2);
