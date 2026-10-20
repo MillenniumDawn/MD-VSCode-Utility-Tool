@@ -298,14 +298,20 @@ export async function mapLimit<T, R>(
 
 	const effectiveLimit = Math.max(1, Math.min(limit, items.length));
 	let nextIndex = 0;
+	let failed = false;
 
 	async function worker(): Promise<void> {
-		while (true) {
+		while (!failed) {
 			const index = nextIndex++;
 			if (index >= items.length) {
 				return;
 			}
-			results[index] = await fn(items[index]!, index);
+			try {
+				results[index] = await fn(items[index]!, index);
+			} catch (error) {
+				failed = true;
+				throw error;
+			}
 		}
 	}
 
