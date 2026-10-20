@@ -10,7 +10,7 @@ Unreleased
 - [ CI ] Empty release-note seeds no longer add placeholder text. Issue #535.
 - [ Previews ] A dependency marker with spaces or tabs after its path now loads its file instead of being ignored. Issue #546.
 - [ Previews ] A malformed `#!` marker line no longer stalls the editor, however long it is. Issue #576.
-- [ Previews ] An unfinished quoted string containing backslashes no longer freezes the editor. Issue #569.
+- [ Previews ] An unfinished quoted string containing backslashes no longer freezes the editor. Issues #569, #592.
 - [ DDS ] A corrupt or unsupported image is no longer decoded twice. Issue #550.
 - [ GFX ] The sprite filter now updates right away after a right-click paste or cut, instead of showing results for the old text. Issue #549.
 - [ Performance ] An older failed or empty file read no longer removes the newer result after a file changes. Issue #552.
