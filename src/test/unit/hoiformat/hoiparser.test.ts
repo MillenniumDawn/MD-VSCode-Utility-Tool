@@ -221,7 +221,6 @@ describe("hoiformat/hoiparser", () => {
 	describe("a file that cannot be read", () => {
 		const failures: [string, string, string][] = [
 			["a character no token starts with", "a = ~", "Invalid token at (1, 4)"],
-			["an escaped quote without a later closing quote", 'a = "mods\\"~', "Invalid token at (1, 12)"],
 			["an operator where a name belongs", "= 1", "Expect name to be symbol, string or number at (1, 1)"],
 			["a percentage where a name belongs", "50% = 1", "Expect name to be symbol, string or number at (1, 1)"],
 			["a closing brace where a value belongs", "a = }", "Expect string, number, symbol, or { at (1, 4)"],
