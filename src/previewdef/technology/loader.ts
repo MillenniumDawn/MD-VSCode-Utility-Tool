@@ -27,6 +27,14 @@ export interface TechnologyTreeLoaderResult {
 }
 
 const equipmentFolder = 'common/units/equipment';
+const equipmentFolderDependencies = [`${equipmentFolder}/*`, `${equipmentFolder}/*/*`];
+
+async function listEquipmentFiles(): Promise<string[]> {
+    return uniq(
+        (await listFilesFromModOrHOI4(equipmentFolder, { recursively: true }))
+            .filter(f => f.toLowerCase().endsWith('.txt'))
+            .map(f => `${equipmentFolder}/${f}`.replace(/\/+/g, '/')));
+}
 
 const technologyUIGfxFiles = [
     'interface/countrytechtreeview.gfx',
@@ -64,7 +72,7 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
                 equipmentArchetypes,
                 countryTagsByFolder,
             },
-            dependencies: uniq([this.file, ...gfxDependencies, ...extraGfxFiles, ...guiDependencies, ...equipmentFiles, ...countryTagFiles, ...mergeInLoadResult(guiDepFiles, 'dependencies')]),
+            dependencies: uniq([this.file, ...gfxDependencies, ...extraGfxFiles, ...guiDependencies, ...equipmentDependencies(equipmentFiles), ...countryTagFiles, ...mergeInLoadResult(guiDepFiles, 'dependencies')]),
         };
     }
 
@@ -99,6 +107,12 @@ interface EquipmentArchetypesResult {
     equipmentFiles: string[];
 }
 
+// The globs catch a file created at the equipment root or one folder below it. The loaded files are
+// listed as well because the globs reach no deeper than that.
+export function equipmentDependencies(equipmentFiles: string[]): string[] {
+    return [...equipmentFiles, ...equipmentFolderDependencies];
+}
+
 // A single tech-tree preview renders many technologies, and a workspace can hold many tech-tree
 // files; without caching, every render would re-walk and re-parse all `common/units/equipment`
 // files.
@@ -106,14 +120,25 @@ interface EquipmentArchetypesResult {
 // `life` is a TTL since the last *access* and `get` pushes it forward on every hit, so on its own it
 // could never expire an entry a render reads every few seconds -- and the equipment files are
 // registered as preview dependencies, so an edit to one has to reach the next render. The expiry
-// token is what does that: every file this load read, each with its mtime, which for a file open in
-// the editor is Date.now() and so always looks changed.
+// token is what does that: every equipment file as listed now, each with its mtime, which for a file
+// open in the editor is Date.now() and so always looks changed. The list is read again rather than
+// taken from the load, because a file added since then is in no list the load made, and each part
+// of the token carries its path, so a file added or removed changes it too.
 const equipmentArchetypeCache = new PromiseCache<EquipmentArchetypesResult>({
     factory: () => loadEquipmentArchetypesUncached(),
-    // The setting is a part of the token because with the localisation index off the load
-    // short-circuits to an empty result with no files, which nothing on disk could then invalidate.
     expireWhenChange: (_key, cached) => cached.then(
-        async value => `${getFlags().localisationIndex ? 'on' : 'off'}|${await hoiFilesExpiryToken(value.equipmentFiles)}`,
+        async () => {
+            if (!getFlags().localisationIndex) {
+                return 'off';
+            }
+            try {
+                return `on|${await hoiFilesExpiryToken(await listEquipmentFiles())}`;
+            } catch (e) {
+                // An expiry check must not throw, and a token that differs every time reloads.
+                debug('Failed to list equipment files', e);
+                return `failed@${Date.now()}`;
+            }
+        },
         () => '',
     ),
     life: 3 * 1000,
@@ -133,10 +158,7 @@ async function loadEquipmentArchetypesUncached(): Promise<EquipmentArchetypesRes
         return { equipmentArchetypes: {}, equipmentFiles: [] };
     }
 
-    const relativeFiles = uniq(
-        (await listFilesFromModOrHOI4(equipmentFolder, { recursively: true }))
-            .filter(f => f.toLowerCase().endsWith('.txt'))
-            .map(f => `${equipmentFolder}/${f}`.replace(/\/+/g, '/')));
+    const relativeFiles = await listEquipmentFiles();
 
     const fileArchetypes = await Promise.all(relativeFiles.map(async file => {
         try {

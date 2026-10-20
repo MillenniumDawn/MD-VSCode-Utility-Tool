@@ -12,6 +12,7 @@ Unreleased
 - [ GFX ] The sprite filter now updates right away after a right-click paste or cut, instead of showing results for the old text. Issue #549.
 - [ Performance ] An older failed or empty file read no longer removes the newer result after a file changes. Issue #552.
 - [ Loading ] When one file fails while previews or file lists are loading, the rest of that batch is no longer read in the background after the failure. Issue #551.
+- [ Technology Previewer ] New equipment files in the equipment folder and its immediate subfolders now refresh an open technology tree. Issue #545.
 - [ DDS ] DXT5 textures no longer lose part of their soft edges. Half-transparent pixels beside fully clear or fully solid ones were drawn more transparent than the game draws them.
 - [ DDS ] Textures saved as sRGB R8G8B8A8 no longer show too dark, and B4G4R4A4 textures now show instead of going missing.
 - [ Previews ] A `count_triggers` block whose triggers are all `always = yes` now reads as met instead of never met.
