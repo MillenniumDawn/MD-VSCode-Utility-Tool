@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import { EventEmitter } from "events";
 import * as path from "path";
 import { PNG } from "pngjs";
 import { UserError } from "../../../../util/common";
@@ -9,6 +10,37 @@ import { makeDds } from "../../dds";
 type Decoder = typeof import("../../../../util/image/imagedecoder");
 // These exports are the synchronous decoder's conversion boundary; workers load their own copy.
 const converters = require("../../../../util/image/converter") as typeof import("../../../../util/image/converter");
+// The decoder reads `Worker` off this module each time it spawns, so a test can swap it.
+const threads = require("worker_threads") as typeof import("worker_threads");
+
+const SCRIPTED_WIDTH = 7;
+
+// A worker that takes every job and answers only when the test says so.
+class ScriptedWorker extends EventEmitter {
+	static instances: ScriptedWorker[] = [];
+	readonly stderr = new EventEmitter();
+	readonly posted: { id: number }[] = [];
+	failNextPost = false;
+	constructor() {
+		super();
+		ScriptedWorker.instances.push(this);
+	}
+	postMessage(request: { id: number }): void {
+		if (this.failNextPost) {
+			this.failNextPost = false;
+			throw new Error("postMessage failed");
+		}
+		this.posted.push(request);
+	}
+	answer(): void {
+		const request = this.posted.shift();
+		assert.ok(request, "the worker was handed no job to answer");
+		this.emit("message", { id: request.id, png: new ArrayBuffer(1), width: SCRIPTED_WIDTH, height: 1 });
+	}
+	terminate(): Promise<number> {
+		return Promise.resolve(0);
+	}
+}
 
 describe("util/image/imagedecoder fallback", () => {
 	let decoder: Decoder;
@@ -91,6 +123,22 @@ describe("util/image/imagedecoder fallback", () => {
 		});
 	}
 
+	it("fails only the bad inputs of a queued batch, without retrying or logging", async () => {
+		const results = await Promise.allSettled([
+			decoder.decodeImageToPng(oversizedPng, "dds"),
+			decoder.decodeImageToPng(tga, "tga"),
+			decoder.decodeImageToPng(unsupportedTga, "tga"),
+			decoder.decodeImageToPng(tga, "tga"),
+		]);
+		assert.deepStrictEqual(
+			results.map((r) => r.status === "fulfilled" ? r.value.width : r.reason instanceof UserError),
+			[true, 4, true, 4],
+		);
+		assert.deepStrictEqual(syncCalls, []);
+		assert.deepStrictEqual(logged, []);
+		assert.strictEqual(decoder._getWorkerCountForTest(), 1);
+	});
+
 	it("retries once synchronously for a genuine worker startup failure", async () => {
 		decoder._setImageWorkerPathForTest(path.join(__dirname, "missing-worker.js"));
 		const result = await decoder.decodeImageToPng(tga, "tga");
@@ -143,5 +191,51 @@ describe("util/image/imagedecoder fallback", () => {
 		assert.deepStrictEqual(results, expected);
 		pooled.forEach(({ buffer }, i) => assert.deepStrictEqual(buffer, copies[i]));
 		assert.deepStrictEqual(syncCalls, []);
+	});
+
+	describe("with scripted workers", () => {
+		let realWorker: typeof threads.Worker;
+
+		beforeEach(() => {
+			ScriptedWorker.instances = [];
+			realWorker = threads.Worker;
+			threads.Worker = ScriptedWorker as unknown as typeof threads.Worker;
+		});
+
+		afterEach(() => {
+			threads.Worker = realWorker;
+		});
+
+		it("falls back for every job in flight when a worker exits without an error first", async () => {
+			const pending = Promise.all([1, 2, 3].map(() => decoder.decodeImageToPng(tga, "tga")));
+			ScriptedWorker.instances[0].emit("exit", 1);
+			assert.deepStrictEqual((await pending).map((r) => r.width), [4, 4, 4]);
+			assert.deepStrictEqual(syncCalls, ["tga", "tga", "tga"]);
+			assert.ok(logged.length > 0);
+			assert.strictEqual(decoder._isWorkerPoolDisabledForTest(), true);
+			assert.strictEqual(decoder._getWorkerCountForTest(), 0);
+		});
+
+		it("falls back only for a job the worker cannot be handed, and keeps serving the pool", async () => {
+			const first = decoder.decodeImageToPng(tga, "tga");
+			const worker = ScriptedWorker.instances[0];
+			worker.failNextPost = true;
+			const second = decoder.decodeImageToPng(tga, "tga");
+			const third = decoder.decodeImageToPng(tga, "tga");
+			assert.strictEqual(worker.posted.length, 2);
+			worker.answer();
+			worker.answer();
+			assert.deepStrictEqual(
+				(await Promise.all([first, second, third])).map((r) => r.width),
+				[SCRIPTED_WIDTH, 4, SCRIPTED_WIDTH],
+			);
+			assert.deepStrictEqual(syncCalls, ["tga"]);
+			assert.ok(logged.length > 0);
+			assert.strictEqual(decoder._getWorkerCountForTest(), 1);
+			assert.strictEqual(decoder._isWorkerPoolDisabledForTest(), false);
+			const fourth = decoder.decodeImageToPng(tga, "tga");
+			worker.answer();
+			assert.strictEqual((await fourth).width, SCRIPTED_WIDTH);
+		});
 	});
 });
