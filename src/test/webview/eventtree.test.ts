@@ -1,6 +1,5 @@
 import { loadEntrypoint, takePostedMessages, useEntrypoint } from './setup';
 import * as assert from 'assert';
-import { waitFor } from '../waitfor';
 import { hoverDelay } from '../../../webviewsrc/util/hovertooltip';
 import { ConditionComplexExpr } from '../../hoiformat/condition';
 import {
@@ -1068,12 +1067,78 @@ describe('webview/eventtree rendering', () => {
 
     const content = () => document.getElementById('eventtreecontent')!;
     const toggle = (id: string) => document.getElementById(id) as HTMLInputElement;
-    // The effects panel waits out a hover delay before it appears. A test that expects it polls
-    // until it is there; a test that expects nothing has to wait the delay out, with a margin.
-    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    const panelOpened = () => waitFor(
-        () => document.querySelectorAll('.ev-effects-tip').length > 0,
-        { message: 'the effects panel never opened' });
+    // Keep the effects-panel tests on the browser's timer table, but control it so the hover delay
+    // and polling do not spend wall-clock time. Polling uses window.setTimeout too, so it advances
+    // with the same clock as the panel.
+    const windowTimers = (() => {
+        const timers = new Map<number, { due: number; callback: () => void }>();
+        const originalSetTimeout = window.setTimeout;
+        const originalClearTimeout = window.clearTimeout;
+        let now = 0;
+        let nextId = 0;
+
+        return {
+            get now() {
+                return now;
+            },
+            install() {
+                (window as any).setTimeout = (callback: () => void, delay = 0) => {
+                    const id = nextId++;
+                    timers.set(id, { due: now + Math.max(0, delay), callback });
+                    return id;
+                };
+                (window as any).clearTimeout = (id: number) => {
+                    timers.delete(id);
+                };
+            },
+            advance(ms: number) {
+                const end = now + ms;
+                for (;;) {
+                    const due = Array.from(timers.entries())
+                        .filter(([, timer]) => timer.due <= end)
+                        .sort(([leftId, left], [rightId, right]) => left.due - right.due || leftId - rightId)[0];
+                    if (!due) {
+                        break;
+                    }
+                    const [id, timer] = due;
+                    timers.delete(id);
+                    now = timer.due;
+                    timer.callback();
+                }
+                now = end;
+            },
+            reset() {
+                timers.clear();
+                now = 0;
+                nextId = 0;
+            },
+            restore() {
+                (window as any).setTimeout = originalSetTimeout;
+                (window as any).clearTimeout = originalClearTimeout;
+            },
+        };
+    })();
+
+    const panelOpened = () => new Promise<void>((resolve, reject) => {
+        const timeout = 2000;
+        const deadline = windowTimers.now + timeout;
+        const poll = () => {
+            if (document.querySelectorAll('.ev-effects-tip').length > 0) {
+                resolve();
+            } else if (windowTimers.now >= deadline) {
+                reject(new Error(`the effects panel never opened within ${timeout}ms`));
+            } else {
+                window.setTimeout(poll, 10);
+            }
+        };
+        poll();
+    });
+
+    const openPanel = async () => {
+        const opened = panelOpened();
+        windowTimers.advance(hoverDelay);
+        await opened;
+    };
 
     function setToggle(id: string, value: boolean): void {
         const input = toggle(id);
@@ -1120,12 +1185,18 @@ describe('webview/eventtree rendering', () => {
     before(() => {
         previousBody = document.body.innerHTML;
         document.body.innerHTML = shellHtml;
+        windowTimers.install();
         // The module binds its renderer to window load, as the webview does.
         window.dispatchEvent(new (window as any).Event('load'));
     });
 
     after(() => {
+        windowTimers.restore();
         document.body.innerHTML = previousBody;
+    });
+
+    afterEach(() => {
+        windowTimers.reset();
     });
 
     it('renders a card per node', () => {
@@ -1320,7 +1391,11 @@ describe('webview/eventtree rendering', () => {
 
         hover('mouseenter');
         assert.strictEqual(tips(), 0, 'nothing may appear before the hover delay');
-        await panelOpened();
+        const opened = panelOpened();
+        windowTimers.advance(Math.max(0, hoverDelay - 1));
+        assert.strictEqual(tips(), 0, 'nothing may appear before the hover delay has elapsed');
+        windowTimers.advance(1);
+        await opened;
         assert.strictEqual(tips(), 1, 'the panel must appear once the delay is up');
         const panel = document.querySelector('.ev-effects-tip')!;
         assert.ok(panel.textContent!.includes('Effects'));
@@ -1336,7 +1411,7 @@ describe('webview/eventtree rendering', () => {
 
         content().querySelector('.ev-card-option')!.parentElement!
             .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
-        await wait(hoverDelay + 100);
+        windowTimers.advance(hoverDelay + 100);
         assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
 
         setToggle('show-effects', true);
@@ -1348,7 +1423,7 @@ describe('webview/eventtree rendering', () => {
     it('keeps the effects panel clear of the toolbar strip', async () => {
         content().querySelector('.ev-card-option')!.parentElement!
             .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
-        await panelOpened();
+        await openPanel();
         const panel = document.querySelector('.ev-effects-tip') as HTMLElement;
         assert.ok(panel, 'the panel must be open');
         assert.ok(parseFloat(panel.style.top) >= 52, `panel placed at ${panel.style.top}`);
@@ -1360,7 +1435,7 @@ describe('webview/eventtree rendering', () => {
     it('leaves no panel behind when the file is re-rendered mid-hover', async () => {
         content().querySelector('.ev-card-option')!.parentElement!
             .dispatchEvent(new (window as any).MouseEvent('mouseenter'));
-        await panelOpened();
+        await openPanel();
         assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
 
         window.dispatchEvent(new (window as any).MessageEvent('message', {
@@ -1407,7 +1482,7 @@ describe('webview/eventtree rendering', () => {
         it('opens no effects panel for a card the drag passes under', async () => {
             press();
             hover('mouseenter');
-            await wait(hoverDelay + 100);
+            windowTimers.advance(hoverDelay + 100);
             assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
         });
 
@@ -1419,7 +1494,7 @@ describe('webview/eventtree rendering', () => {
 
         it('closes a panel that was already open when the drag starts', async () => {
             hover('mouseenter');
-            await panelOpened();
+            await openPanel();
             assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
 
             press();
@@ -1430,7 +1505,7 @@ describe('webview/eventtree rendering', () => {
             press();
             release();
             hover('mouseenter');
-            await panelOpened();
+            await openPanel();
             assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 1);
         });
 
@@ -1658,7 +1733,7 @@ describe('webview/eventtree rendering', () => {
             push(afterPayload);
             const wrapper = content().querySelector('.ev-card-event')!.parentElement!;
             wrapper.dispatchEvent(new (window as any).MouseEvent('mouseenter'));
-            await panelOpened();
+            await openPanel();
 
             const panel = document.querySelector('.ev-effects-tip')!;
             assert.ok(panel, 'the event card must have a panel');
