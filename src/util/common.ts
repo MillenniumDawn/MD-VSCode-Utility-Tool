@@ -329,7 +329,7 @@ export async function mapLimit<T, R>(
  * microtask would run before the host gets to service any of its pending IO or RPC, which is the
  * whole point of yielding here.
  */
-function yieldToEventLoop(): Promise<void> {
+export function yieldToEventLoop(): Promise<void> {
 	return new Promise((resolve) => {
 		setImmediate(resolve);
 	});

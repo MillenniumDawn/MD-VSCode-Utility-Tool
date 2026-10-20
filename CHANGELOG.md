@@ -5,6 +5,7 @@ v1.1.42
   Functionality:
 
 - [ Performance ] Converting a DDS or TGA image for a preview now uses less temporary memory. The peak while the preview image is written out is unchanged. Issue #556.
+- [ Focus Tree Previewer ] Checking all focus trees no longer freezes the editor while the trees are checked, Cancel works during the whole check, and the check uses less time and memory. Issues #537, #538, #539.
 - Describe this change.
 - [ Testing ] Rewrite the core utility tests as pure tests.
 - Hand the editor API to modules at activation so they load without it.
