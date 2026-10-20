@@ -12,7 +12,8 @@ import {
 } from "../../util/fileloader";
 import { localize } from "../../util/i18n";
 import { isRecord } from "../../util/messageguards";
-import { ProgressReport, withCancellableProgress } from "../../util/progress";
+import { createTimeSlicer, yieldToEventLoop } from "../../util/common";
+import { ProgressReport, uncancelledToken, withCancellableProgress } from "../../util/progress";
 import { getConfiguration } from "../../util/vsccommon";
 import {
 	convertFocusFileNodeToJson,
@@ -50,25 +51,63 @@ export const auditReportFileName = "focus-tree-audit.md";
  * the defining file instead, it is listed once, where it has to be fixed.
  */
 export function collectFocusWarnings(parsed: ParsedFocusFile[]): FileWarnings[] {
+	const work = collectFocusWarningSteps(parsed, getFlags().useConditionInFocus);
+	let next = work.next();
+	while (!next.done) {
+		next = work.next();
+	}
+	return next.value;
+}
+
+export async function collectFocusWarningsAsync(
+	parsed: ParsedFocusFile[],
+	token: Pick<vscode.CancellationToken, "isCancellationRequested"> = uncancelledToken,
+): Promise<FileWarnings[] | undefined> {
+	const work = collectFocusWarningSteps(parsed, getFlags().useConditionInFocus);
+	const slice = createTimeSlicer();
+	while (!token.isCancellationRequested) {
+		const next = work.next();
+		if (next.done) {
+			// Even a small audit must service a pending cancel before publishing its report.
+			await yieldToEventLoop();
+			return token.isCancellationRequested ? undefined : next.value;
+		}
+		await slice();
+	}
+	return undefined;
+}
+
+function* collectFocusWarningSteps(
+	parsed: ParsedFocusFile[],
+	useConditionInFocus: boolean,
+): Generator<void, FileWarnings[]> {
 	const treesByFile = new Map<string, FocusTree[]>();
-	for (const { path: filePath, file } of parsed) {
-		treesByFile.set(filePath, getFocusTreeWithFocusFile(file, [], filePath, {}));
+	const importers: ParsedFocusFile[] = [];
+	for (const entry of parsed) {
+		const { path: filePath, file } = entry;
+		const importsShared = useConditionInFocus && file.focus_tree.some(
+			(tree) => extractOrListIds(tree.shared_focus).length > 0,
+		);
+		if (importsShared) {
+			importers.push(entry);
+		}
+		// An importer's own trees are rebuilt with donors below, so this pass only has to supply its
+		// shared and joint focuses.
+		const firstPass = importsShared ? { ...file, focus_tree: [] } : file;
+		treesByFile.set(filePath, getFocusTreeWithFocusFile(firstPass, [], filePath, {}, useConditionInFocus));
+		yield;
 	}
 
 	// The preview merges a tree's shared focuses only with conditions on; without them the first
 	// pass is already what it shows.
-	if (getFlags().useConditionInFocus) {
+	if (useConditionInFocus) {
 		const sharedTrees = [...treesByFile.entries()].flatMap(([filePath, trees]) =>
 			trees.filter((tree) => tree.isSharedFocues).map((tree) => ({ filePath, tree })),
 		);
-		for (const { path: filePath, file } of parsed) {
-			const usesSharedFocuses = file.focus_tree.some(
-				(tree) => extractOrListIds(tree.shared_focus).length > 0,
-			);
-			if (usesSharedFocuses) {
-				const donors = sharedTrees.filter((s) => s.filePath !== filePath).map((s) => s.tree);
-				treesByFile.set(filePath, getFocusTreeWithFocusFile(file, donors, filePath, {}));
-			}
+		for (const { path: filePath, file } of importers) {
+			const donors = sharedTrees.filter((s) => s.filePath !== filePath).map((s) => s.tree);
+			treesByFile.set(filePath, getFocusTreeWithFocusFile(file, donors, filePath, {}, useConditionInFocus));
+			yield;
 		}
 	}
 
@@ -196,7 +235,10 @@ async function buildFocusTreeAuditReport(
 		}
 		try {
 			const [buffer] = await readFileFromModOrHOI4(filePath, options);
-			const node = parseHoi4File(buffer.toString());
+			if (progress.token.isCancellationRequested) {
+				return undefined;
+			}
+			const node = parseHoi4File(buffer.toString(), "", { keepTokens: false });
 			return { path: filePath, file: convertFocusFileNodeToJson(node, {}) };
 		} catch (e) {
 			return { path: filePath, parseError: e instanceof Error ? e.message : String(e) };
@@ -214,7 +256,11 @@ async function buildFocusTreeAuditReport(
 		.filter((f): f is { path: string; parseError: string } => "parseError" in f)
 		.map((f) => ({ file: f.path, warnings: [], parseError: f.parseError }));
 
-	return formatFocusWarningReport([...collectFocusWarnings(parsed), ...failed], files.length);
+	const warnings = await collectFocusWarningsAsync(parsed, progress.token);
+	if (warnings === undefined) {
+		return undefined;
+	}
+	return formatFocusWarningReport([...warnings, ...failed], files.length);
 }
 
 function reportFolderUri(folder: string): vscode.Uri {

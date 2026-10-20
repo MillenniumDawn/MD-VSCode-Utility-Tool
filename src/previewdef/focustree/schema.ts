@@ -323,6 +323,7 @@ export function getFocusTreeWithFocusFile(
 	sharedFocusTrees: FocusTree[],
 	filePath: string,
 	constants: {},
+	useConditionInFocus = getFlags().useConditionInFocus,
 ): FocusTree[] {
 	const focusTrees: FocusTree[] = [];
 	const sharedConditionExprs: ConditionItem[] = [];
@@ -349,7 +350,7 @@ export function getFocusTreeWithFocusFile(
 	// Without useConditionInFocus no tree merges shared focuses, so the pseudo-trees are the only
 	// place their overlaps are checked, and every pair stays in.
 	const importRoots =
-		(hasSharedFocuses || hasJointFocuses) && getFlags().useConditionInFocus
+		(hasSharedFocuses || hasJointFocuses) && useConditionInFocus
 			? computeImportRoots({ ...jointFocuses, ...sharedFocuses })
 			: undefined;
 
@@ -413,7 +414,7 @@ export function getFocusTreeWithFocusFile(
 			constants,
 		);
 
-		if (getFlags().useConditionInFocus) {
+		if (useConditionInFocus) {
 			for (const sharedFocus of extractOrListIds(focusTree.shared_focus)) {
 				addSharedFocus(
 					focuses,

@@ -3,6 +3,7 @@ Unreleased
   Functionality:
 
 - [ Performance ] Converting a DDS or TGA image for a preview now uses less temporary memory. The peak while the preview image is written out is unchanged. Issue #556.
+- [ Focus Tree Previewer ] Checking all focus trees no longer freezes the editor while the trees are checked, Cancel works during the whole check, and the check uses less time and memory. Issues #537, #538, #539.
 
   Bugfixes:
 - [ Previews ] A dependency marker with spaces or tabs after its path now loads its file instead of being ignored. Issue #546.
