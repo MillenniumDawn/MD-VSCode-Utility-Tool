@@ -24,6 +24,44 @@ async function scanInChild(head: string, fill: string, count: number, tail: stri
 }
 
 describe("util/dependency marker parsing", () => {
+	const cases: [string, string[], { type: string; path: string }[]][] = [
+		["nothing from ordinary lines and comments", ["", "name = 1", "# a regular comment"], []],
+		["txt and yml files, and a file whose extension is its type", [
+			"#!event:events/foo.txt",
+			"#!localisation:localisation/replace/english.yml",
+			"#!sprite:data/foo.sprite",
+			"#!sprite:gfx/sprite.gfx",
+			"#!event:events/foo.png",
+		], [
+			{ type: "event", path: "events/foo.txt" },
+			{ type: "localisation", path: "localisation/replace/english.yml" },
+			{ type: "sprite", path: "data/foo.sprite" },
+		]],
+		["markers in declaration order", [
+			"#!event:events/a.txt",
+			"#!localisation:localisation/a.yml",
+			"#!event:events/b.txt",
+		], [
+			{ type: "event", path: "events/a.txt" },
+			{ type: "localisation", path: "localisation/a.yml" },
+			{ type: "event", path: "events/b.txt" },
+		]],
+		["one forward slash for each run of slashes or backslashes", [
+			"#!event:events\\\\sub\\\\foo.txt",
+			"#!event:events//sub//bar.txt",
+		], [
+			{ type: "event", path: "events/sub/foo.txt" },
+			{ type: "event", path: "events/sub/bar.txt" },
+		]],
+		["a path with spaces after the colon", ["#!event:  events/foo.txt"], [{ type: "event", path: "events/foo.txt" }]],
+	];
+
+	for (const [title, lines, expected] of cases) {
+		it(`reads ${title}`, () => {
+			assert.deepStrictEqual(getDependenciesFromText(lines.join("\n") + "\n"), expected);
+		});
+	}
+
 	it("scans a very long malformed marker line in linear time", async function () {
 		this.timeout(5000);
 		assert.deepStrictEqual(await scanInChild("#!event:", ":", 300000, "\n#!event:events/a.txt"),
