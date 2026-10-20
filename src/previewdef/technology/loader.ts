@@ -30,11 +30,10 @@ const equipmentFolder = 'common/units/equipment';
 const equipmentFolderDependencies = [`${equipmentFolder}/*`, `${equipmentFolder}/*/*`];
 
 async function listEquipmentFiles(): Promise<string[]> {
-	return uniq(
-		(await listFilesFromModOrHOI4(equipmentFolder, { recursively: true }))
-			.filter((file) => file.toLowerCase().endsWith('.txt'))
-			.map((file) => `${equipmentFolder}/${file}`.replace(/\/+/g, '/')),
-	);
+    return uniq(
+        (await listFilesFromModOrHOI4(equipmentFolder, { recursively: true }))
+            .filter(f => f.toLowerCase().endsWith('.txt'))
+            .map(f => `${equipmentFolder}/${f}`.replace(/\/+/g, '/')));
 }
 
 const technologyUIGfxFiles = [
@@ -108,10 +107,10 @@ interface EquipmentArchetypesResult {
     equipmentFiles: string[];
 }
 
-// These cover newly created files at the equipment root and one directory below it. The discovered
-// paths stay in the list as well, so edits and the cache expiry token still use the actual files.
+// The globs catch a file created at the equipment root or one folder below it. The loaded files are
+// listed as well because the globs reach no deeper than that.
 export function equipmentDependencies(equipmentFiles: string[]): string[] {
-	return uniq([...equipmentFiles, ...equipmentFolderDependencies]);
+    return [...equipmentFiles, ...equipmentFolderDependencies];
 }
 
 // A single tech-tree preview renders many technologies, and a workspace can hold many tech-tree
@@ -121,21 +120,25 @@ export function equipmentDependencies(equipmentFiles: string[]): string[] {
 // `life` is a TTL since the last *access* and `get` pushes it forward on every hit, so on its own it
 // could never expire an entry a render reads every few seconds -- and the equipment files are
 // registered as preview dependencies, so an edit to one has to reach the next render. The expiry
-// token is what does that: every file this load read, each with its mtime, which for a file open in
-// the editor is Date.now() and so always looks changed.
+// token is what does that: every equipment file as listed now, each with its mtime, which for a file
+// open in the editor is Date.now() and so always looks changed. The list is read again rather than
+// taken from the load, because a file added since then is in no list the load made, and each part
+// of the token carries its path, so a file added or removed changes it too.
 const equipmentArchetypeCache = new PromiseCache<EquipmentArchetypesResult>({
     factory: () => loadEquipmentArchetypesUncached(),
-    // The current file list is part of the token as well as the mtimes. Otherwise a new file is
-    // noticed by the preview watcher but absent from the old load's file list, so the cache stays
-    // valid and keeps returning archetypes that do not include it.
     expireWhenChange: (_key, cached) => cached.then(
         async () => {
-			if (!getFlags().localisationIndex) {
-				return 'off';
-			}
-			const equipmentFiles = await listEquipmentFiles();
-			return `on|${equipmentFiles.join('|')}|${await hoiFilesExpiryToken(equipmentFiles)}`;
-		},
+            if (!getFlags().localisationIndex) {
+                return 'off';
+            }
+            try {
+                return `on|${await hoiFilesExpiryToken(await listEquipmentFiles())}`;
+            } catch (e) {
+                // An expiry check must not throw, and a token that differs every time reloads.
+                debug('Failed to list equipment files', e);
+                return `failed@${Date.now()}`;
+            }
+        },
         () => '',
     ),
     life: 3 * 1000,
