@@ -2,6 +2,86 @@ import * as assert from 'assert';
 import { Point, ProvinceEdgeGraph, WorldMapWarning } from '../../../../../previewdef/worldmap/definitions';
 import { concatEdges, fillEdges, validateProvince } from '../../../../../previewdef/worldmap/loader/provincebmp';
 import { localize } from '../../../../../util/i18n';
+import { LoaderSession } from '../../../../../util/loader/loader';
+
+async function withMockedProvinceBuffer(buffer: Buffer, fn: () => Promise<void>): Promise<void> {
+    const fileloader: any = await import('../../../../../util/fileloader');
+    const original = fileloader.readFileFromModOrHOI4;
+    const originalExpiryToken = fileloader.hoiFileExpiryToken;
+    fileloader.readFileFromModOrHOI4 = async () => [buffer, undefined];
+    fileloader.hoiFileExpiryToken = async () => '';
+    try {
+        await fn();
+    } finally {
+        fileloader.readFileFromModOrHOI4 = original;
+        fileloader.hoiFileExpiryToken = originalExpiryToken;
+    }
+}
+
+function buildProvinceBmp(): { buffer: Buffer; colorAt: (x: number, y: number) => number } {
+    const width = 256;
+    const height = 256;
+    const bytesPerRow = width * 3;
+    const dataOffset = 54;
+    const buffer = Buffer.alloc(dataOffset + bytesPerRow * height);
+    buffer.write('BM', 0, 'ascii');
+    buffer.writeUInt32LE(dataOffset, 10);
+    buffer.writeUInt32LE(40, 14);
+    buffer.writeInt32LE(width, 18);
+    buffer.writeInt32LE(height, 22);
+    buffer.writeUInt16LE(24, 28);
+    buffer.writeUInt32LE(0, 30);
+
+    const topLeft = 0x332211;
+    const topRight = 0x665544;
+    const bottomLeft = 0x998877;
+    const colorAt = (x: number, y: number): number =>
+        y < 128
+            ? (x < 128 ? topLeft : topRight)
+            : (x < 128 ? bottomLeft : topLeft);
+
+    for (let y = 0; y < height; y++) {
+        const bmpRow = height - 1 - y;
+        for (let x = 0; x < width; x++) {
+            const color = colorAt(x, y);
+            const offset = dataOffset + bmpRow * bytesPerRow + x * 3;
+            buffer[offset] = color & 0xff;
+            buffer[offset + 1] = (color >>> 8) & 0xff;
+            buffer[offset + 2] = (color >>> 16) & 0xff;
+        }
+    }
+
+    return { buffer, colorAt };
+}
+
+describe('worldmap/provincebmp color lookup', function () {
+    it('preserves every pixel and unique color when loading repeated BMP colors', async function () {
+        const { buffer, colorAt } = buildProvinceBmp();
+        await withMockedProvinceBuffer(buffer, async () => {
+            const { ProvinceBmpLoader } = await import('../../../../../previewdef/worldmap/loader/provincebmp');
+            const result = await new ProvinceBmpLoader('map/provinces.bmp').load(new LoaderSession(true));
+
+            const expected = new Uint32Array(256 * 256);
+            for (let y = 0; y < 256; y++) {
+                for (let x = 0; x < 256; x++) {
+                    expected[y * 256 + x] = colorAt(x, y);
+                }
+            }
+
+            assert.strictEqual(result.result.width, 256);
+            assert.strictEqual(result.result.height, 256);
+            assert.deepStrictEqual(result.result.colorByPosition, expected);
+            assert.deepStrictEqual(result.result.provinces.map((province) => province.color), [
+                0x998877,
+                0x332211,
+                0x665544,
+            ]);
+            assert.strictEqual(result.result.colorToProvince[0x998877], result.result.provinces[0]);
+            assert.strictEqual(result.result.colorToProvince[0x332211], result.result.provinces[1]);
+            assert.strictEqual(result.result.colorToProvince[0x665544], result.result.provinces[2]);
+        });
+    });
+});
 
 function pt(x: number, y: number): Point {
     return { x, y };
