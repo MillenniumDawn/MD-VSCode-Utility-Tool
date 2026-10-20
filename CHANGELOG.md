@@ -1,5 +1,9 @@
 Unreleased
 
+  Functionality:
+
+- [ Performance ] Converting a DDS or TGA image for a preview now uses less temporary memory. The peak while the preview image is written out is unchanged. Issue #556.
+
   Bugfixes:
 - [ DDS ] DXT5 textures no longer lose part of their soft edges. Half-transparent pixels beside fully clear or fully solid ones were drawn more transparent than the game draws them.
 - [ DDS ] Textures saved as sRGB R8G8B8A8 no longer show too dark, and B4G4R4A4 textures now show instead of going missing.

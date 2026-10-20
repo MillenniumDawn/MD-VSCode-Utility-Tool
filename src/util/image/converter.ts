@@ -48,9 +48,12 @@ export function ddsToPng(dds: DDS): PNG {
 		throw new UserError("DDS contains no images");
 	}
 
-	const png = new PNG({ width: img.width, height: img.height });
+	const png = new PNG();
+	png.width = img.width;
+	png.height = img.height;
 	const imgbuffer = img.getFullRgba();
-	png.data = Buffer.from(imgbuffer);
+	// Surface returns fresh RGBA storage; keep it rather than allocating two more image buffers.
+	png.data = Buffer.from(imgbuffer.buffer, imgbuffer.byteOffset, imgbuffer.byteLength);
 
 	return png;
 }
@@ -102,8 +105,11 @@ export function tgaToPng(buffer: Buffer): PNG {
 		throw new UserError(`Unsupported tga format: ${e instanceof Error ? e.message : String(e)}`);
 	}
 
-	const png = new PNG({ width: tga.width, height: tga.height });
-	png.data = Buffer.from(tga.pixels);
+	const png = new PNG();
+	png.width = tga.width;
+	png.height = tga.height;
+	// The decoder owns these pixels and is no longer used after conversion.
+	png.data = Buffer.from(tga.pixels.buffer, tga.pixels.byteOffset, tga.pixels.byteLength);
 
 	return png;
 }
