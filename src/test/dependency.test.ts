@@ -222,13 +222,9 @@ describe('util/dependency', () => {
             ]);
         });
 
-        it('does not match when the path has leading whitespace after the colon', () => {
-            // The path group in the regex is `.*\.ext$` and the regex is anchored to
-            // end-of-line, so the entire `  events/foo.txt  ` becomes the path and the
-            // extension (`txt  `) does not match the txt/yml filter. Document the
-            // behaviour: dependency markers must not have leading whitespace after the colon.
+        it('trims leading and trailing whitespace around the path', () => {
             const result = getDependenciesFromText('#!event:  events/foo.txt  \n');
-            assert.deepStrictEqual(result, []);
+            assert.deepStrictEqual(result, [{ type: 'event', path: 'events/foo.txt' }]);
         });
 
         it('ignores comment-like text that is not a marker', () => {
