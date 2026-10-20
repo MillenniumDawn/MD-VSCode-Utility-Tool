@@ -7,17 +7,6 @@ v1.1.42
 - [ World Map Preview ] Opening the world map reads the province colors of `provinces.bmp` about four times faster. Issue #555.
 - [ Performance ] Converting a DDS or TGA image for a preview now uses less temporary memory. The peak while the preview image is written out is unchanged. Issue #556.
 - [ Focus Tree Previewer ] Checking all focus trees no longer freezes the editor while the trees are checked, Cancel works during the whole check, and the check uses less time and memory. Issues #537, #538, #539.
-- Describe this change.
-- [ Testing ] Rewrite the core utility tests as pure tests.
-- Hand the editor API to modules at activation so they load without it.
-- [ Testing ] Move the world map and focus tree data tests into the pure suite.
-- Document dependency marker syntax and scope.
-- Document preview performance troubleshooting.
-- Document focused validation commands.
-- [ Testing ] Make hover tooltip timing tests deterministic. Issue #568.
-- Clear the unused-code check on main.
-- [ Testing ] Test dependency markers in the unit suite only. Issue #593.
-- [ Testing ] Run the event tree effects-panel tests on a fake clock. Issue #591.
 
   Bugfixes:
 - [ CI ] Empty release-note seeds no longer add placeholder text. Issue #535.
