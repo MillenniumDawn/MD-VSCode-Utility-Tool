@@ -27,6 +27,15 @@ export interface TechnologyTreeLoaderResult {
 }
 
 const equipmentFolder = 'common/units/equipment';
+const equipmentFolderDependencies = [`${equipmentFolder}/*`, `${equipmentFolder}/*/*`];
+
+async function listEquipmentFiles(): Promise<string[]> {
+	return uniq(
+		(await listFilesFromModOrHOI4(equipmentFolder, { recursively: true }))
+			.filter((file) => file.toLowerCase().endsWith('.txt'))
+			.map((file) => `${equipmentFolder}/${file}`.replace(/\/+/g, '/')),
+	);
+}
 
 const technologyUIGfxFiles = [
     'interface/countrytechtreeview.gfx',
@@ -64,7 +73,7 @@ export class TechnologyTreeLoader extends ContentLoader<TechnologyTreeLoaderResu
                 equipmentArchetypes,
                 countryTagsByFolder,
             },
-            dependencies: uniq([this.file, ...gfxDependencies, ...extraGfxFiles, ...guiDependencies, ...equipmentFiles, ...countryTagFiles, ...mergeInLoadResult(guiDepFiles, 'dependencies')]),
+            dependencies: uniq([this.file, ...gfxDependencies, ...extraGfxFiles, ...guiDependencies, ...equipmentDependencies(equipmentFiles), ...countryTagFiles, ...mergeInLoadResult(guiDepFiles, 'dependencies')]),
         };
     }
 
@@ -99,6 +108,12 @@ interface EquipmentArchetypesResult {
     equipmentFiles: string[];
 }
 
+// These cover newly created files at the equipment root and one directory below it. The discovered
+// paths stay in the list as well, so edits and the cache expiry token still use the actual files.
+export function equipmentDependencies(equipmentFiles: string[]): string[] {
+	return uniq([...equipmentFiles, ...equipmentFolderDependencies]);
+}
+
 // A single tech-tree preview renders many technologies, and a workspace can hold many tech-tree
 // files; without caching, every render would re-walk and re-parse all `common/units/equipment`
 // files.
@@ -110,10 +125,17 @@ interface EquipmentArchetypesResult {
 // the editor is Date.now() and so always looks changed.
 const equipmentArchetypeCache = new PromiseCache<EquipmentArchetypesResult>({
     factory: () => loadEquipmentArchetypesUncached(),
-    // The setting is a part of the token because with the localisation index off the load
-    // short-circuits to an empty result with no files, which nothing on disk could then invalidate.
+    // The current file list is part of the token as well as the mtimes. Otherwise a new file is
+    // noticed by the preview watcher but absent from the old load's file list, so the cache stays
+    // valid and keeps returning archetypes that do not include it.
     expireWhenChange: (_key, cached) => cached.then(
-        async value => `${getFlags().localisationIndex ? 'on' : 'off'}|${await hoiFilesExpiryToken(value.equipmentFiles)}`,
+        async () => {
+			if (!getFlags().localisationIndex) {
+				return 'off';
+			}
+			const equipmentFiles = await listEquipmentFiles();
+			return `on|${equipmentFiles.join('|')}|${await hoiFilesExpiryToken(equipmentFiles)}`;
+		},
         () => '',
     ),
     life: 3 * 1000,
@@ -133,10 +155,7 @@ async function loadEquipmentArchetypesUncached(): Promise<EquipmentArchetypesRes
         return { equipmentArchetypes: {}, equipmentFiles: [] };
     }
 
-    const relativeFiles = uniq(
-        (await listFilesFromModOrHOI4(equipmentFolder, { recursively: true }))
-            .filter(f => f.toLowerCase().endsWith('.txt'))
-            .map(f => `${equipmentFolder}/${f}`.replace(/\/+/g, '/')));
+    const relativeFiles = await listEquipmentFiles();
 
     const fileArchetypes = await Promise.all(relativeFiles.map(async file => {
         try {
