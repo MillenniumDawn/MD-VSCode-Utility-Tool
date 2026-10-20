@@ -134,13 +134,16 @@ The Settings editor lists them under the extension in these sections.
 
 **Indexes and performance**
 
+See [performance and troubleshooting](docs/performance-troubleshooting.md) for index and image
+worker tradeoffs, browser behavior, and diagnostics.
+
 | Setting | What it does |
 |---|---|
 | `mdHoi4Utilities.sharedFocusIndex` | Index shared focuses so other trees can pull them in. |
 | `mdHoi4Utilities.ideaSwapIndex` | Scan `common` and `events` for `swap_ideas` so the idea preview can draw idea chains. |
 | `mdHoi4Utilities.gfxIndex` | Index every sprite definition. Faster icon lookups, more memory. |
 | `mdHoi4Utilities.localisationIndex` | Index localisation so previews show translated text. Uses more memory. |
-| `mdHoi4Utilities.imageDecodeWorkers` | Threads used to decode `.dds` / `.tga` images. More is faster on icon-heavy trees. |
+| `mdHoi4Utilities.imageDecodeWorkers` | Desktop worker threads for `.dds` / `.tga` conversion (default 4, range 1–16). Higher values can speed up concurrent decoding when CPU is available, with added CPU and memory use. |
 
 **Auditor**
 
