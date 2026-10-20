@@ -1,7 +1,35 @@
 import * as assert from 'assert';
 import { Point, ProvinceEdgeGraph, WorldMapWarning } from '../../../../../previewdef/worldmap/definitions';
-import { concatEdges, fillEdges, validateProvince } from '../../../../../previewdef/worldmap/loader/provincebmp';
+import {
+    concatEdges,
+    fillEdges,
+    getProvincesByPosition,
+    validateProvince,
+} from '../../../../../previewdef/worldmap/loader/provincebmp';
 import { localize } from '../../../../../util/i18n';
+
+describe('worldmap/provincebmp getProvincesByPosition', () => {
+    it('lists each color once in the order read, and turns the bottom-up rows the right way up', () => {
+        // Quadrants, with the top-left color again at the bottom right, so a color comes back
+        // after another one was read.
+        const size = 256;
+        const colorAt = (x: number, y: number) =>
+            y < 128 ? (x < 128 ? 0x332211 : 0x665544) : (x < 128 ? 0x998877 : 0x332211);
+        const data = Buffer.alloc(size * size * 3);
+        const expected = new Uint32Array(size * size);
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const color = colorAt(x, y);
+                data.writeUIntLE(color, ((size - 1 - y) * size + x) * 3, 3);
+                expected[y * size + x] = color;
+            }
+        }
+
+        const result = getProvincesByPosition({ width: size, height: size, bitsPerPixel: 24, bytesPerRow: size * 3, data });
+        assert.deepStrictEqual(result.colorByPosition, expected);
+        assert.deepStrictEqual(result.provinces, [{ color: 0x998877 }, { color: 0x332211 }, { color: 0x665544 }]);
+    });
+});
 
 function pt(x: number, y: number): Point {
     return { x, y };
