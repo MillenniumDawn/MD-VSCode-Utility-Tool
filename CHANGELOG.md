@@ -15,6 +15,7 @@ v1.1.42
 - Document focused validation commands.
 - [ Testing ] Make hover tooltip timing tests deterministic. Issue #568.
 - Clear the unused-code check on main.
+- [ Testing ] Test dependency markers in the unit suite only. Issue #593.
 
   Bugfixes:
 - [ Previews ] A dependency marker with spaces or tabs after its path now loads its file instead of being ignored. Issue #546.
