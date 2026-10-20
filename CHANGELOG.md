@@ -1,5 +1,7 @@
 Unreleased
 
+v1.1.42
+
   Functionality:
 
 - [ World Map Preview ] Opening the world map reads the province colors of `provinces.bmp` about four times faster. Issue #555.
