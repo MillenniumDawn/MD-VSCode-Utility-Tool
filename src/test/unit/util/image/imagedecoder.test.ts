@@ -4,10 +4,9 @@ import * as path from "path";
 import { PNG } from "pngjs";
 import { UserError } from "../../../../util/common";
 import { DDS } from "../../../../util/image/dds";
-import { fresh, handOver } from "../../host";
+import * as decoder from "../../../../util/image/imagedecoder";
+import { handOver } from "../../host";
 import { makeDds } from "../../dds";
-
-type Decoder = typeof import("../../../../util/image/imagedecoder");
 // These exports are the synchronous decoder's conversion boundary; workers load their own copy.
 const converters = require("../../../../util/image/converter") as typeof import("../../../../util/image/converter");
 // The decoder reads `Worker` off this module each time it spawns, so a test can swap it.
@@ -43,7 +42,6 @@ class ScriptedWorker extends EventEmitter {
 }
 
 describe("util/image/imagedecoder fallback", () => {
-	let decoder: Decoder;
 	let syncCalls: string[];
 	let logged: unknown[][];
 	let restore: () => void;
@@ -60,7 +58,6 @@ describe("util/image/imagedecoder fallback", () => {
 			workspace: { getConfiguration: () => ({ imageDecodeWorkers: 1 }) },
 			window: { createOutputChannel: () => ({ appendLine: () => undefined }) },
 		});
-		decoder = fresh<Decoder>("../../util/image/imagedecoder");
 		decoder._setImageWorkerPathForTest(realWorker);
 		syncCalls = [];
 		logged = [];
