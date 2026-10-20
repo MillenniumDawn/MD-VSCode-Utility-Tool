@@ -185,6 +185,8 @@ Suggestions and bug reports are welcome on the
 
 For local checks, use the Node version in `.nvmrc`, then run `npm ci`, `npm run lint`,
 `npm run knip`, `npm test`, `npm run package`, and `npm run smoke:webviews`.
+See the [validation guide](docs/contributing-validation.md) for focused test commands, coverage,
+editor and browser smoke tests, and compatibility checks.
 
 [marketplace]: https://marketplace.visualstudio.com/items?itemName=MilleniumDawnModTeam.hearts-of-iron-iv-utilities-2026
 [openvsx]: https://open-vsx.org/extension/MilleniumDawnModTeam/hearts-of-iron-iv-utilities-2026
