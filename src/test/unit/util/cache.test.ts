@@ -2,6 +2,7 @@ import * as assert from "assert";
 import { mock } from "node:test";
 import type * as cacheModule from "../../../util/cache";
 import type { Cache, CacheOptions, PromiseCache, PromiseCacheOptions } from "../../../util/cache";
+import { deferred, settle } from "../async";
 import { fresh } from "../host";
 
 // Every cache in the process shares one sweep timer. The caches other modules keep must not share
@@ -221,6 +222,40 @@ describe("util/cache", () => {
 			assert.strictEqual(await c.get("a"), "a#2");
 			mock.timers.tick(200);
 			assert.strictEqual(await c.get("a"), "a#2");
+		});
+
+		it("keeps a replacement when an expired pending value settles empty or fails", async () => {
+			for (const outcome of ["reject", "null", "undefined"] as const) {
+				const old = deferred<unknown>();
+				const fresh = deferred<unknown>();
+				let calls = 0;
+				let token = 0;
+				const c = promiseCache<unknown>({
+					expireWhenChange: () => token,
+					nonExpireLife: 200,
+					factory: () => (++calls === 1 ? old.promise : fresh.promise),
+				});
+
+				const oldValue = c.get("a");
+				mock.timers.tick(201);
+				token++;
+				const newValue = c.get("a");
+				await settle();
+				assert.strictEqual(calls, 2);
+
+				if (outcome === "reject") {
+					old.reject(new Error("old failed"));
+					await assert.rejects(oldValue, /old failed/);
+				} else {
+					old.resolve(outcome === "null" ? null : undefined);
+					await oldValue;
+				}
+
+				fresh.resolve("new value");
+				assert.strictEqual(await newValue, "new value");
+				assert.strictEqual(await c.get("a"), "new value");
+				assert.strictEqual(calls, 2);
+			}
 		});
 
 		it("forgets a removed key, and everything on clear", async () => {
