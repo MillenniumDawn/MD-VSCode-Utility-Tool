@@ -119,7 +119,7 @@ describe('scripts/lib/openrouter', function () {
 
     it('uses the shared model default and honors a trimmed override', function () {
         process.env.OPENROUTER_MODEL = '  ';
-        assert.strictEqual(openrouter.modelName(), 'z-ai/glm-5.2:free');
+        assert.strictEqual(openrouter.modelName(), 'openrouter/free');
         process.env.OPENROUTER_MODEL = ' test/model ';
         const messages = [{ role: 'user', content: 'question' }];
         assert.deepStrictEqual(openrouter.request(messages, 500, { response_format: { type: 'json_object' } }), {
