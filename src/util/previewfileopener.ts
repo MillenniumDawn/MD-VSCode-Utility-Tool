@@ -53,6 +53,13 @@ async function ensureCopyTargetIsInsideWorkspace(
 	}
 }
 
+// `.` and `..` are not names: the file resolver refuses `..`, and joinPath drops `.`.
+function hasDotPrefixedSegment(file: string): boolean {
+	return file
+		.split(/[\\/]/)
+		.some((segment) => segment.startsWith(".") && segment !== "." && segment !== "..");
+}
+
 async function openDocumentAtRange(
 	document: vscode.TextDocument,
 	start: number | undefined,
@@ -81,6 +88,13 @@ export async function openOrCopyHoiFile(
 			getDocumentByUri(filePathInModWithoutOpened) ??
 			(await host().workspace.openTextDocument(filePathInModWithoutOpened));
 		await openDocumentAtRange(document, start, end, options.viewColumn);
+		return;
+	}
+
+	if (hasDotPrefixedSegment(file)) {
+		await host().window.showErrorMessage(
+			options.failedToOpenMessage("Copy target is inside a dot-prefixed path"),
+		);
 		return;
 	}
 
