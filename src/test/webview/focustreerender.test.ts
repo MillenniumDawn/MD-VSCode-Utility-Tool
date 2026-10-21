@@ -14,7 +14,8 @@ function focus(id: string): Focus {
     };
 }
 
-function updateBody(focusId: string, inlay?: { useConditionInFocus: boolean }) {
+// `slot` is a scripted image of the inlay, with the template the host rendered for the window.
+function updateBody(focusId: string, inlay?: { useConditionInFocus: boolean; slot?: { id: string; template: string } }) {
     const tree: FocusTree = {
         id: 'test_tree',
         focuses: { [focusId]: focus(focusId) },
@@ -23,7 +24,11 @@ function updateBody(focusId: string, inlay?: { useConditionInFocus: boolean }) {
             id: 'flag_inlay', file: 'common/focus_inlay_windows/test.txt', token: undefined,
             internal: true, position: { x: 1800, y: 50 },
             visible: { scopeName: '', nodeContent: 'has_country_flag = inlay_flag' },
-            scriptedImages: [], scriptedButtons: [], conditionExprs: [],
+            scriptedImages: inlay.slot ? [{
+                id: inlay.slot.id, file: 'common/focus_inlay_windows/test.txt', token: undefined,
+                gfxOptions: [{ gfxName: 'GFX_slot', gfxFile: 'interface/slots.gfx', condition: true, file: 'common/focus_inlay_windows/test.txt', token: undefined }],
+            }] : [],
+            scriptedButtons: [], conditionExprs: [],
         }] : [],
         inlayConditionExprs: [],
         allowBranchOptions: [], conditionExprs: [],
@@ -34,7 +39,7 @@ function updateBody(focusId: string, inlay?: { useConditionInFocus: boolean }) {
         data: {
             focusTrees: [tree],
             renderedFocus: { [focusId]: `<div id="focus_${focusId}" class="focus"></div>` },
-            renderedInlayWindows: inlay ? { flag_inlay: '<div id="flag_inlay_root"></div>' } : {},
+            renderedInlayWindows: inlay ? { flag_inlay: inlay.slot?.template ?? '<div id="flag_inlay_root"></div>' } : {},
             gridBox: {
                 position: { x: { _value: 50 }, y: { _value: 50 } },
                 format: { _name: 'up' },
@@ -169,6 +174,27 @@ describe('webview/focustree rendering', () => {
             const placeholder = await renderInlay(true);
             assert.strictEqual(placeholder.querySelector('#flag_inlay_root'), null);
         });
+    });
+
+    // The host names the class to swap after the slot, spelled so that no id can close the attribute
+    // it sits in. The page has to spell it the same way, or the slot is left without its image.
+    it('swaps the class of an inlay slot whose id holds a quote, a bracket and </style>', async () => {
+        (window as any).__showInlayWindows = true;
+        try {
+            const slot = {
+                id: 'a"b<c></style>',
+                template: '<div id="slot" class="{{inlay_slot_class:a_34b_60c_62_60_47style_62}} st-slot"></div>',
+            };
+            window.dispatchEvent(new (window as any).MessageEvent('message', { data: updateBody('slot_focus', { useConditionInFocus: false, slot }) }));
+            await rendered(document.getElementById('focustreeplaceholder')!);
+            takePostedMessages();
+
+            const placeholder = document.getElementById('inlaywindowplaceholder')!;
+            assert.deepStrictEqual([...placeholder.querySelector('#slot')!.classList], ['st-inlay-gfx-interface_47slots_46gfx_45GFX_slot', 'st-slot']);
+            assert.ok(!placeholder.innerHTML.includes('{{'), placeholder.innerHTML);
+        } finally {
+            delete (window as any).__showInlayWindows;
+        }
     });
 
     // The button is wired by the page's load handler, so the click is only real on a loaded page.

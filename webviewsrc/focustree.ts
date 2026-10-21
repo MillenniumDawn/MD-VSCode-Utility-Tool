@@ -997,7 +997,7 @@ function renderInlayWindows(
 	return selectedInlayWindow.scriptedImages.reduce((content, slot) => {
 		const activeOption = getActiveInlayOption(slot.gfxOptions, exprs);
 		return content
-			.split(`{{inlay_slot_class:${slot.id}}}`)
+			.split(`{{inlay_slot_class:${normalizeForStyle(slot.id)}}}`)
 			.join(
 				activeOption
 					? getInlayGfxClassName(activeOption.gfxName, activeOption.gfxFile)

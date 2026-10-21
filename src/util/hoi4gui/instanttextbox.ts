@@ -5,6 +5,15 @@ import { InstantTextBoxType } from "../../hoiformat/gui";
 import { getLocalisedTextQuick } from "../localisationIndex";
 import { getFlags } from "../featureflags";
 
+// The format reaches a <style> element, so only values CSS has a meaning for get through.
+const textAlignByFormat = new Map([
+    ['left', 'left'],
+    ['center', 'center'],
+    ['centre', 'center'],
+    ['right', 'right'],
+    ['justify', 'justify'],
+]);
+
 export interface RenderInstantTextBoxOptions extends RenderCommonOptions {
     // Show textbox.text verbatim instead of looking it up in the localisation index. Used by the
     // technology tree to render raw tech ids when the user prefers ids over localised names.
@@ -15,7 +24,7 @@ export async function renderInstantTextBox(textbox: HOIPartial<InstantTextBoxTyp
     const [x, y, width, height] = calculateBBox({ ...textbox, size: { width: textbox.maxwidth, height: textbox.maxheight } }, parentInfo);
     const borderX = normalizeNumberLike(textbox.bordersize?.x, width);
     const borderY = normalizeNumberLike(textbox.bordersize?.y, height);
-    const format = textbox.format?._name.replace('centre', 'center');
+    const textAlign = textAlignByFormat.get(textbox.format?._name ?? '');
     const font = textbox.font ?? '';
     const fontMatch = /\d+/.exec(font.replace('hoi4', ''));
     const fontSize = Math.ceil(parseInt(fontMatch?.find(() => true) ?? '16') * 0.7);
@@ -34,7 +43,7 @@ export async function renderInstantTextBox(textbox: HOIPartial<InstantTextBoxTyp
             width: ${width}px;
             height: ${height}px;
             font-size: ${fontSize}px;
-            text-align: ${format};
+            ${textAlign ? `text-align: ${textAlign};` : ''}
             padding: ${borderY}px ${borderX}px;
             ${textbox.vertical_alignment === 'center' ? `vertical-align: middle; line-height: ${height}px;` : ''}
         `)}
