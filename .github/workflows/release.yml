@@ -172,8 +172,10 @@ jobs:
       - name: Look for an open release pull request
         id: existing
         run: |
+          # --head also matches a fork's branch of the same name.
           number=$(gh pr list --head "$RELEASE_BRANCH" --state open \
-            --json number --jq '.[0].number // ""')
+            --json number,isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository | not)][0].number // ""')
           echo "number=$number" >> "$GITHUB_OUTPUT"
       # Read the bot account from the token so an App rename moves its author.
       - name: Configure git
@@ -404,7 +406,6 @@ jobs:
     permissions:
       contents: read
     env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
       VSIX: ${{ needs.build-pre-release.outputs.vsix }}
     steps:
       # vsce is a dev dependency, even though the VSIX was built elsewhere.
@@ -423,8 +424,11 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: pre-release-vsix
-      # Missing tokens fail, duplicates pass, and transient failures retry.
+      # Missing tokens fail, duplicates pass, and transient failures retry. Each
+      # token is on its publish step alone, out of reach of npm ci's scripts.
       - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: >-
           node scripts/publish-extension.js --registry marketplace
           --vsix "$VSIX" --pre-release
@@ -439,7 +443,6 @@ jobs:
     permissions:
       contents: read
     env:
-      OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
       VSIX: ${{ needs.build-pre-release.outputs.vsix }}
     steps:
       # v7.0.1
@@ -458,6 +461,8 @@ jobs:
         with:
           name: pre-release-vsix
       - name: Publish to Open VSX Registry
+        env:
+          OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
         run: >-
           node scripts/publish-extension.js --registry open-vsx --vsix "$VSIX"
 
@@ -559,7 +564,6 @@ jobs:
     permissions:
       contents: read
     env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
       VSIX: ${{ needs.build-release.outputs.vsix }}
     outputs:
       transient: ${{ steps.publish.outputs.transient }}
@@ -581,6 +585,8 @@ jobs:
           name: release-vsix
       - name: Publish to VS Code Marketplace
         id: publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: >-
           node scripts/publish-extension.js --registry marketplace
           --vsix "$VSIX"
@@ -598,7 +604,6 @@ jobs:
     permissions:
       contents: read
     env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
       VSIX: ${{ needs.build-release.outputs.vsix }}
     steps:
       # v7.0.1
@@ -617,6 +622,8 @@ jobs:
         with:
           name: release-vsix
       - name: Publish to VS Code Marketplace, patiently
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: >-
           node scripts/publish-extension.js --registry marketplace
           --vsix "$VSIX" --schedule patient
@@ -629,7 +636,6 @@ jobs:
     permissions:
       contents: read
     env:
-      OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
       VSIX: ${{ needs.build-release.outputs.vsix }}
     outputs:
       transient: ${{ steps.publish.outputs.transient }}
@@ -651,6 +657,8 @@ jobs:
           name: release-vsix
       - name: Publish to Open VSX Registry
         id: publish
+        env:
+          OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
         run: >-
           node scripts/publish-extension.js --registry open-vsx --vsix "$VSIX"
 
@@ -668,7 +676,6 @@ jobs:
     permissions:
       contents: read
     env:
-      OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
       VSIX: ${{ needs.build-release.outputs.vsix }}
     steps:
       # v7.0.1
@@ -687,6 +694,8 @@ jobs:
         with:
           name: release-vsix
       - name: Publish to Open VSX Registry, patiently
+        env:
+          OPEN_VSX_TOKEN: ${{ secrets.OPEN_VSX_TOKEN }}
         run: >-
           node scripts/publish-extension.js --registry open-vsx
           --vsix "$VSIX" --schedule patient
@@ -892,8 +901,10 @@ jobs:
           # their work. Restart a closed leftover with no open pull request.
           if git ls-remote --exit-code --heads origin "$BRANCH" \
             >/dev/null 2>&1; then
-            number=$(gh pr list --head "$BRANCH" --state open --json number \
-              --jq '.[0].number // empty')
+            # --head also matches a fork's branch of the same name.
+            number=$(gh pr list --head "$BRANCH" --state open \
+              --json number,isCrossRepository \
+              --jq '[.[] | select(.isCrossRepository | not)][0].number // empty')
             if [ -n "$number" ]; then
               gh pr comment "$number" --body-file "$BODY"
               echo "::notice::$title -- reported on pull request #$number."
