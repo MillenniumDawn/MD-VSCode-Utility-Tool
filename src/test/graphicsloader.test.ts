@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import { mock } from "node:test";
 import * as path from "path";
 import { PNG } from "pngjs";
 import * as vscode from "vscode";
@@ -14,6 +15,7 @@ import {
 } from "../util/image/imagedecoder";
 import { clearDlcZipCache } from "../util/fileloader";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
+import { makeZeroPng, pngHeader } from "./unit/png";
 // Imported only so tsc emits the worker file into this test's outDir; it is import-safe on the main
 // thread (its message handler attaches only when actually run as a worker_threads worker).
 import "../util/image/imageWorker";
@@ -197,6 +199,27 @@ describe("util/image/graphicsloader (headless)", function () {
 			"PNG passthrough should keep the same buffer",
 		);
 	});
+
+	const refusedPngs: [name: string, file: Buffer][] = [
+		["a header over the size limit", makeZeroPng([pngHeader(20000, 20000, 0)], 1024)],
+		["an interlaced image", makeZeroPng([pngHeader(16, 16, 1)], 1024)],
+		["no readable header", Buffer.from("not a png at all")],
+	];
+	for (const [name, file] of refusedPngs) {
+		it(`returns undefined for a PNG texture with ${name} without decoding it`, async function () {
+			files["gfx/interface/goals/refused.png"] = file;
+			const read = mock.method(PNG.sync, "read");
+			const spy = spyConsoleError();
+			try {
+				assert.strictEqual(await getImageByPath("gfx/interface/goals/refused.png"), undefined);
+				assert.strictEqual(read.mock.callCount(), 0);
+				assert.deepStrictEqual(spy.calls, []);
+			} finally {
+				read.mock.restore();
+				spy.restore();
+			}
+		});
+	}
 
 	it("resolves a sprite from a gfx file through the loader", async function () {
 		files["interface/goals.gfx"] = Buffer.from(
