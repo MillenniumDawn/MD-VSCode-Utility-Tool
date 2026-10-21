@@ -11,10 +11,11 @@ import { LoaderSession } from '../../util/loader/loader';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { GuiFileLoader, GuiFileLoaderResult } from "./loader";
 import { actionGroupHtml, iconButtonHtml } from "../toolbaricons";
+import { RenderContentOptions } from "../loaderpreview";
 
-export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webview: vscode.Webview): Promise<string> {
+export async function renderGuiFile(loader: GuiFileLoader, uri: vscode.Uri, webview: vscode.Webview, options?: RenderContentOptions): Promise<string> {
     try {
-        const session = new LoaderSession(false);
+        const session = new LoaderSession(options?.dependencyChanged ?? false);
         const loadResult = await loader.load(session);
         const loadedLoaders = session.loadedLoaderNames();
         debug('Loader session gui', loadedLoaders);

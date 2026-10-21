@@ -117,6 +117,7 @@ export class IdeasLoader extends LanguageAwareContentLoader<IdeasLoaderResult> {
 			...(await getGfxContainerFiles(pictures)),
 		];
 
+		const gfxFiles = uniq([...gfxDependencies, ideasGFX]);
 		const ideaIds = merged.categories.flatMap((c) => c.ideas.map((i) => i.id));
 
 		const [modifierDefinitions, definitionFiles, swaps, placeholderIcon] = await Promise.all([
@@ -129,7 +130,7 @@ export class IdeasLoader extends LanguageAwareContentLoader<IdeasLoaderResult> {
 		return {
 			result: {
 				ideas: merged,
-				gfxFiles: uniq([...gfxDependencies, ideasGFX]),
+				gfxFiles,
 				modifierDefinitions,
 				swaps,
 				swapsUnavailable: !getFlags().ideaSwapIndex,
@@ -141,6 +142,7 @@ export class IdeasLoader extends LanguageAwareContentLoader<IdeasLoaderResult> {
 				this.file,
 				...ideaDependencies,
 				...mergeInLoadResult(ideaDepFiles, "dependencies"),
+				...gfxFiles,
 				...definitionFiles,
 			]),
 		};

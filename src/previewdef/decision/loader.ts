@@ -170,6 +170,8 @@ export class DecisionsLoader extends LanguageAwareContentLoader<DecisionsLoaderR
 			...(await getGfxContainerFiles(uniq([...icons, ...categoryIcons]))),
 		];
 
+		const gfxFiles = uniq([...gfxDependencies, ...decisionGfxFiles]);
+
 		return {
 			result: {
 				decisions: merged,
@@ -177,7 +179,7 @@ export class DecisionsLoader extends LanguageAwareContentLoader<DecisionsLoaderR
 				scriptedGuis,
 				guiWindows,
 				modifierDefinitions,
-				gfxFiles: uniq([...gfxDependencies, ...decisionGfxFiles]),
+				gfxFiles,
 			},
 			dependencies: uniq([
 				this.file,
@@ -185,7 +187,7 @@ export class DecisionsLoader extends LanguageAwareContentLoader<DecisionsLoaderR
 				...mergeInLoadResult(decisionDepFiles, "dependencies"),
 				`${decisionCategoriesFolder}/*`,
 				`${scriptedGuisFolder}/*`,
-				...decisionGfxFiles,
+				...gfxFiles,
 				// How every modifier line reads; renderDecisionFile forces the session on an edit.
 				...definitionFiles,
 			]),
