@@ -5,6 +5,7 @@ Unreleased
 - [ Previews ] The idea, decision, event and character previews now refresh when you edit a `.gfx` file they use. The MIO preview now refreshes when an organization file is added or removed. Issues #479, #544.
 - [ Previews ] A focus label, an inlay slot name or a text box `format` holding quotes, `<` or `</style>` can no longer add elements to a preview, and previews no longer submit forms. Issue #572.
 - [ Previews ] Clicking a preview link can no longer copy a file into a hidden folder in your workspace, such as `.git` or `.vscode`. Issue #571.
+- [ GFX ] A PNG texture that is interlaced or larger than the supported size is now skipped instead of decoded, so a small malformed file can no longer use up the editor's memory. Issue #570.
 
 v1.1.42
 
