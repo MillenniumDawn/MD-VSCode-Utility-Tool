@@ -1,7 +1,7 @@
 import * as assert from 'assert';
-import { parseHoi4File } from '../hoiformat/hoiparser';
-import { getEvents, ChildEvent, HOIEvent } from '../previewdef/event/schema';
-import { ConditionComplexExpr, conditionToString } from '../hoiformat/condition';
+import { parseHoi4File } from '../../../../hoiformat/hoiparser';
+import { getEvents, ChildEvent, HOIEvent } from '../../../../previewdef/event/schema';
+import { ConditionComplexExpr, conditionToString } from '../../../../hoiformat/condition';
 
 // The structures below are transcribed from Millennium Dawn's events/00_arab_spring.txt and
 // events/05_united_kingdom.txt. They cover what the workflow view needs the schema to keep:

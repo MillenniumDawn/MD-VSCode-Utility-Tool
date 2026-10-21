@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { parseHoi4File } from "../hoiformat/hoiparser";
+import { parseHoi4File } from "../../../../hoiformat/hoiparser";
 import {
 	convertFocusFileNodeToJson,
 	extractFocusIds,
@@ -9,9 +9,7 @@ import {
 	importedPseudoTreesToShow,
 	focusTreesToDisplay,
 	FocusWarning,
-} from "../previewdef/focustree/schema";
-import { refreshFeatureFlags } from "../util/featureflags";
-import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
+} from "../../../../previewdef/focustree/schema";
 
 const filePath = "common/national_focus/test.txt";
 
@@ -31,9 +29,9 @@ function treeWithFocuses(...focuses: string[]): string {
 }`;
 }
 
-function treesOf(content: string): FocusTree[] {
+function treesOf(content: string, useConditionInFocus = false): FocusTree[] {
 	const file = convertFocusFileNodeToJson(parseHoi4File(content), {});
-	return getFocusTreeWithFocusFile(file, [], filePath, {});
+	return getFocusTreeWithFocusFile(file, [], filePath, {}, useConditionInFocus);
 }
 
 function warningsOf(content: string): FocusWarning[] {
@@ -59,43 +57,31 @@ function mergeSharedFocuses(
 		[],
 		"common/national_focus/shared.txt",
 		{},
+		false,
 	);
 
-	stubVscode({ configuration: { useConditionInFocus: true } });
-	refreshFeatureFlags();
-	try {
-		const references = sharedFocusRefs
-			.map((ref) => `\n    shared_focus = ${ref}`)
-			.join("");
-		const content = treeWithFocuses(...focuses).replace(
-			"id = test_tree",
-			`id = test_tree${references}`,
-		);
-		const trees = getFocusTreeWithFocusFile(
-			convertFocusFileNodeToJson(parseHoi4File(content), {}),
-			donors,
-			filePath,
-			{},
-		);
-		const host = trees.find((t) => t.id === "test_tree");
-		assert.ok(host, "the merging tree must exist");
-		return { donor: donors[0], host };
-	} finally {
-		restoreVscodeStubs();
-		refreshFeatureFlags();
-	}
+	const references = sharedFocusRefs
+		.map((ref) => `\n    shared_focus = ${ref}`)
+		.join("");
+	const content = treeWithFocuses(...focuses).replace(
+		"id = test_tree",
+		`id = test_tree${references}`,
+	);
+	const trees = getFocusTreeWithFocusFile(
+		convertFocusFileNodeToJson(parseHoi4File(content), {}),
+		donors,
+		filePath,
+		{},
+		true,
+	);
+	const host = trees.find((t) => t.id === "test_tree");
+	assert.ok(host, "the merging tree must exist");
+	return { donor: donors[0], host };
 }
 
 // Parses one file with useConditionInFocus on, so a focus_tree merges the file's own shared focuses.
 function treesWithSharedFocuses(content: string): FocusTree[] {
-	stubVscode({ configuration: { useConditionInFocus: true } });
-	refreshFeatureFlags();
-	try {
-		return treesOf(content);
-	} finally {
-		restoreVscodeStubs();
-		refreshFeatureFlags();
-	}
+	return treesOf(content, true);
 }
 
 describe("previewdef/focustree layout warnings", () => {
@@ -877,18 +863,11 @@ ${second}`)[0].warnings.map((w) => w.text);
 	});
 
 	it("checks every shared focus against the rest when trees do not merge them", () => {
-		stubVscode({ configuration: { useConditionInFocus: false } });
-		refreshFeatureFlags();
-		try {
-			const content = `shared_focus = { id = sh_a x = 0 y = 0 }
+		const content = `shared_focus = { id = sh_a x = 0 y = 0 }
 shared_focus = { id = sh_b x = 0 y = 0 }`;
-			assert.deepStrictEqual(warningTexts(content), [
-				"Focuses sh_a, sh_b share the same position, so their icons overlap.",
-			]);
-		} finally {
-			restoreVscodeStubs();
-			refreshFeatureFlags();
-		}
+		assert.deepStrictEqual(warningTexts(content), [
+			"Focuses sh_a, sh_b share the same position, so their icons overlap.",
+		]);
 	});
 
 	it("replays a merged focus's own warnings once per tree", () => {

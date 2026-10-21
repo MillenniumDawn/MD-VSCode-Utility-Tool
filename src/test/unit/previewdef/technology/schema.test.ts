@@ -1,7 +1,7 @@
 import * as assert from 'assert';
-import { parseHoi4File } from '../hoiformat/hoiparser';
-import { getTechnologyTrees, isSpecialProjectTech, Technology } from '../previewdef/technology/schema';
-import { getSubTechnologySpriteNames } from '../previewdef/technology/contentbuilder';
+import { parseHoi4File } from '../../../../hoiformat/hoiparser';
+import { getTechnologyTrees, isSpecialProjectTech, Technology } from '../../../../previewdef/technology/schema';
+import { getSubTechnologySpriteNames } from '../../../../previewdef/technology/contentbuilder';
 
 function technologiesById(source: string): Record<string, Technology> {
     const trees = getTechnologyTrees(parseHoi4File(source));
