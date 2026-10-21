@@ -1,5 +1,8 @@
 Unreleased
 
+  Bugfixes:
+- [ CI ] Release notes are worded by a free model again. The old free model was withdrawn, so every seeded bullet had fallen back to its pull request title. Issue #534.
+
 v1.1.42
 
   Functionality:
