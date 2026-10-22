@@ -5,10 +5,8 @@ import * as guiwindowindex from "../../../../util/guiwindowindex";
 import * as imagecache from "../../../../util/image/imagecache";
 import * as vsccommon from "../../../../util/vsccommon";
 import { FocusTreeLoader } from "../../../../previewdef/focustree/loader";
-import { buildFocusTreePayload, loadFocusTreesOnly } from "../../../../previewdef/focustree/contentbuilder";
+import { buildFocusTreePayload } from "../../../../previewdef/focustree/contentbuilder";
 import { refreshFeatureFlags } from "../../../../util/featureflags";
-import { Dependency } from "../../../../util/dependency";
-import { LoadResultOD, LoaderSession } from "../../../../util/loader/loader";
 import { PNG } from "pngjs";
 import { handOver } from "../../host";
 
@@ -30,20 +28,6 @@ let gfxText: string;
 let versions: Record<string, number>;
 let readCounts: Record<string, number>;
 let imageWidths: Record<string, number>;
-
-class CountingFocusTreeLoader extends FocusTreeLoader {
-	public postLoadCount = 0;
-
-	protected override async postLoad(
-		content: string | undefined,
-		dependencies: Dependency[],
-		error: unknown,
-		session: LoaderSession,
-	): Promise<LoadResultOD<any>> {
-		this.postLoadCount++;
-		return super.postLoad(content, dependencies, error, session);
-	}
-}
 
 function uri(filePath: string): any {
 	return {
@@ -99,11 +83,11 @@ function configure(): void {
 		texturefile = "gfx/interface/refresh-old.png"
 	} }`;
 	versions = {};
-	for (const file of [guiPath, gfxPath, inlayPath, focusPath, "gfx/interface/refresh-old.png", "gfx/interface/refresh-new.png"]) {
+	for (const file of [guiPath, gfxPath, inlayPath, focusPath, "gfx/interface/refresh-old.png"]) {
 		versions[file] = 1;
 	}
 	readCounts = {};
-	imageWidths = { "gfx/interface/refresh-old.png": 8, "gfx/interface/refresh-new.png": 24 };
+	imageWidths = { "gfx/interface/refresh-old.png": 8 };
 	handOver({
 		Uri: {
 			joinPath: (base: any, ...parts: string[]) => uri([base.path, ...parts].join("/")),
@@ -177,7 +161,7 @@ function configure(): void {
 		if (name !== "GFX_refresh_test" || !(Array.isArray(paths) ? paths : [paths]).includes(gfxPath)) {
 			return undefined;
 		}
-		const texture = gfxText.includes("refresh-new.png") ? "gfx/interface/refresh-new.png" : "gfx/interface/refresh-old.png";
+		const texture = "gfx/interface/refresh-old.png";
 		const width = imageWidths[texture]!;
 		return { frames: [{ width, height: 1, image: { width, height: 1, uri: `data:image/png;base64,${width}`, path: uri(`/mod/${texture}`) } }] };
 	};
@@ -220,21 +204,22 @@ describe("previewdef/focustree dependency-only inlay refresh", () => {
 		assert.strictEqual((refreshed?.focusTrees[0]?.inlayWindows[0]?.guiWindow?.size?.width as any)?._value, 240);
 	});
 
-	it("re-reads an inlay sprite definition after its GFX texturefile changes", async () => {
-		const loader = new CountingFocusTreeLoader(focusPath, async () => fileContents(focusPath)!);
-		const initial = await loadFocusTreesOnly(loader);
-		assert.strictEqual(initial?.focusTrees[0]?.inlayWindows[0]?.scriptedImages[0]?.gfxOptions[0]?.gfxFile, gfxPath);
-		assert.strictEqual(loader.postLoadCount, 1);
+	it("resolves an inlay sprite added to its GFX file after the tree loaded", async () => {
+		const gfxFileOf = (payload: Awaited<ReturnType<typeof buildFocusTreePayload>>) =>
+			payload?.focusTrees[0]?.inlayWindows[0]?.scriptedImages[0]?.gfxOptions[0]?.gfxFile;
+		gfxText = gfxText.replace("GFX_refresh_test", "GFX_other");
+		const loader = new FocusTreeLoader(focusPath, async () => fileContents(focusPath)!);
+		const initial = await buildFocusTreePayload(loader, undefined, { resolveIcons: false });
+		assert.strictEqual(gfxFileOf(initial), undefined);
 
-		gfxText = gfxText.replace("refresh-old.png", "refresh-new.png");
+		gfxText = gfxText.replace("GFX_other", "GFX_refresh_test");
 		versions[gfxPath] = 2;
-		mock.timers.tick(501);
-		const stale = await loadFocusTreesOnly(loader);
-		assert.strictEqual(stale?.focusTrees[0]?.inlayWindows[0]?.scriptedImages[0]?.gfxOptions[0]?.gfxFile, gfxPath);
-		assert.strictEqual(loader.postLoadCount, 1);
+		// The fileloader's 500 ms stat memo outlives a test, so wait out the previous test's window too.
+		mock.timers.tick(1001);
+		const stale = await buildFocusTreePayload(loader, undefined, { resolveIcons: false });
+		assert.strictEqual(gfxFileOf(stale), undefined);
 
-		const refreshed = await loadFocusTreesOnly(loader, true);
-		assert.strictEqual(refreshed?.focusTrees[0]?.inlayWindows[0]?.scriptedImages[0]?.gfxOptions[0]?.gfxFile, gfxPath);
-		assert.strictEqual(loader.postLoadCount, 2);
+		const refreshed = await buildFocusTreePayload(loader, undefined, { resolveIcons: false, dependencyChanged: true });
+		assert.strictEqual(gfxFileOf(refreshed), gfxPath);
 	});
 });

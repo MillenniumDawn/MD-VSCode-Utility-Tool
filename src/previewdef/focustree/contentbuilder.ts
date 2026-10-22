@@ -190,13 +190,12 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
 /**
  * Parses the focus trees only, skipping the expensive per-focus/inlay HTML and style rendering that
  * buildFocusTreePayload does. The partial-update early-out uses this to fingerprint structure cheaply.
- * With a normal session it shares the loader's content-hash cache, so a same-tick buildFocusTreePayload
- * reuses this parse instead of re-parsing. A dependency change deliberately forces both passes to reload.
- * Returns null when empty or on error.
+ * Because it shares the loader's content-hash cache, a same-tick buildFocusTreePayload reuses this parse
+ * instead of re-parsing, so the fall-through path never double-parses. Returns null when empty or on error.
  */
-export async function loadFocusTreesOnly(loader: FocusTreeLoader, dependencyChanged = false): Promise<{ focusTrees: FocusTree[]; layout: FocusTreeLayout } | null> {
+export async function loadFocusTreesOnly(loader: FocusTreeLoader): Promise<{ focusTrees: FocusTree[]; layout: FocusTreeLayout } | null> {
     try {
-        const r = await loader.load(new LoaderSession(dependencyChanged));
+        const r = await loader.load(new LoaderSession(false));
         const focusTrees = focusTreesToDisplay(r.result.focusTrees);
         return focusTrees.length ? { focusTrees, layout: r.result.layout ?? standardFocusTreeLayout } : null;
     } catch (e) {

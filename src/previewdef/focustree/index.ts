@@ -221,7 +221,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         };
         this.focusTreeLoader.setProgressListener(progress);
         try {
-            if (options.partial && await this.unchangedBeforeRender(options.dependencyChanged)) {
+            if (options.partial && !options.dependencyChanged && await this.unchangedBeforeRender()) {
                 return null;
             }
 
@@ -274,25 +274,25 @@ class FocusTreePreview extends UpdateablePreviewBase {
     /**
      * Object-level early-out (bug #37): parse the focus trees only and, before paying for any
      * per-focus HTML/style rendering, report unchanged when the parsed structure and icon set both
-     * match the last render. In a normal session, loadFocusTreesOnly shares the loader's content-hash
-     * cache, so the fall-through buildFocusTreePayload reuses this same parse. When a dependency
-     * changed, both passes deliberately force a reload before the refreshed render.
+     * match the last render. loadFocusTreesOnly shares the loader's content-hash cache, so the
+     * fall-through buildFocusTreePayload reuses this same parse -- there is no double parse. A
+     * dependency change skips this check, so its forced reload happens once, in the structure pass.
      */
-    private async unchangedBeforeRender(dependencyChanged: boolean): Promise<boolean> {
+    private async unchangedBeforeRender(): Promise<boolean> {
         let trees: { focusTrees: FocusTree[]; layout: FocusTreeLayout } | null = null;
         try {
-            trees = await withTimeout(loadFocusTreesOnly(this.focusTreeLoader, dependencyChanged), focusTreeRenderTimeout);
+            trees = await withTimeout(loadFocusTreesOnly(this.focusTreeLoader), focusTreeRenderTimeout);
         } catch (e) {
             // A slow/stuck object-level load must not throw; drop the early-out and let the existing
             // structure pass (with its own timeout handling) take over.
             error(e);
             return false;
         }
-        if (trees === null || dependencyChanged || getFlags().localisationIndex ||
+        if (trees === null || getFlags().localisationIndex ||
             this.lastTreeStructural === undefined || this.lastTreeIcon === undefined) {
-            // !dependencyChanged is required: a dependency (resolved icon bytes, .gfx sprite swap,
-            // .gui window) alters the render without touching the FocusTree objects, so its
-            // fingerprint would not move. !localisationIndex is required because with the localisation
+            // The caller skips this on a dependency change: a dependency (resolved icon bytes, .gfx
+            // sprite swap, .gui window) alters the render without touching the FocusTree objects, so
+            // its fingerprint would not move. !localisationIndex is required because with the localisation
             // index on, renderFocus embeds resolved loc text that changes when a .yml is edited, and
             // .yml files are not focus-loader dependencies (so a loc edit never arrives as
             // dependencyChanged) -- the object fingerprint cannot see it. (See task-07 report.)

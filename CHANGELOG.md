@@ -11,7 +11,7 @@ Unreleased
 - [ GFX ] A PNG texture that is interlaced or larger than the supported size is now skipped instead of decoded, so a small malformed file can no longer use up the editor's memory. Issue #570.
 - [ CI ] Workflow warnings and notices now safely display multiline text without triggering extra workflow commands. Issue #577.
 - [ Character Previewer ] Pressing Enter or Space on a trait pill now expands its details instead of opening the trait file; Ctrl/Meta navigation still works. Issue #548.
-- [ Focus Tree Previewer ] Changes to GUI and sprite files used by inlay windows now refresh the preview. Issue #608.
+- [ Focus Tree Previewer ] Editing an inlay window's `.gui` file, or adding its missing sprite to a `.gfx` file, now refreshes an open focus tree. Before, the preview kept the old window until the focus file itself changed. Issue #608.
 
 v1.1.42
 
