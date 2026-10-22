@@ -40,12 +40,13 @@ export class EventsLoader extends LanguageAwareContentLoader<EventsLoaderResult>
             ...flatten(eventsDepFiles.map(f => f.result.gfxFiles)),
             ...await getGfxContainerFiles(flatten(Object.values(events.eventItemsByNamespace)).map(e => e.picture)),
         ];
+        const gfxFiles = uniq([...gfxDependencies, eventsGFX]);
 
         return {
             result: {
                 events: mergedEvents,
                 mainNamespaces: Object.keys(events.eventItemsByNamespace),
-                gfxFiles: uniq([...gfxDependencies, eventsGFX]),
+                gfxFiles,
                 localizationDict,
             },
             dependencies: uniq([
@@ -54,6 +55,7 @@ export class EventsLoader extends LanguageAwareContentLoader<EventsLoaderResult>
                 ...mergeInLoadResult(eventsDepFiles, 'dependencies'),
                 ...localizationDependencies,
                 ...flatten(eventsDepFiles.map(f => f.dependencies)),
+                ...gfxFiles,
             ])
         };
     }
