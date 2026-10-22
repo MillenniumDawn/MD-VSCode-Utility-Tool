@@ -51,6 +51,16 @@ async function ensureCopyTargetIsInsideWorkspace(
 	if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
 		throw new Error("Copy target resolves outside the workspace");
 	}
+	if (hasDotPrefixedSegment(relative)) {
+		throw new Error("Copy target is inside a dot-prefixed path");
+	}
+}
+
+// `.` and `..` are not names: the file resolver refuses `..`, and joinPath drops `.`.
+function hasDotPrefixedSegment(file: string): boolean {
+	return file
+		.split(/[\\/]/)
+		.some((segment) => segment.startsWith(".") && segment !== "." && segment !== "..");
 }
 
 async function openDocumentAtRange(
@@ -84,6 +94,13 @@ export async function openOrCopyHoiFile(
 		return;
 	}
 
+	if (hasDotPrefixedSegment(file)) {
+		await host().window.showErrorMessage(
+			options.failedToOpenMessage("Copy target is inside a dot-prefixed path"),
+		);
+		return;
+	}
+
 	const workspaceFolders = host().workspace.workspaceFolders;
 	if (!workspaceFolders?.length) {
 		await host().window.showErrorMessage(options.mustOpenFolderMessage);
@@ -107,9 +124,9 @@ export async function openOrCopyHoiFile(
 	}
 
 	try {
-		const [buffer] = await readFileFromModOrHOI4(file);
 		const targetPath = host().Uri.joinPath(targetFolderUri, file);
 		await ensureCopyTargetIsInsideWorkspace(targetPath, targetFolderUri);
+		const [buffer] = await readFileFromModOrHOI4(file);
 		await mkdirs(dirUri(targetPath));
 		await writeFile(targetPath, buffer);
 
