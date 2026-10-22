@@ -8,6 +8,7 @@ Unreleased
 - [ GFX ] A PNG texture that is interlaced or larger than the supported size is now skipped instead of decoded, so a small malformed file can no longer use up the editor's memory. Issue #570.
 - [ CI ] Workflow warnings and notices now safely display multiline text without triggering extra workflow commands. Issue #577.
 - [ Character Previewer ] Pressing Enter or Space on a trait pill now expands its details instead of opening the trait file; Ctrl/Meta navigation still works. Issue #548.
+- [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. Issue #547.
 
 v1.1.42
 

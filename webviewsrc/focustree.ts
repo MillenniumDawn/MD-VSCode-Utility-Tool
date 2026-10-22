@@ -40,6 +40,7 @@ import { feLocalize } from "./util/i18n";
 import { applyIconState } from "../src/previewdef/toolbaricons";
 import { Checkbox } from "./util/checkbox";
 import { vscode } from "./util/vscode";
+import { SearchBox } from "./util/searchbox";
 
 // Shared with the MIO preview; re-exported so the focus tree tests reach them through this entry.
 export { applyPrerequisiteTrace } from "./util/trace";
@@ -71,45 +72,19 @@ function showBranch(visibility: boolean, optionClass: string) {
 	}
 }
 
-// The highlight used to be two inline style writes on every focus in the tree, on every keystroke.
-// Remembering which nodes carry it means a keystroke only touches the ones that actually changed.
-const searchHitClass = "focus-search-hit";
-let highlightedFocuses = new Set<HTMLDivElement>();
+const search = new SearchBox<HTMLDivElement>({
+	boxId: "focus-searchbox",
+	countId: "focus-search-count",
+	stateKey: "searchboxValue",
+	noMatchesKey: "focustree.nomatches",
+	countKey: "focustree.searchmatches",
+	navigateOnEdit: true,
+	matches: matchesFocusSearch,
+	target: (focus) => ({ id: focus.id, element: focus, highlight: focus }),
+});
 
-export function search(searchContent: string, navigate: boolean = true) {
-	const focuses = document.getElementsByClassName("focus");
-	const searchedFocus: HTMLDivElement[] = [];
-	const hits = new Set<HTMLDivElement>();
-	let navigated = false;
-	for (let i = 0; i < focuses.length; i++) {
-		const focus = focuses[i] as HTMLDivElement;
-		if (
-			searchContent &&
-			focus.id
-				.toLowerCase()
-				.replace(/^focus_/, "")
-				.includes(searchContent)
-		) {
-			hits.add(focus);
-			// delete() reports whether it was already highlighted, so what is left in
-			// highlightedFocuses afterwards is exactly the set that has to be cleared.
-			if (!highlightedFocuses.delete(focus)) {
-				focus.classList.add(searchHitClass);
-			}
-			if (navigate && !navigated) {
-				focus.scrollIntoView({ block: "center", inline: "center" });
-				navigated = true;
-			}
-			searchedFocus.push(focus);
-		}
-	}
-
-	for (const stale of highlightedFocuses) {
-		stale.classList.remove(searchHitClass);
-	}
-	highlightedFocuses = hits;
-
-	return searchedFocus;
+export function matchesFocusSearch(focus: HTMLDivElement, query: string): boolean {
+	return focus.id.toLowerCase().replace(/^focus_/, "").includes(query);
 }
 
 // Shift+click a focus to isolate its prerequisite lines. Set up once the shell has loaded.
@@ -1029,7 +1004,14 @@ function getInlayGfxClassName(
 	);
 }
 
-let retriggerSearch: () => void = () => {};
+function refreshFocusSearch(): void {
+	const visibleFocuses = Array.from(
+		document.getElementsByClassName("focus"),
+	).filter((element) => (element as HTMLDivElement).style.display !== "none") as HTMLDivElement[];
+	search.refresh(visibleFocuses);
+}
+
+let retriggerSearch: () => void = refreshFocusSearch;
 
 window.addEventListener("message", tryRun(async (event) => {
 	const msg = event.data;
@@ -1181,55 +1163,14 @@ window.addEventListener(
 
 					const hiddenBranches = difference(allValues, selection);
 					setState({ hiddenBranches });
+					retriggerSearch();
 				});
 			}
 		}
 
-		// Searchbox
-		const searchbox = document.getElementById("searchbox") as HTMLInputElement;
-		let currentNavigatedIndex = 0;
-		let oldSearchboxValue: string = getState().searchboxValue || "";
-		let searchedFocus: HTMLDivElement[] = search(oldSearchboxValue, false);
-
-		searchbox.value = oldSearchboxValue;
-
-		const searchboxChangeFunc = function (this: HTMLInputElement) {
-			const searchboxValue = this.value.toLowerCase();
-			if (oldSearchboxValue !== searchboxValue) {
-				currentNavigatedIndex = 0;
-				searchedFocus = search(searchboxValue);
-				oldSearchboxValue = searchboxValue;
-				setState({ searchboxValue });
-			}
-		};
-
-		searchbox.addEventListener("change", searchboxChangeFunc);
-		searchbox.addEventListener("keypress", function (e) {
-			if (e.key === "Enter") {
-				const visibleSearchedFocus = searchedFocus.filter(
-					(f) => f.style.display !== "none",
-				);
-				if (visibleSearchedFocus.length > 0) {
-					currentNavigatedIndex =
-						(currentNavigatedIndex +
-							(e.shiftKey ? visibleSearchedFocus.length - 1 : 1)) %
-						visibleSearchedFocus.length;
-					visibleSearchedFocus[currentNavigatedIndex]?.scrollIntoView({
-						block: "center",
-						inline: "center",
-					});
-				}
-			} else {
-				searchboxChangeFunc.apply(this);
-			}
-		});
-		searchbox.addEventListener("keyup", searchboxChangeFunc);
-		searchbox.addEventListener("paste", searchboxChangeFunc);
-		searchbox.addEventListener("cut", searchboxChangeFunc);
-
-		retriggerSearch = () => {
-			searchedFocus = search(oldSearchboxValue, false);
-		};
+		// Bind before the first build so a stored query is applied to the first rendered tree.
+		search.wire();
+		retriggerSearch = refreshFocusSearch;
 
 		// Conditions
 		if (useConditionInFocus) {
@@ -1372,6 +1313,7 @@ window.addEventListener(
 		const firstOpen = state.xOffset === undefined && state.yOffset === undefined;
 		updateSelectedFocusTree(false);
 		await buildContent();
+		retriggerSearch();
 		if (!firstOpen || !scrollToInitialShowPosition()) {
 			scrollToState();
 		}

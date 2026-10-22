@@ -27,6 +27,8 @@ export interface SearchBoxOptions<T> {
 	// since before the box was shared, and renaming either would retire its existing translations.
 	noMatchesKey: string;
 	countKey: string;
+	// Some existing previews scroll to the first hit as the query changes; most wait for Enter.
+	navigateOnEdit?: boolean;
 	matches: (item: T, query: string) => boolean;
 	target: (item: T) => SearchTarget;
 }
@@ -61,7 +63,7 @@ export class SearchBox<T> {
 			// the cursor from landing somewhere arbitrary in the new set of hits.
 			this.currentId = undefined;
 			setState({ [this.options.stateKey]: next });
-			this.apply(false);
+			this.apply(this.options.navigateOnEdit ?? false);
 		};
 
 		box.addEventListener(
@@ -95,6 +97,9 @@ export class SearchBox<T> {
 		const hits = new Set(this.hits.map((hit) => this.options.target(hit).id));
 		if (this.currentId !== undefined && !hits.has(this.currentId)) {
 			this.currentId = undefined;
+		}
+		if (navigate && this.currentId === undefined && this.hits[0] !== undefined) {
+			this.currentId = this.options.target(this.hits[0]).id;
 		}
 		for (const item of this.items) {
 			const target = this.options.target(item);
