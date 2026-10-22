@@ -611,6 +611,46 @@ describe("webview/characterpreview rendering", () => {
 				);
 			});
 
+			it(`expands on Shift+${key === " " ? "Space" : key}, as on a Shift-click`, () => {
+				const { pill, detail } = navigablePill();
+				const wasHidden = detail.hidden;
+
+				pill.dispatchEvent(new (window as any).KeyboardEvent("keydown", {
+					key,
+					code,
+					bubbles: true,
+					cancelable: true,
+					shiftKey: true,
+				}));
+
+				assert.strictEqual(detail.hidden, !wasHidden);
+				assert.deepStrictEqual(
+					takePostedMessages().filter((m) => m.command === "navigate"),
+					[],
+				);
+			});
+
+			it(`toggles once while ${key === " " ? "Space" : key} is held down`, () => {
+				const { pill, detail } = navigablePill();
+				const wasHidden = detail.hidden;
+
+				for (const repeat of [false, true]) {
+					pill.dispatchEvent(new (window as any).KeyboardEvent("keydown", {
+						key,
+						code,
+						bubbles: true,
+						cancelable: true,
+						repeat,
+					}));
+				}
+
+				assert.strictEqual(detail.hidden, !wasHidden);
+				assert.deepStrictEqual(
+					takePostedMessages().filter((m) => m.command === "navigate"),
+					[],
+				);
+			});
+
 			for (const modifier of ["ctrlKey", "metaKey"] as const) {
 				it(`keeps ${modifier === "ctrlKey" ? "Ctrl" : "Meta"}+${key === " " ? "Space" : key} navigation`, () => {
 					const { pill, detail } = navigablePill();

@@ -361,16 +361,16 @@ export function traitToDom(trait: TraitCard): HTMLDivElement {
 			if (
 				(e.key !== "Enter" && e.key !== " " && e.code !== "Enter" && e.code !== "Space") ||
 				e.ctrlKey ||
-				e.metaKey ||
-				e.altKey ||
-				e.shiftKey
+				e.metaKey
 			) {
 				return;
 			}
 
 			e.preventDefault();
 			e.stopImmediatePropagation();
-			toggle();
+			if (!e.repeat) {
+				toggle();
+			}
 		}),
 	);
 
