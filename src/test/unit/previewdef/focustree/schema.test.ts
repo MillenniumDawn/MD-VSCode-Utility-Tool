@@ -10,6 +10,8 @@ import {
 	focusTreesToDisplay,
 	FocusWarning,
 } from "../../../../previewdef/focustree/schema";
+import { refreshFeatureFlags } from "../../../../util/featureflags";
+import { handOver } from "../../host";
 
 const filePath = "common/national_focus/test.txt";
 
@@ -990,6 +992,30 @@ shared_focus = {
 		);
 		const merged = trees.find((t) => t.id === "test_tree");
 		assert.ok(merged?.focuses["j_root"], "the joint focus must be merged");
+	});
+
+	it("merges shared focuses only when the useConditionInFocus setting is on", () => {
+		const tree = treeWithFocuses(focusBlock("m1", 10, 0)).replace(
+			"id = test_tree",
+			"id = test_tree shared_focus = j_root",
+		);
+		const file = convertFocusFileNodeToJson(
+			parseHoi4File(`joint_focus = { id = j_root x = 0 y = 0 }\n${tree}`),
+			{},
+		);
+		const merged = (useConditionInFocus: boolean) => {
+			handOver({ workspace: { getConfiguration: () => ({ useConditionInFocus }) } });
+			refreshFeatureFlags();
+			const trees = getFocusTreeWithFocusFile(file, [], filePath, {});
+			return "j_root" in (trees.find((t) => t.id === "test_tree")?.focuses ?? {});
+		};
+		try {
+			assert.strictEqual(merged(true), true);
+			assert.strictEqual(merged(false), false);
+		} finally {
+			handOver({ workspace: { getConfiguration: () => ({}) } });
+			refreshFeatureFlags();
+		}
 	});
 
 	it("checks shared focuses merged in from another file against each other", () => {
