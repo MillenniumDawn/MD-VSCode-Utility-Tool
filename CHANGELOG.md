@@ -11,6 +11,7 @@ v1.1.43
   Bugfixes:
 - [ CI ] The release workflow now gives the registry tokens only to the publish step, and no longer mistakes a fork's pull request for its own release or fix pull request. Issues #573, #574.
 - [ Previews ] The idea, decision, event and character previews now refresh when you edit a `.gfx` file they use. The MIO preview now refreshes when an organization file is added or removed. Issues #479, #544.
+- [ Previews ] A focus label, an inlay slot name or a text box `format` holding quotes, `<` or `</style>` can no longer add elements to a preview, and previews no longer submit forms. Issue #572.
 
 v1.1.42
 

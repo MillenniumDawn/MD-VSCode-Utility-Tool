@@ -97,6 +97,7 @@ export function html(webview: vscode.Webview, body: string, scripts: (string | D
             script-src ${preparedScripts.map(v => v[1]).filter(v => v.length > 0).join(' ')} ${webview.cspSource};
             img-src data: blob: ${webview.cspSource};
             font-src ${webview.cspSource};
+            form-action 'none';
         ">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         ${preparedScripts.map(v => v[0]).join('')}
@@ -125,7 +126,7 @@ export function loadingShellHtml(message?: string): string {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; form-action 'none';">
 <style nonce="${nonce}">
     html, body { margin: 0; padding: 0; height: 100%; background: var(--vscode-editor-background); }
     .preview-loading {
