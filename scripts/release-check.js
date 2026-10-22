@@ -49,6 +49,7 @@ const { isExempt } = require('./check-version');
 const { pullRequestsForCommit } = require('./pr-bullets');
 const { notice } = require('./lib/actions-log');
 const { parseFlags } = require('./lib/flags');
+const { git, tagExists } = require('./lib/git');
 
 const releaseBranch = 'release/version-bump';
 // The branch release.yml pushes when a release failed to publish. Its merge is a release too.
@@ -56,10 +57,6 @@ const fixBranch = /^fix\/release-v\d+\.\d+\.\d+$/;
 
 function isFixBranch(ref) {
 	return fixBranch.test(String(ref ?? ''));
-}
-
-function git(args) {
-	return execFileSync('git', args, { encoding: 'utf8' }).trim();
 }
 
 function gitSucceeds(args) {
@@ -158,15 +155,6 @@ function resolveCommit(ref) {
 		return git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
 	} catch {
 		return ref;
-	}
-}
-
-function tagExists(tag) {
-	try {
-		git(['rev-parse', '--verify', '--quiet', `refs/tags/${tag}`]);
-		return true;
-	} catch {
-		return false;
 	}
 }
 
