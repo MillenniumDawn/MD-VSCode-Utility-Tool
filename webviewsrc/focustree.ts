@@ -894,7 +894,7 @@ function setupCheckedFocuses(focuses: Focus[], focusTree: FocusTree) {
 						window.scrollBy(newLeft - oldLeft, newTop - oldTop);
 					}
 
-					retriggerSearch();
+					refreshFocusSearch();
 				}));
 			} else {
 				checkbox.parentElement?.remove();
@@ -1011,8 +1011,6 @@ function refreshFocusSearch(): void {
 	search.refresh(visibleFocuses);
 }
 
-let retriggerSearch: () => void = refreshFocusSearch;
-
 window.addEventListener("message", tryRun(async (event) => {
 	const msg = event.data;
 
@@ -1058,7 +1056,7 @@ window.addEventListener("message", tryRun(async (event) => {
 
 	updateSelectedFocusTree(false);
 	await buildContent();
-	retriggerSearch();
+	refreshFocusSearch();
 }));
 
 window.addEventListener(
@@ -1095,7 +1093,7 @@ window.addEventListener(
 				(window as any).__showInlayWindows = showInlayWindowsElement.checked;
 				updateSelectedFocusTree(false);
 				await buildContent();
-				retriggerSearch();
+				refreshFocusSearch();
 			}));
 		}
 
@@ -1110,7 +1108,7 @@ window.addEventListener(
 				setState({ selectedFocusTreeIndex });
 				updateSelectedFocusTree(true);
 				await buildContent();
-				retriggerSearch();
+				refreshFocusSearch();
 			}));
 		}
 
@@ -1130,7 +1128,7 @@ window.addEventListener(
 				}
 				setSelectedInlayWindowId(focusTree, inlayWindowsElement.value);
 				await buildContent();
-				retriggerSearch();
+				refreshFocusSearch();
 			}));
 		}
 
@@ -1163,14 +1161,13 @@ window.addEventListener(
 
 					const hiddenBranches = difference(allValues, selection);
 					setState({ hiddenBranches });
-					retriggerSearch();
+					refreshFocusSearch();
 				});
 			}
 		}
 
 		// Bind before the first build so a stored query is applied to the first rendered tree.
 		search.wire();
-		retriggerSearch = refreshFocusSearch;
 
 		// Conditions
 		if (useConditionInFocus) {
@@ -1202,7 +1199,7 @@ window.addEventListener(
 					setState({ selectedExprs });
 
 					await buildContent();
-					retriggerSearch();
+					refreshFocusSearch();
 				}));
 			}
 
@@ -1234,7 +1231,7 @@ window.addEventListener(
 					setState({ selectedInlayExprs });
 
 					await buildContent();
-					retriggerSearch();
+					refreshFocusSearch();
 				}));
 			}
 		}
@@ -1303,7 +1300,7 @@ window.addEventListener(
 			resetFocusCheckboxes.addEventListener("click", tryRun(async () => {
 				setState({ checkedFocuses: {} });
 				await buildContent();
-				retriggerSearch();
+				refreshFocusSearch();
 			}));
 		}
 
@@ -1313,7 +1310,7 @@ window.addEventListener(
 		const firstOpen = state.xOffset === undefined && state.yOffset === undefined;
 		updateSelectedFocusTree(false);
 		await buildContent();
-		retriggerSearch();
+		refreshFocusSearch();
 		if (!firstOpen || !scrollToInitialShowPosition()) {
 			scrollToState();
 		}

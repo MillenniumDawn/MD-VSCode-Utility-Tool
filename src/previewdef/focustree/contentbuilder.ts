@@ -284,6 +284,13 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
         outline: 2px solid var(--vscode-editor-findMatchBorder, #E33);
         background: var(--vscode-editor-findMatchBackground, rgba(255, 0, 0, 0.5));
     `);
+    styleTable.raw(`#focus-search-count`, `
+        align-self: center;
+        min-width: 5em;
+        margin-right: 12px;
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+    `);
 
     // Set by the webview while the continuous focus box can be dragged.
     styleTable.raw(`#continuousFocuses.continuous-editable`, `

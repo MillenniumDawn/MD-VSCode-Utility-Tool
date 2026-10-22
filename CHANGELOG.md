@@ -1,5 +1,8 @@
 Unreleased
 
+  Functionality:
+- [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
+
   Bugfixes:
 - [ CI ] The release workflow now gives the registry tokens only to the publish step, and no longer mistakes a fork's pull request for its own release or fix pull request. Issues #573, #574.
 - [ Previews ] The idea, decision, event and character previews now refresh when you edit a `.gfx` file they use. The MIO preview now refreshes when an organization file is added or removed. Issues #479, #544.
@@ -8,7 +11,6 @@ Unreleased
 - [ GFX ] A PNG texture that is interlaced or larger than the supported size is now skipped instead of decoded, so a small malformed file can no longer use up the editor's memory. Issue #570.
 - [ CI ] Workflow warnings and notices now safely display multiline text without triggering extra workflow commands. Issue #577.
 - [ Character Previewer ] Pressing Enter or Space on a trait pill now expands its details instead of opening the trait file; Ctrl/Meta navigation still works. Issue #548.
-- [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. Issue #547.
 
 v1.1.42
 

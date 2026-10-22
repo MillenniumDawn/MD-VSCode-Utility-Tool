@@ -130,8 +130,6 @@ describe('webview/focustree rendering', () => {
         resetWebviewState();
         const searchbox = document.createElement('input');
         searchbox.id = 'focus-searchbox';
-        const legacySearchbox = document.createElement('input');
-        legacySearchbox.id = 'searchbox';
         const count = document.createElement('span');
         count.id = 'focus-search-count';
         const allowBranch = document.createElement('div');
@@ -141,7 +139,7 @@ describe('webview/focustree rendering', () => {
         const allowBranchContainer = document.createElement('div');
         allowBranchContainer.id = 'allowbranch-container';
         allowBranchContainer.append(allowBranch);
-        document.body.append(searchbox, legacySearchbox, count, allowBranchContainer);
+        document.body.append(searchbox, count, allowBranchContainer);
         const placeholder = document.getElementById('focustreeplaceholder')!;
         placeholder.innerHTML = '';
 
@@ -221,6 +219,7 @@ describe('webview/focustree rendering', () => {
             searchbox.dispatchEvent(new (window as any).Event('paste'));
             searchbox.dispatchEvent(new (window as any).Event('input'));
             assert.strictEqual(count.textContent, 'no matches');
+            assert.strictEqual(placeholder.querySelectorAll('.focus.ev-hit').length, 0);
             searchbox.value = '';
             searchbox.dispatchEvent(new (window as any).Event('cut'));
             searchbox.dispatchEvent(new (window as any).Event('input'));
@@ -229,7 +228,6 @@ describe('webview/focustree rendering', () => {
             (window as any).scroll = originalScroll;
             (window as any).scrollTo = originalScrollTo;
             searchbox.remove();
-            legacySearchbox.remove();
             count.remove();
             allowBranchContainer.remove();
         }
@@ -332,7 +330,7 @@ describe('webview/focustree rendering', () => {
     // The tree it reads is the one on screen now, not the one the page was loaded with.
     it('posts the tree on screen and its warnings when the copy button is clicked', async () => {
         const searchbox = document.createElement('input');
-        searchbox.id = 'searchbox';
+        searchbox.id = 'focus-searchbox';
         const copyButton = document.createElement('button');
         copyButton.id = 'copy-warnings';
         document.body.append(searchbox, copyButton);
@@ -385,7 +383,7 @@ describe('webview/focustree rendering toolbar toggles', () => {
         (window as any).focusTrees = [updateBody('first_focus').data.focusTrees[0]];
         document.body.innerHTML = `
             <div class="toolbar-outer"><div class="toolbar">
-                <input id="searchbox" type="text"/>
+                <input id="focus-searchbox" type="text"/>
                 ${iconButtonHtml('showWarnings', feLocalize, { domId: 'show-warnings', on: false })}
                 ${iconButtonHtml('warningMarkers', feLocalize, { domId: 'toggle-warning-markers', on: true })}
             </div></div>
