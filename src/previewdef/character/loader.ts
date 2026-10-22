@@ -120,7 +120,7 @@ export class CharactersLoader extends LanguageAwareContentLoader<CharactersLoade
 			// Reporting them here is what subscribes this preview to them; renderCharacterFile then
 			// forces the session on a dependency change, since the character file's own hash has not
 			// moved and the loader would otherwise hand back its cached traits.
-			dependencies: uniq([this.file, ...traits.files, ...definitionFiles]),
+			dependencies: uniq([this.file, ...traits.files, ...definitionFiles, ...gfxFiles]),
 		};
 	}
 
