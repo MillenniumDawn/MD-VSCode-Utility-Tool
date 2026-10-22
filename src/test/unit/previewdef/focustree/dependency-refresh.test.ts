@@ -251,6 +251,6 @@ describe("previewdef/focustree dependency-only inlay refresh", () => {
 
 		await preview.renderContent({ getText: () => "" }, preview.uri, panel.webview, { partial: true, dependencyChanged: true });
 
-		assert.deepStrictEqual(forced, [false, true]);
+		assert.deepStrictEqual(forced, [true]);
 	});
 });
