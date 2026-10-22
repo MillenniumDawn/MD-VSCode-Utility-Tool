@@ -35,7 +35,8 @@ describe("util/previewfileopener copy target", () => {
 	let pickerCalls: number;
 
 	before(() => {
-		workspace = fs.mkdtempSync(path.join(os.tmpdir(), "previewfileopener-"));
+		// A mod can live under a dot folder (~/.local/share/Paradox Interactive), so the root has one too.
+		workspace = fs.mkdtempSync(path.join(os.tmpdir(), ".previewfileopener-"));
 	});
 
 	after(() => {
