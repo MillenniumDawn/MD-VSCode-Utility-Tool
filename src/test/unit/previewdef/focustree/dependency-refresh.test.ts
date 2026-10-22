@@ -6,6 +6,7 @@ import * as imagecache from "../../../../util/image/imagecache";
 import * as vsccommon from "../../../../util/vsccommon";
 import { FocusTreeLoader } from "../../../../previewdef/focustree/loader";
 import { buildFocusTreePayload } from "../../../../previewdef/focustree/contentbuilder";
+import { focusTreePreviewDef } from "../../../../previewdef/focustree";
 import { refreshFeatureFlags } from "../../../../util/featureflags";
 import { PNG } from "pngjs";
 import { handOver } from "../../host";
@@ -221,5 +222,35 @@ describe("previewdef/focustree dependency-only inlay refresh", () => {
 
 		const refreshed = await buildFocusTreePayload(loader, undefined, { resolveIcons: false, dependencyChanged: true });
 		assert.strictEqual(gfxFileOf(refreshed), gfxPath);
+	});
+
+	it("forces the preview's structure load once when a dependency changed", async () => {
+		const disposable = { dispose: () => undefined };
+		handOver({
+			EventEmitter: class { event = () => disposable; fire() {} dispose() {} },
+			workspace: {
+				workspaceFolders: [{ uri: modRoot }],
+				textDocuments: [],
+				getWorkspaceFolder: () => ({ uri: modRoot }),
+				getConfiguration: () => ({}),
+				onDidChangeConfiguration: () => disposable,
+			},
+		} as any);
+		const panel = {
+			webview: { html: "", cspSource: "", asWebviewUri: (u: unknown) => u, postMessage: async () => true, onDidReceiveMessage: () => disposable },
+			visible: true,
+			onDidChangeViewState: () => disposable,
+			onDidDispose: () => disposable,
+		};
+		const preview = new (focusTreePreviewDef as any).previewConstructor(uri(`/mod/${focusPath}`), panel);
+		const forced: boolean[] = [];
+		preview.focusTreeLoader.load = async (session: { force: boolean }) => {
+			forced.push(session.force);
+			return { result: { focusTrees: [] }, dependencies: [] };
+		};
+
+		await preview.renderContent({ getText: () => "" }, preview.uri, panel.webview, { partial: true, dependencyChanged: true });
+
+		assert.deepStrictEqual(forced, [false, true]);
 	});
 });
