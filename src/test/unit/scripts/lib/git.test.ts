@@ -25,7 +25,10 @@ describe("scripts/lib/git", () => {
 	});
 
 	it("runs git from the current directory and trims its output", () => {
-		assert.strictEqual(git(["rev-parse", "--show-toplevel"]), repository);
+		assert.strictEqual(
+			fs.realpathSync.native(git(["rev-parse", "--show-toplevel"])),
+			fs.realpathSync.native(repository),
+		);
 	});
 
 	it("reports whether a tag exists and treats a missing tag as false", () => {
