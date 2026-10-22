@@ -244,13 +244,29 @@ describe("previewdef/focustree dependency-only inlay refresh", () => {
 		};
 		const preview = new (focusTreePreviewDef as any).previewConstructor(uri(`/mod/${focusPath}`), panel);
 		const forced: boolean[] = [];
+		const focusTrees: { isSharedFocues: boolean }[] = [];
 		preview.focusTreeLoader.load = async (session: { force: boolean }) => {
 			forced.push(session.force);
-			return { result: { focusTrees: [] }, dependencies: [] };
+			return { result: { focusTrees }, dependencies: [] };
 		};
 
 		await preview.renderContent({ getText: () => "" }, preview.uri, panel.webview, { partial: true, dependencyChanged: true });
 
 		assert.deepStrictEqual(forced, [true]);
+
+		forced.length = 0;
+		focusTrees.push({ isSharedFocues: false });
+		preview.lastTreeStructural = "unchanged";
+		preview.lastTreeIcon = "unchanged";
+		preview.treeFingerprintsFor = () => ({ structural: "unchanged", icon: "unchanged" });
+
+		const unchanged = await preview.renderContent({ getText: () => "" }, preview.uri, panel.webview, { partial: true, dependencyChanged: false });
+
+		assert.strictEqual(unchanged, null);
+		assert.deepStrictEqual(forced, [false]);
+
+		preview.lastTreeStructural = undefined;
+		assert.strictEqual(await preview.unchangedBeforeRender(), false);
+		assert.deepStrictEqual(forced, [false, false]);
 	});
 });
