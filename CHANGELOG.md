@@ -1,5 +1,7 @@
 Unreleased
 
+v1.1.43
+
   Bugfixes:
 - [ CI ] The release workflow now gives the registry tokens only to the publish step, and no longer mistakes a fork's pull request for its own release or fix pull request. Issues #573, #574.
 
