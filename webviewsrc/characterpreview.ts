@@ -334,6 +334,10 @@ export function traitToDom(trait: TraitCard): HTMLDivElement {
 	const open = expandTraits;
 	detail.hidden = !open;
 	pill.setAttribute("aria-expanded", String(open));
+	const toggle = () => {
+		detail.hidden = !detail.hidden;
+		pill.setAttribute("aria-expanded", String(!detail.hidden));
+	};
 	pill.addEventListener(
 		"click",
 		tryRun((e: Event) => {
@@ -348,8 +352,25 @@ export function traitToDom(trait: TraitCard): HTMLDivElement {
 			// element the event is already at. This one is registered while the card is built, before
 			// subscribeNavigators runs, so it is first and does get to cancel the rest.
 			e.stopImmediatePropagation();
-			detail.hidden = !detail.hidden;
-			pill.setAttribute("aria-expanded", String(!detail.hidden));
+			toggle();
+		}),
+	);
+	pill.addEventListener(
+		"keydown",
+		tryRun((e: KeyboardEvent) => {
+			if (
+				(e.key !== "Enter" && e.key !== " " && e.code !== "Enter" && e.code !== "Space") ||
+				e.ctrlKey ||
+				e.metaKey ||
+				e.altKey ||
+				e.shiftKey
+			) {
+				return;
+			}
+
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			toggle();
 		}),
 	);
 
