@@ -126,6 +126,33 @@ describe("util/previewfileopener copy target", () => {
 		assert.deepStrictEqual(errors, []);
 	});
 
+	it("neither reads nor writes through a symlink into a dot folder", async () => {
+		const hidden = path.join(workspace, ".git", "hooks");
+		fs.mkdirSync(hidden, { recursive: true });
+		fs.symlinkSync(path.join(workspace, ".git"), path.join(workspace, "alias"), "junction");
+
+		await navigateTo("alias/hooks/x");
+
+		assert.deepStrictEqual(reads, []);
+		assert.deepStrictEqual(writes, []);
+		assert.deepStrictEqual(opened, []);
+		assert.match(errors[0], /Copy target is inside a dot-prefixed path/);
+	});
+
+	it("still copies through a symlink into a normal workspace folder", async () => {
+		const common = path.join(workspace, "common");
+		fs.mkdirSync(common, { recursive: true });
+		fs.symlinkSync(common, path.join(workspace, "common-alias"), "junction");
+
+		await navigateTo("common-alias/ideas/x.txt");
+
+		const target = path.join(workspace, "common-alias", "ideas", "x.txt");
+		assert.deepStrictEqual(reads, ["common-alias/ideas/x.txt"]);
+		assert.deepStrictEqual(writes, [{ path: target, text: "ideas = { }" }]);
+		assert.deepStrictEqual(opened, [target]);
+		assert.deepStrictEqual(errors, []);
+	});
+
 	it("treats a lone dot segment as no segment", async () => {
 		await navigateTo("./common/ideas/x.txt");
 

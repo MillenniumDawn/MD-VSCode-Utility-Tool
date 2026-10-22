@@ -51,6 +51,9 @@ async function ensureCopyTargetIsInsideWorkspace(
 	if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
 		throw new Error("Copy target resolves outside the workspace");
 	}
+	if (hasDotPrefixedSegment(relative)) {
+		throw new Error("Copy target is inside a dot-prefixed path");
+	}
 }
 
 // `.` and `..` are not names: the file resolver refuses `..`, and joinPath drops `.`.
@@ -121,9 +124,9 @@ export async function openOrCopyHoiFile(
 	}
 
 	try {
-		const [buffer] = await readFileFromModOrHOI4(file);
 		const targetPath = host().Uri.joinPath(targetFolderUri, file);
 		await ensureCopyTargetIsInsideWorkspace(targetPath, targetFolderUri);
+		const [buffer] = await readFileFromModOrHOI4(file);
 		await mkdirs(dirUri(targetPath));
 		await writeFile(targetPath, buffer);
 
