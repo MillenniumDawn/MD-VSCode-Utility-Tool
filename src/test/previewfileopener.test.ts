@@ -286,17 +286,21 @@ describe("util/previewfileopener", () => {
 		const errors: string[] = [];
 		const opened: string[] = [];
 		const written: string[] = [];
+		let reads = 0;
 		const vscode = await import("vscode");
 		stubVscode({
 			configuration: { modFile: "", loadDlcContents: false },
-			workspaceFolders: [{ uri: vscode.Uri.file("/ws") }],
+			workspaceFolders: [{ uri: vscode.Uri.file(process.cwd()) }],
 			stat: async () => ({
 				type: vscode.FileType.File,
 				mtime: 1,
 				ctime: 0,
 				size: 10,
 			}),
-			readFile: async () => Buffer.from("secret"),
+			readFile: async () => {
+				reads++;
+				return Buffer.from("secret");
+			},
 			writeFile: async (uri: any) => {
 				written.push(String(uri.path ?? uri.fsPath ?? ""));
 			},
@@ -304,7 +308,7 @@ describe("util/previewfileopener", () => {
 				opened.push(String(uri.path ?? uri.fsPath ?? uri));
 				return { uri, getText: () => "", positionAt: () => ({}) };
 			},
-			showWorkspaceFolderPick: async () => ({ uri: vscode.Uri.file("/ws") }),
+			showWorkspaceFolderPick: async () => ({ uri: vscode.Uri.file(process.cwd()) }),
 			showErrorMessage: async (message: string) => {
 				errors.push(message);
 				return undefined;
@@ -319,7 +323,8 @@ describe("util/previewfileopener", () => {
 
 		assert.deepStrictEqual(opened, []);
 		assert.deepStrictEqual(written, []);
+		assert.strictEqual(reads, 0);
 		assert.strictEqual(errors.length, 1);
-		assert.match(errors[0], /Can't find file/);
+		assert.match(errors[0], /Copy target resolves outside the workspace/);
 	});
 });
