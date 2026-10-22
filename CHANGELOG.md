@@ -6,6 +6,7 @@ Unreleased
 - [ Previews ] A focus label, an inlay slot name or a text box `format` holding quotes, `<` or `</style>` can no longer add elements to a preview, and previews no longer submit forms. Issue #572.
 - [ Previews ] Clicking a preview link can no longer copy a file into a hidden folder in your workspace, such as `.git` or `.vscode`. Issue #571.
 - [ GFX ] A PNG texture that is interlaced or larger than the supported size is now skipped instead of decoded, so a small malformed file can no longer use up the editor's memory. Issue #570.
+- [ CI ] Workflow warnings and notices now safely display multiline text without triggering extra workflow commands. Issue #577.
 
 v1.1.42
 
