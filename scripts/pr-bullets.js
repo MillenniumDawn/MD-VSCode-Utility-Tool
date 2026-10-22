@@ -15,7 +15,6 @@
 
 'use strict';
 
-const { execFileSync } = require('child_process');
 const fs = require('fs');
 
 const { bulletFor, issueFromBody } = require('./bump-version');
@@ -23,10 +22,7 @@ const { componentForFiles, sectionForPullRequest } = require('./changelog-bullet
 const { warn, notice } = require('./lib/actions-log');
 const { parseFlags } = require('./lib/flags');
 const { gh } = require('./lib/github');
-
-function git(args) {
-	return execFileSync('git', args, { encoding: 'utf8' }).trim();
-}
+const { git } = require('./lib/git');
 
 function lines(output) {
 	return output ? output.split(/\r?\n/).filter(Boolean) : [];
