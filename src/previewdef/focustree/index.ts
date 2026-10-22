@@ -232,7 +232,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
             let structure: FocusTreePayload | null;
             try {
                 structure = await withTimeout(
-                    buildFocusTreePayload(this.focusTreeLoader, progress, { resolveIcons: false }),
+                    buildFocusTreePayload(this.focusTreeLoader, progress, { resolveIcons: false, dependencyChanged: options.dependencyChanged }),
                     focusTreeRenderTimeout,
                     options.partial ? undefined : () => {
                         progress?.(localize('focustree.loading.slow', 'Still working on a heavy focus tree...'));
@@ -274,13 +274,14 @@ class FocusTreePreview extends UpdateablePreviewBase {
     /**
      * Object-level early-out (bug #37): parse the focus trees only and, before paying for any
      * per-focus HTML/style rendering, report unchanged when the parsed structure and icon set both
-     * match the last render. loadFocusTreesOnly shares the loader's content-hash cache, so the
-     * fall-through buildFocusTreePayload reuses this same parse -- there is no double parse.
+     * match the last render. In a normal session, loadFocusTreesOnly shares the loader's content-hash
+     * cache, so the fall-through buildFocusTreePayload reuses this same parse. When a dependency
+     * changed, both passes deliberately force a reload before the refreshed render.
      */
     private async unchangedBeforeRender(dependencyChanged: boolean): Promise<boolean> {
         let trees: { focusTrees: FocusTree[]; layout: FocusTreeLayout } | null = null;
         try {
-            trees = await withTimeout(loadFocusTreesOnly(this.focusTreeLoader), focusTreeRenderTimeout);
+            trees = await withTimeout(loadFocusTreesOnly(this.focusTreeLoader, dependencyChanged), focusTreeRenderTimeout);
         } catch (e) {
             // A slow/stuck object-level load must not throw; drop the early-out and let the existing
             // structure pass (with its own timeout handling) take over.
