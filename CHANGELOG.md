@@ -5,6 +5,7 @@ v1.1.43
   Functionality:
 
 - [ CI ] Share the identical Git helpers used by release scripts. Issue #562.
+- [ Testing ] Load the four world map page modules in the module-load test. Issue #532.
 
   Bugfixes:
 - [ CI ] The release workflow now gives the registry tokens only to the publish step, and no longer mistakes a fork's pull request for its own release or fix pull request. Issues #573, #574.
