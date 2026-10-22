@@ -183,7 +183,7 @@ describe('webview/focustree rendering', () => {
         try {
             const slot = {
                 id: 'a"b<c></style>',
-                template: '<div id="slot" class="{{inlay_slot_class:a_34b_60c_62_60_47style_62}} st-slot"></div>',
+                template: '<div id="slot" class="{{inlay_slot_class:a%22b%3Cc%3E%3C%2Fstyle%3E}} st-slot"></div>',
             };
             window.dispatchEvent(new (window as any).MessageEvent('message', { data: updateBody('slot_focus', { useConditionInFocus: false, slot }) }));
             await rendered(document.getElementById('focustreeplaceholder')!);
@@ -191,6 +191,28 @@ describe('webview/focustree rendering', () => {
 
             const placeholder = document.getElementById('inlaywindowplaceholder')!;
             assert.deepStrictEqual([...placeholder.querySelector('#slot')!.classList], ['st-inlay-gfx-interface_47slots_46gfx_45GFX_slot', 'st-slot']);
+            assert.ok(!placeholder.innerHTML.includes('{{'), placeholder.innerHTML);
+        } finally {
+            delete (window as any).__showInlayWindows;
+        }
+    });
+
+    it('keeps the images of distinct inlay slots separate', async () => {
+        (window as any).__showInlayWindows = true;
+        try {
+            const message = updateBody('slot_focus', { useConditionInFocus: false, slot: {
+                id: 'a-b',
+                template: '<div id="first" class="{{inlay_slot_class:a-b}}"></div><div id="second" class="{{inlay_slot_class:a_45b}}"></div>',
+            } });
+            const slots = message.data.focusTrees[0].inlayWindows[0]!.scriptedImages;
+            slots.push({ ...slots[0]!, id: 'a_45b', gfxOptions: [{ ...slots[0]!.gfxOptions[0]!, gfxName: 'GFX_other' }] });
+            window.dispatchEvent(new (window as any).MessageEvent('message', { data: message }));
+            await rendered(document.getElementById('focustreeplaceholder')!);
+            takePostedMessages();
+
+            const placeholder = document.getElementById('inlaywindowplaceholder')!;
+            assert.strictEqual(placeholder.querySelector('#first')!.className, 'st-inlay-gfx-interface_47slots_46gfx_45GFX_slot');
+            assert.strictEqual(placeholder.querySelector('#second')!.className, 'st-inlay-gfx-interface_47slots_46gfx_45GFX_other');
             assert.ok(!placeholder.innerHTML.includes('{{'), placeholder.innerHTML);
         } finally {
             delete (window as any).__showInlayWindows;

@@ -77,8 +77,16 @@ describe("previewdef/focustree contentbuilder", () => {
 		it("names the class to swap in after the slot, spelled so no id can close the attribute", async () => {
 			assert.ok((await inlayWindow(plainId)).includes("{{inlay_slot_class:leader_slot}}"));
 			const hostile = await inlayWindow(hostileId);
-			assert.ok(hostile.includes("{{inlay_slot_class:a_34b_60c_62_60_47style_62}}"), hostile);
+			assert.ok(hostile.includes("{{inlay_slot_class:a%22b%3Cc%3E%3C%2Fstyle%3E}}"), hostile);
 			assert.ok(!hostile.includes(hostileId), hostile);
+		});
+
+		it("keeps distinct slot ids from sharing a placeholder", async () => {
+			const first = (await inlayWindow("a-b")).match(/\{\{inlay_slot_class:[^}]*\}\}/)?.[0];
+			const second = (await inlayWindow("a_45b")).match(/\{\{inlay_slot_class:[^}]*\}\}/)?.[0];
+			assert.ok(first);
+			assert.ok(second);
+			assert.notStrictEqual(first, second);
 		});
 
 		it("gains no element or attribute from a slot named with a quote, a bracket and </style>", async () => {

@@ -565,7 +565,7 @@ async function renderInlayOverrideChild<T extends keyof RenderChildTypeMap>(
     }
 
     const scale = iconLikeChild.scale ?? 1;
-    const gfxClassPlaceholder = `{{inlay_slot_class:${normalizeForStyle(slot.id)}}}`;
+    const gfxClassPlaceholder = `{{inlay_slot_class:${encodeURIComponent(slot.id)}}}`;
     // The image comes only from the placeholder, which the webview swaps for the option whose
     // condition is met. A background of this first option here would sit later in the stylesheet
     // and win over whichever option was chosen; the sprite only sizes the slot.
