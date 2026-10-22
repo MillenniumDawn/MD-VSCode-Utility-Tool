@@ -50,7 +50,7 @@ export class SearchBox<T> {
 		if (!box) {
 			return;
 		}
-		this.query = (getState()[this.options.stateKey] ?? "").toLowerCase();
+		this.query = (getState()[this.options.stateKey] ?? "").trim().toLowerCase();
 		box.value = this.query;
 
 		const onEdit = () => {

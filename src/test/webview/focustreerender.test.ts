@@ -3,6 +3,7 @@ import * as assert from 'assert';
 import { Focus, FocusTree } from '../../previewdef/focustree/schema';
 import { iconButtonHtml } from '../../previewdef/toolbaricons';
 import { feLocalize } from '../../../webviewsrc/util/i18n';
+import { setState } from '../../../webviewsrc/util/common';
 
 function focus(id: string): Focus {
     return {
@@ -128,6 +129,7 @@ describe('webview/focustree rendering', () => {
 
     it('counts visible focus matches, navigates them, and reapplies the query after a rebuild', async () => {
         resetWebviewState();
+        setState({ searchboxValue: ' NAVY ' });
         const searchbox = document.createElement('input');
         searchbox.id = 'focus-searchbox';
         const count = document.createElement('span');
@@ -176,6 +178,12 @@ describe('webview/focustree rendering', () => {
             }
             await rendered(placeholder);
             takePostedMessages();
+
+            assert.strictEqual(searchbox.value, 'navy');
+            assert.strictEqual(count.textContent, '-/2');
+            assert.strictEqual(placeholder.querySelectorAll('.focus.ev-hit').length, 2);
+            searchbox.value = '';
+            searchbox.dispatchEvent(new (window as any).Event('input'));
 
             const scrolls: string[] = [];
             for (const element of Array.from(placeholder.querySelectorAll<HTMLDivElement>('.focus'))) {
