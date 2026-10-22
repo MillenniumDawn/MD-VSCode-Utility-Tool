@@ -1,11 +1,11 @@
 import * as assert from "assert";
-import { parseHoi4File } from "../hoiformat/hoiparser";
+import { parseHoi4File } from "../../../../hoiformat/hoiparser";
 import {
 	HOICharacter,
 	HOICharacterRole,
 	getCharactersFromFile,
-} from "../previewdef/character/schema";
-import { conditionToString } from "../hoiformat/condition";
+} from "../../../../previewdef/character/schema";
+import { conditionToString } from "../../../../hoiformat/condition";
 
 // The blocks below are transcribed from Millennium Dawn's common/characters: AFG.txt for a
 // character wearing three roles at once, TUR.txt for the duplicated `portraits` category the game

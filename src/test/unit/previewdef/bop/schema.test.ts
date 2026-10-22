@@ -1,6 +1,6 @@
 import * as assert from "assert";
-import { parseHoi4File } from "../hoiformat/hoiparser";
-import { getBopsFromFile } from "../previewdef/bop/schema";
+import { parseHoi4File } from "../../../../hoiformat/hoiparser";
+import { getBopsFromFile } from "../../../../previewdef/bop/schema";
 
 // Fixtures transcribed from Millennium Dawn's common/bop, keeping the quirks the real files have:
 // no centre range, on_activate before modifier, trailing comments, a placeholder icon, and a

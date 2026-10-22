@@ -1,7 +1,7 @@
 import * as assert from "assert";
-import { parseHoi4File } from "../hoiformat/hoiparser";
-import { HOIIdea, HOIIdeaCategory, getIdeasFromFile } from "../previewdef/idea/schema";
-import { conditionToString } from "../hoiformat/condition";
+import { parseHoi4File } from "../../../../hoiformat/hoiparser";
+import { HOIIdea, HOIIdeaCategory, getIdeasFromFile } from "../../../../previewdef/idea/schema";
+import { conditionToString } from "../../../../hoiformat/condition";
 
 // The blocks below are transcribed from Millennium Dawn's common/ideas/05_netherlands.txt and
 // common/ideas/AA_law_economics.txt. Between them they cover what the roster needs the schema to

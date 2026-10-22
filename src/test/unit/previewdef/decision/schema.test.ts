@@ -1,11 +1,11 @@
 import * as assert from "assert";
-import { parseHoi4File } from "../hoiformat/hoiparser";
-import { conditionToString } from "../hoiformat/condition";
+import { parseHoi4File } from "../../../../hoiformat/hoiparser";
+import { conditionToString } from "../../../../hoiformat/condition";
 import {
 	HOIDecision,
 	HOIDecisionCategoryRef,
 	getDecisionsFromFile,
-} from "../previewdef/decision/schema";
+} from "../../../../previewdef/decision/schema";
 
 // The blocks below are transcribed from Millennium Dawn's common/decisions/00_political_decisions.txt,
 // common/decisions/Poland.txt, common/decisions/05_india.txt and

@@ -1,6 +1,6 @@
 import * as assert from 'assert';
-import { parseHoi4File } from '../hoiformat/hoiparser';
-import { getMiosFromFile, Mio, MioTrait } from '../previewdef/mio/schema';
+import { parseHoi4File } from '../../../../hoiformat/hoiparser';
+import { getMiosFromFile, Mio, MioTrait } from '../../../../previewdef/mio/schema';
 
 describe('previewdef/mio/schema tree_header_text', () => {
     it('parses multiple tree_header_text blocks into textHeaders', () => {
