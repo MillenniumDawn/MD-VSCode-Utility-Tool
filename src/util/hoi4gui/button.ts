@@ -1,27 +1,19 @@
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from "../../hoiformat/schema";
-import { ParentInfo, calculateBBox } from "./common";
+import { ParentInfo } from "./common";
 import { ButtonType } from "../../hoiformat/gui";
-import { RenderNodeCommonOptions, renderSprite } from './nodecommon';
+import { RenderNodeCommonOptions, placeSprite, renderSprite } from './nodecommon';
 import { renderInstantTextBox } from "./instanttextbox";
 
 export interface RenderButtonOptions extends RenderNodeCommonOptions {
 }
 
 export async function renderButton(button: HOIPartial<ButtonType>, parentInfo: ParentInfo, options: RenderButtonOptions): Promise<string> {
-    const spriteType = button.spritetype ?? button.quadtexturesprite;
-    const image = options.getSprite && spriteType ? await options.getSprite(spriteType, 'icon', button.name) : undefined;
-
-    if (image === undefined) {
+    const placed = await placeSprite(button, parentInfo, options);
+    if (placed === undefined) {
         return '';
     }
+    const { image, x, y, scale } = placed;
 
-    let [x, y] = calculateBBox(button, parentInfo);
-    if (button.centerposition) {
-        x -= image.width / 2;
-        y -= image.height / 2;
-    }
-
-    const scale = button.scale ?? 1;
     return `<div
     start="${button._token?.start}"
     end="${button._token?.end}"

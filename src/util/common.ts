@@ -568,6 +568,28 @@ function describeThrown(e: unknown): string {
 	}
 }
 
+// One pattern per argument count, built on first use: localize runs tens of thousands of times
+// during an index build, and compiling the same regex on each call was most of what it did. The
+// pattern only names the placeholders that have an argument, so `{1}` with a single argument is
+// left in the text as it always was.
+const placeholderPatterns: RegExp[] = [];
+
+export function fillPlaceholders(message: string, args: readonly unknown[]): string {
+	if (args.length === 0) {
+		return message;
+	}
+	let pattern = placeholderPatterns[args.length];
+	if (pattern === undefined) {
+		const indexes: string[] = [];
+		for (let i = 0; i < args.length; i++) {
+			indexes.push(i.toString());
+		}
+		pattern = new RegExp("\\{(" + indexes.join("|") + ")\\}", "g");
+		placeholderPatterns[args.length] = pattern;
+	}
+	return message.replace(pattern, (_, group1: string) => String(args[parseInt(group1, 10)] ?? ""));
+}
+
 // JSON for embedding in an inline <script>. The HTML parser ends the script at the first `</script`
 // it sees, whatever the JavaScript around it means, so a workspace string containing one would
 // otherwise truncate the payload and spill the rest into the document as markup. Escaping `<`

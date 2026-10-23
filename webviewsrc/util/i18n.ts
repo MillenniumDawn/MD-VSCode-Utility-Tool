@@ -1,4 +1,4 @@
-import { __table } from "../../i18n/en";
+import { fillPlaceholders } from "../../src/util/common";
 
 let table: Record<string, string> = {};
 
@@ -23,30 +23,5 @@ export function feLocalize(
 			message = localized;
 		}
 	}
-
-	if (args.length === 0) {
-		return message;
-	}
-	return message.replace(
-		placeholderPattern(args.length),
-		(_, group1) => args[parseInt(group1, 10)]?.toString() ?? "",
-	);
-}
-
-// One pattern per argument count, built on first use, as in the extension host's localize. The
-// pattern only names the placeholders that have an argument, so `{1}` with a single argument is
-// left in the text as it always was.
-const placeholderPatterns: RegExp[] = [];
-
-function placeholderPattern(arity: number): RegExp {
-	let pattern = placeholderPatterns[arity];
-	if (pattern === undefined) {
-		const indexes: string[] = [];
-		for (let i = 0; i < arity; i++) {
-			indexes.push(i.toString());
-		}
-		pattern = new RegExp("\\{(" + indexes.join("|") + ")\\}", "g");
-		placeholderPatterns[arity] = pattern;
-	}
-	return pattern;
+	return fillPlaceholders(message, args);
 }
