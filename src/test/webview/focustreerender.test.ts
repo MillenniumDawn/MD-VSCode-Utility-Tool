@@ -3,6 +3,7 @@ import * as assert from 'assert';
 import { Focus, FocusTree } from '../../previewdef/focustree/schema';
 import { iconButtonHtml } from '../../previewdef/toolbaricons';
 import { feLocalize } from '../../../webviewsrc/util/i18n';
+import { setState } from '../../../webviewsrc/util/common';
 
 function focus(id: string): Focus {
     return {
@@ -126,6 +127,120 @@ describe('webview/focustree rendering', () => {
         assert.strictEqual(element.querySelector('#focus_first_focus'), null);
     });
 
+    it('counts visible focus matches, navigates them, and reapplies the query after a rebuild', async () => {
+        resetWebviewState();
+        setState({ searchboxValue: ' NAVY ' });
+        const searchbox = document.createElement('input');
+        searchbox.id = 'focus-searchbox';
+        const count = document.createElement('span');
+        count.id = 'focus-search-count';
+        const allowBranch = document.createElement('div');
+        allowBranch.id = 'allowbranch';
+        allowBranch.className = 'select multiple-select';
+        allowBranch.innerHTML = '<span class="value"></span>';
+        const allowBranchContainer = document.createElement('div');
+        allowBranchContainer.id = 'allowbranch-container';
+        allowBranchContainer.append(allowBranch);
+        document.body.append(searchbox, count, allowBranchContainer);
+        const placeholder = document.getElementById('focustreeplaceholder')!;
+        placeholder.innerHTML = '';
+
+        const originalScroll = window.scroll;
+        const originalScrollTo = window.scrollTo;
+        (window as any).scroll = () => undefined;
+        (window as any).scrollTo = () => undefined;
+        try {
+            const message = updateBody('ENG_navy');
+            const first = focus('ENG_navy');
+            const branched = focus('FRA_navy');
+            branched.inAllowBranch = ['branch_focus'];
+            const branch = focus('branch_focus');
+            first.x = 0;
+            branched.x = 1;
+            branch.x = 2;
+            message.data.focusTrees[0].focuses = {
+                ENG_navy: first,
+                FRA_navy: branched,
+                branch_focus: branch,
+            };
+            message.data.focusTrees[0].allowBranchOptions = ['branch_focus'];
+            message.data.renderedFocus = {
+                ENG_navy: '<div></div>',
+                FRA_navy: '<div></div>',
+                branch_focus: '<div></div>',
+            };
+            window.dispatchEvent(new (window as any).MessageEvent('message', { data: message }));
+            await rendered(placeholder);
+
+            window.dispatchEvent(new (window as any).Event('load'));
+            for (let i = 0; i < 100 && !takePostedMessages().some(m => m.command === 'ready'); i++) {
+                await settled();
+            }
+            await rendered(placeholder);
+            takePostedMessages();
+
+            assert.strictEqual(searchbox.value, 'navy');
+            assert.strictEqual(count.textContent, '-/2');
+            assert.strictEqual(placeholder.querySelectorAll('.focus.ev-hit').length, 2);
+            searchbox.value = '';
+            searchbox.dispatchEvent(new (window as any).Event('input'));
+
+            const scrolls: string[] = [];
+            for (const element of Array.from(placeholder.querySelectorAll<HTMLDivElement>('.focus'))) {
+                element.scrollIntoView = () => scrolls.push(element.id);
+            }
+
+            searchbox.value = 'navy';
+            searchbox.dispatchEvent(new (window as any).Event('input'));
+            assert.strictEqual(count.textContent, '1/2');
+            assert.strictEqual(placeholder.querySelectorAll('.focus.ev-hit').length, 2);
+            assert.deepStrictEqual(scrolls, ['focus_ENG_navy']);
+
+            searchbox.dispatchEvent(new (window as any).KeyboardEvent('keypress', { key: 'Enter' }));
+            assert.strictEqual(count.textContent, '2/2');
+            searchbox.dispatchEvent(new (window as any).KeyboardEvent('keypress', { key: 'Enter', shiftKey: true }));
+            assert.strictEqual(count.textContent, '1/2');
+            assert.ok(placeholder.querySelector('#focus_ENG_navy')?.classList.contains('ev-hit-current'));
+            assert.deepStrictEqual(scrolls, ['focus_ENG_navy', 'focus_FRA_navy', 'focus_ENG_navy']);
+
+            allowBranch.dispatchEvent(new (window as any).MouseEvent('mousedown', { bubbles: true }));
+            const branchOption = document.querySelector('.select-dropdown input[type="checkbox"]') as HTMLInputElement;
+            assert.ok(branchOption, 'expected the allow-branch option in the dropdown');
+            branchOption.click();
+            assert.strictEqual(count.textContent, '1/1');
+            assert.strictEqual(placeholder.querySelector<HTMLDivElement>('#focus_FRA_navy')?.style.display, 'none');
+
+            const updated = updateBody('ENG_navy');
+            updated.data.focusTrees[0].focuses = { ENG_navy: focus('ENG_navy'), USA_navy: focus('USA_navy') };
+            updated.data.focusTrees[0].focuses.USA_navy!.x = 1;
+            updated.data.renderedFocus = {
+                ENG_navy: '<div></div>',
+                USA_navy: '<div></div>',
+            };
+            window.dispatchEvent(new (window as any).MessageEvent('message', { data: updated }));
+            await rendered(placeholder);
+            assert.strictEqual(searchbox.value, 'navy');
+            assert.strictEqual(count.textContent, '1/2');
+            assert.strictEqual(placeholder.querySelectorAll('.focus.ev-hit').length, 2);
+
+            searchbox.value = 'missing';
+            searchbox.dispatchEvent(new (window as any).Event('paste'));
+            searchbox.dispatchEvent(new (window as any).Event('input'));
+            assert.strictEqual(count.textContent, 'no matches');
+            assert.strictEqual(placeholder.querySelectorAll('.focus.ev-hit').length, 0);
+            searchbox.value = '';
+            searchbox.dispatchEvent(new (window as any).Event('cut'));
+            searchbox.dispatchEvent(new (window as any).Event('input'));
+            assert.strictEqual(count.textContent, '');
+        } finally {
+            (window as any).scroll = originalScroll;
+            (window as any).scrollTo = originalScrollTo;
+            searchbox.remove();
+            count.remove();
+            allowBranchContainer.remove();
+        }
+    });
+
     // A shared focus may sit relative_position_id to a joint focus of the same file. The joint
     // focus is not drawn in the <Shared focuses> tree, but it still has to place its dependents.
     it('places a shared focus relative to an anchor from the other pseudo-tree', async () => {
@@ -223,7 +338,7 @@ describe('webview/focustree rendering', () => {
     // The tree it reads is the one on screen now, not the one the page was loaded with.
     it('posts the tree on screen and its warnings when the copy button is clicked', async () => {
         const searchbox = document.createElement('input');
-        searchbox.id = 'searchbox';
+        searchbox.id = 'focus-searchbox';
         const copyButton = document.createElement('button');
         copyButton.id = 'copy-warnings';
         document.body.append(searchbox, copyButton);
@@ -276,7 +391,7 @@ describe('webview/focustree rendering toolbar toggles', () => {
         (window as any).focusTrees = [updateBody('first_focus').data.focusTrees[0]];
         document.body.innerHTML = `
             <div class="toolbar-outer"><div class="toolbar">
-                <input id="searchbox" type="text"/>
+                <input id="focus-searchbox" type="text"/>
                 ${iconButtonHtml('showWarnings', feLocalize, { domId: 'show-warnings', on: false })}
                 ${iconButtonHtml('warningMarkers', feLocalize, { domId: 'toggle-warning-markers', on: true })}
             </div></div>

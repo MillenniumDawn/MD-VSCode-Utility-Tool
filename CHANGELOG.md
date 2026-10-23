@@ -3,7 +3,7 @@ Unreleased
 v1.1.43
 
   Functionality:
-
+- [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
 - [ CI ] Share the identical Git helpers used by release scripts. Issue #562.
 - [ Testing ] Load the four world map page modules in the module-load test. Issue #532.
 - [ Testing ] Move the schema tests into the pure suite. Issue #565.

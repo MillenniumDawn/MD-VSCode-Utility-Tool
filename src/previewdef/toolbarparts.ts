@@ -36,10 +36,10 @@ export function toggleHtml(labelStyle: string, id: string, text: string): string
         <input type="checkbox" id="${id}">`;
 }
 
-export function searchHtml(labelStyle: string, prefix: string, text: string): string {
+export function searchHtml(labelStyle: string, prefix: string, text: string, inputStyle?: string): string {
 	return `
         <label for="${prefix}-searchbox" class="${labelStyle}">${text}</label>
-        <input id="${prefix}-searchbox" type="text" />
+        <input id="${prefix}-searchbox"${inputStyle === undefined ? "" : ` class="${inputStyle}"`} type="text" />
         <span id="${prefix}-search-count" class="${prefix}-search-count"></span>`;
 }
 
