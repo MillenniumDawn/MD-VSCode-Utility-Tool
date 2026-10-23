@@ -5,6 +5,7 @@ import { contextContainer } from "../../context";
 import { refreshFeatureFlags } from "../../util/featureflags";
 import * as fileloader from "../../util/fileloader";
 import { __resetIndexProgressForTests } from "../../util/indexBuild";
+import { captureCacheScope } from "../../util/indexCache";
 import { clearParentModCache } from "../../util/parentmods";
 import { handOver } from "./host";
 
@@ -14,8 +15,18 @@ import { handOver } from "./host";
 /** The three halves an index builds, told apart by the source options each one passes. */
 export type Half = "global" | "parent" | "workspace";
 
+// Strict, so a half that stops passing its options cannot read another half's files.
 function halfOf(options: fileloader.FileSourceOptions | undefined): Half {
-	return options?.mod === false ? "global" : options?.workspace === false ? "parent" : "workspace";
+	if (options?.mod === false) {
+		return "global";
+	}
+	if (options?.workspace === false) {
+		return "parent";
+	}
+	if (options?.parent === false) {
+		return "workspace";
+	}
+	throw new Error(`no half lists or reads with ${JSON.stringify(options)}`);
 }
 
 class FakeDisposable {
@@ -30,9 +41,6 @@ class FakeUri {
 	constructor(readonly path: string) {}
 	get fsPath(): string {
 		return this.path;
-	}
-	with(change: { path?: string }): FakeUri {
-		return new FakeUri(change.path ?? this.path);
 	}
 	toString(): string {
 		return `file://${this.path}`;
@@ -58,21 +66,23 @@ export interface IndexWorld {
 	read(relativePath: string, half: Half): Buffer | Promise<Buffer>;
 	/** How many listings the builds asked for. */
 	listings: number;
+	/** How many file reads the builds and the event handlers asked for. */
+	reads: number;
 	/** Whether Cancel on the progress notification has been pressed. */
 	cancelled: boolean;
-	/** The cache files, by name, once the test has given the indexes a disk with useDisk. */
+	/** The cache files, by full path, once the test has given the indexes a disk with useDisk. */
 	disk: Map<string, Uint8Array>;
 	useDisk(): void;
+	/** Where a cache file of this name sits in the cache directory the current settings pick. */
+	cacheFile(name: string): string;
 }
 
 function editorFor(world: IndexWorld) {
 	const disposable = () => ({ dispose: () => undefined });
 	return {
 		ProgressLocation: { Notification: 15 },
-		FileType: { File: 1, Directory: 2 },
 		Uri: {
 			file: (path: string) => new FakeUri(path),
-			parse: (text: string) => new FakeUri(text.replace(/^file:\/\//, "")),
 			joinPath: (base: FakeUri, ...parts: string[]) => new FakeUri(posix.join(base.path, ...parts)),
 		},
 		Disposable: FakeDisposable,
@@ -81,7 +91,6 @@ function editorFor(world: IndexWorld) {
 			workspaceFolders: [{ uri: new FakeUri("/ws") }],
 			getWorkspaceFolder: () => ({ uri: new FakeUri("/ws") }),
 			textDocuments: [],
-			onDidChangeConfiguration: disposable,
 			onDidChangeWorkspaceFolders: disposable,
 			onDidChangeTextDocument: disposable,
 			onDidCloseTextDocument: disposable,
@@ -89,26 +98,22 @@ function editorFor(world: IndexWorld) {
 			onDidDeleteFiles: disposable,
 			onDidRenameFiles: disposable,
 			fs: {
-				stat: async () => ({ type: 1, mtime: 0, ctime: 0, size: 0 }),
 				readDirectory: async () => [],
 				createDirectory: async () => undefined,
-				delete: async () => undefined,
 				readFile: async (uri: FakeUri) => {
-					const data = world.disk.get(posix.basename(uri.path));
+					const data = world.disk.get(uri.path);
 					if (!data) {
 						throw new Error(`no such cache file: ${uri.path}`);
 					}
 					return data;
 				},
 				writeFile: async (uri: FakeUri, content: Uint8Array) => {
-					world.disk.set(posix.basename(uri.path), content);
+					world.disk.set(uri.path, content);
 				},
 			},
 		},
 		window: {
 			createOutputChannel: () => ({ appendLine: () => undefined, dispose: () => undefined }),
-			showErrorMessage: async () => undefined,
-			showWarningMessage: async () => undefined,
 			withProgress: (_options: unknown, task: (progress: unknown, token: unknown) => unknown) =>
 				task({ report: () => undefined }, { isCancellationRequested: world.cancelled }),
 		},
@@ -129,12 +134,20 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 			list: () => [],
 			read: () => Buffer.alloc(0),
 			listings: 0,
+			reads: 0,
 			cancelled: false,
 			disk: new Map(),
 			useDisk: () => {
 				contextContainer.current = {
 					globalStorageUri: new FakeUri("/storage"),
 				} as unknown as vscode.ExtensionContext;
+			},
+			cacheFile: (name) => {
+				const dir = captureCacheScope();
+				if (!dir) {
+					throw new Error("the test has no disk: call useDisk first");
+				}
+				return posix.join(dir.path, name);
 			},
 		} satisfies IndexWorld);
 
@@ -143,10 +156,10 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 			world.listings++;
 			return world.list(root, halfOf(options));
 		});
-		mock.method(fileloader, "readFileFromModOrHOI4", async (relativePath: string, options?: fileloader.FileSourceOptions) => [
-			await world.read(relativePath, halfOf(options)),
-			new FakeUri(relativePath),
-		]);
+		mock.method(fileloader, "readFileFromModOrHOI4", async (relativePath: string, options?: fileloader.FileSourceOptions) => {
+			world.reads++;
+			return [await world.read(relativePath, halfOf(options)), new FakeUri(relativePath)];
+		});
 		refreshFeatureFlags();
 		clearParentModCache();
 		__resetIndexProgressForTests();
@@ -157,6 +170,9 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 		reset();
 		mock.restoreAll();
 		contextContainer.current = null;
+		// Back to the defaults, so a flag one test turned off is not off for the next file.
+		world.settings = {};
+		refreshFeatureFlags();
 		clearParentModCache();
 		__resetIndexProgressForTests();
 	});

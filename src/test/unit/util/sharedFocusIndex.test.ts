@@ -57,6 +57,8 @@ describe("util/sharedFocusIndex", () => {
 			world.read = () => sharedFocus;
 		});
 
+		// The build reads the old content and every read after it the new, so the ids in the index say
+		// whether an event's re-read landed after the build's write or was overwritten by it.
 		describe("incremental events vs. an in-flight build", () => {
 			let read: Deferred<Buffer>;
 			let lookup: Promise<string | undefined>;
@@ -66,27 +68,32 @@ describe("util/sharedFocusIndex", () => {
 				world.read = () => read.promise;
 				lookup = findFileByFocusKey("my_shared_focus");
 				await settle();
+				world.read = () => Buffer.from("shared_focus = { id = renamed_shared_focus }");
 			});
+
+			async function settleBuild(): Promise<void> {
+				read.resolve(sharedFocus);
+				await lookup;
+				await settle();
+			}
 
 			// Queued delete-then-create for the same path, as onRenameFiles would for a same-path
 			// rename; if order were lost, the create could be clobbered by the earlier delete.
 			it("preserves event ordering for events queued during a pending build", async () => {
 				__testHandlers.onDeleteFiles({ files: [workspaceFile(SHARED_FOCUS_FILE)] });
 				__testHandlers.onCreateFiles({ files: [workspaceFile(SHARED_FOCUS_FILE)] });
-				read.resolve(sharedFocus);
-				await lookup;
-				await settle();
+				await settleBuild();
 
-				assert.strictEqual(await findFileByFocusKey("my_shared_focus"), SHARED_FOCUS_FILE);
+				assert.strictEqual(await findFileByFocusKey("renamed_shared_focus"), SHARED_FOCUS_FILE);
+				assert.strictEqual(await findFileByFocusKey("my_shared_focus"), undefined);
 			});
 
 			it("defers an onCloseTextDocument mutation the same way while a build is pending", async () => {
 				closeDirty();
-				read.resolve(sharedFocus);
-				await lookup;
-				await settle();
+				await settleBuild();
 
-				assert.strictEqual(await findFileByFocusKey("my_shared_focus"), SHARED_FOCUS_FILE);
+				assert.strictEqual(await findFileByFocusKey("renamed_shared_focus"), SHARED_FOCUS_FILE);
+				assert.strictEqual(await findFileByFocusKey("my_shared_focus"), undefined);
 			});
 		});
 
@@ -101,10 +108,12 @@ describe("util/sharedFocusIndex", () => {
 			it("keeps the file's focuses resolvable while its re-parse is still running", async () => {
 				const read = deferred<Buffer>();
 				world.read = () => read.promise;
+				const readsBefore = world.reads;
 				closeDirty();
 				await settle();
 
 				// The re-parse is still awaiting the read here.
+				assert.strictEqual(world.reads, readsBefore + 1);
 				assert.strictEqual(await findFileByFocusKey("my_shared_focus"), SHARED_FOCUS_FILE);
 
 				read.resolve(sharedFocus);
@@ -137,7 +146,8 @@ describe("util/sharedFocusIndex", () => {
 			});
 
 			it("keeps the previously indexed ids when the file doesn't parse midway through an edit", async () => {
-				mock.method(Logger, "error", () => undefined);
+				const logs: string[] = [];
+				logsInto(logs, "error");
 				mock.method(hoiparser, "parseHoi4File", () => {
 					throw new Error("half-typed focus block");
 				});
@@ -145,6 +155,7 @@ describe("util/sharedFocusIndex", () => {
 				await settle();
 
 				assert.strictEqual(await findFileByFocusKey("my_shared_focus"), SHARED_FOCUS_FILE);
+				assert.ok(logs.some((line) => line.includes("half-typed focus block")));
 			});
 		});
 	});
@@ -215,7 +226,9 @@ describe("util/sharedFocusIndex", () => {
 		for (const [title, thrown, expected] of thrownValues) {
 			it(`logs String(e) for ${title}`, async () => {
 				parseThrows(thrown);
-				assert.ok((await loggedLine()).includes(expected));
+				const line = await loggedLine();
+				assert.ok(line.includes("common/national_focus/bad.txt"), line);
+				assert.ok(line.includes(expected), line);
 			});
 		}
 
@@ -266,8 +279,8 @@ describe("util/sharedFocusIndex", () => {
 
 		// Only the workspace half has a cache on disk; the global half finds none.
 		function cacheOnDisk(data: string): void {
-			world.disk.set("sharedFocusIndex.workspace.manifest.json", Buffer.from(MANIFEST));
-			world.disk.set("sharedFocusIndex.workspace.data.jsonl", Buffer.from(data));
+			world.disk.set(world.cacheFile("sharedFocusIndex.workspace.manifest.json"), Buffer.from(MANIFEST));
+			world.disk.set(world.cacheFile("sharedFocusIndex.workspace.data.jsonl"), Buffer.from(data));
 		}
 
 		beforeEach(() => {

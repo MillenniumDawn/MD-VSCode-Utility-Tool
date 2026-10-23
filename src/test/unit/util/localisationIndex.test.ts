@@ -123,35 +123,36 @@ describe("util/localisationIndex", () => {
 				"localisation/parent_l_english.yml": yml("l_english:", ' SHARED:0 "parent"', ' PARENT_ONLY:0 "parent only"'),
 				"localisation/sub_l_english.yml": yml("l_english:", ' SHARED:0 "workspace"'),
 			};
-			let releaseWorkspaceRead: () => void;
+			let releaseParentRead: () => void;
 
 			beforeEach(() => {
 				useParent(world);
-				const workspaceRead = deferred();
-				releaseWorkspaceRead = () => workspaceRead.resolve();
+				const parentRead = deferred();
+				releaseParentRead = () => parentRead.resolve();
 				const names = { global: "vanilla_l_english.yml", parent: "parent_l_english.yml", workspace: "sub_l_english.yml" };
 				world.list = (_root, half) => listed([names[half]]);
 				world.read = async (relativePath) => {
-					if (relativePath.endsWith("sub_l_english.yml")) {
-						// The workspace half parses first, so a last-wins bug would show the parent's text.
-						await workspaceRead.promise;
+					if (relativePath.endsWith("parent_l_english.yml")) {
+						// The parent half parses last, so one shared half where the last write wins would
+						// answer with the parent's text.
+						await parentRead.promise;
 					}
 					return files[relativePath]!;
 				};
 			});
 
-			it("answers from the working mod, then the parent, then vanilla", async () => {
+			it("answers from the working mod first, and from each half for the keys only it has", async () => {
 				const lookup = getLocalisedText("SHARED", "en");
 				await settle();
-				releaseWorkspaceRead();
+				releaseParentRead();
 
 				assert.strictEqual(await lookup, "workspace");
 				assert.strictEqual(await getLocalisedText("PARENT_ONLY", "en"), "parent only");
 				assert.strictEqual(await getLocalisedText("VANILLA_ONLY", "en"), "vanilla only");
 			});
 
-			it("falls back to the parent, then vanilla, as the workspace files that shadow them go", async () => {
-				releaseWorkspaceRead();
+			it("falls back to the parent once the workspace file that shadows it goes", async () => {
+				releaseParentRead();
 				assert.strictEqual(await getLocalisedText("SHARED", "en"), "workspace");
 
 				__testHandlers.onDeleteFiles({ files: [workspaceFile("localisation/sub_l_english.yml")] });
@@ -167,7 +168,10 @@ describe("util/localisationIndex", () => {
 			// until the half's data file and the manifest written after it are both on disk.
 			async function waitForCache(cacheName: string): Promise<void> {
 				for (let i = 0; i < 100; i++) {
-					if (world.disk.has(`${cacheName}.data.jsonl`) && world.disk.has(`${cacheName}.manifest.json`)) {
+					if (
+						world.disk.has(world.cacheFile(`${cacheName}.data.jsonl`)) &&
+						world.disk.has(world.cacheFile(`${cacheName}.manifest.json`))
+					) {
 						return;
 					}
 					await settle();
@@ -209,7 +213,7 @@ describe("util/localisationIndex", () => {
 
 					// The records, `[langKey, filePath, entries]`, then their count. The listing path
 					// carries the localisation root, so match on the entries the file owns.
-					const lines = Buffer.from(world.disk.get("localisationIndex.parent.0.data.jsonl")!)
+					const lines = Buffer.from(world.disk.get(world.cacheFile("localisationIndex.parent.0.data.jsonl"))!)
 						.toString()
 						.split("\n")
 						.filter((line) => line !== "")

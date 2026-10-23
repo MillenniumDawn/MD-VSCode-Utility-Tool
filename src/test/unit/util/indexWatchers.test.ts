@@ -104,10 +104,13 @@ for (const index of cases) {
 
 		it("registers a disposable and does no build work for it", async () => {
 			const disposable = index.register();
-			await settle();
-			assert.strictEqual(world.listings, 0);
-			assert.strictEqual(typeof disposable.dispose, "function");
-			disposable.dispose();
+			try {
+				await settle();
+				assert.strictEqual(world.listings, 0);
+				assert.strictEqual(typeof disposable.dispose, "function");
+			} finally {
+				disposable.dispose();
+			}
 		});
 
 		it("does no build work when the feature flag is off", async () => {
@@ -131,6 +134,7 @@ for (const index of cases) {
 			index.handlers.onCreateFiles({ files: [workspaceFile(path)] });
 			await settle();
 			assert.strictEqual(world.listings, 0);
+			assert.strictEqual(world.reads, 0);
 
 			assert.deepStrictEqual(await index.lookup(), index.found);
 		});
