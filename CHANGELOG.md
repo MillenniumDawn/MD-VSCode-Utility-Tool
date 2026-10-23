@@ -9,6 +9,7 @@ v1.1.43
 - [ Testing ] Move the schema tests into the pure suite. Issue #565.
 
   Bugfixes:
+- [ Previews ] Opening a mod workspace with only MIO organization files or `.gui` files under `interface/` now activates the preview button without opening another file first. Issue #481.
 - [ CI ] The release workflow now gives the registry tokens only to the publish step, and no longer mistakes a fork's pull request for its own release or fix pull request. Issues #573, #574.
 - [ Previews ] The idea, decision, event and character previews now refresh when you edit a `.gfx` file they use. The MIO preview now refreshes when an organization file is added or removed. Issues #479, #544.
 - [ Previews ] A focus label, an inlay slot name or a text box `format` holding quotes, `<` or `</style>` can no longer add elements to a preview, and previews no longer submit forms. Issue #572.
@@ -17,6 +18,7 @@ v1.1.43
 - [ CI ] Workflow warnings and notices now safely display multiline text without triggering extra workflow commands. Issue #577.
 - [ Character Previewer ] Pressing Enter or Space on a trait pill now expands its details instead of opening the trait file; Ctrl/Meta navigation still works. Issue #548.
 - [ Focus Tree Previewer ] Editing an inlay window's `.gui` file, or adding its missing sprite to a `.gfx` file, now refreshes an open focus tree. Before, the preview kept the old window until the focus file itself changed. Issue #608.
+- [ DDS ] Legacy textures with unused bits before their color channels now show the correct colors. Issue #530.
 - [ Testing ] Keep registry publishing tokens off the command line. Issue #578.
 
 v1.1.42

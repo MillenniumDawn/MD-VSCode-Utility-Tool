@@ -460,7 +460,10 @@ function getChannelReader(
 	}
 
 	if (pixelFormat.bitsPerPixel % 32 === 0) {
-		if (pixelFormat.channelLengthInPixel.every((p) => p === 32)) {
+		if (
+			pixelFormat.channelLengthInPixel.every((p) => p === 32) &&
+			pixelFormat.channelStartInPixel.every((s) => s % 32 === 0)
+		) {
 			return {
 				reader: all32Reader,
 				readerState: new Uint32Array(
@@ -473,7 +476,10 @@ function getChannelReader(
 	}
 
 	if (pixelFormat.bitsPerPixel % 16 === 0) {
-		if (pixelFormat.channelLengthInPixel.every((p) => p === 16)) {
+		if (
+			pixelFormat.channelLengthInPixel.every((p) => p === 16) &&
+			pixelFormat.channelStartInPixel.every((s) => s % 16 === 0)
+		) {
 			return {
 				reader: all16Reader,
 				readerState: new Uint16Array(
@@ -486,7 +492,10 @@ function getChannelReader(
 	}
 
 	if (pixelFormat.bitsPerPixel % 8 === 0) {
-		if (pixelFormat.channelLengthInPixel.every((p) => p === 8)) {
+		if (
+			pixelFormat.channelLengthInPixel.every((p) => p === 8) &&
+			pixelFormat.channelStartInPixel.every((s) => s % 8 === 0)
+		) {
 			return {
 				reader: all8Reader,
 				readerState: new Uint8Array(inputBuffer, inputBufferOffset, length),
@@ -525,21 +534,20 @@ function defaultUint8Reader(
 	buffer: Uint8Array,
 	offset: number,
 	bitOffset: number,
-	_channelStart: number[],
+	channelStart: number[],
 	channelLength: number[],
 	_channelMask: number[],
 	rawPixel: Float64Array,
 ): void {
 	for (let i = 0; i < channelLength.length; i++) {
 		const bitCount = channelLength[i]!;
+		const start = bitOffset + channelStart[i]!;
 		rawPixel[i] = readUnsignedBitsFromBuffer(
 			buffer,
-			offset,
-			bitOffset,
+			offset + (start >> 3),
+			start & 7,
 			bitCount,
 		);
-		offset += (bitOffset + bitCount) >> 3;
-		bitOffset = (bitOffset + bitCount) & 7;
 	}
 }
 
@@ -547,13 +555,13 @@ function all8Reader(
 	buffer: Uint8Array,
 	offset: number,
 	_bitOffset: number,
-	_channelStart: number[],
+	channelStart: number[],
 	channelLength: number[],
 	_channelMask: number[],
 	rawPixel: Float64Array,
 ): void {
 	for (let i = 0; i < channelLength.length; i++) {
-		rawPixel[i] = buffer[offset + i]!;
+		rawPixel[i] = buffer[offset + (channelStart[i]! >> 3)]!;
 	}
 }
 
@@ -561,13 +569,13 @@ function all16Reader(
 	buffer: Uint16Array,
 	offset: number,
 	_bitOffset: number,
-	_channelStart: number[],
+	channelStart: number[],
 	channelLength: number[],
 	_channelMask: number[],
 	rawPixel: Float64Array,
 ): void {
 	for (let i = 0; i < channelLength.length; i++) {
-		rawPixel[i] = buffer[(offset >> 1) + i]!;
+		rawPixel[i] = buffer[(offset >> 1) + (channelStart[i]! >> 4)]!;
 	}
 }
 
@@ -575,13 +583,13 @@ function all32Reader(
 	buffer: Float32Array | Uint32Array,
 	offset: number,
 	_bitOffset: number,
-	_channelStart: number[],
+	channelStart: number[],
 	channelLength: number[],
 	_channelMask: number[],
 	rawPixel: Float64Array,
 ): void {
 	for (let i = 0; i < channelLength.length; i++) {
-		rawPixel[i] = buffer[(offset >> 2) + i]!;
+		rawPixel[i] = buffer[(offset >> 2) + (channelStart[i]! >> 5)]!;
 	}
 }
 
