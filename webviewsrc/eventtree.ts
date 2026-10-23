@@ -10,7 +10,13 @@ import {
 import { SearchBox } from "./util/searchbox";
 import { bridgeOverRemoved, skippedBySource } from "./util/graphbridge";
 import { applyNav, badge } from "./util/card";
-import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
+import {
+	FilterControl,
+	bindLocalisationToggle,
+	gateToggle,
+	readFilterList,
+	toggleBinder,
+} from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { wireUpdateBody } from "./util/updatebody";
 import { vscode } from "./util/vscode";
@@ -141,12 +147,7 @@ export function readFilters(stored: unknown): EventFilter[] {
 }
 
 // Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
-//
-// This has to stay below `eventFilters`, not up with the other restored toggles: `readFilters` is
-// hoisted but the list it reads is not, so calling it earlier throws on the const in its temporal
-// dead zone and takes the whole module -- and with it the canvas -- down. The tests compile to
-// commonjs, where the same read is a property access that quietly answers `undefined`, so only the
-// bundled preview shows it.
+// It stays below `eventFilters` for the reason readFilterList gives.
 let filters: EventFilter[] = readFilters(getState().eventFilters);
 
 // One option is emitted as a node once per scope situation it is reached in, so it can have several
@@ -833,10 +834,7 @@ window.addEventListener(
 		}
 		enableZoom(contentElement, 0, toolbarHeight);
 
-		bindToggle("show-localisation", showLocalisation, (value) => {
-			showLocalisation = value;
-			setState({ showLocalisation: value });
-		});
+		bindLocalisationToggle(bindToggle, showLocalisation, (value) => (showLocalisation = value));
 		bindToggle("show-option-triggers", showOptionTriggers, (value) => {
 			showOptionTriggers = value;
 			setState({ showOptionTriggers: value });

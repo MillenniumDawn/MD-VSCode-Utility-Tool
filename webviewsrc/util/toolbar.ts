@@ -9,13 +9,19 @@
 // the moment the file gains the thing back -- through an ordinary in-place update, no reload.
 
 import { syncCheckbox } from "./checkbox";
-import { tryRun } from "./common";
+import { setState, tryRun } from "./common";
 import { DivDropdown } from "./dropdown";
 import { feLocalize } from "./i18n";
 
 // Normalises a stored selection into the toolbar's own order and drops anything that is not one of
 // its entries. State written by an older version -- or by nothing at all -- arrives as whatever it
 // happens to be, so it is never handed to a predicate unchecked.
+//
+// A page that restores its selection at module level has to do it below its own list of filters,
+// not up with the other restored toggles: its `readFilters` is hoisted but the list it reads is not,
+// so calling it earlier throws on the const in its temporal dead zone and takes the whole page down.
+// The tests compile to commonjs, where the same read quietly answers `undefined`, so only the
+// bundled preview shows it.
 export function readFilterList<F extends string>(all: readonly F[], stored: unknown): F[] {
 	if (!Array.isArray(stored)) {
 		return [];
@@ -54,9 +60,9 @@ export function gateToggle(
 // the rebuild is supplied once here rather than repeated at each of the five or six call sites.
 //
 // The bound function puts a toggle in its restored position and applies it on every click.
-export function toggleBinder(
-	rebuild: () => void,
-): (id: string, initial: boolean, apply: (value: boolean) => void) => void {
+type BindToggle = (id: string, initial: boolean, apply: (value: boolean) => void) => void;
+
+export function toggleBinder(rebuild: () => void): BindToggle {
 	return (id, initial, apply) => {
 		const input = document.getElementById(id) as HTMLInputElement | null;
 		if (!input) {
@@ -74,6 +80,19 @@ export function toggleBinder(
 			}),
 		);
 	};
+}
+
+// The "show localisation" toggle, stored under the `showLocalisation` key by every preview that
+// has one apart from the decision preview.
+export function bindLocalisationToggle(
+	bindToggle: BindToggle,
+	initial: boolean,
+	set: (value: boolean) => void,
+): void {
+	bindToggle("show-localisation", initial, (value) => {
+		set(value);
+		setState({ showLocalisation: value });
+	});
 }
 
 export interface FilterControlOptions<F extends string> {

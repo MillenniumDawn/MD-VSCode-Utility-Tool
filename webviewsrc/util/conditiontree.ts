@@ -21,6 +21,9 @@ const foldLabels: Record<string, string> = {
 	count: "count",
 };
 
+// The character and idea previews have always read a `count` folder as "at least".
+export const cardFoldLabels: Record<string, string> = { ...foldLabels, count: "at least" };
+
 // conditionToString in hoiformat/condition.ts renders a single flat line, which is unreadable for
 // anything but a trivial trigger. This renders the same tree as nested lists instead.
 //

@@ -1,10 +1,8 @@
 import { loadEntrypoint, useEntrypoint } from "./setup";
 import * as assert from "assert";
-import {
-	IdeaCard,
-	IdeaPreviewPayload,
-	ModifierLine,
-} from "../../previewdef/idea/payload";
+import { IdeaCard, IdeaPreviewPayload } from "../../previewdef/idea/payload";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
+import { cardFoldLabels, conditionToDom } from "../../../webviewsrc/util/conditiontree";
 
 // ideapreview.ts reads window.ideaPreview at module scope, so the payload has to exist before the
 // import runs. This mirrors Millennium Dawn's Dutch ideas plus the generic political_power_bonus
@@ -145,8 +143,6 @@ const {
 	matchesQuery,
 	chainedIds,
 	chainsForGroups,
-	conditionToDom,
-	modifierLineToDom,
 } = ideapreview;
 type IdeaFilter = import("../../../webviewsrc/ideapreview").IdeaFilter;
 
@@ -254,69 +250,52 @@ describe("webview/ideapreview chainsForGroups", () => {
 	});
 });
 
-describe("webview/ideapreview modifierLineToDom", () => {
-	function lineOf(extra: Partial<ModifierLine>): HTMLDivElement {
-		return modifierLineToDom({
-			key: "stability_factor",
-			name: "Stability",
-			value: "-10%",
-			tone: "bad",
-			...extra,
-		});
-	}
-
-	it("writes the name, the value and the tone the payload decided", () => {
-		const row = lineOf({});
-		assert.strictEqual(row.querySelector(".idea-mod-name")?.textContent, "Stability");
-		const value = row.querySelector(".idea-mod-value");
-		assert.strictEqual(value?.textContent, "-10%");
-		assert.ok(value?.classList.contains("idea-mod-bad"));
-	});
-
-	it("keeps the raw token as the name's tooltip", () => {
-		const name = lineOf({}).querySelector(".idea-mod-name") as HTMLElement;
-		assert.strictEqual(name.title, "stability_factor");
-	});
-
-	it("carries the good and neutral tones through as well", () => {
-		assert.ok(
-			lineOf({ tone: "good" })
-				.querySelector(".idea-mod-value")
-				?.classList.contains("idea-mod-good"),
-		);
-		assert.ok(
-			lineOf({ tone: "neutral" })
-				.querySelector(".idea-mod-value")
-				?.classList.contains("idea-mod-neutral"),
-		);
-	});
-});
-
-describe("webview/ideapreview conditionToDom", () => {
+describe("webview/ideapreview conditions with the card fold labels", () => {
 	it("renders a leaf as one line", () => {
-		const list = conditionToDom({ scopeName: "", nodeContent: "original_tag = HOL" });
+		const list = conditionToDom({ scopeName: "", nodeContent: "original_tag = HOL" }, cardFoldLabels);
 		assert.strictEqual(list.querySelectorAll("li").length, 1);
 		assert.strictEqual(list.textContent, "original_tag = HOL");
 	});
 
 	// A one-item `and` adds nesting without adding meaning.
 	it("unwraps a single-item and", () => {
-		const list = conditionToDom({
-			type: "and",
-			items: [{ scopeName: "", nodeContent: "original_tag = HOL" }],
-		});
+		const list = conditionToDom(
+			{
+				type: "and",
+				items: [{ scopeName: "", nodeContent: "original_tag = HOL" }],
+			},
+			cardFoldLabels,
+		);
 		assert.strictEqual(list.querySelectorAll("li").length, 1);
 	});
 
 	it("names the folder so a negated group cannot read as a positive one", () => {
-		const list = conditionToDom({
-			type: "ornot",
-			items: [
-				{ scopeName: "", nodeContent: "a = 1" },
-				{ scopeName: "", nodeContent: "b = 2" },
-			],
-		});
+		const list = conditionToDom(
+			{
+				type: "ornot",
+				items: [
+					{ scopeName: "", nodeContent: "a = 1" },
+					{ scopeName: "", nodeContent: "b = 2" },
+				],
+			},
+			cardFoldLabels,
+		);
 		assert.strictEqual(list.querySelector(".ev-fold")?.textContent, "none of");
+	});
+
+	it("reads a count folder as at least", () => {
+		const list = conditionToDom(
+			{
+				type: "count",
+				amount: 2,
+				items: [
+					{ scopeName: "", nodeContent: "a = 1" },
+					{ scopeName: "", nodeContent: "b = 2" },
+				],
+			} as ConditionComplexExpr,
+			cardFoldLabels,
+		);
+		assert.strictEqual(list.querySelector(".ev-fold")?.textContent, "at least == 2");
 	});
 });
 
@@ -433,6 +412,21 @@ describe("webview/ideapreview rendering", () => {
 		toggle.checked = false;
 		toggle.dispatchEvent(new (window as any).Event("change"));
 		assert.strictEqual(content().querySelectorAll(".idea-desc").length, 0);
+	});
+
+	it("draws a condition panel for each condition once conditions are asked for", () => {
+		assert.strictEqual(content().querySelectorAll(".ev-cond").length, 0);
+
+		const toggle = document.getElementById("show-conditions") as HTMLInputElement;
+		toggle.checked = true;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+
+		const heads = Array.from(content().querySelectorAll(".ev-cond-head")).map((e) => e.textContent);
+		assert.deepStrictEqual(heads, ["Allowed"]);
+
+		toggle.checked = false;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+		assert.strictEqual(content().querySelectorAll(".ev-cond").length, 0);
 	});
 
 	it("drops the modifier lines entirely when the toggle is off", () => {

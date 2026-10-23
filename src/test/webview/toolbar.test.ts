@@ -2,10 +2,12 @@ import "./setup";
 import * as assert from "assert";
 import {
 	FilterControl,
+	bindLocalisationToggle,
 	gateToggle,
 	readFilterList,
 	toggleBinder,
 } from "../../../webviewsrc/util/toolbar";
+import { getState } from "../../../webviewsrc/util/common";
 
 type TestFilter = "missions" | "decisions" | "chains";
 
@@ -120,6 +122,24 @@ describe("webview/util/toolbar", () => {
 			document.body.innerHTML = "";
 			const bindToggle = toggleBinder(() => assert.fail("should not rebuild"));
 			assert.doesNotThrow(() => bindToggle("missing", true, () => undefined));
+		});
+	});
+
+	describe("bindLocalisationToggle", () => {
+		it("applies a click and stores it under showLocalisation", () => {
+			document.body.innerHTML = `<input type="checkbox" id="show-localisation"><span></span>`;
+			const applied: boolean[] = [];
+			let rebuilds = 0;
+			bindLocalisationToggle(toggleBinder(() => rebuilds++), true, (value) => applied.push(value));
+
+			const input = document.getElementById("show-localisation") as HTMLInputElement;
+			assert.strictEqual(input.checked, true);
+			input.checked = false;
+			input.dispatchEvent(new (window as any).Event("change"));
+
+			assert.deepStrictEqual(applied, [false]);
+			assert.strictEqual(getState().showLocalisation, false);
+			assert.strictEqual(rebuilds, 1);
 		});
 	});
 

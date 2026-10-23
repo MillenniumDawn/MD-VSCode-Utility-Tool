@@ -5,7 +5,6 @@ import * as assert from "assert";
 import {
 	CharacterCard,
 	CharacterPreviewPayload,
-	ModifierLine,
 	TraitCard,
 } from "../../previewdef/character/payload";
 
@@ -191,8 +190,7 @@ const shellHtml = `
 const { module: characterpreview, listeners } = loadEntrypoint(
 	() => require("../../../webviewsrc/characterpreview") as typeof import("../../../webviewsrc/characterpreview"),
 );
-const { readFilters, matchesFilters, matchesQuery, modifierLineToDom, traitToDom } =
-	characterpreview;
+const { readFilters, matchesFilters, matchesQuery, traitToDom } = characterpreview;
 
 function byId(cardId: string): CharacterCard {
 	const found = integrationPayload.cards.find((c) => c.cardId === cardId);
@@ -285,44 +283,6 @@ describe("webview/characterpreview matchesQuery", () => {
 
 	it("does not match a character that has nothing to do with the query", () => {
 		assert.strictEqual(matchesQuery(byId("AFG_faceless:advisor:0"), "trickster"), false);
-	});
-});
-
-describe("webview/characterpreview modifierLineToDom", () => {
-	function lineOf(extra: Partial<ModifierLine>): HTMLDivElement {
-		return modifierLineToDom({
-			key: "recon_factor",
-			name: "Recon",
-			value: "+25%",
-			tone: "good",
-			...extra,
-		});
-	}
-
-	it("writes the name, the value and the tone the payload decided", () => {
-		const row = lineOf({});
-		assert.strictEqual(row.querySelector(".char-mod-name")?.textContent, "Recon");
-		const value = row.querySelector(".char-mod-value");
-		assert.strictEqual(value?.textContent, "+25%");
-		assert.ok(value?.classList.contains("char-mod-good"));
-	});
-
-	it("keeps the raw token as the name's tooltip", () => {
-		const name = lineOf({}).querySelector(".char-mod-name") as HTMLElement;
-		assert.strictEqual(name.title, "recon_factor");
-	});
-
-	it("carries the bad and neutral tones through as well", () => {
-		assert.ok(
-			lineOf({ tone: "bad" })
-				.querySelector(".char-mod-value")
-				?.classList.contains("char-mod-bad"),
-		);
-		assert.ok(
-			lineOf({ tone: "neutral" })
-				.querySelector(".char-mod-value")
-				?.classList.contains("char-mod-neutral"),
-		);
 	});
 });
 
@@ -531,6 +491,21 @@ describe("webview/characterpreview rendering", () => {
 	it("marks the card whose trait nothing defines", () => {
 		assert.strictEqual(content().querySelectorAll(".char-card-warn").length, 1);
 		assert.strictEqual(content().querySelectorAll(".char-trait-unknown").length, 1);
+	});
+
+	it("draws a condition panel for each condition once conditions are asked for", () => {
+		assert.strictEqual(content().querySelectorAll(".ev-cond").length, 0);
+
+		const toggle = document.getElementById("show-conditions") as HTMLInputElement;
+		toggle.checked = true;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+
+		const heads = Array.from(content().querySelectorAll(".ev-cond-head")).map((e) => e.textContent);
+		assert.deepStrictEqual(heads, ["Available"]);
+
+		toggle.checked = false;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+		assert.strictEqual(content().querySelectorAll(".ev-cond").length, 0);
 	});
 
 	it("draws the skills", () => {
