@@ -49,6 +49,7 @@ const registries = {
 	marketplace: {
 		label: 'VS Code Marketplace',
 		tokenVariable: 'VSCE_PAT',
+		spawnTokenVariable: 'VSCE_PAT',
 		missingToken: [
 			'VSCE_PAT is not set, so nothing can reach the VS Code Marketplace. Create a',
 			'personal access token with Marketplace: Manage scope at',
@@ -59,13 +60,13 @@ const registries = {
 			if (options.preRelease) {
 				args.push('--pre-release');
 			}
-			args.push('--pat', options.pat);
 			return args;
 		},
 	},
 	'open-vsx': {
 		label: 'Open VSX',
 		tokenVariable: 'OPEN_VSX_TOKEN',
+		spawnTokenVariable: 'OVSX_PAT',
 		missingToken: [
 			'OPEN_VSX_TOKEN is not set, so nothing can reach Open VSX. Create an access',
 			'token at https://open-vsx.org/user-settings/tokens and add it as the',
@@ -75,7 +76,7 @@ const registries = {
 		// No --pre-release: ovsx answers "Ignoring option '--pre-release' for prepackaged extension"
 		// and reads the flag out of the manifest instead, where `vsce package --pre-release` put it.
 		command(options) {
-			return ['--no-install', 'ovsx', 'publish', options.vsix, '--skip-duplicate', '-p', options.pat];
+			return ['--no-install', 'ovsx', 'publish', options.vsix, '--skip-duplicate'];
 		},
 	},
 };
@@ -112,9 +113,13 @@ function commandFor(options) {
 	return registries[options.registry].command(options);
 }
 
-function publishOnce(options) {
+function publishOnce(options, spawn = spawnSync) {
 	// The output is both shown as it happens and kept, because the retry decision reads it.
-	const result = spawnSync('npx', commandFor(options), { encoding: 'utf8', shell: process.platform === 'win32' });
+	const result = spawn('npx', commandFor(options), {
+		encoding: 'utf8',
+		env: { ...process.env, [registries[options.registry].spawnTokenVariable]: options.pat },
+		shell: process.platform === 'win32',
+	});
 	const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
 	process.stdout.write(output);
 	if (result.error) {
@@ -199,4 +204,4 @@ if (require.main === module) {
 	main();
 }
 
-module.exports = { commandFor, isTransient, parseArgs, publish, registries, schedules };
+module.exports = { commandFor, isTransient, parseArgs, publish, publishOnce, registries, schedules };
