@@ -1,5 +1,4 @@
 import type * as vscode from "vscode";
-import { PNG } from "pngjs";
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import {
 	getSpriteTypes,
@@ -21,7 +20,7 @@ import { describeParseFailure } from "../indexHalf";
 import { Logger } from "../logger";
 import { getGfxContainerFile } from "../gfxindex";
 import { getFlags } from "../featureflags";
-import { readPngHeaderDimensions } from "./converter";
+import { assertDecodablePng } from "./converter";
 export { Sprite, Image };
 
 // Decoded PNG buffers are the heaviest thing in memory; bound the image and sprite caches by
@@ -241,18 +240,9 @@ async function getImage(relativePath: string): Promise<Image | undefined> {
 		} else if (relativePath.endsWith(".tga")) {
 			({ pngBuffer, width, height } = await decodeImageToPng(buffer, "tga"));
 		} else if (relativePath.endsWith(".png")) {
-			// PNG passthrough: the buffer is already PNG, so only its dimensions are read here, straight
-			// from the IHDR header bytes rather than a full inflate; PNG.sync.read is the fallback for a
-			// header that doesn't check out.
+			// PNG passthrough: only chunk headers are read, never a full inflate.
 			pngBuffer = buffer;
-			const header = readPngHeaderDimensions(buffer);
-			if (header) {
-				({ width, height } = header);
-			} else {
-				const png = PNG.sync.read(buffer);
-				width = png.width;
-				height = png.height;
-			}
+			({ width, height } = assertDecodablePng(buffer));
 		} else {
 			throw new UserError("Unsupported image type: " + relativePath);
 		}

@@ -1,12 +1,16 @@
 import * as assert from "assert";
+import { mock } from "node:test";
 import type * as vscode from "vscode";
 import { PNG } from "pngjs";
+import zlib from "zlib";
 import {
 	Image,
 	Sprite,
 	CorneredTileSprite,
 	effectiveFrameCount,
 } from "../../../../util/image/sprite";
+import { isUserError } from "../../dds";
+import { makeZeroPng, pngHeader } from "../../png";
 
 // A sprite only carries the path along, so any value stands in for it.
 const texturePath = { path: "/gfx/interface/test.png" } as vscode.Uri;
@@ -189,4 +193,32 @@ describe("util/image/sprite frames", () => {
 		// Between two frames there is nothing to cut.
 		assert.deepStrictEqual(sprite.getTiles(0.5), []);
 	});
+});
+
+describe("util/image/sprite hostile texture", () => {
+	afterEach(() => mock.restoreAll());
+
+	const refused: [name: string, file: Buffer, message: RegExp][] = [
+		[
+			"an interlaced PNG that inflates past its header",
+			makeZeroPng([pngHeader(16, 16, 1)], 8 * 1024 * 1024),
+			/interlaced images are not supported/,
+		],
+		[
+			"a PNG whose header is over the size limit",
+			makeZeroPng([pngHeader(20000, 20000, 0)], 1024),
+			/PNG image size 20000x20000 exceeds the supported maximum/,
+		],
+	];
+	for (const [name, file, message] of refused) {
+		it(`cuts no frame or tile from ${name}`, () => {
+			const inflate = mock.method(zlib, "inflateSync");
+			const image = new Image(file, 16, 16, texturePath);
+			assert.throws(() => new Sprite("s", image, 2).frames, isUserError(message));
+			const border = { x: 2, y: 2 };
+			const tiles = new CorneredTileSprite("s", image, 1, { x: 16, y: 16 }, border);
+			assert.throws(() => tiles.getTiles(), isUserError(message));
+			assert.strictEqual(inflate.mock.callCount(), 0);
+		});
+	}
 });
