@@ -25,9 +25,11 @@ export function applyNav(element: HTMLElement, nav: NavTarget | undefined): void
 	element.setAttribute("file", nav.file);
 }
 
-// The modifier lists on a character or idea card. `prefix` is the page's class prefix (`char`,
-// `idea`): the two pages style their lists apart.
-export function modifierLineToDom(prefix: string, line: ModifierLine): HTMLDivElement {
+// The modifier lists on a character or idea card. `prefix` is the page's class prefix: the two pages
+// style their lists apart.
+type CardPrefix = "char" | "idea";
+
+export function modifierLineToDom(prefix: CardPrefix, line: ModifierLine): HTMLDivElement {
 	const row = document.createElement("div");
 	row.className = `${prefix}-mod`;
 
@@ -47,7 +49,7 @@ export function modifierLineToDom(prefix: string, line: ModifierLine): HTMLDivEl
 }
 
 export function modifierSection(
-	prefix: string,
+	prefix: CardPrefix,
 	title: string | undefined,
 	lines: ModifierLine[],
 ): HTMLDivElement | undefined {
@@ -69,7 +71,7 @@ export function modifierSection(
 	return box;
 }
 
-export function appendGroups(prefix: string, container: HTMLElement, groups: ModifierGroup[]): void {
+export function appendGroups(prefix: CardPrefix, container: HTMLElement, groups: ModifierGroup[]): void {
 	for (const group of groups) {
 		const section = modifierSection(prefix, group.title, group.lines);
 		if (section) {

@@ -6,7 +6,7 @@ import { appendGroups, modifierLineToDom, modifierSection } from "../../../webvi
 const line: ModifierLine = { key: "recon_factor", name: "Recon", value: "+25%", tone: "good" };
 
 describe("webview/util/card modifier lists", () => {
-	for (const prefix of ["char", "idea"]) {
+	for (const prefix of ["char", "idea"] as const) {
 		describe(`with the ${prefix} prefix`, () => {
 			it("writes the name, the value and the tone the payload decided", () => {
 				const row = modifierLineToDom(prefix, line);
@@ -37,6 +37,7 @@ describe("webview/util/card modifier lists", () => {
 				assert.strictEqual(untitled?.querySelector(`.${prefix}-mods-head`), null);
 
 				const titled = modifierSection(prefix, "Research bonus", [line, line]);
+				assert.strictEqual(titled?.firstElementChild?.className, `${prefix}-mods-head`);
 				assert.strictEqual(titled?.querySelector(`.${prefix}-mods-head`)?.textContent, "Research bonus");
 				assert.strictEqual(titled?.querySelectorAll(`.${prefix}-mod`).length, 2);
 			});

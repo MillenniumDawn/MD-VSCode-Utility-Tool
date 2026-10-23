@@ -56,12 +56,12 @@ export function gateToggle(
 	return value;
 }
 
+type BindToggle = (id: string, initial: boolean, apply: (value: boolean) => void) => void;
+
 // Binds a preview's toggles to its rebuild. Every toggle in every preview rebuilds the canvas, so
 // the rebuild is supplied once here rather than repeated at each of the five or six call sites.
 //
 // The bound function puts a toggle in its restored position and applies it on every click.
-type BindToggle = (id: string, initial: boolean, apply: (value: boolean) => void) => void;
-
 export function toggleBinder(rebuild: () => void): BindToggle {
 	return (id, initial, apply) => {
 		const input = document.getElementById(id) as HTMLInputElement | null;

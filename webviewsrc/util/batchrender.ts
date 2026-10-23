@@ -61,7 +61,8 @@ export function pushGroupTasks<C>(
 	buildCard: (card: C) => HTMLDivElement,
 	rendered: RenderedCard<C>[],
 ): void {
-	let flow: HTMLDivElement | undefined = undefined;
+	// Set by the first task, which always runs before the batches.
+	let flow!: HTMLDivElement;
 	tasks.push(() => {
 		flow = openGroup();
 	});
@@ -69,9 +70,6 @@ export function pushGroupTasks<C>(
 	for (let i = 0; i < cards.length; i += cardsPerBatch) {
 		const batch = cards.slice(i, i + cardsPerBatch);
 		tasks.push(() => {
-			if (!flow) {
-				return;
-			}
 			for (const card of batch) {
 				const element = buildCard(card);
 				rendered.push({ card, element });
