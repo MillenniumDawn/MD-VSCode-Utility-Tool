@@ -203,10 +203,6 @@ function renderEdges(
 
 	context.lineWidth = 2;
 	for (const provinceEdge of province.edges) {
-		if (!("path" in provinceEdge)) {
-			continue;
-		}
-
 		if (provinceEdge.to > province.id) {
 			continue;
 		}

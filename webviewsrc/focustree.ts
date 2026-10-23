@@ -38,9 +38,11 @@ import { GridBoxType } from "../src/hoiformat/gui";
 import { toNumberLike } from "../src/hoiformat/schema";
 import { feLocalize } from "./util/i18n";
 import { applyIconState } from "../src/previewdef/toolbaricons";
+import { TOOLBAR_HEIGHT } from "../src/previewdef/toolbarparts";
 import { Checkbox } from "./util/checkbox";
 import { vscode } from "./util/vscode";
 import { SearchBox } from "./util/searchbox";
+import { conditionDropdown, setConditionOptions } from "./util/conditiontree";
 
 // Shared with the MIO preview; re-exported so the focus tree tests reach them through this entry.
 export { applyPrerequisiteTrace } from "./util/trace";
@@ -445,18 +447,7 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 		}
 
 		if (conditions) {
-			conditions.select.innerHTML = `<span class="value"></span>
-                ${conditionExprs
-									.map(
-										(option) =>
-											`<div class="option" value="${escapeAttr(`${option.scopeName}!|${option.nodeContent}`)}">${option.scopeName ? `[${escapeAttr(option.scopeName)}]` : ""}${escapeAttr(option.nodeContent)}</div>`,
-									)
-									.join("")}`;
-			conditions.selectedValues$.next(
-				clearCondition
-					? []
-					: selectedExprs.map((e) => `${e.scopeName}!|${e.nodeContent}`),
-			);
+			setConditionOptions(conditions, conditionExprs, clearCondition ? [] : selectedExprs);
 		}
 
 		const inlayConditionContainerElement = document.getElementById(
@@ -468,17 +459,10 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 		}
 
 		if (inlayConditions) {
-			inlayConditions.select.innerHTML = `<span class="value"></span>
-                ${inlayConditionExprs
-									.map(
-										(option) =>
-											`<div class="option" value="${escapeAttr(`${option.scopeName}!|${option.nodeContent}`)}">${option.scopeName ? `[${escapeAttr(option.scopeName)}]` : ""}${escapeAttr(option.nodeContent)}</div>`,
-									)
-									.join("")}`;
-			inlayConditions.selectedValues$.next(
-				clearCondition
-					? []
-					: selectedInlayExprs.map((e) => `${e.scopeName}!|${e.nodeContent}`),
+			setConditionOptions(
+				inlayConditions,
+				inlayConditionExprs,
+				clearCondition ? [] : selectedInlayExprs,
 			);
 		}
 	} else {
@@ -1175,74 +1159,35 @@ window.addEventListener(
 				"conditions",
 			) as HTMLDivElement | null;
 			if (conditionsElement) {
-				conditions = new DivDropdown(conditionsElement, true);
-
-				conditions.selectedValues$.next(
-					selectedExprs.map((e) => `${e.scopeName}!|${e.nodeContent}`),
-				);
-				conditions.selectedValues$.subscribe(tryRun(async (selection) => {
-					selectedExprs = selection.map<ConditionItem>((selection) => {
-						const index = selection.indexOf("!|");
-						if (index === -1) {
-							return {
-								scopeName: "",
-								nodeContent: selection,
-							};
-						} else {
-							return {
-								scopeName: selection.substring(0, index),
-								nodeContent: selection.substring(index + 2),
-							};
-						}
-					});
-
+				conditions = conditionDropdown(conditionsElement, selectedExprs, async (selection) => {
+					selectedExprs = selection;
 					setState({ selectedExprs });
-
 					await buildContent();
 					refreshFocusSearch();
-				}));
+				});
 			}
 
 			const inlayConditionsElement = document.getElementById(
 				"inlay-conditions",
 			) as HTMLDivElement | null;
 			if (inlayConditionsElement) {
-				inlayConditions = new DivDropdown(inlayConditionsElement, true);
-
-				inlayConditions.selectedValues$.next(
-					selectedInlayExprs.map((e) => `${e.scopeName}!|${e.nodeContent}`),
+				inlayConditions = conditionDropdown(
+					inlayConditionsElement,
+					selectedInlayExprs,
+					async (selection) => {
+						selectedInlayExprs = selection;
+						setState({ selectedInlayExprs });
+						await buildContent();
+						refreshFocusSearch();
+					},
 				);
-				inlayConditions.selectedValues$.subscribe(tryRun(async (selection) => {
-					selectedInlayExprs = selection.map<ConditionItem>((selection) => {
-						const index = selection.indexOf("!|");
-						if (index === -1) {
-							return {
-								scopeName: "",
-								nodeContent: selection,
-							};
-						} else {
-							return {
-								scopeName: selection.substring(0, index),
-								nodeContent: selection.substring(index + 2),
-							};
-						}
-					});
-
-					setState({ selectedInlayExprs });
-
-					await buildContent();
-					refreshFocusSearch();
-				}));
 			}
 		}
 
-		// Zoom. The anchor is the toolbar strip's height, which is what #focustreecontent is offset
-		// by -- it was 40 here against a 52px strip, and the drift shows up as the view sliding as
-		// you zoom, now that a button zoom anchors on the middle of the canvas rather than a cursor.
 		const contentElement = document.getElementById(
 			"focustreecontent",
 		) as HTMLDivElement;
-		enableZoom(contentElement, 0, 52);
+		enableZoom(contentElement, 0, TOOLBAR_HEIGHT);
 
 		// Shift+click a focus to isolate its prerequisite lines
 		tracing = subscribeTracing({

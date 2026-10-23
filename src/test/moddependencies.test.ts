@@ -346,6 +346,20 @@ describe("util/moddependencies", function () {
 		});
 	});
 
+	it("does not count a sibling whose name starts with the workspace folder's as inside it", async function () {
+		const siblingUserData = `${workspaceDir}2`;
+		const nestedModFile = nodePath.join(siblingUserData, "sub", "descriptor.mod");
+		await write(nodePath.join(siblingUserData, "mod", "marker.mod"), "");
+		await write(nodePath.join(siblingUserData, "dlc_load.json"), "{}");
+		await write(nestedModFile, "");
+		config.userDataPath = "";
+
+		await withoutDefaultUserDataDir(async () => {
+			const found = await findUserDataDir(vscode.Uri.file(nestedModFile));
+			assert.strictEqual(realPathOf(found), nodePath.resolve(siblingUserData));
+		});
+	});
+
 	it("finds the user data directory above a workspace checked out under its mod folder", async function () {
 		const nestedWorkspace = nodePath.join(userDataDir, "mod", "nested-sub");
 		const nestedModFile = nodePath.join(nestedWorkspace, "descriptor.mod");

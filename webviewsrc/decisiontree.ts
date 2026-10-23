@@ -10,6 +10,7 @@ import { applyNav, badge } from "./util/card";
 import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { applyIconState } from "../src/previewdef/toolbaricons";
+import { TOOLBAR_HEIGHT } from "../src/previewdef/toolbarparts";
 import { wireUpdateBody } from "./util/updatebody";
 import { buildGuiFrame } from "./util/guiframe";
 import { bridgeOverRemoved, skippedBySource } from "./util/graphbridge";
@@ -39,10 +40,6 @@ initCommon();
 // re-render can sweep any that were stranded by replacing their host node mid-hover.
 const effectTooltipClass = "dec-effects-tip";
 
-// Mirrors toolbarHeight in src/previewdef/decision/contentbuilder.ts, which is what actually sizes
-// the strip. Change one and the other has to follow.
-const toolbarHeight = 52;
-
 // The card is this wide, so a scripted GUI window drawn inside one is scaled down to fit it rather
 // than pushing the column out to the width of a 1920px game screen.
 const guiPreviewWidth = 300;
@@ -51,7 +48,7 @@ const guiPreviewWidth = 300;
 // than the event preview does.
 const effectTooltipOptions: EffectTooltipOptions = {
 	className: effectTooltipClass,
-	toolbarHeight,
+	toolbarHeight: TOOLBAR_HEIGHT,
 	gap: 12,
 	margin: 8,
 };
@@ -132,12 +129,7 @@ export function readFilters(stored: unknown): DecisionFilter[] {
 }
 
 // Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
-//
-// This has to stay below `decisionFilters`, not up with the other restored toggles: `readFilters` is
-// hoisted but the list it reads is not, so calling it earlier throws on the const in its temporal
-// dead zone and takes the whole module -- and with it the canvas -- down. The tests compile to
-// commonjs, where the same read is a property access that quietly answers `undefined`, so only the
-// bundled preview shows it.
+// It stays below `decisionFilters` for the reason readFilterList gives.
 let filters: DecisionFilter[] = readFilters(getState().decisionFilters);
 
 export interface VisibleGraph {
@@ -968,7 +960,7 @@ window.addEventListener(
 	"load",
 	tryRun(function () {
 		const contentElement = document.getElementById("decisiontreecontent") as HTMLDivElement;
-		enableZoom(contentElement, 0, toolbarHeight);
+		enableZoom(contentElement, 0, TOOLBAR_HEIGHT);
 
 		bindToggle("show-localisation", showLocalisation, (value) => {
 			showLocalisation = value;

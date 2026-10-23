@@ -14,6 +14,12 @@ Unreleased
 - [ Character Previewer ] Pressing Enter or Space on a trait pill now expands its details instead of opening the trait file; Ctrl/Meta navigation still works. Issue #548.
 - [ Focus Tree Previewer ] Editing an inlay window's `.gui` file, or adding its missing sprite to a `.gfx` file, now refreshes an open focus tree. Before, the preview kept the old window until the focus file itself changed. Issue #608.
 - [ DDS ] Legacy textures with unused bits before their color channels now show the correct colors. Issue #530.
+- [ Cleanup ] The previews take their toolbar height from one place instead of four. Issue #557.
+- [ Cleanup ] Parent mods, the mod registry and the index cache now share one rule for when two spellings of a path are the same folder. Issue #558.
+- [ Cleanup ] Message placeholders, `else_if` and `else` conditions, and GUI icons and buttons each have one implementation instead of two. Issue #559.
+- [ Cleanup ] The world map walks its provinces, states, regions, railways and supply nodes through one loop, and decides when edges, labels and rivers show through one check. Issue #560.
+- [ Previews ] The character and idea previews no longer keep drawing the old cards under "No characters to show." or "No ideas to show." when an edit or a filter empties a long list that is still appearing. Issue #491.
+- [ Cleanup ] The previews' dropdowns, the focus tree and MIO condition lists, and the in-place refresh of the MIO, technology and GFX previews each have one implementation instead of several. Issue #491.
 - [ Cleanup ] The GFX, shared focus, localisation and idea swap indexes are built and kept up to date by one shared routine instead of four copies. A game `.gfx` file that fails to parse is now labeled `[Vanilla]` in the output, not `[Mod]`. Issue #489.
 
 v1.1.42

@@ -301,6 +301,21 @@ function handleIf(
 	};
 }
 
+// An else_if or else is reached only when every earlier limit failed: the previous branch's own
+// prefix, plus that branch's limit negated.
+function failedEarlierBranches(ifItem: ConditionFolder): ConditionComplexExpr[] {
+	const lastItemItems = (
+		ifItem.items[ifItem.items.length - 1] as ConditionFolder
+	).items;
+	return [
+		...lastItemItems.slice(0, lastItemItems.length - 2),
+		{
+			...(lastItemItems[lastItemItems.length - 2] as ConditionFolder),
+			type: "andnot",
+		},
+	];
+}
+
 function handleElseIf(
 	elseIfNode: Node,
 	ifItem: ConditionFolder,
@@ -311,15 +326,8 @@ function handleElseIf(
 	}
 	const elseiflimit = elseIfNode.value.find((v) => v.name === "limit");
 	if (elseiflimit) {
-		const lastItemItems = (
-			ifItem.items[ifItem.items.length - 1] as ConditionFolder
-		).items;
 		const newItem: ConditionComplexExpr[] = [
-			...lastItemItems.slice(0, lastItemItems.length - 2),
-			{
-				...(lastItemItems[lastItemItems.length - 2] as ConditionFolder),
-				type: "andnot",
-			},
+			...failedEarlierBranches(ifItem),
 			extractConditionFolder(elseiflimit.value, scopeStack, "and"),
 			extractConditionFolder(elseIfNode.value, scopeStack, "and", [
 				"limit",
@@ -340,16 +348,7 @@ function handleElse(
 	scopeStack: Scope[],
 ) {
 	if (elseNode === null || Array.isArray(elseNode.value)) {
-		const lastItemItems = (
-			ifItem.items[ifItem.items.length - 1] as ConditionFolder
-		).items;
-		const newItem: ConditionComplexExpr[] = [
-			...lastItemItems.slice(0, lastItemItems.length - 2),
-			{
-				...(lastItemItems[lastItemItems.length - 2] as ConditionFolder),
-				type: "andnot",
-			},
-		];
+		const newItem = failedEarlierBranches(ifItem);
 		if (elseNode !== null) {
 			newItem.push(
 				extractConditionFolder(elseNode.value, scopeStack, "and", [

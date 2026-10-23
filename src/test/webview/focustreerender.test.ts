@@ -3,7 +3,7 @@ import * as assert from 'assert';
 import { Focus, FocusTree } from '../../previewdef/focustree/schema';
 import { iconButtonHtml } from '../../previewdef/toolbaricons';
 import { feLocalize } from '../../../webviewsrc/util/i18n';
-import { setState } from '../../../webviewsrc/util/common';
+import { getState, setState } from '../../../webviewsrc/util/common';
 
 function focus(id: string): Focus {
     return {
@@ -442,5 +442,74 @@ describe('webview/focustree rendering toolbar toggles', () => {
         button.dispatchEvent(new (window as any).Event('click'));
         assert.strictEqual(button.getAttribute('aria-pressed'), 'true');
         assert.strictEqual(icon(button), 'codicon-circle-large-filled');
+    });
+});
+
+describe('webview/focustree condition dropdowns', () => {
+    useEntrypoint(listeners);
+
+    const settled = () => new Promise(resolve => setTimeout(resolve, 0));
+    const war = { scopeName: '', nodeContent: 'has_war = yes' };
+    const flag = { scopeName: 'ROOT', nodeContent: 'has_country_flag = inlay_flag' };
+    let previousBody = '';
+
+    before(async () => {
+        previousBody = document.body.innerHTML;
+        resetWebviewState();
+        document.body.innerHTML = `
+            <div id="condition-container"><div id="conditions" class="select multiple-select"><span class="value"></span></div></div>
+            <div id="inlay-condition-container"><div id="inlay-conditions" class="select multiple-select"><span class="value"></span></div></div>
+            <div id="continuousFocuses"></div>
+            <div id="focustreecontent"><div id="focustreeplaceholder"></div></div>
+            <div id="inlaywindowplaceholder"></div>
+            <div id="warnings-container" style="display:none"><div id="warnings"></div></div>`;
+        // Condition mode comes with the tree, and the load handler only builds the dropdowns in it.
+        const message = updateBody('cond_focus', { useConditionInFocus: true });
+        message.data.focusTrees[0].conditionExprs = [war];
+        message.data.focusTrees[0].inlayConditionExprs = [flag];
+        window.dispatchEvent(new (window as any).MessageEvent('message', { data: message }));
+        const originalScroll = window.scroll;
+        const originalScrollTo = window.scrollTo;
+        (window as any).scroll = () => undefined;
+        (window as any).scrollTo = () => undefined;
+        try {
+            window.dispatchEvent(new (window as any).Event('load'));
+            for (let i = 0; i < 100 && !takePostedMessages().some(m => m.command === 'ready'); i++) {
+                await settled();
+            }
+            for (let i = 0; i < 20; i++) {
+                await settled();
+            }
+        } finally {
+            (window as any).scroll = originalScroll;
+            (window as any).scrollTo = originalScrollTo;
+        }
+        takePostedMessages();
+    });
+
+    after(() => {
+        document.body.innerHTML = previousBody;
+        resetWebviewState();
+    });
+
+    async function pickFirst(id: string): Promise<void> {
+        const select = document.getElementById(id)!;
+        select.dispatchEvent(new (window as any).MouseEvent('mousedown', { cancelable: true }));
+        (document.querySelector('ul.select-dropdown li') as HTMLElement).click();
+        select.dispatchEvent(new (window as any).MouseEvent('mousedown', { cancelable: true }));
+        for (let i = 0; i < 20; i++) {
+            await settled();
+        }
+        takePostedMessages();
+    }
+
+    it('keeps the focus and inlay condition picks apart, each under its own key', async () => {
+        await pickFirst('conditions');
+        assert.deepStrictEqual(getState().selectedExprs, [war]);
+        assert.deepStrictEqual(getState().selectedInlayExprs, []);
+
+        await pickFirst('inlay-conditions');
+        assert.deepStrictEqual(getState().selectedExprs, [war]);
+        assert.deepStrictEqual(getState().selectedInlayExprs, [flag]);
     });
 });

@@ -353,6 +353,20 @@ describe("webview/worldmap/renderContext", function () {
 		assert.strictEqual(isEdgeVisible(topBar, { scale: 2 } as ViewPoint), true);
 	});
 
+	it("takes the floor from the current view mode", function () {
+		const topBar = displayBar(["edge", "adaptzooming"], "strategicregion");
+		assert.strictEqual(isEdgeVisible(topBar, { scale: 0.24 } as ViewPoint), false);
+		assert.strictEqual(isEdgeVisible(topBar, { scale: 0.25 } as ViewPoint), true);
+	});
+
+	// The page drops the supply area option when the setting is off, and a stored view mode that
+	// names it then reads back from the select as "".
+	it("follows the display list with adapt-zooming off even for a view mode it has no floor for", function () {
+		const topBar = displayBar(["edge", "label"], "");
+		assert.strictEqual(isEdgeVisible(topBar, { scale: 1 } as ViewPoint), true);
+		assert.strictEqual(isLabelVisible(topBar, { scale: 1 } as ViewPoint), true);
+	});
+
 	it("hides province labels until the zoom reaches the view-mode floor", function () {
 		const topBar = displayBar(["label", "adaptzooming"], "province");
 		assert.strictEqual(
