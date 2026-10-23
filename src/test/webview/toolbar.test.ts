@@ -1,4 +1,4 @@
-import "./setup";
+import { resetWebviewState } from "./setup";
 import * as assert from "assert";
 import {
 	FilterControl,
@@ -7,7 +7,7 @@ import {
 	readFilterList,
 	toggleBinder,
 } from "../../../webviewsrc/util/toolbar";
-import { getState } from "../../../webviewsrc/util/common";
+import { getState, setState } from "../../../webviewsrc/util/common";
 
 type TestFilter = "missions" | "decisions" | "chains";
 
@@ -126,7 +126,10 @@ describe("webview/util/toolbar", () => {
 	});
 
 	describe("bindLocalisationToggle", () => {
+		afterEach(resetWebviewState);
+
 		it("applies a click and stores it under showLocalisation", () => {
+			setState({ showLocalisation: true });
 			document.body.innerHTML = `<input type="checkbox" id="show-localisation"><span></span>`;
 			const applied: boolean[] = [];
 			let rebuilds = 0;

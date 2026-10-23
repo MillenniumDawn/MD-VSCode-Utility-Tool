@@ -7,6 +7,8 @@ import {
 	CharacterPreviewPayload,
 	TraitCard,
 } from "../../previewdef/character/payload";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
+import { getState } from "../../../webviewsrc/util/common";
 
 // characterpreview.ts reads window.characterPreview at module scope, so the payload has to exist
 // before the import runs. This mirrors Millennium Dawn's AFG.txt: one character wearing three
@@ -531,13 +533,69 @@ describe("webview/characterpreview rendering", () => {
 		}
 	});
 
+	function post(next: CharacterPreviewPayload): void {
+		window.dispatchEvent(
+			new (window as any).MessageEvent("message", {
+				data: { type: "updateBody", data: { characterPreview: next } },
+			}),
+		);
+	}
+
+	function setToggle(id: string, checked: boolean): void {
+		const toggle = document.getElementById(id) as HTMLInputElement;
+		toggle.checked = checked;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+	}
+
+	it("shows the key in place of the localised name once localisation is turned off", () => {
+		const subs = () => Array.from(content().querySelectorAll(".ev-sub")).map((e) => e.textContent);
+		setToggle("show-localisation", false);
+		try {
+			assert.ok(!subs().includes("Ahmad Shah Massoud"));
+			assert.strictEqual(getState().showLocalisation, false);
+		} finally {
+			setToggle("show-localisation", true);
+		}
+		assert.ok(subs().includes("Ahmad Shah Massoud"));
+	});
+
+	it("draws every condition panel in the card wording, and the card's own modifier lists", () => {
+		const atLeastOne = (leaf: string) =>
+			({
+				type: "count",
+				amount: 1,
+				items: [
+					{ scopeName: "", nodeContent: leaf },
+					{ scopeName: "", nodeContent: "has_war = yes" },
+				],
+			}) as ConditionComplexExpr;
+		const full = card("AFG_full", "advisor", {
+			allowed: atLeastOne("tag = AFG"),
+			available: atLeastOne("has_government = neutrality"),
+			visible: atLeastOne("is_ai = no"),
+			modifiers: [{ key: "stability_factor", name: "Stability", value: "+5%", tone: "good" }],
+			research: [{ key: "infantry_weapons", name: "Infantry weapons", value: "+10%", tone: "good" }],
+		});
+		post({
+			...integrationPayload,
+			groups: [{ kind: "advisor", title: "Advisors", cardIds: [full.cardId] }],
+			cards: [full],
+		});
+		setToggle("show-conditions", true);
+		try {
+			const texts = (selector: string) =>
+				Array.from(content().querySelectorAll(selector)).map((e) => e.textContent);
+			assert.deepStrictEqual(texts(".ev-cond-head"), ["Allowed", "Available", "Visible"]);
+			assert.deepStrictEqual(texts(".ev-fold"), ["at least == 1", "at least == 1", "at least == 1"]);
+			assert.deepStrictEqual(texts(".char-mod-name"), ["Stability", "Infantry weapons"]);
+			assert.deepStrictEqual(texts(".char-mods-head"), ["Research bonus"]);
+		} finally {
+			setToggle("show-conditions", false);
+			post(integrationPayload);
+		}
+	});
+
 	it("stops painting the previous roster when the next one is empty", () => {
-		const post = (next: CharacterPreviewPayload) =>
-			window.dispatchEvent(
-				new (window as any).MessageEvent("message", {
-					data: { type: "updateBody", data: { characterPreview: next } },
-				}),
-			);
 		const frames: (() => void)[] = [];
 		const realNow = Date.now;
 		let now = 0;
