@@ -113,12 +113,87 @@ describe("Surface.getFullRgba on uncompressed pixels", () => {
 			{ width: 1, flags: DDPF_LUMINANCE, bitsPerPixel: 40, masks: [0xffffffff, 0, 0, 0], data: [0xff, 0xff, 0xff, 0xff, 0] },
 			[255, 255, 255, 255],
 		],
+		[
+			"an RGB word with an unused leading byte",
+			{
+				width: 3,
+				flags: DDPF_RGB,
+				bitsPerPixel: 32,
+				masks: [0xff000000, 0x00ff0000, 0x0000ff00, 0],
+				data: [9, 30, 20, 10, 0, 0, 0, 128, 9, 30, 20, 10],
+			},
+			[10, 20, 30, 255, 128, 0, 0, 255, 10, 20, 30, 255],
+		],
+		[
+			"a 16-bit channel behind an unused low halfword",
+			{
+				width: 2,
+				flags: DDPF_LUMINANCE,
+				bitsPerPixel: 32,
+				masks: [0xffff0000, 0, 0, 0],
+				data: u32(0x5a5a0000, 0xffff0000),
+			},
+			[90, 90, 90, 255, 255, 255, 255, 255],
+		],
+		[
+			"twelve unused low bits before a 24-bit luminance sample",
+			{
+				width: 3,
+				flags: DDPF_LUMINANCE,
+				bitsPerPixel: 24,
+				masks: [0xfff000, 0, 0, 0],
+				data: [0, 0, 0, 0x00, 0xf0, 0xff, 0x00, 0x30, 0x33],
+			},
+			[0, 0, 0, 255, 255, 255, 255, 255, 51, 51, 51, 255],
+		],
+		[
+			"eight-bit channels off the byte boundary of a 32-bit pixel",
+			{
+				width: 2,
+				flags: DDPF_RGB,
+				bitsPerPixel: 32,
+				masks: [0xff0, 0xff000, 0xff00000, 0],
+				data: u32(0x0efcdab0, 0x05634120),
+			},
+			[171, 205, 239, 255, 18, 52, 86, 255],
+		],
 	];
 	for (const [name, fixture, expected] of legacy) {
 		it(`decodes ${name} described by channel masks`, () => {
 			assert.deepStrictEqual(decodeDds({ ...fixture, height: 1 }), expected);
 		});
 	}
+
+	it("reads shifted 8-bit channels row after row", () => {
+		assert.deepStrictEqual(
+			decodeDds({
+				width: 2,
+				height: 2,
+				flags: DDPF_RGB,
+				masks: [0xff000000, 0x00ff0000, 0x0000ff00, 0],
+				data: [9, 30, 20, 10, 0, 0, 0, 128, 1, 2, 3, 4, 5, 6, 7, 8],
+			}),
+			[10, 20, 30, 255, 128, 0, 0, 255, 4, 3, 2, 255, 8, 7, 6, 255],
+		);
+	});
+
+	it("reads a channel shifted off the byte boundary when pixels are not whole bytes", () => {
+		// Twelve-bit pixels put the second pixel mid-byte; each row still starts on a byte.
+		assert.deepStrictEqual(
+			decodeDds({
+				width: 3,
+				height: 2,
+				flags: DDPF_ALPHA_CHANNEL,
+				bitsPerPixel: 12,
+				masks: [0, 0, 0, 0xf0],
+				data: [0x50, 0x00, 0x05, 0x50, 0x00, 0xf0, 0x00, 0x0f, 0xf0, 0x00],
+			}),
+			[
+				255, 255, 255, 85, 255, 255, 255, 85, 255, 255, 255, 85,
+				255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+			],
+		);
+	});
 
 	it("keeps every 8-bit value as it is", () => {
 		const values = Array.from({ length: 256 }, (_, value) => value);
