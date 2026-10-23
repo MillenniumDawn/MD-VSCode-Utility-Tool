@@ -24,8 +24,8 @@
 
 /* Sticks under the toolbar so the reader always knows which role the cards below are being shown
    in -- which matters more here than in the idea preview, because the same character legitimately
-   appears in several groups. `top` is the toolbar height: see toolbarHeight in
-   src/previewdef/character/contentbuilder.ts. */
+   appears in several groups. `top` is the toolbar height: see TOOLBAR_HEIGHT in
+   src/previewdef/toolbarparts.ts. */
 .char-group-head {
 	position: sticky;
 	top: 0;

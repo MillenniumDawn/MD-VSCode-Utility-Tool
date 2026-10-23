@@ -2,6 +2,7 @@ import type * as vscode from "vscode";
 import { host } from "./host";
 import { localize } from "./i18n";
 import { Logger } from "./logger";
+import { pathIdentity } from "./nodecommon";
 import {
 	fileOrUriStringToUri,
 	getConfiguration,
@@ -79,12 +80,9 @@ export function getExplicitParentModUris(): vscode.Uri[] {
 	return uris;
 }
 
-// Slashes normalized, so the setting's `D:\mods\parent` and the registry's `D:/mods/parent`
-// count as the one folder on Windows. Linux keeps case because `/mods/Parent` and `/mods/parent`
-// are distinct folders there.
+// So the setting's `D:\mods\parent` and the registry's `D:/mods/parent` count as one folder.
 function uriKey(uri: vscode.Uri): string {
-	const normalized = uriToFilePathWhenPossible(uri).replace(/\\+/g, "/").replace(/\/+$/, "");
-	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+	return pathIdentity(uriToFilePathWhenPossible(uri)).replace(/\/+$/, "");
 }
 
 // The workspace folders already skipped as parents, so the warning is written once per folder
