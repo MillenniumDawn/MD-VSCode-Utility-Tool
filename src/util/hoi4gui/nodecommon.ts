@@ -1,4 +1,4 @@
-import { Background } from "../../hoiformat/gui";
+import { Background, ButtonType, IconType } from "../../hoiformat/gui";
 import { HOIPartial, parseNumberLike } from "../../hoiformat/schema";
 import { NumberPosition, NumberSize } from "../common";
 import { CorneredTileSprite, Sprite } from "../image/sprite";
@@ -11,6 +11,30 @@ export interface RenderNodeCommonOptions extends RenderCommonOptions {
 		callerType: "bg" | "icon",
 		callerName: string | undefined,
 	): Promise<Sprite | undefined>;
+}
+
+// The sprite an icon or a button draws and where it goes. `centerposition` puts the sprite's middle
+// on the position rather than its corner.
+export async function placeSprite(
+	node: HOIPartial<IconType> | HOIPartial<ButtonType>,
+	parentInfo: ParentInfo,
+	options: RenderNodeCommonOptions,
+): Promise<{ image: Sprite; x: number; y: number; scale: number } | undefined> {
+	const spriteType = node.spritetype ?? node.quadtexturesprite;
+	const image =
+		options.getSprite && spriteType
+			? await options.getSprite(spriteType, "icon", node.name)
+			: undefined;
+	if (image === undefined) {
+		return undefined;
+	}
+
+	let [x, y] = calculateBBox(node, parentInfo);
+	if (node.centerposition) {
+		x -= image.width / 2;
+		y -= image.height / 2;
+	}
+	return { image, x, y, scale: node.scale ?? 1 };
 }
 
 export function renderSprite(

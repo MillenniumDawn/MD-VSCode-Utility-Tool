@@ -20,6 +20,13 @@ export function matchPathEnd(pathname: string, segments: string[]): boolean {
 	return true;
 }
 
+// The key two spellings of one folder share: slashes normalized, case folded on Windows only,
+// because `/mods/Parent` and `/mods/parent` are distinct folders on Linux.
+export function pathIdentity(value: string): string {
+	const normalized = value.replace(/\\+/g, "/");
+	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
 export function isSamePath(a: string, b: string): boolean {
 	return path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 }
