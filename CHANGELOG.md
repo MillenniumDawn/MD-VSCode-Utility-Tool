@@ -1,7 +1,13 @@
 Unreleased
 
+v1.1.43
+
   Functionality:
 - [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
+- [ CI ] Share the identical Git helpers used by release scripts. Issue #562.
+- [ Testing ] Load the four world map page modules in the module-load test. Issue #532.
+- [ Testing ] Move the schema tests into the pure suite. Issue #565.
+- Let shared navigation make preview cards keyboard-focusable. Issue #561.
 
   Bugfixes:
 - [ Previews ] Opening a mod workspace with only MIO organization files or `.gui` files under `interface/` now activates the preview button without opening another file first. Issue #481.
@@ -22,6 +28,7 @@ Unreleased
 - [ Cleanup ] The previews' dropdowns, the focus tree and MIO condition lists, and the in-place refresh of the MIO, technology and GFX previews each have one implementation instead of several. Issue #491.
 - [ Cleanup ] The GFX, shared focus, localisation and idea swap indexes are built and kept up to date by one shared routine instead of four copies. A game `.gfx` file that fails to parse is now labeled `[Vanilla]` in the output, not `[Mod]`. Issue #489.
 - [ Testing ] The GFX, shared focus and localisation index tests run without the editor and share one setup, and the behavior every index shares is tested once for all four. Issue #567.
+- [ Testing ] Keep registry publishing tokens off the command line. Issue #578.
 
 v1.1.42
 
