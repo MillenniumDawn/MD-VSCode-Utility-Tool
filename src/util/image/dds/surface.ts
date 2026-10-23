@@ -554,44 +554,42 @@ function defaultUint8Reader(
 function all8Reader(
 	buffer: Uint8Array,
 	offset: number,
-	bitOffset: number,
+	_bitOffset: number,
 	channelStart: number[],
 	channelLength: number[],
 	_channelMask: number[],
 	rawPixel: Float64Array,
 ): void {
 	for (let i = 0; i < channelLength.length; i++) {
-		rawPixel[i] = buffer[offset + ((bitOffset + channelStart[i]!) >> 3)]!;
+		rawPixel[i] = buffer[offset + (channelStart[i]! >> 3)]!;
 	}
 }
 
 function all16Reader(
 	buffer: Uint16Array,
 	offset: number,
-	bitOffset: number,
+	_bitOffset: number,
 	channelStart: number[],
 	channelLength: number[],
 	_channelMask: number[],
 	rawPixel: Float64Array,
 ): void {
 	for (let i = 0; i < channelLength.length; i++) {
-		rawPixel[i] =
-			buffer[(offset >> 1) + ((bitOffset + channelStart[i]!) >> 4)]!;
+		rawPixel[i] = buffer[(offset >> 1) + (channelStart[i]! >> 4)]!;
 	}
 }
 
 function all32Reader(
 	buffer: Float32Array | Uint32Array,
 	offset: number,
-	bitOffset: number,
+	_bitOffset: number,
 	channelStart: number[],
 	channelLength: number[],
 	_channelMask: number[],
 	rawPixel: Float64Array,
 ): void {
 	for (let i = 0; i < channelLength.length; i++) {
-		rawPixel[i] =
-			buffer[(offset >> 2) + ((bitOffset + channelStart[i]!) >> 5)]!;
+		rawPixel[i] = buffer[(offset >> 2) + (channelStart[i]! >> 5)]!;
 	}
 }
 
