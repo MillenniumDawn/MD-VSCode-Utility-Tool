@@ -17,6 +17,7 @@ Unreleased
 - [ Cleanup ] The previews take their toolbar height from one place instead of four. Issue #557.
 - [ Cleanup ] Parent mods, the mod registry and the index cache now share one rule for when two spellings of a path are the same folder. Issue #558.
 - [ Cleanup ] Message placeholders, `else_if` and `else` conditions, and GUI icons and buttons each have one implementation instead of two. Issue #559.
+- [ Cleanup ] The world map walks its provinces, states, regions, railways and supply nodes through one loop, and decides when edges, labels and rivers show through one check. Issue #560.
 
 v1.1.42
 
