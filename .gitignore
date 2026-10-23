@@ -70,6 +70,7 @@ jspm_packages/
 # Tool directories
 .opencode/
 .superpowers/
+.pi/
 
 # IDE and editor files
 .vscode/settings.json
