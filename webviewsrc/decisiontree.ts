@@ -445,7 +445,7 @@ function buildCategoryCard(node: DecisionGraphCategoryNode): HTMLDivElement {
 	const card = document.createElement("div");
 	card.className = "ev-card dec-card-category";
 	head(card, node, node.scriptedGui ? ["gui"] : []);
-	applyNav(card, node.nav, true);
+	applyNav(card, node.nav);
 
 	const hidden = hiddenByCategory.get(node.id);
 	const collapsed = hidden !== undefined;
@@ -551,7 +551,7 @@ function buildDecisionCard(node: DecisionGraphDecisionNode): HTMLDivElement {
 	const card = document.createElement("div");
 	card.className = "ev-card " + (node.isMission ? "dec-card-mission" : "dec-card-decision");
 	head(card, node, [node.isMission ? "mission" : "decision"]);
-	applyNav(card, node.nav, true);
+	applyNav(card, node.nav);
 
 	const meta = document.createElement("div");
 	meta.className = "ev-meta";
