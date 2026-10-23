@@ -1,6 +1,6 @@
 import { EntrypointListeners, loadEntrypoint, recordedPosts } from "./setup";
 import * as assert from "assert";
-import { wireUpdateBody } from "../../../webviewsrc/util/updatebody";
+import { onUpdateBody, wireUpdateBody } from "../../../webviewsrc/util/updatebody";
 
 interface TestPayload {
 	name: string;
@@ -105,5 +105,43 @@ describe("webview/util/updatebody", () => {
 
 		assert.deepStrictEqual(applied, []);
 		assert.strictEqual(rebuilds, 0);
+	});
+
+	describe("onUpdateBody", () => {
+		let received: Record<string, any>[] = [];
+		let pageListeners: EntrypointListeners;
+
+		before(() => {
+			pageListeners = loadEntrypoint(() =>
+				onUpdateBody({ contentIds: ["testcontent", "testselect"], styleId: "test-server-styles" }, (data) => {
+					received.push(data);
+				}),
+			).listeners;
+			pageListeners.attach();
+		});
+
+		after(() => pageListeners.detach());
+
+		beforeEach(() => {
+			received = [];
+		});
+
+		it("hands over the whole data block when every element it needs is there", () => {
+			document.body.insertAdjacentHTML("beforeend", `<select id="testselect"></select>`);
+			push({ contentHtml: "<p></p>" });
+			assert.deepStrictEqual(received, [{ contentHtml: "<p></p>" }]);
+		});
+
+		it("asks for a reload instead when any one of them is missing", () => {
+			const withBoth = (() => {
+				document.body.insertAdjacentHTML("beforeend", `<select id="testselect"></select>`);
+				return countPosts(() => push({}));
+			})();
+			document.getElementById("testselect")!.remove();
+			const withOne = countPosts(() => push({}));
+
+			assert.strictEqual(withOne, withBoth + 1);
+			assert.strictEqual(received.length, 1);
+		});
 	});
 });
