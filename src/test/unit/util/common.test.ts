@@ -441,10 +441,12 @@ describe("util/common", () => {
 			["{1} {0} {1}", ["d", "e"], "e d e"],
 			["a {} b {0}", [], "a {} b {0}"],
 			["[{0}]", [undefined], "[]"],
+			["[{0}]", [null], "[]"],
+			["{0},{1},{2}", [0, false, ""], "0,false,"],
 		];
 
 		for (const [message, args, expected] of cases) {
-			it(`fills ${message} with ${args.length} argument(s) as ${expected}`, () => {
+			it(`fills ${message} from [${args.map(String).join(", ")}] as ${expected}`, () => {
 				assert.strictEqual(fillPlaceholders(message, args), expected);
 			});
 		}
