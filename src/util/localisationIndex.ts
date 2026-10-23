@@ -1,18 +1,11 @@
 import type * as vscode from "vscode";
 import { host } from "./host";
 import { getFlags } from "./featureflags";
-import { IndexFile, listIndexFiles } from "./indexListing";
+import { IndexFile } from "./indexListing";
 import { localize } from "./i18n";
-import { createIndexBuilder, IndexProgress } from "./indexBuild";
-import { FileSourceOptions, ListFilesOptions } from "./fileloader";
-import {
-	buildIndexHalf,
-	captureIndexBuildContext,
-	IndexBuildContext,
-	readIndexFileContent,
-	reportIndexParseFailure,
-} from "./indexHalf";
-import { createIndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
+import { FileSourceOptions } from "./fileloader";
+import { readIndexFileContent, reportIndexParseFailure } from "./indexHalf";
+import { createThreeHalfIndex } from "./indexFactory";
 import {
 	defaultYmlSuffix,
 	isoBySettingName,
@@ -22,53 +15,109 @@ import {
 
 type LocalisationData = Record<string, Record<string, string>>;
 
-const globalLocalisationIndex: LocalisationData = {};
-const globalLocalisationFileMap: Record<
-	string,
-	Record<string, Set<string>>
-> = {};
 // A half of its own for the parent mods, for the same reason the gfx index has one: within a half
 // the last file parsed wins, so a key the workspace overrides in a differently named .yml would
 // otherwise show the parent's text on some builds.
-let parentLocalisationIndexes: LocalisationData[] = [];
-let workspaceLocalisationIndex: LocalisationData = {};
+interface LocalisationHalf {
+	index: LocalisationData;
+	// Which localisation keys came from which file, per language:
+	// langKey -> filePath -> Set<localisationKey>. A cache is only worth hydrating from if it
+	// carries this: without it a warm build restored no keys and parsed no fresh files, leaving the
+	// half empty.
+	fileMap: Record<string, Record<string, Set<string>>>;
+}
 
-// Tracks which localisation keys came from which file, per language
-// langKey -> filePath -> Set<localisationKey>
-const workspaceLocalisationFileMap: Record<
-	string,
-	Record<string, Set<string>>
-> = {};
+const LOC_CACHE_VERSION = 2;
+const langSuffixPattern = ymlSuffixes.join("|");
+const localisationFileFilter = new RegExp(
+	`.*_(${langSuffixPattern})\\.yml$`,
+	"i",
+);
 
-// The parent half's parallel map. Its cache is only worth hydrating from if it carries fileMap
-// data: without it a warm build restored no parent keys and parsed no fresh files, leaving the
-// parent half empty.
-const parentLocalisationFileMaps: Record<
-	string,
-	Record<string, Set<string>>
->[] = [];
+/**
+ * One language of one .yml file, as one line of the cache. The file's keys are the entries' keys,
+ * so the cache no longer carries a second copy of every key alongside the index.
+ */
+type LocCacheRecord = [
+	langKey: string,
+	filePath: string,
+	entries: Record<string, string>,
+];
 
-const builder = createIndexBuilder({
+const localisationIndex = createThreeHalfIndex<LocalisationHalf, LocCacheRecord>({
 	name: "localisationIndex",
-	message: localize(
-		"localisationIndex.building",
-		"Building Localisation index...",
+	message: localize("localisationIndex.building", "Building Localisation index..."),
+	rebuildMessage: localize(
+		"localisationIndex.workspace.building",
+		"Building workspace localisation index...",
 	),
-	build: async (progress) => {
-		const context = await captureIndexBuildContext();
-		return Promise.all([
-			buildGlobalLocalisationIndex(progress, context),
-			buildParentLocalisationIndex(progress, context),
-			buildWorkspaceLocalisationIndex(progress, context),
-		]);
+	rebuildFailureMessage: "Building workspace localisation index failed.",
+	enabled: () => getFlags().localisationIndex,
+	roots: ["localisation"],
+	filter: (relativePath) => localisationFileFilter.test(relativePath),
+	extension: ".yml",
+	cacheVersion: LOC_CACHE_VERSION,
+	fullRebuildOnAnyChange: true,
+	newHalf: () => ({ index: {}, fileMap: {} }),
+	hydrate: ({ index, fileMap }, [langKey, filePath, entries], skipFiles) => {
+		if (skipFiles.has(filePath)) {
+			return;
+		}
+		Object.assign(index[langKey] ?? (index[langKey] = {}), entries);
+		const fileMapForLang = fileMap[langKey] ?? (fileMap[langKey] = {});
+		fileMapForLang[filePath] = new Set(Object.keys(entries));
+	},
+	parseFile: fillLocalisationItems,
+	// Each value is copied from the index rather than from the file, so a key two files define
+	// is cached with the text that won, as it always was.
+	serialize: ({ index, fileMap }) => {
+		const records: LocCacheRecord[] = [];
+		for (const langKey in fileMap) {
+			const languageIndex = index[langKey] ?? {};
+			const filesForLang = fileMap[langKey] ?? {};
+			for (const filePath in filesForLang) {
+				const entries: Record<string, string> = {};
+				for (const key of filesForLang[filePath] ?? []) {
+					const value = languageIndex[key];
+					if (value !== undefined) {
+						entries[key] = value;
+					}
+				}
+				records.push([langKey, filePath, entries]);
+			}
+		}
+		return records;
+	},
+	removeFile: ({ index, fileMap }, relative) => {
+		for (const langKey of Object.keys(fileMap)) {
+			const fileKeys = fileMap[langKey]?.[relative];
+			if (!fileKeys) {
+				continue;
+			}
+
+			const languageIndex = index[langKey];
+			if (languageIndex) {
+				for (const key of fileKeys) {
+					delete languageIndex[key];
+				}
+			}
+			delete fileMap[langKey]?.[relative];
+		}
+	},
+	mergeFile: (workspace, parsed, relative) => {
+		for (const langKey in parsed.index) {
+			Object.assign(
+				workspace.index[langKey] ?? (workspace.index[langKey] = {}),
+				parsed.index[langKey],
+			);
+
+			const keys = parsed.fileMap[langKey]?.[relative];
+			if (keys) {
+				(workspace.fileMap[langKey] ?? (workspace.fileMap[langKey] = {}))[relative] = keys;
+			}
+		}
 	},
 });
-
-const buildGate = builder.gate;
-
-function ensureIndexBuilt(): Promise<[void, void, void]> {
-	return builder.ensureBuilt();
-}
 
 export async function getLocalisedTextQuick(
 	localisationKey: string | undefined,
@@ -94,7 +143,7 @@ export async function getLocalisedText(
 		return localisationKey ?? "";
 	}
 
-	await ensureIndexBuilt().catch(() => undefined);
+	await localisationIndex.ensureBuilt().catch(() => undefined);
 
 	const langKey = ymlSuffixByIso[language.toLowerCase()] || defaultYmlSuffix;
 	const defaultLangKey = defaultYmlSuffix;
@@ -111,167 +160,16 @@ function lookupLocalisation(
 	langKey: string,
 	localisationKey: string,
 ): string | undefined {
-	return (
-		workspaceLocalisationIndex[langKey]?.[localisationKey] ??
-		parentLocalisationIndexes
-			.map((index) => index[langKey]?.[localisationKey])
-			.find((value) => value !== undefined) ??
-		globalLocalisationIndex[langKey]?.[localisationKey] ??
-		undefined
-	);
-}
-
-const LOC_CACHE_VERSION = 2;
-const langSuffixPattern = ymlSuffixes.join("|");
-const localisationFileFilter = new RegExp(
-	`.*_(${langSuffixPattern})\\.yml$`,
-	"i",
-);
-
-/**
- * One language of one .yml file, as one line of the cache. The file's keys are the entries' keys,
- * so the cache no longer carries a second copy of every key alongside the index.
- */
-type LocCacheRecord = [
-	langKey: string,
-	filePath: string,
-	entries: Record<string, string>,
-];
-
-const localisationRoot = "localisation";
-const isLocalisationFile = (relativePath: string) =>
-	localisationFileFilter.test(relativePath);
-
-async function buildGlobalLocalisationIndex(
-	progress: IndexProgress,
-	context: IndexBuildContext,
-): Promise<void> {
-	await buildLocalisationIndexHalf(
-		"localisationIndex.global",
-		{ mod: false, hoi4: true, recursively: true },
-		globalLocalisationIndex,
-		globalLocalisationFileMap,
-		progress,
-		context,
-	);
-}
-
-async function buildParentLocalisationIndex(
-	progress: IndexProgress,
-	context?: IndexBuildContext,
-): Promise<void> {
-	const buildContext = context ?? (await captureIndexBuildContext());
-	const parents = buildContext.parentModUris;
-	parentLocalisationIndexes = parents.map(() => ({}));
-	parentLocalisationFileMaps.length = parents.length;
-	await Promise.all(
-		parents.map((parent, index) => {
-			const fileMap: Record<string, Record<string, Set<string>>> = {};
-			parentLocalisationFileMaps[index] = fileMap;
-			return buildLocalisationIndexHalf(
-				`localisationIndex.parent.${index}`,
-				{
-					workspace: false,
-					hoi4: false,
-					recursively: true,
-					parentModUris: [parent],
-				},
-				parentLocalisationIndexes[index]!,
-				fileMap,
-				progress,
-				buildContext,
-			);
-		}),
-	);
-}
-
-async function buildWorkspaceLocalisationIndex(
-	progress: IndexProgress,
-	context?: IndexBuildContext,
-): Promise<void> {
-	const buildContext = context ?? (await captureIndexBuildContext());
-	await buildLocalisationIndexHalf(
-		"localisationIndex.workspace",
-		{ mod: true, parent: false, hoi4: false, recursively: true },
-		workspaceLocalisationIndex,
-		workspaceLocalisationFileMap,
-		progress,
-		buildContext,
-	);
-}
-
-async function buildLocalisationIndexHalf(
-	cacheName: string,
-	options: ListFilesOptions,
-	targetIndex: LocalisationData,
-	fileMap: Record<string, Record<string, Set<string>>> | null,
-	progress: IndexProgress,
-	context: IndexBuildContext,
-): Promise<void> {
-	await buildIndexHalf<LocCacheRecord>(
-		{
-			cacheName,
-			version: LOC_CACHE_VERSION,
-			cacheScope: context.cacheScope,
-			dependencyGeneration: context.dependencyGeneration,
-			fullRebuildOnAnyChange: true,
-			listFiles: (token) =>
-				listIndexFiles({
-					roots: [localisationRoot],
-					filter: isLocalisationFile,
-					options: { ...options, token },
-				}),
-			hydrate: ([langKey, filePath, entries], skipFiles) => {
-				if (skipFiles.has(filePath)) {
-					return;
-				}
-				Object.assign(
-					targetIndex[langKey] ?? (targetIndex[langKey] = {}),
-					entries,
-				);
-				if (fileMap) {
-					const fileMapForLang = fileMap[langKey] ?? (fileMap[langKey] = {});
-					fileMapForLang[filePath] = new Set(Object.keys(entries));
-				}
-			},
-			parseFile: async (file) => {
-				await fillLocalisationItems(
-					file,
-					targetIndex,
-					fileMap,
-					options,
-				);
-			},
-			// Each value is copied from the index rather than from the file, so a key two files define
-			// is cached with the text that won, as it always was.
-			serialize: () => {
-				const records: LocCacheRecord[] = [];
-				for (const langKey in fileMap ?? {}) {
-					const languageIndex = targetIndex[langKey] ?? {};
-					const filesForLang = fileMap?.[langKey] ?? {};
-					for (const filePath in filesForLang) {
-						const entries: Record<string, string> = {};
-						for (const key of filesForLang[filePath] ?? []) {
-							const value = languageIndex[key];
-							if (value !== undefined) {
-								entries[key] = value;
-							}
-						}
-						records.push([langKey, filePath, entries]);
-					}
-				}
-				return records;
-			},
-		},
-		progress,
-	);
+	return localisationIndex
+		.inPrecedence()
+		.map((half) => half.index[langKey]?.[localisationKey])
+		.find((value) => value !== undefined);
 }
 
 /** Returns whether the file was read and parsed, so a re-index knows not to discard what it has. */
 async function fillLocalisationItems(
+	{ index, fileMap }: LocalisationHalf,
 	localisationFile: IndexFile,
-	localisationIndex: LocalisationData,
-	fileMap: Record<string, Record<string, Set<string>>> | null,
 	options: FileSourceOptions,
 ): Promise<boolean> {
 	const filePath = localisationFile.path;
@@ -288,22 +186,11 @@ async function fillLocalisationItems(
 	try {
 		const localisations = parseLocalisation(content);
 		for (const langKey in localisations) {
-			if (!localisationIndex[langKey]) {
-				localisationIndex[langKey] = {};
-			}
-
 			const languageLocalisations = localisations[langKey] ?? {};
-			Object.assign(localisationIndex[langKey], languageLocalisations);
-
-			if (fileMap) {
-				if (!fileMap[langKey]) {
-					fileMap[langKey] = {};
-				}
-				fileMap[langKey][filePath] = new Set(
-					Object.keys(languageLocalisations),
-				);
-			}
-
+			Object.assign(index[langKey] ?? (index[langKey] = {}), languageLocalisations);
+			(fileMap[langKey] ?? (fileMap[langKey] = {}))[filePath] = new Set(
+				Object.keys(languageLocalisations),
+			);
 		}
 		return true;
 	} catch (e) {
@@ -360,128 +247,14 @@ export function parseLocalisation(fileContent: string): LocalisationData {
 	return result;
 }
 
-function removeWorkspaceLocalisationFile(relative: string): void {
-	for (const langKey of Object.keys(workspaceLocalisationFileMap)) {
-		const fileKeys = workspaceLocalisationFileMap[langKey]?.[relative];
-		if (!fileKeys) {
-			continue;
-		}
-
-		const languageIndex = workspaceLocalisationIndex[langKey];
-		if (languageIndex) {
-			for (const key of fileKeys) {
-				delete languageIndex[key];
-			}
-		}
-		delete workspaceLocalisationFileMap[langKey]?.[relative];
-	}
-}
-
-/**
- * Re-indexes an edited localisation file: parse first, swap the entries in afterwards.
- *
- * Clearing the file's keys up front -- what an edit used to do -- left every string it defines
- * unresolved for as long as the re-parse took, and a preview refreshing in that window, which the
- * same edit triggers on the same debounce, fell back to showing raw keys. A file that fails to
- * parse midway through an edit keeps the strings it was last indexed with.
- */
-async function reindexWorkspaceLocalisationFile(
-	file: vscode.Uri,
-): Promise<void> {
-	const relative = toWorkspaceRelativePath(file, `${localisationRoot}/`);
-	if (!relative) {
-		return;
-	}
-
-	// No URI: a re-index reaches one file, so resolving it the usual way costs nothing. Workspace
-	// only: a re-index that fires after the file was deleted must not read the parent's copy into
-	// this half.
-	const parsedIndex: LocalisationData = {};
-	const parsedFileMap: Record<string, Record<string, Set<string>>> = {};
-	const parsed = await fillLocalisationItems(
-		{ path: relative },
-		parsedIndex,
-		parsedFileMap,
-		{ parent: false, hoi4: false },
-	);
-	if (!parsed) {
-		return;
-	}
-
-	removeWorkspaceLocalisationFile(relative);
-	for (const langKey in parsedIndex) {
-		const target =
-			workspaceLocalisationIndex[langKey] ??
-			(workspaceLocalisationIndex[langKey] = {});
-		Object.assign(target, parsedIndex[langKey]);
-
-		const keys = parsedFileMap[langKey]?.[relative];
-		if (keys) {
-			const fileMapForLang =
-				workspaceLocalisationFileMap[langKey] ??
-				(workspaceLocalisationFileMap[langKey] = {});
-			fileMapForLang[relative] = keys;
-		}
-	}
-}
-
-const watchers = createIndexWatchers({
-	enabled: () => getFlags().localisationIndex,
-	extension: ".yml",
-	hasStarted: () => builder.hasStarted(),
-	gate: buildGate,
-	reindexFile: (file) => {
-		void reindexWorkspaceLocalisationFile(file);
-	},
-	removeFile: (file) => {
-		const relative = toWorkspaceRelativePath(file, `${localisationRoot}/`);
-		if (relative) {
-			removeWorkspaceLocalisationFile(relative);
-		}
-	},
-	rebuildWorkspace: {
-		reset: () => {
-			workspaceLocalisationIndex = {};
-			for (const key of Object.keys(workspaceLocalisationFileMap)) {
-				delete workspaceLocalisationFileMap[key];
-			}
-		},
-		build: buildWorkspaceLocalisationIndex,
-		message: localize(
-			"localisationIndex.workspace.building",
-			"Building workspace localisation index...",
-		),
-		failureMessage: "Building workspace localisation index failed.",
-	},
-	rebuildParent: {
-		reset: () => {
-			parentLocalisationIndexes = [];
-			parentLocalisationFileMaps.length = 0;
-		},
-		build: buildParentLocalisationIndex,
-	},
-});
-
 export function registerLocalisationIndex(): vscode.Disposable {
-	return watchers.register();
+	return localisationIndex.register();
 }
 
 // Test-only: clears memoized build state so isolated tests can exercise the lazy-build path.
 export function __resetLocalisationIndexForTests(): void {
-	builder.reset();
-	for (const key of Object.keys(globalLocalisationIndex)) {
-		delete globalLocalisationIndex[key];
-	}
-	for (const key of Object.keys(globalLocalisationFileMap)) {
-		delete globalLocalisationFileMap[key];
-	}
-	parentLocalisationIndexes = [];
-	workspaceLocalisationIndex = {};
-	parentLocalisationFileMaps.length = 0;
-	for (const key of Object.keys(workspaceLocalisationFileMap)) {
-		delete workspaceLocalisationFileMap[key];
-	}
+	localisationIndex.resetForTests();
 }
 
 // Test-only: exposes the incremental event handlers so tests can drive the build/event race directly.
-export const __testHandlers = watchers.handlers;
+export const __testHandlers = localisationIndex.handlers;
