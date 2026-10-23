@@ -1,6 +1,6 @@
 import './setup';
 import * as assert from 'assert';
-import { DivDropdown, numDropDownOpened$ } from '../../../webviewsrc/util/dropdown';
+import { DivDropdown, enableDropdowns, numDropDownOpened$ } from '../../../webviewsrc/util/dropdown';
 
 describe('webview/util/dropdown', function () {
     beforeEach(function () {
@@ -80,6 +80,64 @@ describe('webview/util/dropdown', function () {
         dd.select.dispatchEvent(new Event('mousedown', { cancelable: true }));
         assert.ok(!dd.select.classList.contains('dropdown-opened'));
         dd.dispose();
+    });
+
+    it('opens and closes on Enter as well', function () {
+        const dd = buildDivDropdown(['a', 'b']);
+        dd.select.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter', cancelable: true }));
+        assert.ok(dd.select.classList.contains('dropdown-opened'));
+        assert.strictEqual(numDropDownOpened$.value, 1);
+
+        dd.select.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter', cancelable: true }));
+        assert.ok(!dd.select.classList.contains('dropdown-opened'));
+        assert.strictEqual(numDropDownOpened$.value, 0);
+        dd.dispose();
+    });
+
+    it('takes a pick from the open menu and closes a single-select one', function () {
+        const dd = buildDivDropdown(['a', 'b']);
+        dd.select.dispatchEvent(new Event('mousedown', { cancelable: true }));
+        (document.querySelectorAll('ul.select-dropdown li')[1] as HTMLElement).click();
+
+        assert.deepStrictEqual(dd.selectedValues$.value, ['b']);
+        assert.strictEqual((dd.select.querySelector('span.value') as HTMLSpanElement).textContent, 'b');
+        assert.ok(!dd.select.classList.contains('dropdown-opened'));
+        assert.strictEqual(numDropDownOpened$.value, 0);
+        dd.dispose();
+    });
+
+    it('takes a pick from the open menu and keeps a multi-select one open', function () {
+        const dd = buildDivDropdown(['a', 'b'], true);
+        dd.select.dispatchEvent(new Event('mousedown', { cancelable: true }));
+        (document.querySelectorAll('ul.select-dropdown li')[1] as HTMLElement).click();
+
+        assert.deepStrictEqual(dd.selectedValues$.value, ['b']);
+        assert.ok(dd.select.classList.contains('dropdown-opened'));
+        assert.strictEqual(numDropDownOpened$.value, 1);
+        dd.select.dispatchEvent(new Event('mousedown', { cancelable: true }));
+        dd.dispose();
+    });
+
+    // enableDropdowns puts the same menu over every native <select> in a select container.
+    it('sets a native select to the option picked and reports the change', function () {
+        document.body.innerHTML = `
+            <div class="select-container"><select id="native">
+                <option value="a">A</option><option value="b">B</option><option value="c" hidden>C</option>
+            </select></div>`;
+        enableDropdowns();
+        const select = document.getElementById('native') as HTMLSelectElement;
+        const changes: string[] = [];
+        select.addEventListener('change', () => changes.push(select.value));
+
+        select.dispatchEvent(new Event('mousedown', { cancelable: true }));
+        const items = document.querySelectorAll('ul.select-dropdown li');
+        assert.strictEqual(items.length, 2, 'a hidden option is not offered');
+        (items[1] as HTMLElement).click();
+
+        assert.strictEqual(select.value, 'b');
+        assert.deepStrictEqual(changes, ['b']);
+        assert.ok(!select.classList.contains('dropdown-opened'));
+        assert.strictEqual(numDropDownOpened$.value, 0);
     });
 
     it('increments open counter when dropdown opens', function (done) {

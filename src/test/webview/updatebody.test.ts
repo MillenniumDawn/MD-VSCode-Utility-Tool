@@ -1,6 +1,6 @@
-import { EntrypointListeners, loadEntrypoint, recordedPosts } from "./setup";
+import { EntrypointListeners, loadEntrypoint, recordedPosts, takeRuntimeErrors } from "./setup";
 import * as assert from "assert";
-import { wireUpdateBody } from "../../../webviewsrc/util/updatebody";
+import { onUpdateBody, wireUpdateBody } from "../../../webviewsrc/util/updatebody";
 
 interface TestPayload {
 	name: string;
@@ -105,5 +105,61 @@ describe("webview/util/updatebody", () => {
 
 		assert.deepStrictEqual(applied, []);
 		assert.strictEqual(rebuilds, 0);
+	});
+
+	describe("onUpdateBody", () => {
+		let received: Record<string, any>[] = [];
+		let failure: Error | undefined;
+		let pageListeners: EntrypointListeners;
+
+		before(() => {
+			pageListeners = loadEntrypoint(() =>
+				onUpdateBody({ contentIds: ["testcontent", "testselect"], styleId: "test-server-styles" }, (data) => {
+					received.push(data);
+					return failure ? Promise.reject(failure) : undefined;
+				}),
+			).listeners;
+			pageListeners.attach();
+		});
+
+		after(() => pageListeners.detach());
+
+		beforeEach(() => {
+			received = [];
+			failure = undefined;
+		});
+
+		it("reports an update that fails part-way, rather than dropping the error", async () => {
+			document.body.insertAdjacentHTML("beforeend", `<select id="testselect"></select>`);
+			failure = new Error("broken update");
+			const originalConsoleError = console.error;
+			console.error = () => undefined;
+			try {
+				push({});
+				await new Promise((resolve) => setTimeout(resolve, 0));
+			} finally {
+				console.error = originalConsoleError;
+			}
+
+			assert.deepStrictEqual(takeRuntimeErrors(), [failure]);
+		});
+
+		it("hands over the whole data block when every element it needs is there", () => {
+			document.body.insertAdjacentHTML("beforeend", `<select id="testselect"></select>`);
+			push({ contentHtml: "<p></p>" });
+			assert.deepStrictEqual(received, [{ contentHtml: "<p></p>" }]);
+		});
+
+		it("asks for a reload instead when any one of them is missing", () => {
+			const withBoth = (() => {
+				document.body.insertAdjacentHTML("beforeend", `<select id="testselect"></select>`);
+				return countPosts(() => push({}));
+			})();
+			document.getElementById("testselect")!.remove();
+			const withOne = countPosts(() => push({}));
+
+			assert.strictEqual(withOne, withBoth + 1);
+			assert.strictEqual(received.length, 1);
+		});
 	});
 });
