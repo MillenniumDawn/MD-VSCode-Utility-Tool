@@ -1436,15 +1436,15 @@ describe('scripts/publish-extension', function () {
     });
 
     describe('commandFor', function () {
-        it('publishes to the Marketplace through vsce, skipping a version it already has', function () {
+        it('publishes to the Marketplace through vsce, with no token on the command line', function () {
             const args = publishExtension.commandFor({ registry: 'marketplace', vsix: 'ext.vsix', pat: 'secret', preRelease: false });
-            assert.deepStrictEqual(args, ['--no-install', '@vscode/vsce', 'publish', '--packagePath', 'ext.vsix', '--skip-duplicate', '--pat', 'secret']);
+            assert.deepStrictEqual(args, ['--no-install', '@vscode/vsce', 'publish', '--packagePath', 'ext.vsix', '--skip-duplicate']);
             assert.ok(publishExtension.commandFor({ registry: 'marketplace', vsix: 'ext.vsix', pat: 'secret', preRelease: true }).includes('--pre-release'));
         });
 
-        it('publishes to Open VSX through ovsx, skipping a version it already has', function () {
+        it('publishes to Open VSX through ovsx, with no token on the command line', function () {
             const args = publishExtension.commandFor({ registry: 'open-vsx', vsix: 'ext.vsix', pat: 'secret', preRelease: false });
-            assert.deepStrictEqual(args, ['--no-install', 'ovsx', 'publish', 'ext.vsix', '--skip-duplicate', '-p', 'secret']);
+            assert.deepStrictEqual(args, ['--no-install', 'ovsx', 'publish', 'ext.vsix', '--skip-duplicate']);
         });
 
         it('never hands ovsx --pre-release, which it ignores for a built vsix', function () {
