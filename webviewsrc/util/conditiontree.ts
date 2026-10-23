@@ -7,7 +7,7 @@ import { feLocalize } from "./i18n";
 
 // Condition and effect rendering, shared by the event and decision previews. Both draw the same two
 // trees -- a trigger and what a thing does when it runs -- so they draw them the same way, out of
-// one copy.
+// one copy. The condition dropdown further down is the focus tree's and the MIO preview's.
 //
 // The `eventtree.*` localisation keys are kept as they were when this lived in eventtree.ts:
 // renaming them would retire every existing translation of these strings for no gain to the reader.
@@ -169,8 +169,10 @@ export function conditionDropdown(
 ): DivDropdown {
 	const dropdown = new DivDropdown(element, true);
 	dropdown.selectedValues$.next(selected.map(conditionValue));
-	dropdown.selectedValues$.subscribe(
-		tryRun((values: readonly string[]) => onChange(values.map(parseConditionValue))),
+	dropdown.addSubscription(
+		dropdown.selectedValues$.subscribe(
+			tryRun((values: readonly string[]) => onChange(values.map(parseConditionValue))),
+		),
 	);
 	return dropdown;
 }

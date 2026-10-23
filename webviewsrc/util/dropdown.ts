@@ -31,7 +31,7 @@ abstract class DropdownBase<E extends HTMLElement> extends Subscriber {
 
 	constructor(
 		readonly select: E,
-		protected readonly multiSelection: boolean,
+		protected readonly multiSelection: boolean = false,
 	) {
 		super();
 		this.addSubscription(
@@ -51,7 +51,7 @@ abstract class DropdownBase<E extends HTMLElement> extends Subscriber {
 		);
 	}
 
-	protected abstract menuOptions(): Option[];
+	protected abstract getOptions(): Option[];
 
 	protected abstract pick(options: Option[]): void;
 
@@ -72,7 +72,7 @@ abstract class DropdownBase<E extends HTMLElement> extends Subscriber {
 	private open() {
 		this.select.classList.add("dropdown-opened");
 
-		const dropdownMenu = new DropdownMenu(this.menuOptions(), this.multiSelection);
+		const dropdownMenu = new DropdownMenu(this.getOptions(), this.multiSelection);
 		const dropdownMenuSubscriptions: Disposable[] = [dropdownMenu];
 
 		dropdownMenuSubscriptions.push(
@@ -104,11 +104,7 @@ abstract class DropdownBase<E extends HTMLElement> extends Subscriber {
 }
 
 class Dropdown extends DropdownBase<HTMLSelectElement> {
-	constructor(select: HTMLSelectElement) {
-		super(select, false);
-	}
-
-	protected menuOptions(): Option[] {
+	protected getOptions(): Option[] {
 		const options: Option[] = [];
 		this.select.querySelectorAll("option").forEach((option) => {
 			if (!option.hidden) {
@@ -149,7 +145,7 @@ export class DivDropdown extends DropdownBase<HTMLDivElement> {
 		private labels: DivDropdownLabels = {},
 	) {
 		super(select, multiSelection);
-		this.updateSelectedValue(this.getOptions());
+		// A BehaviorSubject replays its value to a new subscriber, so this also draws the empty selection.
 		this.addSubscription(
 			this.selectedValues$.subscribe((value) => {
 				const options = this.getOptions(value);
@@ -178,19 +174,14 @@ export class DivDropdown extends DropdownBase<HTMLDivElement> {
 		this.selectedValues$.next(values);
 	}
 
-	protected menuOptions(): Option[] {
-		return this.getOptions();
-	}
-
 	protected pick(options: Option[]) {
-		this.updateSelectedValue(options);
 		this.selectedValues$.next(options.filter((o) => o.selected).map((o) => o.value));
 		if (!this.multiSelection) {
 			this.closeAndRefocus();
 		}
 	}
 
-	private getOptions(selectedValues?: readonly string[]): Option[] {
+	protected getOptions(selectedValues?: readonly string[]): Option[] {
 		if (selectedValues === undefined) {
 			selectedValues = this.selectedValues$.value;
 		}

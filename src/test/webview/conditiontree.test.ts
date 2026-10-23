@@ -23,6 +23,8 @@ describe("webview/util/conditiontree condition dropdown", () => {
 
 		assert.deepStrictEqual(reported, [[scoped], [war, separator]]);
 		dropdown.dispose();
+		dropdown.selectedValues$.next(["has_war = yes"]);
+		assert.strictEqual(reported.length, 2, "a disposed dropdown reports nothing more");
 	});
 
 	it("reads a value with no separator as a trigger with no scope", () => {
