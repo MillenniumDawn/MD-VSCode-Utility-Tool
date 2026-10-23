@@ -106,6 +106,18 @@ describe('webview/util/dropdown', function () {
         dd.dispose();
     });
 
+    it('takes a pick from the open menu and keeps a multi-select one open', function () {
+        const dd = buildDivDropdown(['a', 'b'], true);
+        dd.select.dispatchEvent(new Event('mousedown', { cancelable: true }));
+        (document.querySelectorAll('ul.select-dropdown li')[1] as HTMLElement).click();
+
+        assert.deepStrictEqual(dd.selectedValues$.value, ['b']);
+        assert.ok(dd.select.classList.contains('dropdown-opened'));
+        assert.strictEqual(numDropDownOpened$.value, 1);
+        dd.select.dispatchEvent(new Event('mousedown', { cancelable: true }));
+        dd.dispose();
+    });
+
     // enableDropdowns puts the same menu over every native <select> in a select container.
     it('sets a native select to the option picked and reports the change', function () {
         document.body.innerHTML = `

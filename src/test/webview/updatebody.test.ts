@@ -1,4 +1,4 @@
-import { EntrypointListeners, loadEntrypoint, recordedPosts } from "./setup";
+import { EntrypointListeners, loadEntrypoint, recordedPosts, takeRuntimeErrors } from "./setup";
 import * as assert from "assert";
 import { onUpdateBody, wireUpdateBody } from "../../../webviewsrc/util/updatebody";
 
@@ -109,12 +109,14 @@ describe("webview/util/updatebody", () => {
 
 	describe("onUpdateBody", () => {
 		let received: Record<string, any>[] = [];
+		let failure: Error | undefined;
 		let pageListeners: EntrypointListeners;
 
 		before(() => {
 			pageListeners = loadEntrypoint(() =>
 				onUpdateBody({ contentIds: ["testcontent", "testselect"], styleId: "test-server-styles" }, (data) => {
 					received.push(data);
+					return failure ? Promise.reject(failure) : undefined;
 				}),
 			).listeners;
 			pageListeners.attach();
@@ -124,6 +126,22 @@ describe("webview/util/updatebody", () => {
 
 		beforeEach(() => {
 			received = [];
+			failure = undefined;
+		});
+
+		it("reports an update that fails part-way, rather than dropping the error", async () => {
+			document.body.insertAdjacentHTML("beforeend", `<select id="testselect"></select>`);
+			failure = new Error("broken update");
+			const originalConsoleError = console.error;
+			console.error = () => undefined;
+			try {
+				push({});
+				await new Promise((resolve) => setTimeout(resolve, 0));
+			} finally {
+				console.error = originalConsoleError;
+			}
+
+			assert.deepStrictEqual(takeRuntimeErrors(), [failure]);
 		});
 
 		it("hands over the whole data block when every element it needs is there", () => {
