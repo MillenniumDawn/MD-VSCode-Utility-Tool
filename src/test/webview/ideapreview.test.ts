@@ -1,10 +1,8 @@
 import { loadEntrypoint, useEntrypoint } from "./setup";
 import * as assert from "assert";
-import {
-	IdeaCard,
-	IdeaPreviewPayload,
-	ModifierLine,
-} from "../../previewdef/idea/payload";
+import { IdeaCard, IdeaPreviewPayload } from "../../previewdef/idea/payload";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
+import { cardFoldLabels, conditionToDom } from "../../../webviewsrc/util/conditiontree";
 
 // ideapreview.ts reads window.ideaPreview at module scope, so the payload has to exist before the
 // import runs. This mirrors Millennium Dawn's Dutch ideas plus the generic political_power_bonus
@@ -145,8 +143,6 @@ const {
 	matchesQuery,
 	chainedIds,
 	chainsForGroups,
-	conditionToDom,
-	modifierLineToDom,
 } = ideapreview;
 type IdeaFilter = import("../../../webviewsrc/ideapreview").IdeaFilter;
 
@@ -254,69 +250,26 @@ describe("webview/ideapreview chainsForGroups", () => {
 	});
 });
 
-describe("webview/ideapreview modifierLineToDom", () => {
-	function lineOf(extra: Partial<ModifierLine>): HTMLDivElement {
-		return modifierLineToDom({
-			key: "stability_factor",
-			name: "Stability",
-			value: "-10%",
-			tone: "bad",
-			...extra,
-		});
-	}
-
-	it("writes the name, the value and the tone the payload decided", () => {
-		const row = lineOf({});
-		assert.strictEqual(row.querySelector(".idea-mod-name")?.textContent, "Stability");
-		const value = row.querySelector(".idea-mod-value");
-		assert.strictEqual(value?.textContent, "-10%");
-		assert.ok(value?.classList.contains("idea-mod-bad"));
-	});
-
-	it("keeps the raw token as the name's tooltip", () => {
-		const name = lineOf({}).querySelector(".idea-mod-name") as HTMLElement;
-		assert.strictEqual(name.title, "stability_factor");
-	});
-
-	it("carries the good and neutral tones through as well", () => {
-		assert.ok(
-			lineOf({ tone: "good" })
-				.querySelector(".idea-mod-value")
-				?.classList.contains("idea-mod-good"),
+// The tree renderer itself is tested with the event tree. What the cards add is their own word for
+// `count`, on top of the tree previews' words for everything else.
+describe("webview/ideapreview card fold labels", () => {
+	it("read a count folder as at least and keep the other folder names", () => {
+		const label = (type: string) =>
+			conditionToDom(
+				{
+					type,
+					amount: 2,
+					items: [
+						{ scopeName: "", nodeContent: "a = 1" },
+						{ scopeName: "", nodeContent: "b = 2" },
+					],
+				} as ConditionComplexExpr,
+				cardFoldLabels,
+			).querySelector(".ev-fold")?.textContent;
+		assert.deepStrictEqual(
+			["and", "or", "ornot", "andnot", "count"].map(label),
+			["all of", "any of", "none of", "not all of", "at least == 2"],
 		);
-		assert.ok(
-			lineOf({ tone: "neutral" })
-				.querySelector(".idea-mod-value")
-				?.classList.contains("idea-mod-neutral"),
-		);
-	});
-});
-
-describe("webview/ideapreview conditionToDom", () => {
-	it("renders a leaf as one line", () => {
-		const list = conditionToDom({ scopeName: "", nodeContent: "original_tag = HOL" });
-		assert.strictEqual(list.querySelectorAll("li").length, 1);
-		assert.strictEqual(list.textContent, "original_tag = HOL");
-	});
-
-	// A one-item `and` adds nesting without adding meaning.
-	it("unwraps a single-item and", () => {
-		const list = conditionToDom({
-			type: "and",
-			items: [{ scopeName: "", nodeContent: "original_tag = HOL" }],
-		});
-		assert.strictEqual(list.querySelectorAll("li").length, 1);
-	});
-
-	it("names the folder so a negated group cannot read as a positive one", () => {
-		const list = conditionToDom({
-			type: "ornot",
-			items: [
-				{ scopeName: "", nodeContent: "a = 1" },
-				{ scopeName: "", nodeContent: "b = 2" },
-			],
-		});
-		assert.strictEqual(list.querySelector(".ev-fold")?.textContent, "none of");
 	});
 });
 
@@ -327,6 +280,14 @@ describe("webview/ideapreview rendering", () => {
 		const element = document.getElementById("ideapreviewcontent");
 		assert.ok(element, "expected the shell content element");
 		return element!;
+	}
+
+	function post(next: IdeaPreviewPayload): void {
+		window.dispatchEvent(
+			new (window as any).MessageEvent("message", {
+				data: { type: "updateBody", data: { ideaPreview: next } },
+			}),
+		);
 	}
 
 	let previousBody = "";
@@ -435,6 +396,63 @@ describe("webview/ideapreview rendering", () => {
 		assert.strictEqual(content().querySelectorAll(".idea-desc").length, 0);
 	});
 
+	it("draws a condition panel for each condition once conditions are asked for", () => {
+		assert.strictEqual(content().querySelectorAll(".ev-cond").length, 0);
+
+		const toggle = document.getElementById("show-conditions") as HTMLInputElement;
+		toggle.checked = true;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+
+		const heads = Array.from(content().querySelectorAll(".ev-cond-head")).map((e) => e.textContent);
+		assert.deepStrictEqual(heads, ["Allowed"]);
+
+		toggle.checked = false;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+		assert.strictEqual(content().querySelectorAll(".ev-cond").length, 0);
+	});
+
+	it("draws both condition panels in the card wording, and every modifier list a card has", () => {
+		const atLeastOne = (leaf: string) =>
+			({
+				type: "count",
+				amount: 1,
+				items: [
+					{ scopeName: "", nodeContent: leaf },
+					{ scopeName: "", nodeContent: "has_war = yes" },
+				],
+			}) as ConditionComplexExpr;
+		const line = (name: string) => ({ key: name, name, value: "+5%", tone: "good" as const });
+		const full = card("HOL_full", {
+			allowed: atLeastOne("original_tag = HOL"),
+			available: atLeastOne("has_government = democratic"),
+			modifiers: [line("Stability")],
+			research: [line("Fuel and Oil")],
+			targeted: [{ title: "Against GER", lines: [line("Attack")] }],
+			equipment: [{ title: "Infantry equipment", lines: [line("Soft attack")] }],
+		});
+		post({
+			...integrationPayload,
+			groups: [{ category: "country", isLaw: false, isDesigner: false, ideaIds: [full.id] }],
+			cards: [full],
+			chains: [],
+		});
+		const toggle = document.getElementById("show-conditions") as HTMLInputElement;
+		toggle.checked = true;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+		try {
+			const texts = (selector: string) =>
+				Array.from(content().querySelectorAll(selector)).map((e) => e.textContent);
+			assert.deepStrictEqual(texts(".ev-cond-head"), ["Allowed", "Available"]);
+			assert.deepStrictEqual(texts(".ev-fold"), ["at least == 1", "at least == 1"]);
+			assert.deepStrictEqual(texts(".idea-mod-name"), ["Stability", "Fuel and Oil", "Attack", "Soft attack"]);
+			assert.deepStrictEqual(texts(".idea-mods-head"), ["Research bonus", "Against GER", "Infantry equipment"]);
+		} finally {
+			toggle.checked = false;
+			toggle.dispatchEvent(new (window as any).Event("change"));
+			post(integrationPayload);
+		}
+	});
+
 	it("drops the modifier lines entirely when the toggle is off", () => {
 		const toggle = document.getElementById("show-modifiers") as HTMLInputElement;
 		toggle.checked = false;
@@ -501,6 +519,29 @@ describe("webview/ideapreview rendering", () => {
 			}),
 		);
 		assert.strictEqual(content().querySelectorAll(".idea-empty").length, 0);
+	});
+
+	it("stops painting the previous roster when the next one is empty", () => {
+		const frames: (() => void)[] = [];
+		const realNow = Date.now;
+		let now = 0;
+		// Every clock read spends most of a frame, so the roster takes a frame per group.
+		(globalThis as any).requestAnimationFrame = (fn: () => void) => frames.push(fn);
+		Date.now = () => (now += 5);
+		try {
+			post(integrationPayload);
+			post({ ...integrationPayload, cards: [], groups: [], chains: [] });
+			while (frames.length > 0) {
+				frames.shift()!();
+			}
+
+			assert.strictEqual(content().querySelectorAll(".idea-group").length, 0);
+			assert.strictEqual(content().querySelectorAll(".idea-empty").length, 1);
+		} finally {
+			delete (globalThis as any).requestAnimationFrame;
+			Date.now = realNow;
+			post(integrationPayload);
+		}
 	});
 
 	it("says when the swap index is off, so a missing chain is not read as none existing", () => {

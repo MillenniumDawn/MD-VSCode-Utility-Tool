@@ -129,12 +129,7 @@ export function readFilters(stored: unknown): DecisionFilter[] {
 }
 
 // Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
-//
-// This has to stay below `decisionFilters`, not up with the other restored toggles: `readFilters` is
-// hoisted but the list it reads is not, so calling it earlier throws on the const in its temporal
-// dead zone and takes the whole module -- and with it the canvas -- down. The tests compile to
-// commonjs, where the same read is a property access that quietly answers `undefined`, so only the
-// bundled preview shows it.
+// It stays below `decisionFilters` for the reason readFilterList gives.
 let filters: DecisionFilter[] = readFilters(getState().decisionFilters);
 
 export interface VisibleGraph {
