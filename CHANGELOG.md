@@ -14,7 +14,7 @@ Unreleased
 - [ Character Previewer ] Pressing Enter or Space on a trait pill now expands its details instead of opening the trait file; Ctrl/Meta navigation still works. Issue #548.
 - [ Focus Tree Previewer ] Editing an inlay window's `.gui` file, or adding its missing sprite to a `.gfx` file, now refreshes an open focus tree. Before, the preview kept the old window until the focus file itself changed. Issue #608.
 - [ DDS ] Legacy textures with unused bits before their color channels now show the correct colors. Issue #530.
-- [ Cleanup ] The character and idea previews draw their cards and modifier lists from one shared copy instead of two. Part of issue #491.
+- [ Previews ] The character and idea previews no longer keep drawing the old cards under "No characters to show." or "No ideas to show." when an edit or a filter empties a long list that is still appearing. Issue #491.
 
 v1.1.42
 
