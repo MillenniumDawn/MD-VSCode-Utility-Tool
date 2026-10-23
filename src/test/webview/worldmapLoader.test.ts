@@ -241,6 +241,19 @@ describe("webview/worldmap/FEWorldMapClass reverse maps", function () {
 			assert.deepStrictEqual(touching([]), []);
 		});
 
+		it("walks bad entries first, skips holes, and stops when the callback returns true", function () {
+			const states: any[] = [undefined, { id: 1 }, { id: 2 }, { id: 3 }];
+			states[-1] = { id: -1 };
+			const map = new FEWorldMapClass({ states, statesCount: 4, badStatesCount: 1 } as any);
+
+			const seen: number[] = [];
+			map.forEachState((state) => {
+				seen.push(state.id);
+				return state.id === 2;
+			});
+			assert.deepStrictEqual(seen, [-1, 1, 2]);
+		});
+
 		it("hands back the same supply-area province list every time", function () {
 			// The hover pass skips the highlight when the hovered and selected areas are the same
 			// object, so a freshly built list would make it redraw the whole area every frame.
