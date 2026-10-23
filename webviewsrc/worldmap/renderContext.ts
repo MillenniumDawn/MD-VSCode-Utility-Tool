@@ -27,32 +27,19 @@ export interface RenderContext {
 	extraState: any;
 }
 
-export function isEdgeVisible(topBar: TopBar, viewPoint: ViewPoint) {
-	if (topBar.display.selectedValues$.value.includes("adaptzooming")) {
-		const viewMode = topBar.viewMode$.value;
-		const renderScale = renderScaleByViewMode[viewMode];
-		const scale = viewPoint.scale;
-		return (
-			renderScale.edge <= scale &&
-			topBar.display.selectedValues$.value.includes("edge")
-		);
-	}
+// A display option the reader ticked, hidden below minScale while adaptive zooming is on. minScale is
+// only asked for then, so a view mode with no floor draws as long as adaptive zooming is off.
+function displayOn(topBar: TopBar, viewPoint: ViewPoint, option: string, minScale: () => number) {
+	const selected = topBar.display.selectedValues$.value;
+	return selected.includes(option) && (!selected.includes("adaptzooming") || minScale() <= viewPoint.scale);
+}
 
-	return topBar.display.selectedValues$.value.includes("edge");
+export function isEdgeVisible(topBar: TopBar, viewPoint: ViewPoint) {
+	return displayOn(topBar, viewPoint, "edge", () => renderScaleByViewMode[topBar.viewMode$.value].edge);
 }
 
 export function isLabelVisible(topBar: TopBar, viewPoint: ViewPoint) {
-	if (topBar.display.selectedValues$.value.includes("adaptzooming")) {
-		const viewMode = topBar.viewMode$.value;
-		const renderScale = renderScaleByViewMode[viewMode];
-		const scale = viewPoint.scale;
-		return (
-			renderScale.labels <= scale &&
-			topBar.display.selectedValues$.value.includes("label")
-		);
-	}
-
-	return topBar.display.selectedValues$.value.includes("label");
+	return displayOn(topBar, viewPoint, "label", () => renderScaleByViewMode[topBar.viewMode$.value].labels);
 }
 
 export function isMouseHighlightVisible(topBar: TopBar) {
@@ -68,14 +55,7 @@ export function isSupplyVisible(topBar: TopBar) {
 }
 
 export function isRiverVisible(topBar: TopBar, viewPoint: ViewPoint) {
-	if (topBar.display.selectedValues$.value.includes("adaptzooming")) {
-		return (
-			1 <= viewPoint.scale &&
-			topBar.display.selectedValues$.value.includes("river")
-		);
-	}
-
-	return topBar.display.selectedValues$.value.includes("river");
+	return displayOn(topBar, viewPoint, "river", () => 1);
 }
 
 export function renderAllOffsets(

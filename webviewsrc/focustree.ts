@@ -38,6 +38,7 @@ import { GridBoxType } from "../src/hoiformat/gui";
 import { toNumberLike } from "../src/hoiformat/schema";
 import { feLocalize } from "./util/i18n";
 import { applyIconState } from "../src/previewdef/toolbaricons";
+import { TOOLBAR_HEIGHT } from "../src/previewdef/toolbarparts";
 import { Checkbox } from "./util/checkbox";
 import { vscode } from "./util/vscode";
 import { SearchBox } from "./util/searchbox";
@@ -1183,13 +1184,10 @@ window.addEventListener(
 			}
 		}
 
-		// Zoom. The anchor is the toolbar strip's height, which is what #focustreecontent is offset
-		// by -- it was 40 here against a 52px strip, and the drift shows up as the view sliding as
-		// you zoom, now that a button zoom anchors on the middle of the canvas rather than a cursor.
 		const contentElement = document.getElementById(
 			"focustreecontent",
 		) as HTMLDivElement;
-		enableZoom(contentElement, 0, 52);
+		enableZoom(contentElement, 0, TOOLBAR_HEIGHT);
 
 		// Shift+click a focus to isolate its prerequisite lines
 		tracing = subscribeTracing({

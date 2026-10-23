@@ -1,17 +1,22 @@
 import { tryRun, subscribeNavigators, initCommon, getState, setState } from "./util/common";
 import { SearchBox } from "./util/searchbox";
-import { applyNav, badge } from "./util/card";
-import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
+import { appendGroups, applyNav, badge, modifierSection } from "./util/card";
+import {
+	FilterControl,
+	bindLocalisationToggle,
+	gateToggle,
+	readFilterList,
+	toggleBinder,
+} from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { wireUpdateBody } from "./util/updatebody";
-import { ConditionComplexExpr } from "../src/hoiformat/condition";
-import { conditionPanel as conditionTreePanel } from "./util/conditiontree";
+import { cardFoldLabels, conditionPanel } from "./util/conditiontree";
+import { RenderTask, RenderedCard, pushGroupTasks, taskRunner } from "./util/batchrender";
 import {
 	CharacterCard,
 	CharacterPreviewPayload,
 	CharacterRoleGroup,
 	CharacterToolbarFlags,
-	ModifierGroup,
 	ModifierLine,
 	TraitCard,
 } from "../src/previewdef/character/payload";
@@ -97,12 +102,7 @@ export function readFilters(stored: unknown): CharacterFilter[] {
 }
 
 // Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
-//
-// This has to stay below `characterFilters`, not up with the other restored toggles: `readFilters`
-// is hoisted but the list it reads is not, so calling it earlier throws on the const in its temporal
-// dead zone and takes the whole module -- and with it the roster -- down. The tests compile to
-// commonjs, where the same read is a property access that quietly answers `undefined`, so only the
-// bundled preview shows it.
+// It stays below `characterFilters` for the reason readFilterList gives.
 let filters: CharacterFilter[] = readFilters(getState().characterFilters);
 
 /**
@@ -181,85 +181,12 @@ function linesOf(card: CharacterCard): ModifierLine[] {
 
 //#endregion
 
-//#region Condition rendering
-
-// The tree itself is drawn by util/conditiontree.ts, which the event, decision and idea previews
-// share. Only the fold wording is this preview's own.
-const foldLabels: Record<string, string> = {
-	and: "all of",
-	or: "any of",
-	andnot: "not all of",
-	ornot: "none of",
-	count: "at least",
-};
-
-function conditionPanel(condition: ConditionComplexExpr, label: string): HTMLDivElement {
-	return conditionTreePanel(condition, label, foldLabels);
-}
-
-//#endregion
-
 //#region Card rendering
 
-interface RenderedCard {
-	card: CharacterCard;
-	element: HTMLDivElement;
-}
-
-let rendered: RenderedCard[] = [];
+let rendered: RenderedCard<CharacterCard>[] = [];
 
 function textFor(loc: { key: string; text: string }): string {
 	return showLocalisation ? loc.text : loc.key;
-}
-
-export function modifierLineToDom(line: ModifierLine): HTMLDivElement {
-	const row = document.createElement("div");
-	row.className = "char-mod";
-
-	const name = document.createElement("span");
-	name.className = "char-mod-name";
-	name.textContent = line.name;
-	// The token the file was written with, for a reader who has to go and find it.
-	name.title = line.key;
-	row.appendChild(name);
-
-	const value = document.createElement("span");
-	value.className = "char-mod-value char-mod-" + line.tone;
-	value.textContent = line.value;
-	row.appendChild(value);
-
-	return row;
-}
-
-function modifierSection(
-	title: string | undefined,
-	lines: ModifierLine[],
-): HTMLDivElement | undefined {
-	if (lines.length === 0) {
-		return undefined;
-	}
-
-	const box = document.createElement("div");
-	box.className = "char-mods";
-	if (title !== undefined) {
-		const head = document.createElement("div");
-		head.className = "char-mods-head";
-		head.textContent = title;
-		box.appendChild(head);
-	}
-	for (const line of lines) {
-		box.appendChild(modifierLineToDom(line));
-	}
-	return box;
-}
-
-function appendGroups(container: HTMLElement, groups: ModifierGroup[]): void {
-	for (const group of groups) {
-		const section = modifierSection(group.title, group.lines);
-		if (section) {
-			container.appendChild(section);
-		}
-	}
 }
 
 /**
@@ -311,11 +238,11 @@ export function traitToDom(trait: TraitCard): HTMLDivElement {
 		detail.appendChild(desc);
 	}
 
-	const modifiers = modifierSection(undefined, trait.modifiers);
+	const modifiers = modifierSection("char", undefined, trait.modifiers);
 	if (modifiers) {
 		detail.appendChild(modifiers);
 	}
-	appendGroups(detail, trait.groups);
+	appendGroups("char", detail, trait.groups);
 
 	if (detail.childElementCount === 0) {
 		const note = document.createElement("div");
@@ -458,7 +385,7 @@ function buildCard(card: CharacterCard): HTMLDivElement {
 	}
 
 	if (showSkills) {
-		const skills = modifierSection(undefined, card.skills);
+		const skills = modifierSection("char", undefined, card.skills);
 		if (skills) {
 			skills.classList.add("char-skills");
 			element.appendChild(skills);
@@ -474,11 +401,12 @@ function buildCard(card: CharacterCard): HTMLDivElement {
 		element.appendChild(traits);
 	}
 
-	const modifiers = modifierSection(undefined, card.modifiers);
+	const modifiers = modifierSection("char", undefined, card.modifiers);
 	if (modifiers) {
 		element.appendChild(modifiers);
 	}
 	const research = modifierSection(
+		"char",
 		feLocalize("characterpreview.research", "Research bonus"),
 		card.research,
 	);
@@ -489,17 +417,29 @@ function buildCard(card: CharacterCard): HTMLDivElement {
 	if (showConditions) {
 		if (card.allowed !== true) {
 			element.appendChild(
-				conditionPanel(card.allowed, feLocalize("characterpreview.allowed", "Allowed")),
+				conditionPanel(
+					card.allowed,
+					feLocalize("characterpreview.allowed", "Allowed"),
+					cardFoldLabels,
+				),
 			);
 		}
 		if (card.available !== true) {
 			element.appendChild(
-				conditionPanel(card.available, feLocalize("characterpreview.available", "Available")),
+				conditionPanel(
+					card.available,
+					feLocalize("characterpreview.available", "Available"),
+					cardFoldLabels,
+				),
 			);
 		}
 		if (card.visible !== true) {
 			element.appendChild(
-				conditionPanel(card.visible, feLocalize("characterpreview.visible", "Visible")),
+				conditionPanel(
+					card.visible,
+					feLocalize("characterpreview.visible", "Visible"),
+					cardFoldLabels,
+				),
 			);
 		}
 	}
@@ -511,52 +451,11 @@ function buildCard(card: CharacterCard): HTMLDivElement {
 
 //#region Roster
 
-// Each unit of work is a batch of cards, so a file of a hundred characters paints its first group
-// immediately rather than freezing until the last portrait is placed.
-type RenderTask = () => void;
-
-// How many cards one task builds. Small enough that the budget loop below can stop between two of
-// them on the largest real file, large enough that a small file is still one or two tasks.
+// How many cards one task builds. Small enough that the runner can stop between two of them on the
+// largest real file, large enough that a small file is still one or two tasks.
 const cardsPerBatch = 20;
 
-let renderGeneration = 0;
-
-function runTasks(tasks: RenderTask[], done: () => void): void {
-	const generation = ++renderGeneration;
-	let index = 0;
-
-	// jsdom has no requestAnimationFrame, and the tests drive this path; running straight through
-	// there is also what a test wants, since it has nothing to wait on.
-	const schedule =
-		typeof requestAnimationFrame === "function"
-			? requestAnimationFrame
-			: (fn: () => void) => {
-					fn();
-					return 0;
-				};
-
-	const step = () => {
-		// A newer build started while this one was still painting: its output is what belongs on
-		// screen, so this one stops rather than appending into a container it no longer owns.
-		if (generation !== renderGeneration) {
-			return;
-		}
-
-		const deadline = Date.now() + 8;
-		while (index < tasks.length && Date.now() < deadline) {
-			tasks[index]?.();
-			index++;
-		}
-
-		if (index < tasks.length) {
-			schedule(step);
-		} else {
-			done();
-		}
-	};
-
-	step();
-}
+const runTasks = taskRunner();
 
 function buildContent(): void {
 	const container = document.getElementById(
@@ -583,9 +482,10 @@ function buildContent(): void {
 			"No characters to show.",
 		);
 		container.appendChild(empty);
+		// An empty run still stops one in flight, which would otherwise paint its groups under this.
 		// Nothing to highlight, but the counter still has to stop claiming the matches of the roster
 		// that was on screen a moment ago -- which is what refreshing with the emptied list does.
-		search.refresh(rendered);
+		runTasks([], () => search.refresh(rendered));
 		return;
 	}
 
@@ -598,28 +498,18 @@ function buildContent(): void {
 			continue;
 		}
 
-		// The header and an empty flow first, so the group is on screen before its cards are; the
-		// cards then go in a batch at a time.
-		let flow: HTMLDivElement | undefined = undefined;
-		tasks.push(() => {
-			const section = buildGroup(group, groupCards.length);
-			flow = section.flow;
-			container.appendChild(section.element);
-		});
-
-		for (let i = 0; i < groupCards.length; i += cardsPerBatch) {
-			const batch = groupCards.slice(i, i + cardsPerBatch);
-			tasks.push(() => {
-				if (!flow) {
-					return;
-				}
-				for (const card of batch) {
-					const element = buildCard(card);
-					rendered.push({ card, element });
-					flow.appendChild(element);
-				}
-			});
-		}
+		pushGroupTasks(
+			tasks,
+			() => {
+				const section = buildGroup(group, groupCards.length);
+				container.appendChild(section.element);
+				return section.flow;
+			},
+			groupCards,
+			cardsPerBatch,
+			buildCard,
+			rendered,
+		);
 	}
 
 	runTasks(tasks, () => {
@@ -662,7 +552,7 @@ function buildGroup(
 
 //#region Search
 
-const search = new SearchBox<RenderedCard>({
+const search = new SearchBox<RenderedCard<CharacterCard>>({
 	boxId: "character-searchbox",
 	countId: "character-search-count",
 	stateKey: "characterSearchQuery",
@@ -752,10 +642,7 @@ wireUpdateBody<CharacterPreviewPayload>({
 window.addEventListener(
 	"load",
 	tryRun(function () {
-		bindToggle("show-localisation", showLocalisation, (value) => {
-			showLocalisation = value;
-			setState({ showLocalisation: value });
-		});
+		bindLocalisationToggle(bindToggle, showLocalisation, (value) => (showLocalisation = value));
 		bindToggle("show-portrait", showPortrait, (value) => {
 			showPortrait = value;
 			setState({ characterShowPortrait: value });

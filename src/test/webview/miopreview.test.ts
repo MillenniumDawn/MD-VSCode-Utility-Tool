@@ -49,7 +49,6 @@ function installPayload(): void {
         slotsize: { width: { _value: 87 }, height: { _value: 117 } },
     };
     (global as any).window.xGridSize = 87;
-    (global as any).window.toolbarHeight = 52;
     (global as any).window.previewOptions = { 'mio.showGrid': true };
 }
 

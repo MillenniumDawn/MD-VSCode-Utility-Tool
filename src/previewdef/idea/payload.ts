@@ -12,7 +12,6 @@ import { ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
 // sharedpayload.ts alongside LocText and NavTarget.
 export {
 	NavTarget,
-	ModifierLine,
 	ModifierGroup,
 } from "../sharedpayload";
 import { LocText, NavTarget, ModifierLine, ModifierGroup, IconStyle } from "../sharedpayload";

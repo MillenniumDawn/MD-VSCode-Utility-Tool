@@ -1,5 +1,5 @@
 import * as assert from "assert";
-import { isSamePath, matchPathEnd } from "../../../util/nodecommon";
+import { isSamePath, matchPathEnd, pathIdentity } from "../../../util/nodecommon";
 
 describe("util/nodecommon", () => {
 	describe("matchPathEnd", () => {
@@ -35,6 +35,26 @@ describe("util/nodecommon", () => {
 		for (const [left, right, expected] of pairs) {
 			it(`${expected ? "takes" : "does not take"} ${left} and ${right} for one path`, () => {
 				assert.strictEqual(isSamePath(left, right), expected);
+			});
+		}
+	});
+
+	describe("pathIdentity", () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+		afterEach(() => Object.defineProperty(process, "platform", platform));
+
+		const cases: [string, string, string, string][] = [
+			["win32", "drive path", "D:\\Mods\\Parent", "d:/mods/parent"],
+			["win32", "UNC path", "\\\\Server\\Share\\Mod", "/server/share/mod"],
+			["win32", "mixed slashes", "D:/Mods\\Parent", "d:/mods/parent"],
+			["linux", "path with case", "/mods/Parent", "/mods/Parent"],
+			["linux", "backslashes", "mod\\\\ugc.mod", "mod/ugc.mod"],
+		];
+
+		for (const [os, name, input, expected] of cases) {
+			it(`keys a ${name} on ${os} as ${expected}`, () => {
+				Object.defineProperty(process, "platform", { ...platform, value: os });
+				assert.strictEqual(pathIdentity(input), expected);
 			});
 		}
 	});

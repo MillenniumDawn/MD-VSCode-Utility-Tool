@@ -11,6 +11,7 @@ import { GridBoxType } from "../src/hoiformat/gui";
 import { emptyMap, toNumberLike } from "../src/hoiformat/schema";
 import { vscode } from "./util/vscode";
 import { Mio, MioTrait } from "../src/previewdef/mio/schema";
+import { TOOLBAR_HEIGHT } from "../src/previewdef/toolbarparts";
 import { applyExclusiveLinkStyle } from "../src/util/hoi4gui/exclusivelink";
 import { applyWarningMarkers, bindWarningPanelButton, renderWarningList, setWarningMarkersVisible } from "./util/warnings";
 import { Tracing, subscribeTracing } from "./util/trace";
@@ -440,9 +441,8 @@ window.addEventListener('load', tryRun(async function() {
         });
     }
 
-    // Zoom. The anchor is the toolbar strip's height, which the host owns.
     const contentElement = document.getElementById('miopreviewcontent') as HTMLDivElement;
-    enableZoom(contentElement, 0, (window as any).toolbarHeight ?? 52);
+    enableZoom(contentElement, 0, TOOLBAR_HEIGHT);
 
     tracing = subscribeTracing({
         contentId: 'miopreviewcontent',

@@ -92,7 +92,6 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
 
         assert.ok(/\.st-toolbar-height \{[^}]*height: 52px;/.test(styleCss), styleCss);
         assert.ok(/\.st-miopreviewcontent \{[^}]*top:52px/.test(styleCss), styleCss);
-        assert.ok(renderedHtml(rendered).includes('window.toolbarHeight = 52'));
     });
 
     // The parser accepts quoted identifiers, so an organization or trait id is workspace text. The

@@ -64,6 +64,22 @@ interface ProvinceGrid {
 
 const provinceGridCellSize = 64;
 
+// The bad entries sit at negative indices, as own properties of the array. A callback returning
+// true stops the walk.
+function forEachIndexed<T>(
+	items: (T | null | undefined)[],
+	count: number,
+	badCount: number,
+	callback: (item: T) => boolean | void,
+): void {
+	for (let i = -badCount; i < count; i++) {
+		const item = items[i];
+		if (item && callback(item)) {
+			break;
+		}
+	}
+}
+
 interface FEWorldMapClassExtra {
 	getProvinceById(provinceId: number | undefined): Province | undefined;
 	getStateById(stateId: number | undefined): State | undefined;
@@ -816,69 +832,38 @@ export class FEWorldMapClass implements FEWorldMap {
 	}
 
 	public forEachProvince(callback: (province: Province) => boolean | void) {
-		const count = this.provincesCount;
-		for (let i = -this.badProvincesCount; i < count; i++) {
-			const province = this.provinces[i];
-			if (province && callback(province)) {
-				break;
-			}
-		}
+		forEachIndexed(this.provinces, this.provincesCount, this.badProvincesCount, callback);
 	}
 
 	public forEachState(callback: (state: State) => boolean | void) {
-		const count = this.statesCount;
-		for (let i = -this.badStatesCount; i < count; i++) {
-			const state = this.states[i];
-			if (state && callback(state)) {
-				break;
-			}
-		}
+		forEachIndexed(this.states, this.statesCount, this.badStatesCount, callback);
 	}
 
 	public forEachStrategicRegion(
 		callback: (strategicRegion: StrategicRegion) => boolean | void,
 	): void {
-		const count = this.strategicRegionsCount;
-		for (let i = -this.badStrategicRegionsCount; i < count; i++) {
-			const strategicRegion = this.strategicRegions[i];
-			if (strategicRegion && callback(strategicRegion)) {
-				break;
-			}
-		}
+		forEachIndexed(
+			this.strategicRegions,
+			this.strategicRegionsCount,
+			this.badStrategicRegionsCount,
+			callback,
+		);
 	}
 
 	public forEachSupplyArea(
 		callback: (supplyArea: SupplyArea) => boolean | void,
 	): void {
-		const count = this.supplyAreasCount;
-		for (let i = -this.badSupplyAreasCount; i < count; i++) {
-			const supplyArea = this.supplyAreas[i];
-			if (supplyArea && callback(supplyArea)) {
-				break;
-			}
-		}
+		forEachIndexed(this.supplyAreas, this.supplyAreasCount, this.badSupplyAreasCount, callback);
 	}
 
 	public forEachRailway(callback: (railway: Railway) => boolean | void): void {
-		const count = this.railwaysCount;
-		for (let i = 0; i < count; i++) {
-			const railway = this.railways[i];
-			if (railway && callback(railway)) {
-				break;
-			}
-		}
+		forEachIndexed(this.railways, this.railwaysCount, 0, callback);
 	}
 
 	public forEachSupplyNode(
 		callback: (supplyNode: SupplyNode) => boolean | void,
 	): void {
-		const count = this.supplyNodesCount;
-		for (let i = 0; i < count; i++) {
-			const supplyNode = this.supplyNodes[i];
-			if (supplyNode && callback(supplyNode)) {
-				break;
-			}
-		}
+		forEachIndexed(this.supplyNodes, this.supplyNodesCount, 0, callback);
 	}
 
 	private getWarningIndex(): WarningIndex {
