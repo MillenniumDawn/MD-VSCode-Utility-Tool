@@ -7,6 +7,7 @@ v1.1.43
 - [ CI ] Share the identical Git helpers used by release scripts. Issue #562.
 - [ Testing ] Load the four world map page modules in the module-load test. Issue #532.
 - [ Testing ] Move the schema tests into the pure suite. Issue #565.
+- Let shared navigation make preview cards keyboard-focusable. Issue #561.
 
   Bugfixes:
 - [ Previews ] Opening a mod workspace with only MIO organization files or `.gui` files under `interface/` now activates the preview button without opening another file first. Issue #481.
