@@ -23,7 +23,7 @@
 }
 
 /* Sticks under the toolbar so the reader always knows which category the cards below belong to.
-   `top` is the toolbar height -- see toolbarHeight in src/previewdef/idea/contentbuilder.ts. */
+   `top` is the toolbar height -- see TOOLBAR_HEIGHT in src/previewdef/toolbarparts.ts. */
 .idea-group-head {
 	position: sticky;
 	top: 0;

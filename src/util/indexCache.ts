@@ -6,6 +6,7 @@ import { fnv1a64Hex } from './hash';
 import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration, uriToFilePathWhenPossible } from './vsccommon';
 import { getParentModUris } from './parentmods';
 import { createTimeSlicer, mapLimit } from './common';
+import { pathIdentity } from './nodecommon';
 
 interface CacheManifest {
     version: number;
@@ -41,11 +42,6 @@ const CACHE_ROOT = 'indexCache';
  * once. That is a few seconds of the shared parse queue, and it buys one identity rule instead of
  * two.
  */
-function normalizePathIdentity(value: string): string {
-    const normalized = value.replace(/\\+/g, '/');
-    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
-}
-
 export function cacheNamespaceFor(
     modFile: string | undefined,
     workspaceFolderUris: readonly string[],
@@ -55,7 +51,7 @@ export function cacheNamespaceFor(
 
     const mod = modFile?.trim();
     if (mod) {
-        parts.push('mod:' + normalizePathIdentity(mod));
+        parts.push('mod:' + pathIdentity(mod));
     }
 
     // Sorted, so that dragging a folder up the explorer does not throw the cache away.
@@ -66,7 +62,7 @@ export function cacheNamespaceFor(
     for (const parent of parentModPaths) {
         const trimmed = parent.trim();
         if (trimmed) {
-            parts.push('parent:' + normalizePathIdentity(trimmed));
+            parts.push('parent:' + pathIdentity(trimmed));
         }
     }
 

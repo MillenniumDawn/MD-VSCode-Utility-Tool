@@ -20,6 +20,7 @@ import {
 import { feLocalize } from "./util/i18n";
 import { wireUpdateBody } from "./util/updatebody";
 import { vscode } from "./util/vscode";
+import { TOOLBAR_HEIGHT } from "../src/previewdef/toolbarparts";
 import {
 	EventGraphEdge,
 	EventGraphEventNode,
@@ -68,11 +69,6 @@ const hoverPictureClass = "event-hover-picture";
 // The same, for the effects panel.
 const effectTooltipClass = "ev-effects-tip";
 
-// Mirrors toolbarHeight in src/previewdef/event/contentbuilder.ts, which is what actually sizes
-// the strip. Change one and the other has to follow, or the popup clamp and the zoom offset below
-// stop matching where the toolbar really ends.
-const toolbarHeight = 52;
-
 // The hover popups are appended to <body>, so they are placed in viewport coordinates by hand
 // rather than by the layout. The toolbar strip is drawn above them now, so anything they put under
 // it would simply be invisible: this keeps them clear of it instead.
@@ -82,7 +78,7 @@ const popupMargin = 4;
 
 const effectTooltipOptions: EffectTooltipOptions = {
 	className: effectTooltipClass,
-	toolbarHeight,
+	toolbarHeight: TOOLBAR_HEIGHT,
 	gap: 8,
 	margin: popupMargin,
 };
@@ -765,7 +761,7 @@ function showPictureWhenHoverElement(eventNode: HTMLDivElement) {
 		hoverElement.style.left =
 			position.left + window.scrollX - (pictureWidth * scale - position.width) / 2 + "px";
 		hoverElement.style.top =
-			clampBelowToolbar(position.top + position.height, toolbarHeight, popupMargin) +
+			clampBelowToolbar(position.top + position.height, TOOLBAR_HEIGHT, popupMargin) +
 			window.scrollY +
 			"px";
 		document.body.append(hoverElement);
@@ -832,7 +828,7 @@ window.addEventListener(
 		if (!contentElement) {
 			return;
 		}
-		enableZoom(contentElement, 0, toolbarHeight);
+		enableZoom(contentElement, 0, TOOLBAR_HEIGHT);
 
 		bindLocalisationToggle(bindToggle, showLocalisation, (value) => (showLocalisation = value));
 		bindToggle("show-option-triggers", showOptionTriggers, (value) => {
