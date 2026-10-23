@@ -178,8 +178,9 @@ function convertNormalPixelFormat(ddsPixelFormat: DDSPixelFormat): PixelFormat {
 			);
 			channelFormat = ChannelFormat.la;
 		}
-	} else if (pfflags & DDPF_YUV) {
-		channelFormat = ChannelFormat.yuv;
+	} else if (pfflags & (DDPF_YUV | DDPF_RGB)) {
+		const yuv = (pfflags & DDPF_YUV) !== 0;
+		channelFormat = yuv ? ChannelFormat.yuv : ChannelFormat.rgb;
 		channelIdStartLength.push(
 			getStartLengthByMask(0, ddsPixelFormat.dwRBitMask),
 		);
@@ -194,25 +195,7 @@ function convertNormalPixelFormat(ddsPixelFormat: DDSPixelFormat): PixelFormat {
 			channelIdStartLength.push(
 				getStartLengthByMask(3, ddsPixelFormat.dwABitMask),
 			);
-			channelFormat = ChannelFormat.yuva;
-		}
-	} else if (pfflags & DDPF_RGB) {
-		channelFormat = ChannelFormat.rgb;
-		channelIdStartLength.push(
-			getStartLengthByMask(0, ddsPixelFormat.dwRBitMask),
-		);
-		channelIdStartLength.push(
-			getStartLengthByMask(1, ddsPixelFormat.dwGBitMask),
-		);
-		channelIdStartLength.push(
-			getStartLengthByMask(2, ddsPixelFormat.dwBBitMask),
-		);
-
-		if (pfflags & DDPF_ALPHA) {
-			channelIdStartLength.push(
-				getStartLengthByMask(3, ddsPixelFormat.dwABitMask),
-			);
-			channelFormat = ChannelFormat.rgba;
+			channelFormat = yuv ? ChannelFormat.yuva : ChannelFormat.rgba;
 		}
 	} else {
 		throw new UserError("Unknown pixel format flags " + pfflags);
