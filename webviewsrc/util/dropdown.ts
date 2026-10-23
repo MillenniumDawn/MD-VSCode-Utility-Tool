@@ -23,70 +23,60 @@ export function enableDropdowns() {
 	}
 }
 
-class Dropdown extends Subscriber {
+// What the two dropdowns share: a click or Enter on the control opens the menu or closes the open
+// one, and an open menu is counted in numDropDownOpened$ until it closes. A subclass says what the
+// menu lists and what a pick does.
+abstract class DropdownBase<E extends HTMLElement> extends Subscriber {
 	private closeDropdown: (() => void) | undefined = undefined;
 
-	constructor(readonly select: HTMLSelectElement) {
+	constructor(
+		readonly select: E,
+		protected readonly multiSelection: boolean = false,
+	) {
 		super();
-		this.init();
-	}
-
-	private init() {
 		this.addSubscription(
 			fromEvent<MouseEvent>(this.select, "mousedown").subscribe((e) => {
 				e.preventDefault();
 				this.select.focus();
-				if (this.closeDropdown) {
-					this.closeDropdown();
-				} else {
-					this.showSelectionsForDropdown();
-				}
+				this.toggle();
 			}),
 		);
 		this.addSubscription(
 			fromEvent<KeyboardEvent>(this.select, "keydown").subscribe((e) => {
 				if (e.code === "Enter") {
 					e.preventDefault();
-					if (this.closeDropdown) {
-						this.closeDropdown();
-					} else {
-						this.showSelectionsForDropdown();
-					}
+					this.toggle();
 				}
 			}),
 		);
 	}
 
-	private showSelectionsForDropdown() {
-		this.select.classList.add("dropdown-opened");
-		const options = this.select.querySelectorAll("option");
-		const optionForDropdownMenu: Option[] = [];
-		options.forEach((option) => {
-			if (!option.hidden) {
-				optionForDropdownMenu.push({
-					text: option.textContent ?? "",
-					value: option.value,
-					selected: option.value === this.select.value,
-				});
-			}
-		});
+	protected abstract getOptions(): Option[];
 
-		const dropdownMenu = new DropdownMenu(optionForDropdownMenu);
+	protected abstract pick(options: Option[]): void;
+
+	// Focus goes back to the control once the click that picked has finished.
+	protected closeAndRefocus() {
+		this.closeDropdown?.();
+		setTimeout(() => this.select.focus(), 0);
+	}
+
+	private toggle() {
+		if (this.closeDropdown) {
+			this.closeDropdown();
+		} else {
+			this.open();
+		}
+	}
+
+	private open() {
+		this.select.classList.add("dropdown-opened");
+
+		const dropdownMenu = new DropdownMenu(this.getOptions(), this.multiSelection);
 		const dropdownMenuSubscriptions: Disposable[] = [dropdownMenu];
 
 		dropdownMenuSubscriptions.push(
-			toDisposable(
-				dropdownMenu.options$.subscribe((options) => {
-					const selectedOption = options.find((o) => o.selected);
-					if (selectedOption) {
-						this.select.value = selectedOption.value;
-						this.select.dispatchEvent(new Event("change"));
-					}
-
-					this.closeDropdown?.apply(this);
-					setTimeout(() => this.select.focus(), 0);
-				}),
-			),
+			toDisposable(dropdownMenu.options$.subscribe((options) => this.pick(options))),
 		);
 
 		dropdownMenuSubscriptions.push(
@@ -95,7 +85,7 @@ class Dropdown extends Subscriber {
 					if (isKey) {
 						this.select.focus();
 					}
-					this.closeDropdown?.apply(this);
+					this.closeDropdown?.();
 				}),
 			),
 		);
@@ -113,6 +103,31 @@ class Dropdown extends Subscriber {
 	}
 }
 
+class Dropdown extends DropdownBase<HTMLSelectElement> {
+	protected getOptions(): Option[] {
+		const options: Option[] = [];
+		this.select.querySelectorAll("option").forEach((option) => {
+			if (!option.hidden) {
+				options.push({
+					text: option.textContent ?? "",
+					value: option.value,
+					selected: option.value === this.select.value,
+				});
+			}
+		});
+		return options;
+	}
+
+	protected pick(options: Option[]) {
+		const selectedOption = options.find((o) => o.selected);
+		if (selectedOption) {
+			this.select.value = selectedOption.value;
+			this.select.dispatchEvent(new Event("change"));
+		}
+		this.closeAndRefocus();
+	}
+}
+
 // What the closed combobox reads when nothing is selected. The default announces an empty set,
 // which is right for a dropdown that picks things out of a list. A dropdown whose entries are
 // *filters* means the opposite -- selecting none of them leaves every item on screen -- so it
@@ -121,18 +136,16 @@ export interface DivDropdownLabels {
 	empty?: string;
 }
 
-export class DivDropdown extends Subscriber {
-	private closeDropdown: (() => void) | undefined = undefined;
-
+export class DivDropdown extends DropdownBase<HTMLDivElement> {
 	public selectedValues$ = new BehaviorSubject<readonly string[]>([]);
 
 	constructor(
-		readonly select: HTMLDivElement,
-		private multiSelection: boolean = false,
+		select: HTMLDivElement,
+		multiSelection: boolean = false,
 		private labels: DivDropdownLabels = {},
 	) {
-		super();
-		this.init();
+		super(select, multiSelection);
+		// A BehaviorSubject replays its value to a new subscriber, so this also draws the empty selection.
 		this.addSubscription(
 			this.selectedValues$.subscribe((value) => {
 				const options = this.getOptions(value);
@@ -161,84 +174,14 @@ export class DivDropdown extends Subscriber {
 		this.selectedValues$.next(values);
 	}
 
-	private init() {
-		this.addSubscription(
-			fromEvent<MouseEvent>(this.select, "mousedown").subscribe((e) => {
-				e.preventDefault();
-				this.select.focus();
-				if (this.closeDropdown) {
-					this.closeDropdown();
-				} else {
-					this.showSelectionsForDropdown();
-				}
-			}),
-		);
-
-		this.addSubscription(
-			fromEvent<KeyboardEvent>(this.select, "keydown").subscribe((e) => {
-				if (e.code === "Enter") {
-					e.preventDefault();
-					if (this.closeDropdown) {
-						this.closeDropdown();
-					} else {
-						this.showSelectionsForDropdown();
-					}
-				}
-			}),
-		);
-
-		const options = this.getOptions();
-		this.updateSelectedValue(options);
+	protected pick(options: Option[]) {
+		this.selectedValues$.next(options.filter((o) => o.selected).map((o) => o.value));
+		if (!this.multiSelection) {
+			this.closeAndRefocus();
+		}
 	}
 
-	private showSelectionsForDropdown() {
-		this.select.classList.add("dropdown-opened");
-
-		const dropdownMenu = new DropdownMenu(
-			this.getOptions(),
-			this.multiSelection,
-		);
-		const dropdownMenuSubscriptions: Disposable[] = [dropdownMenu];
-
-		dropdownMenuSubscriptions.push(
-			toDisposable(
-				dropdownMenu.options$.subscribe((options) => {
-					this.updateSelectedValue(options);
-					this.selectedValues$.next(
-						options.filter((o) => o.selected).map((o) => o.value),
-					);
-					if (!this.multiSelection) {
-						this.closeDropdown?.apply(this);
-						setTimeout(() => this.select.focus(), 0);
-					}
-				}),
-			),
-		);
-
-		dropdownMenuSubscriptions.push(
-			toDisposable(
-				dropdownMenu.close$.subscribe((isKey) => {
-					if (isKey) {
-						this.select.focus();
-					}
-					this.closeDropdown?.apply(this);
-				}),
-			),
-		);
-
-		numDropDownOpened$.next(numDropDownOpened$.value + 1);
-		this.closeDropdown = () => {
-			this.select.classList.remove("dropdown-opened");
-			dropdownMenu.hide();
-			dropdownMenuSubscriptions.forEach((d) => d.dispose());
-			numDropDownOpened$.next(numDropDownOpened$.value - 1);
-			this.closeDropdown = undefined;
-		};
-
-		dropdownMenu.show(this.select);
-	}
-
-	private getOptions(selectedValues?: readonly string[]): Option[] {
+	protected getOptions(selectedValues?: readonly string[]): Option[] {
 		if (selectedValues === undefined) {
 			selectedValues = this.selectedValues$.value;
 		}

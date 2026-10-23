@@ -5,7 +5,7 @@ import {
 	initCommon,
 	subscribeNavigators,
 } from "./util/common";
-import { vscode } from "./util/vscode";
+import { onUpdateBody } from "./util/updatebody";
 
 initCommon();
 
@@ -25,40 +25,14 @@ function filterChange(text: string) {
 
 // In-place update pushed by UpdateablePreviewBase when the .gfx file changed: swap only the sprite
 // list markup, so the filter bar, scroll and the filter input's listeners survive. The fresh nodes
-// need their .navigator click handlers re-bound and the current filter re-applied. Falls back to a
-// full reload if the DOM the swap needs is gone (e.g. the webview shows the error page, which has no
-// listener).
-window.addEventListener(
-	"message",
-	tryRun((event: MessageEvent) => {
-		const msg = event.data;
-		if (!msg || msg.type !== "updateBody") {
-			return;
-		}
-
-		const imageList = document.getElementById(
-			"gfx-image-list",
-		) as HTMLDivElement | null;
-		if (!imageList) {
-			vscode.postMessage({ command: "reload" });
-			return;
-		}
-
-		if (typeof msg.styleCss === "string") {
-			const serverStyles = document.getElementById("gfx-server-styles");
-			if (serverStyles) {
-				serverStyles.textContent = msg.styleCss;
-			}
-		}
-
-		const data = msg.data ?? {};
-		if (typeof data.contentHtml === "string") {
-			imageList.innerHTML = data.contentHtml;
-			subscribeNavigators();
-			filterChange(getState().filter || "");
-		}
-	}),
-);
+// need their .navigator click handlers re-bound and the current filter re-applied.
+onUpdateBody({ contentIds: ["gfx-image-list"], styleId: "gfx-server-styles" }, (data) => {
+	if (typeof data.contentHtml === "string") {
+		(document.getElementById("gfx-image-list") as HTMLDivElement).innerHTML = data.contentHtml;
+		subscribeNavigators();
+		filterChange(getState().filter || "");
+	}
+});
 
 window.addEventListener(
 	"load",

@@ -5,7 +5,6 @@ import minBy from "lodash/minBy";
 import maxBy from "lodash/maxBy";
 import { renderGridBoxCommon, GridBoxItem, GridBoxConnection } from "../src/util/hoi4gui/gridboxcommon";
 import { StyleTable } from "../src/util/styletable";
-import { escapeAttr } from "../src/util/escape";
 import { applyCondition, ConditionItem } from "../src/hoiformat/condition";
 import { NumberPosition } from "../src/util/common";
 import { GridBoxType } from "../src/hoiformat/gui";
@@ -17,6 +16,8 @@ import { applyExclusiveLinkStyle } from "../src/util/hoi4gui/exclusivelink";
 import { applyWarningMarkers, bindWarningPanelButton, renderWarningList, setWarningMarkersVisible } from "./util/warnings";
 import { Tracing, subscribeTracing } from "./util/trace";
 import { feLocalize } from "./util/i18n";
+import { conditionDropdown, setConditionOptions } from "./util/conditiontree";
+import { onUpdateBody } from "./util/updatebody";
 
 let mios: Mio[] = (window as any).mios;
 
@@ -279,11 +280,7 @@ function updateSelectedMio(clearCondition: boolean) {
     }
 
     if (conditions) {
-        conditions.select.innerHTML = `<span class="value"></span>
-            ${conditionExprs.map(option =>
-                `<div class="option" value="${escapeAttr(`${option.scopeName}!|${option.nodeContent}`)}">${option.scopeName ? `[${escapeAttr(option.scopeName)}]` : ''}${escapeAttr(option.nodeContent)}</div>`
-            ).join('')}`;
-        conditions.selectedValues$.next(clearCondition ? [] : selectedExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
+        setConditionOptions(conditions, conditionExprs, clearCondition ? [] : selectedExprs);
     }
 
 }
@@ -380,30 +377,10 @@ function traitToGridItem(
 }
 
 // In-place update pushed by LoaderPreview when the previewed file changed: refresh the globals
-// buildContent renders from and the server trait-icon <style>, then redraw without a full reload
-// so scroll, zoom and the selected mio / conditions survive. The toolbar controls and their load-
-// time listeners are left intact (only the placeholder grid and headers are rebuilt). Falls back
-// to a full reload if the DOM the swap needs is gone (e.g. the webview shows the "no mio" page).
-window.addEventListener('message', tryRun(async (event: MessageEvent) => {
-    const msg = event.data;
-    if (!msg || msg.type !== 'updateBody') {
-        return;
-    }
-
-    const placeholder = document.getElementById('miopreviewplaceholder') as HTMLDivElement | null;
-    if (!placeholder) {
-        vscode.postMessage({ command: 'reload' });
-        return;
-    }
-
-    if (typeof msg.styleCss === 'string') {
-        const serverStyles = document.getElementById('mio-server-styles');
-        if (serverStyles) {
-            serverStyles.textContent = msg.styleCss;
-        }
-    }
-
-    const data = msg.data ?? {};
+// buildContent renders from, then redraw without a full reload so scroll, zoom and the selected
+// mio / conditions survive. The toolbar controls and their load-time listeners are left intact
+// (only the placeholder grid and headers are rebuilt).
+onUpdateBody({ contentIds: ['miopreviewplaceholder'], styleId: 'mio-server-styles' }, async (data) => {
     if (data.mios) {
         mios = data.mios;
         (window as any).mios = mios;
@@ -440,7 +417,7 @@ window.addEventListener('message', tryRun(async (event: MessageEvent) => {
     updateSelectedMio(false);
     await buildContent();
     window.scrollTo(scrollX, scrollY);
-}));
+});
 
 window.addEventListener('load', tryRun(async function() {
     // Mio selection
@@ -457,29 +434,11 @@ window.addEventListener('load', tryRun(async function() {
     // Conditions
     const conditionsElement = document.getElementById('conditions') as HTMLDivElement | null;
     if (conditionsElement) {
-        conditions = new DivDropdown(conditionsElement, true);
-        
-        conditions.selectedValues$.next(selectedExprs.map(e => `${e.scopeName}!|${e.nodeContent}`));
-        conditions.selectedValues$.subscribe(tryRun(async (selection) => {
-            selectedExprs = selection.map<ConditionItem>(selection => {
-                const index = selection.indexOf('!|');
-                if (index === -1) {
-                    return {
-                        scopeName: '',
-                        nodeContent: selection,
-                    };
-                } else {
-                    return {
-                        scopeName: selection.substring(0, index),
-                        nodeContent: selection.substring(index + 2),
-                    };
-                }
-            });
-
+        conditions = conditionDropdown(conditionsElement, selectedExprs, async selection => {
+            selectedExprs = selection;
             setState({ selectedExprs });
-            
             await buildContent();
-        }));
+        });
     }
 
     const contentElement = document.getElementById('miopreviewcontent') as HTMLDivElement;

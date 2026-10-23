@@ -19,6 +19,7 @@ Unreleased
 - [ Cleanup ] Message placeholders, `else_if` and `else` conditions, and GUI icons and buttons each have one implementation instead of two. Issue #559.
 - [ Cleanup ] The world map walks its provinces, states, regions, railways and supply nodes through one loop, and decides when edges, labels and rivers show through one check. Issue #560.
 - [ Previews ] The character and idea previews no longer keep drawing the old cards under "No characters to show." or "No ideas to show." when an edit or a filter empties a long list that is still appearing. Issue #491.
+- [ Cleanup ] The previews' dropdowns, the focus tree and MIO condition lists, and the in-place refresh of the MIO, technology and GFX previews each have one implementation instead of several. Issue #491.
 
 v1.1.42
 
