@@ -241,13 +241,25 @@ describe("webview/worldmap/FEWorldMapClass reverse maps", function () {
 			assert.deepStrictEqual(touching([]), []);
 		});
 
-		it("walks bad entries first, skips holes, and stops when the callback returns true", function () {
-			const states: any[] = [undefined, { id: 1 }, { id: 2 }, { id: 3 }];
+		// One entry past each count, which the walk must not reach.
+		function statesMap() {
+			const states: any[] = [undefined, { id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
 			states[-1] = { id: -1 };
-			const map = new FEWorldMapClass({ states, statesCount: 4, badStatesCount: 1 } as any);
+			states[-2] = { id: -2 };
+			return new FEWorldMapClass({ states, statesCount: 4, badStatesCount: 1 } as any);
+		}
 
+		it("walks the bad entries first and skips holes, within both counts", function () {
 			const seen: number[] = [];
-			map.forEachState((state) => {
+			statesMap().forEachState((state) => {
+				seen.push(state.id);
+			});
+			assert.deepStrictEqual(seen, [-1, 1, 2, 3]);
+		});
+
+		it("stops when the callback returns true", function () {
+			const seen: number[] = [];
+			statesMap().forEachState((state) => {
 				seen.push(state.id);
 				return state.id === 2;
 			});
