@@ -8,6 +8,7 @@ import { clearDlcZipCache } from "./fileloader";
 import { localize } from "./i18n";
 import { Logger } from "./logger";
 import { getSelectedModFileUri } from "./modfile";
+import { pathIdentity } from "./nodecommon";
 import {
 	getExplicitParentModUris,
 	getParentModUris,
@@ -107,13 +108,9 @@ async function isUserDataDir(dir: vscode.Uri): Promise<boolean> {
 	return false;
 }
 
-// Slashes normalized, and a trailing slash so `D:/ws` does not claim `D:/ws2`. Case is folded
-// only on Windows: distinct paths such as `/mods/Parent` and `/mods/parent` are real peers on Linux.
+// A trailing slash so `D:/ws` does not claim `D:/ws2`.
 function folderKey(uri: vscode.Uri): string {
-	const normalized =
-		uriToFilePathWhenPossible(uri).replace(/\\+/g, "/").replace(/\/+$/, "") +
-		"/";
-	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+	return pathIdentity(uriToFilePathWhenPossible(uri)).replace(/\/+$/, "") + "/";
 }
 
 // A repository controls everything under its own folder, so a `mod/` and a `dlc_load.json` in a
@@ -238,11 +235,6 @@ export async function findUserDataDir(
 	return undefined;
 }
 
-function registryPathKey(value: string): string {
-	const normalized = value.replace(/\\/g, "/");
-	return process.platform === "win32" ? normalized.toLowerCase() : normalized;
-}
-
 // The registry files the launcher has enabled, as `mod/<file>` relative to the user data directory.
 async function readEnabledMods(userDataDir: vscode.Uri): Promise<Set<string>> {
 	try {
@@ -257,7 +249,7 @@ async function readEnabledMods(userDataDir: vscode.Uri): Promise<Set<string>> {
 		return new Set(
 			enabled
 				.filter((entry): entry is string => typeof entry === "string")
-				.map(registryPathKey),
+				.map(pathIdentity),
 		);
 	} catch {
 		return new Set();
@@ -297,7 +289,7 @@ async function loadModRegistry(
 			continue;
 		}
 
-		const isEnabled = enabled.has(registryPathKey(`mod/${file}`));
+		const isEnabled = enabled.has(pathIdentity(`mod/${file}`));
 		const existing = registry.get(descriptor.name);
 		if (existing === undefined) {
 			registry.set(descriptor.name, folder);

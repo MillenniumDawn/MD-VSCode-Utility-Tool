@@ -1,5 +1,6 @@
 import * as path from "path";
 import { CancellationLike, mapLimit, throwIfCancelled } from "./common";
+import { pathIdentity } from "./nodecommon";
 
 /*
  * A directory walk on node's own filesystem API, for roots that are really on disk.
@@ -82,7 +83,7 @@ export async function walkFilesWithMtime(
 	throwIfCancelled(token);
 	// Not swallowed, unlike the guard on every directory below it: a root that is not on disk is the
 	// signal the caller needs, not an empty folder.
-	visitedDirectories.add(normalizeRealPath(await fs.realpath(rootFsPath)));
+	visitedDirectories.add(pathIdentity(await fs.realpath(rootFsPath)));
 	const found = await readDirectory(rootFsPath, "", 0);
 
 	const entries = await mapLimit(found, STAT_CONCURRENCY, async (file) => {
@@ -221,15 +222,11 @@ interface FoundFile {
 	fsPath: string;
 }
 
-function normalizeRealPath(realPath: string): string {
-	// realpath canonicalises the casing of the segments it resolves, but not the drive letter, which
-	// varies with how the path was typed into the setting.
-	return process.platform === "win32" ? realPath.toLowerCase() : realPath;
-}
-
+// realpath canonicalises the casing of the segments it resolves, but not the drive letter, which
+// varies with how the path was typed into the setting.
 async function realPathOrUndefined(fsPath: string): Promise<string | undefined> {
 	try {
-		return normalizeRealPath(await fs.realpath(fsPath));
+		return pathIdentity(await fs.realpath(fsPath));
 	} catch {
 		// A broken junction or a folder we may not open. Undefined means "do not descend".
 		return undefined;
