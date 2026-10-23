@@ -18,6 +18,7 @@ Unreleased
 - [ Cleanup ] Parent mods, the mod registry and the index cache now share one rule for when two spellings of a path are the same folder. Issue #558.
 - [ Cleanup ] Message placeholders, `else_if` and `else` conditions, and GUI icons and buttons each have one implementation instead of two. Issue #559.
 - [ Cleanup ] The world map walks its provinces, states, regions, railways and supply nodes through one loop, and decides when edges, labels and rivers show through one check. Issue #560.
+- [ Previews ] The character and idea previews no longer keep drawing the old cards under "No characters to show." or "No ideas to show." when an edit or a filter empties a long list that is still appearing. Issue #491.
 
 v1.1.42
 

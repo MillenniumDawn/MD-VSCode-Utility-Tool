@@ -1,22 +1,23 @@
 import { tryRun, subscribeNavigators, initCommon, getState, setState } from "./util/common";
 import { SearchBox } from "./util/searchbox";
-import { applyNav, badge } from "./util/card";
-import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
+import { appendGroups, applyNav, badge, modifierSection } from "./util/card";
+import {
+	FilterControl,
+	bindLocalisationToggle,
+	gateToggle,
+	readFilterList,
+	toggleBinder,
+} from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { wireUpdateBody } from "./util/updatebody";
-import { ConditionComplexExpr } from "../src/hoiformat/condition";
-import {
-	conditionToDom as conditionTreeToDom,
-	conditionPanel as conditionTreePanel,
-} from "./util/conditiontree";
+import { cardFoldLabels, conditionPanel } from "./util/conditiontree";
+import { RenderTask, RenderedCard, pushGroupTasks, taskRunner } from "./util/batchrender";
 import {
 	IdeaCard,
 	IdeaChain,
 	IdeaGroup,
 	IdeaPreviewPayload,
 	IdeaToolbarFlags,
-	ModifierGroup,
-	ModifierLine,
 	NavTarget,
 } from "../src/previewdef/idea/payload";
 
@@ -104,12 +105,7 @@ export function readFilters(stored: unknown): IdeaFilter[] {
 }
 
 // Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
-//
-// This has to stay below `ideaFilters`, not up with the other restored toggles: `readFilters` is
-// hoisted but the list it reads is not, so calling it earlier throws on the const in its temporal
-// dead zone and takes the whole module -- and with it the roster -- down. The tests compile to
-// commonjs, where the same read is a property access that quietly answers `undefined`, so only the
-// bundled preview shows it.
+// It stays below `ideaFilters` for the reason readFilterList gives.
 let filters: IdeaFilter[] = readFilters(getState().ideaFilters);
 
 /**
@@ -186,90 +182,12 @@ export function matchesQuery(card: IdeaCard, query: string): boolean {
 
 //#endregion
 
-//#region Condition rendering
-
-// The tree itself is drawn by util/conditiontree.ts, which the event and decision previews share.
-// Only the fold wording is this preview's own: an idea's `count` folder has always read "at least"
-// here, and one of the two spellings would have to be retired to drop the table.
-//
-// `not` was in the table and never used: ConditionFolderType has no such type. It is not carried
-// over.
-const foldLabels: Record<string, string> = {
-	and: "all of",
-	or: "any of",
-	andnot: "not all of",
-	ornot: "none of",
-	count: "at least",
-};
-
-export function conditionToDom(condition: ConditionComplexExpr): HTMLUListElement {
-	return conditionTreeToDom(condition, foldLabels);
-}
-
-function conditionPanel(condition: ConditionComplexExpr, label: string): HTMLDivElement {
-	return conditionTreePanel(condition, label, foldLabels);
-}
-
-//#endregion
-
 //#region Card rendering
 
-interface RenderedCard {
-	card: IdeaCard;
-	element: HTMLDivElement;
-}
-
-let rendered: RenderedCard[] = [];
+let rendered: RenderedCard<IdeaCard>[] = [];
 
 function textFor(loc: { key: string; text: string }): string {
 	return showLocalisation ? loc.text : loc.key;
-}
-
-export function modifierLineToDom(line: ModifierLine): HTMLDivElement {
-	const row = document.createElement("div");
-	row.className = "idea-mod";
-
-	const name = document.createElement("span");
-	name.className = "idea-mod-name";
-	name.textContent = line.name;
-	// The token the file was written with, for a reader who has to go and find it.
-	name.title = line.key;
-	row.appendChild(name);
-
-	const value = document.createElement("span");
-	value.className = "idea-mod-value idea-mod-" + line.tone;
-	value.textContent = line.value;
-	row.appendChild(value);
-
-	return row;
-}
-
-function modifierSection(title: string | undefined, lines: ModifierLine[]): HTMLDivElement | undefined {
-	if (lines.length === 0) {
-		return undefined;
-	}
-
-	const box = document.createElement("div");
-	box.className = "idea-mods";
-	if (title !== undefined) {
-		const head = document.createElement("div");
-		head.className = "idea-mods-head";
-		head.textContent = title;
-		box.appendChild(head);
-	}
-	for (const line of lines) {
-		box.appendChild(modifierLineToDom(line));
-	}
-	return box;
-}
-
-function appendGroups(card: HTMLDivElement, groups: ModifierGroup[]): void {
-	for (const group of groups) {
-		const section = modifierSection(group.title, group.lines);
-		if (section) {
-			card.appendChild(section);
-		}
-	}
 }
 
 function buildCard(card: IdeaCard): HTMLDivElement {
@@ -339,30 +257,39 @@ function buildCard(card: IdeaCard): HTMLDivElement {
 	}
 
 	if (showModifiers) {
-		const modifiers = modifierSection(undefined, card.modifiers);
+		const modifiers = modifierSection("idea", undefined, card.modifiers);
 		if (modifiers) {
 			element.appendChild(modifiers);
 		}
 		const research = modifierSection(
+			"idea",
 			feLocalize("ideapreview.research", "Research bonus"),
 			card.research,
 		);
 		if (research) {
 			element.appendChild(research);
 		}
-		appendGroups(element, card.targeted);
-		appendGroups(element, card.equipment);
+		appendGroups("idea", element, card.targeted);
+		appendGroups("idea", element, card.equipment);
 	}
 
 	if (showConditions) {
 		if (card.allowed !== true) {
 			element.appendChild(
-				conditionPanel(card.allowed, feLocalize("ideapreview.allowed", "Allowed")),
+				conditionPanel(
+					card.allowed,
+					feLocalize("ideapreview.allowed", "Allowed"),
+					cardFoldLabels,
+				),
 			);
 		}
 		if (card.available !== true) {
 			element.appendChild(
-				conditionPanel(card.available, feLocalize("ideapreview.available", "Available")),
+				conditionPanel(
+					card.available,
+					feLocalize("ideapreview.available", "Available"),
+					cardFoldLabels,
+				),
 			);
 		}
 	}
@@ -448,52 +375,11 @@ export function chainsForGroups(
 	return byGroup;
 }
 
-// Each unit of work is one group, so a file of a thousand ideas paints its first category
-// immediately rather than freezing until the last one is built.
-type RenderTask = () => void;
-
-// How many cards one task builds. Small enough that the budget loop below can stop between two of
-// them on the largest real file, large enough that a small file is still one or two tasks.
+// How many cards one task builds. Small enough that the runner can stop between two of them on the
+// largest real file, large enough that a small file is still one or two tasks.
 const cardsPerBatch = 40;
 
-let renderGeneration = 0;
-
-function runTasks(tasks: RenderTask[], done: () => void): void {
-	const generation = ++renderGeneration;
-	let index = 0;
-
-	// jsdom has no requestAnimationFrame, and the tests drive this path; running straight through
-	// there is also what a test wants, since it has nothing to wait on.
-	const schedule =
-		typeof requestAnimationFrame === "function"
-			? requestAnimationFrame
-			: (fn: () => void) => {
-					fn();
-					return 0;
-				};
-
-	const step = () => {
-		// A newer build started while this one was still painting: its output is what belongs on
-		// screen, so this one stops rather than appending into a container it no longer owns.
-		if (generation !== renderGeneration) {
-			return;
-		}
-
-		const deadline = Date.now() + 8;
-		while (index < tasks.length && Date.now() < deadline) {
-			tasks[index]?.();
-			index++;
-		}
-
-		if (index < tasks.length) {
-			schedule(step);
-		} else {
-			done();
-		}
-	};
-
-	step();
-}
+const runTasks = taskRunner();
 
 function buildContent(): void {
 	const container = document.getElementById("ideapreviewcontent") as HTMLDivElement | null;
@@ -527,9 +413,10 @@ function buildContent(): void {
 		empty.className = "idea-empty";
 		empty.textContent = feLocalize("ideapreview.noideas", "No ideas to show.");
 		container.appendChild(empty);
+		// An empty run still stops one in flight, which would otherwise paint its groups under this.
 		// Nothing to highlight, but the counter still has to stop claiming the matches of the roster
 		// that was on screen a moment ago -- which is what refreshing with the emptied list does.
-		search.refresh(rendered);
+		runTasks([], () => search.refresh(rendered));
 		return;
 	}
 
@@ -547,30 +434,21 @@ function buildContent(): void {
 			continue;
 		}
 
-		// The header, the chains and an empty flow first, so the group is on screen before its cards
-		// are; the cards then go in a batch at a time. Millennium Dawn's largest ideas file is a
-		// single category of nearly eight hundred ideas, so a group is exactly the wrong unit to
-		// stop at -- one task per group would put that whole file in one unbroken block.
-		let flow: HTMLDivElement | undefined = undefined;
-		tasks.push(() => {
-			const section = buildGroup(group, loose.length, groupChains, visibleIds, cardsById);
-			flow = section.flow;
-			container.appendChild(section.element);
-		});
-
-		for (let i = 0; i < loose.length; i += cardsPerBatch) {
-			const batch = loose.slice(i, i + cardsPerBatch);
-			tasks.push(() => {
-				if (!flow) {
-					return;
-				}
-				for (const card of batch) {
-					const element = buildCard(card);
-					rendered.push({ card, element });
-					flow.appendChild(element);
-				}
-			});
-		}
+		// The cards go in batches rather than a group at a time: Millennium Dawn's largest ideas file
+		// is a single category of nearly eight hundred ideas, and one task per group would put that
+		// whole file in one unbroken block.
+		pushGroupTasks(
+			tasks,
+			() => {
+				const section = buildGroup(group, loose.length, groupChains, visibleIds, cardsById);
+				container.appendChild(section.element);
+				return section.flow;
+			},
+			loose,
+			cardsPerBatch,
+			buildCard,
+			rendered,
+		);
 	}
 
 	runTasks(tasks, () => {
@@ -662,7 +540,7 @@ function buildChain(
 
 //#region Search
 
-const search = new SearchBox<RenderedCard>({
+const search = new SearchBox<RenderedCard<IdeaCard>>({
 	boxId: "idea-searchbox",
 	countId: "idea-search-count",
 	stateKey: "ideaSearchQuery",
@@ -723,10 +601,7 @@ wireUpdateBody<IdeaPreviewPayload>({
 window.addEventListener(
 	"load",
 	tryRun(function () {
-		bindToggle("show-localisation", showLocalisation, (value) => {
-			showLocalisation = value;
-			setState({ showLocalisation: value });
-		});
+		bindLocalisationToggle(bindToggle, showLocalisation, (value) => (showLocalisation = value));
 		bindToggle("show-icon", showIcon, (value) => {
 			showIcon = value;
 			setState({ ideaShowIcon: value });
