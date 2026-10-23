@@ -1,5 +1,5 @@
 import { error } from "./debug";
-import { jsonForScript } from "./common";
+import { fillPlaceholders, jsonForScript } from "./common";
 import { __table } from "../../i18n/en";
 
 let table: Record<string, string> = {};
@@ -54,33 +54,7 @@ export function localize(
 	if (key in table) {
 		message = table[key] ?? message;
 	}
-
-	if (args.length === 0) {
-		return message;
-	}
-	return message.replace(
-		placeholderPattern(args.length),
-		(_, group1) => String(args[parseInt(group1, 10)] ?? ""),
-	);
-}
-
-// One pattern per argument count, built on first use: localize runs tens of thousands of times
-// during an index build, and compiling the same regex on each call was most of what it did. The
-// pattern only names the placeholders that have an argument, so `{1}` with a single argument is
-// left in the text as it always was.
-const placeholderPatterns: RegExp[] = [];
-
-function placeholderPattern(arity: number): RegExp {
-	let pattern = placeholderPatterns[arity];
-	if (pattern === undefined) {
-		const indexes: string[] = [];
-		for (let i = 0; i < arity; i++) {
-			indexes.push(i.toString());
-		}
-		pattern = new RegExp("\\{(" + indexes.join("|") + ")\\}", "g");
-		placeholderPatterns[arity] = pattern;
-	}
-	return pattern;
+	return fillPlaceholders(message, args);
 }
 
 export function localizeText(text: string): string {

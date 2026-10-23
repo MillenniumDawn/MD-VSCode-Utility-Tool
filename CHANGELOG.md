@@ -22,6 +22,7 @@ v1.1.43
 - [ DDS ] Legacy textures with unused bits before their color channels now show the correct colors. Issue #530.
 - [ Cleanup ] The previews take their toolbar height from one place instead of four. Issue #557.
 - [ Cleanup ] Parent mods, the mod registry and the index cache now share one rule for when two spellings of a path are the same folder. Issue #558.
+- [ Cleanup ] Message placeholders, `else_if` and `else` conditions, and GUI icons and buttons each have one implementation instead of two. Issue #559.
 - [ Testing ] Keep registry publishing tokens off the command line. Issue #578.
 
 v1.1.42
