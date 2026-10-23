@@ -413,9 +413,10 @@ function buildContent(): void {
 		empty.className = "idea-empty";
 		empty.textContent = feLocalize("ideapreview.noideas", "No ideas to show.");
 		container.appendChild(empty);
+		// An empty run still stops one in flight, which would otherwise paint its groups under this.
 		// Nothing to highlight, but the counter still has to stop claiming the matches of the roster
 		// that was on screen a moment ago -- which is what refreshing with the emptied list does.
-		search.refresh(rendered);
+		runTasks([], () => search.refresh(rendered));
 		return;
 	}
 

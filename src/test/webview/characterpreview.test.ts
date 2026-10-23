@@ -531,6 +531,35 @@ describe("webview/characterpreview rendering", () => {
 		}
 	});
 
+	it("stops painting the previous roster when the next one is empty", () => {
+		const post = (next: CharacterPreviewPayload) =>
+			window.dispatchEvent(
+				new (window as any).MessageEvent("message", {
+					data: { type: "updateBody", data: { characterPreview: next } },
+				}),
+			);
+		const frames: (() => void)[] = [];
+		const realNow = Date.now;
+		let now = 0;
+		// Every clock read spends most of a frame, so the roster takes a frame per group.
+		(globalThis as any).requestAnimationFrame = (fn: () => void) => frames.push(fn);
+		Date.now = () => (now += 5);
+		try {
+			post(integrationPayload);
+			post({ ...integrationPayload, cards: [], groups: [] });
+			while (frames.length > 0) {
+				frames.shift()!();
+			}
+
+			assert.strictEqual(content().querySelectorAll(".char-group").length, 0);
+			assert.strictEqual(content().querySelectorAll(".char-empty").length, 1);
+		} finally {
+			delete (globalThis as any).requestAnimationFrame;
+			Date.now = realNow;
+			post(integrationPayload);
+		}
+	});
+
 	// These run against the roster as it is actually wired -- built, then handed to
 	// subscribeNavigators -- because that second listener is the whole problem. A trait pill with a
 	// nav target carries two click listeners: its own, and the navigator's. Nothing traitToDom is

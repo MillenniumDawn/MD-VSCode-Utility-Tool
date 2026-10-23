@@ -497,6 +497,35 @@ describe("webview/ideapreview rendering", () => {
 		assert.strictEqual(content().querySelectorAll(".idea-empty").length, 0);
 	});
 
+	it("stops painting the previous roster when the next one is empty", () => {
+		const post = (next: IdeaPreviewPayload) =>
+			window.dispatchEvent(
+				new (window as any).MessageEvent("message", {
+					data: { type: "updateBody", data: { ideaPreview: next } },
+				}),
+			);
+		const frames: (() => void)[] = [];
+		const realNow = Date.now;
+		let now = 0;
+		// Every clock read spends most of a frame, so the roster takes a frame per group.
+		(globalThis as any).requestAnimationFrame = (fn: () => void) => frames.push(fn);
+		Date.now = () => (now += 5);
+		try {
+			post(integrationPayload);
+			post({ ...integrationPayload, cards: [], groups: [], chains: [] });
+			while (frames.length > 0) {
+				frames.shift()!();
+			}
+
+			assert.strictEqual(content().querySelectorAll(".idea-group").length, 0);
+			assert.strictEqual(content().querySelectorAll(".idea-empty").length, 1);
+		} finally {
+			delete (globalThis as any).requestAnimationFrame;
+			Date.now = realNow;
+			post(integrationPayload);
+		}
+	});
+
 	it("says when the swap index is off, so a missing chain is not read as none existing", () => {
 		const offPayload: IdeaPreviewPayload = {
 			...integrationPayload,
