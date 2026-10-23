@@ -60,7 +60,7 @@ describe("loader preview rendering contracts", () => {
 				decision: "043bdb408a3f4aa573a662017769dfbbd215e139a76d5660c9466ae301ebd352",
 				event: "645ea5311473a9ef81ded8881a0219d5de7842d6e5ffdabd625949c2655900ab",
 				idea: "49688e3838f745d0612aaec58a3f46b2983291ba6af5373f914cc8681e016fd9",
-				mio: "424e76345db6756fcc84f3d733741f521e5a185e14fc9007306cc8b58ff05408",
+				mio: "2870121f4b2774e43597d1b8d6c558f005f5926750bbcb110d6463f9e3a4eb07",
 				technology: "cc32c8963c6fe8843265609b3a778fee9e00bda7fdb448fb8e1903cfbf119bad",
 			});
 		} finally {

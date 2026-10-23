@@ -117,7 +117,6 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     jsCodes.push('window.gridBox = ' + jsonForScript(gridBox));
     jsCodes.push('window.styleNonce = ' + jsonForScript(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
-    jsCodes.push('window.toolbarHeight = ' + toolbarHeight);
     jsCodes.push('window.previewOptions = ' + jsonForScript(getPreviewOptions(previewOptionKeys)));
 
     return {
