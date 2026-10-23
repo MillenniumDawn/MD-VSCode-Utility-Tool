@@ -56,14 +56,14 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
     toolbarFlags: ToolbarFlags;
 }
 
-export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean }): Promise<FocusTreePayload | null> {
+export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean; dependencyChanged?: boolean }): Promise<FocusTreePayload | null> {
     const resolveIcons = options?.resolveIcons !== false;
     try {
         // Per-phase timing of parsing/loading, icon resolution, and DDS->PNG conversion, logged via debug() in dev builds.
         resetIconResolveStats();
         const tStart = Date.now();
 
-        const session = new LoaderSession(false);
+        const session = new LoaderSession(options?.dependencyChanged ?? false);
         const loadResult = await loader.load(session);
         const loadedLoaders = session.loadedLoaderNames();
         debug('Loader session focus tree', loadedLoaders);
