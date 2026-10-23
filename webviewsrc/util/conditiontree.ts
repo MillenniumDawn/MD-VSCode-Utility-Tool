@@ -1,10 +1,13 @@
-import { ConditionComplexExpr } from "../../src/hoiformat/condition";
+import { ConditionComplexExpr, ConditionItem } from "../../src/hoiformat/condition";
 import { EffectTreeNode } from "../../src/previewdef/sharedpayload";
+import { escapeAttr } from "../../src/util/escape";
+import { tryRun } from "./common";
+import { DivDropdown } from "./dropdown";
 import { feLocalize } from "./i18n";
 
 // Condition and effect rendering, shared by the event and decision previews. Both draw the same two
 // trees -- a trigger and what a thing does when it runs -- so they draw them the same way, out of
-// one copy.
+// one copy. The condition dropdown further down is the focus tree's and the MIO preview's.
 //
 // The `eventtree.*` localisation keys are kept as they were when this lived in eventtree.ts:
 // renaming them would retire every existing translation of these strings for no gain to the reader.
@@ -21,11 +24,15 @@ const foldLabels: Record<string, string> = {
 	count: "count",
 };
 
+// The character and idea previews have always read a `count` folder as "at least".
+export const cardFoldLabels: Record<string, string> = { ...foldLabels, count: "at least" };
+
 // conditionToString in hoiformat/condition.ts renders a single flat line, which is unreadable for
 // anything but a trivial trigger. This renders the same tree as nested lists instead.
 //
-// `labels` is a parameter because the idea preview has always named a `count` folder differently
-// from the two tree previews, and sharing this function is not a reason to retire either wording.
+// `labels` is a parameter because the character and idea previews have always named a `count` folder
+// differently from the two tree previews, and sharing this function is not a reason to retire either
+// wording.
 export function conditionToDom(
 	condition: ConditionComplexExpr,
 	labels: Record<string, string> = foldLabels,
@@ -139,6 +146,53 @@ export function conditionPanel(
 	box.appendChild(head);
 	box.appendChild(conditionToDom(condition, labels));
 	return box;
+}
+
+//#endregion
+
+//#region Condition dropdown
+
+// The focus tree and MIO previews let the reader pick which conditions hold. A condition is a
+// dropdown value as its scope and its trigger joined by `!|`.
+function conditionValue(item: ConditionItem): string {
+	return `${item.scopeName}!|${item.nodeContent}`;
+}
+
+function parseConditionValue(value: string): ConditionItem {
+	const index = value.indexOf("!|");
+	return index === -1
+		? { scopeName: "", nodeContent: value }
+		: { scopeName: value.substring(0, index), nodeContent: value.substring(index + 2) };
+}
+
+// Starts the dropdown at `selected` and reports every selection, the first one included.
+export function conditionDropdown(
+	element: HTMLDivElement,
+	selected: ConditionItem[],
+	onChange: (selection: ConditionItem[]) => Promise<void>,
+): DivDropdown {
+	const dropdown = new DivDropdown(element, true);
+	dropdown.selectedValues$.next(selected.map(conditionValue));
+	dropdown.addSubscription(
+		dropdown.selectedValues$.subscribe(
+			tryRun((values: readonly string[]) => onChange(values.map(parseConditionValue))),
+		),
+	);
+	return dropdown;
+}
+
+// Lists `exprs` as the dropdown's options and selects `selected` among them.
+export function setConditionOptions(
+	dropdown: DivDropdown,
+	exprs: ConditionItem[],
+	selected: ConditionItem[],
+): void {
+	const options = exprs.map(
+		(item) =>
+			`<div class="option" value="${escapeAttr(conditionValue(item))}">${item.scopeName ? `[${escapeAttr(item.scopeName)}]` : ""}${escapeAttr(item.nodeContent)}</div>`,
+	);
+	dropdown.select.innerHTML = `<span class="value"></span>${options.join("")}`;
+	dropdown.selectedValues$.next(selected.map(conditionValue));
 }
 
 //#endregion

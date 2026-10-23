@@ -10,10 +10,17 @@ import {
 import { SearchBox } from "./util/searchbox";
 import { bridgeOverRemoved, skippedBySource } from "./util/graphbridge";
 import { applyNav, badge } from "./util/card";
-import { FilterControl, gateToggle, readFilterList, toggleBinder } from "./util/toolbar";
+import {
+	FilterControl,
+	bindLocalisationToggle,
+	gateToggle,
+	readFilterList,
+	toggleBinder,
+} from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { wireUpdateBody } from "./util/updatebody";
 import { vscode } from "./util/vscode";
+import { TOOLBAR_HEIGHT } from "../src/previewdef/toolbarparts";
 import {
 	EventGraphEdge,
 	EventGraphEventNode,
@@ -62,11 +69,6 @@ const hoverPictureClass = "event-hover-picture";
 // The same, for the effects panel.
 const effectTooltipClass = "ev-effects-tip";
 
-// Mirrors toolbarHeight in src/previewdef/event/contentbuilder.ts, which is what actually sizes
-// the strip. Change one and the other has to follow, or the popup clamp and the zoom offset below
-// stop matching where the toolbar really ends.
-const toolbarHeight = 52;
-
 // The hover popups are appended to <body>, so they are placed in viewport coordinates by hand
 // rather than by the layout. The toolbar strip is drawn above them now, so anything they put under
 // it would simply be invisible: this keeps them clear of it instead.
@@ -76,7 +78,7 @@ const popupMargin = 4;
 
 const effectTooltipOptions: EffectTooltipOptions = {
 	className: effectTooltipClass,
-	toolbarHeight,
+	toolbarHeight: TOOLBAR_HEIGHT,
 	gap: 8,
 	margin: popupMargin,
 };
@@ -141,12 +143,7 @@ export function readFilters(stored: unknown): EventFilter[] {
 }
 
 // Empty by default: an opt-in filter must never hide anything the first time the preview is opened.
-//
-// This has to stay below `eventFilters`, not up with the other restored toggles: `readFilters` is
-// hoisted but the list it reads is not, so calling it earlier throws on the const in its temporal
-// dead zone and takes the whole module -- and with it the canvas -- down. The tests compile to
-// commonjs, where the same read is a property access that quietly answers `undefined`, so only the
-// bundled preview shows it.
+// It stays below `eventFilters` for the reason readFilterList gives.
 let filters: EventFilter[] = readFilters(getState().eventFilters);
 
 // One option is emitted as a node once per scope situation it is reached in, so it can have several
@@ -764,7 +761,7 @@ function showPictureWhenHoverElement(eventNode: HTMLDivElement) {
 		hoverElement.style.left =
 			position.left + window.scrollX - (pictureWidth * scale - position.width) / 2 + "px";
 		hoverElement.style.top =
-			clampBelowToolbar(position.top + position.height, toolbarHeight, popupMargin) +
+			clampBelowToolbar(position.top + position.height, TOOLBAR_HEIGHT, popupMargin) +
 			window.scrollY +
 			"px";
 		document.body.append(hoverElement);
@@ -831,12 +828,9 @@ window.addEventListener(
 		if (!contentElement) {
 			return;
 		}
-		enableZoom(contentElement, 0, toolbarHeight);
+		enableZoom(contentElement, 0, TOOLBAR_HEIGHT);
 
-		bindToggle("show-localisation", showLocalisation, (value) => {
-			showLocalisation = value;
-			setState({ showLocalisation: value });
-		});
+		bindLocalisationToggle(bindToggle, showLocalisation, (value) => (showLocalisation = value));
 		bindToggle("show-option-triggers", showOptionTriggers, (value) => {
 			showOptionTriggers = value;
 			setState({ showOptionTriggers: value });

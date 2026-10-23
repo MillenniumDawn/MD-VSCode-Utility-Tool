@@ -4,6 +4,7 @@ import { GridBoxItem } from '../../util/hoi4gui/gridboxcommon';
 import { MioTrait } from '../../previewdef/mio/schema';
 import { warningBoxClass, warningEntryClass } from '../../util/hoi4gui/warningstyles';
 import { traceDimClass, traceLineClass } from '../../util/hoi4gui/tracestyles';
+import { getState } from '../../../webviewsrc/util/common';
 
 function trait(id: string, x: number, y: number, allParents: string[] = []): MioTrait {
     return {
@@ -48,7 +49,6 @@ function installPayload(): void {
         slotsize: { width: { _value: 87 }, height: { _value: 117 } },
     };
     (global as any).window.xGridSize = 87;
-    (global as any).window.toolbarHeight = 52;
     (global as any).window.previewOptions = { 'mio.showGrid': true };
 }
 
@@ -372,6 +372,53 @@ describe('webview/miopreview rendering', () => {
             delete renderedTraits.constructor;
             await toggleGrid();
             takePostedMessages();
+        }
+    });
+
+    it('keeps a picked condition for the next session', async () => {
+        const conditions = document.getElementById('conditions')!;
+        const toggleFirst = async () => {
+            (document.querySelector('ul.select-dropdown li') as HTMLElement).click();
+            await settled();
+        };
+        conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+        try {
+            await toggleFirst();
+            assert.deepStrictEqual(getState().selectedExprs, [{ scopeName: 'ROOT', nodeContent: hostileCondition }]);
+        } finally {
+            await toggleFirst();
+            conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+            takePostedMessages();
+        }
+        assert.deepStrictEqual(getState().selectedExprs, []);
+    });
+
+    function pushUpdate(styleCss?: string): void {
+        window.dispatchEvent(new (window as any).MessageEvent('message', { data: { type: 'updateBody', styleCss, data: {} } }));
+    }
+
+    it('takes an update in place, with the stylesheet the host sends', async () => {
+        document.body.insertAdjacentHTML('beforeend', '<style id="mio-server-styles"></style>');
+        try {
+            pushUpdate('.mio-new {}');
+            await settled();
+
+            assert.strictEqual(document.getElementById('mio-server-styles')!.textContent, '.mio-new {}');
+            assert.deepStrictEqual(takePostedMessages(), []);
+            assert.strictEqual(placeholder().querySelectorAll('.trait').length, 3);
+        } finally {
+            document.getElementById('mio-server-styles')!.remove();
+        }
+    });
+
+    it('asks for a reload when the page on screen has no tree to update', () => {
+        const element = placeholder();
+        element.remove();
+        try {
+            pushUpdate();
+            assert.deepStrictEqual(takePostedMessages(), [{ command: 'reload' }]);
+        } finally {
+            document.getElementById('miopreviewcontent')!.appendChild(element);
         }
     });
 });

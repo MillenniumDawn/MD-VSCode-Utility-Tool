@@ -221,6 +221,7 @@ interface FoundFile {
 	fsPath: string;
 }
 
+// Not pathIdentity: a backslash in a real path off Windows is part of a folder's name.
 function normalizeRealPath(realPath: string): string {
 	// realpath canonicalises the casing of the segments it resolves, but not the drive letter, which
 	// varies with how the path was typed into the setting.
