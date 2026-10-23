@@ -27,7 +27,7 @@ import { FocusItemLayout, FocusShortcutGui, FocusTreeLayout, focusTreeGridBoxFor
 import { describeParseFailure } from "../../util/indexHalf";
 import { actionGroupHtml, iconButtonHtml, iconClassOf } from "../toolbaricons";
 import { Logger } from "../../util/logger";
-import { TOOLBAR_HEIGHT, toolbarWrapper, traceStatusHtml, warningPanelHtml } from "../toolbarparts";
+import { TOOLBAR_HEIGHT, toolbarWrapper, traceStatusHtml, warningPanelHtml, searchHtml } from "../toolbarparts";
 import { spriteIconStyle } from "../iconstyle";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
@@ -275,12 +275,21 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
     // can still attach classes against after a render. See tracestyles.ts.
     registerTraceStyles(styleTable, 'focustreeplaceholder');
 
-    // The search highlight. Same id-prefixed `raw` trick as the trace styles: the webview attaches
-    // this class after a render, so the rule has to exist in the shell stylesheet, and the id keeps
-    // it ahead of the node's own classes without reaching for !important.
-    styleTable.raw(`#focustreeplaceholder .focus-search-hit`, `
-        outline: 1px solid #E33;
-        background: rgba(255, 0, 0, 0.5);
+    // The webview attaches search classes after a render, so their styles live in the shell.
+    styleTable.raw(`#focustreeplaceholder .focus.ev-hit`, `
+        outline: 1px solid var(--vscode-editor-findMatchHighlightBorder, #E33);
+        background: var(--vscode-editor-findMatchHighlightBackground, rgba(255, 0, 0, 0.33));
+    `);
+    styleTable.raw(`#focustreeplaceholder .focus.ev-hit-current`, `
+        outline: 2px solid var(--vscode-editor-findMatchBorder, #E33);
+        background: var(--vscode-editor-findMatchBackground, rgba(255, 0, 0, 0.5));
+    `);
+    styleTable.raw(`#focus-search-count`, `
+        align-self: center;
+        min-width: 5em;
+        margin-right: 12px;
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
     `);
 
     // Set by the webview while the continuous focus box can be dragged.
@@ -339,13 +348,12 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             </select>
         </div>`;
 
-    const searchbox = `
-        <label for="searchbox" class="${styleTable.style('searchboxLabel', () => `margin-right:5px`)}">${localize('focustree.search', 'Search: ')}</label>
-        <input
-            class="${styleTable.style('searchbox', () => `margin-right:10px`)}"
-            id="searchbox"
-            type="text"
-        />`;
+    const searchbox = searchHtml(
+        styleTable.style('searchboxLabel', () => `margin-right:5px`),
+        "focus",
+        localize('focustree.search', 'Search: '),
+        styleTable.style('searchbox', () => `margin-right:10px`),
+    );
 
     const customTitlebars = !flags.hasCustomTitlebar ? '' : `
         <div class="${styleTable.style('customTitlebarsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
