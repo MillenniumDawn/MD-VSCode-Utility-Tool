@@ -21,6 +21,7 @@ v1.1.43
 - [ Focus Tree Previewer ] Editing an inlay window's `.gui` file, or adding its missing sprite to a `.gfx` file, now refreshes an open focus tree. Before, the preview kept the old window until the focus file itself changed. Issue #608.
 - [ DDS ] Legacy textures with unused bits before their color channels now show the correct colors. Issue #530.
 - [ Cleanup ] The previews take their toolbar height from one place instead of four. Issue #557.
+- [ Cleanup ] Parent mods, the mod registry and the index cache now share one rule for when two spellings of a path are the same folder. Issue #558.
 - [ Testing ] Keep registry publishing tokens off the command line. Issue #578.
 
 v1.1.42
