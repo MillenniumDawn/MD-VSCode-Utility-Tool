@@ -450,46 +450,16 @@ function getChannelReader(
 		};
 	}
 
-	if (pixelFormat.bitsPerPixel % 32 === 0) {
+	for (const View of [Uint32Array, Uint16Array, Uint8Array]) {
+		const bits = View.BYTES_PER_ELEMENT * 8;
 		if (
-			pixelFormat.channelLengthInPixel.every((p) => p === 32) &&
-			pixelFormat.channelStartInPixel.every((s) => s % 32 === 0)
+			pixelFormat.bitsPerPixel % bits === 0 &&
+			pixelFormat.channelLengthInPixel.every((p) => p === bits) &&
+			pixelFormat.channelStartInPixel.every((s) => s % bits === 0)
 		) {
 			return {
 				reader: wholeElementReader,
-				readerState: new Uint32Array(
-					inputBuffer,
-					inputBufferOffset,
-					length >> 2,
-				),
-			};
-		}
-	}
-
-	if (pixelFormat.bitsPerPixel % 16 === 0) {
-		if (
-			pixelFormat.channelLengthInPixel.every((p) => p === 16) &&
-			pixelFormat.channelStartInPixel.every((s) => s % 16 === 0)
-		) {
-			return {
-				reader: wholeElementReader,
-				readerState: new Uint16Array(
-					inputBuffer,
-					inputBufferOffset,
-					length >> 1,
-				),
-			};
-		}
-	}
-
-	if (pixelFormat.bitsPerPixel % 8 === 0) {
-		if (
-			pixelFormat.channelLengthInPixel.every((p) => p === 8) &&
-			pixelFormat.channelStartInPixel.every((s) => s % 8 === 0)
-		) {
-			return {
-				reader: wholeElementReader,
-				readerState: new Uint8Array(inputBuffer, inputBufferOffset, length),
+				readerState: new View(inputBuffer, inputBufferOffset, length / View.BYTES_PER_ELEMENT),
 			};
 		}
 	}
