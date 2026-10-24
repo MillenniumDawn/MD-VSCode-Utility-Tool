@@ -4,6 +4,7 @@ Unreleased
 - [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
 
   Bugfixes:
+- [ CI ] Version checks now update their existing note even on pull requests with more than 30 comments, and workflow checkouts no longer retain their credentials. Issue #564.
 - [ Previews ] Opening a mod workspace with only MIO organization files or `.gui` files under `interface/` now activates the preview button without opening another file first. Issue #481.
 - [ CI ] The release workflow now gives the registry tokens only to the publish step, and no longer mistakes a fork's pull request for its own release or fix pull request. Issues #573, #574.
 - [ Previews ] The idea, decision, event and character previews now refresh when you edit a `.gfx` file they use. The MIO preview now refreshes when an organization file is added or removed. Issues #479, #544.
