@@ -26,6 +26,7 @@ jobs:
         with:
           # The base branch and the release tags both have to be readable.
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
@@ -34,7 +35,9 @@ jobs:
         # Advisory only: a branch does not have to bump anything, because a release pull request is
         # opened after the merge. The note is posted on the pull request and the job stays green.
         continue-on-error: true
-        run: node scripts/check-version.js --base-ref "origin/${{ github.base_ref }}"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node scripts/check-version.js --base-ref "origin/$BASE_REF"
       # A pull request from a fork gets a read-only token, so the comment is skipped there and the
       # step summary carries the message instead.
       - name: Comment on the pull request
@@ -45,7 +48,8 @@ jobs:
         run: |
           body=$(cat version-check-message.md)
           marker="<!-- version-check -->"
-          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --jq \
+          comments="repos/$GITHUB_REPOSITORY/issues/$PR/comments"
+          existing=$(gh api "$comments" --paginate --jq \
             ".[] | select(.body | contains(\"$marker\")) | .id" | head -1)
           printf '%s\n\n%s\n' "$marker" "$body" > comment.md
           if [ -n "$existing" ]; then
