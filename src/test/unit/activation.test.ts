@@ -7,12 +7,12 @@ const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../../..
 
 describe("package.json activationEvents", () => {
 	for (const [type, files] of Object.entries(previewFiles) as [string, PreviewFiles][]) {
-		it(`activates a workspace containing ${type} files in their game folder`, () => {
+		it(`activates ${type} game folders at the workspace root or below it`, () => {
 			const pattern = files.folder
 				? files.folder.map((segment) => segment === "*" ? `*${files.extension}` : segment).join("/")
 				: `interface/**/*${files.extension}`;
 			assert.ok(
-				manifest.activationEvents.includes(`workspaceContains:${pattern}`),
+				manifest.activationEvents.includes(`workspaceContains:**/${pattern}`),
 				`the ${type} preview has no activation event for ${pattern}`,
 			);
 		});

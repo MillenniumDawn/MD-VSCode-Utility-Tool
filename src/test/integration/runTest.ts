@@ -7,10 +7,23 @@ import { runTests } from "@vscode/test-electron";
 // .github/workflows/test.yml hashes this file, so moving the pin is what fetches a new build.
 const version = "1.138.0";
 const launchArgs = ["--disable-extensions"];
+const previewFiles = [
+	"common/national_focus/sov.txt",
+	"common/characters/sov.txt",
+	"common/bop/sov.txt",
+	"common/decisions/sov.txt",
+	"common/ideas/sov.txt",
+	"common/military_industrial_organization/organizations/sov.txt",
+	"common/technologies/sov.txt",
+	"events/sov.txt",
+	"interface/sub/sov.gfx",
+	"interface/sub/sov.gui",
+	"map/default.map",
+];
 const fixtures = [
-	{ file: "common/military_industrial_organization/organizations/sov_mio.txt", expectsActive: "yes" },
-	{ file: "interface/sov_gui.gui", expectsActive: "yes" },
+	...["mods/example/", ""].flatMap(prefix => previewFiles.map(file => ({ file: prefix + file, expectsActive: "yes" }))),
 	{ file: "scratch/sov_notes.md", expectsActive: "no" },
+	{ file: "mods/example/scratch/sov_notes.txt", expectsActive: "no" },
 ];
 
 async function main(): Promise<void> {
@@ -31,6 +44,7 @@ async function main(): Promise<void> {
 			fs.mkdirSync(path.dirname(filePath), { recursive: true });
 			fs.writeFileSync(filePath, "");
 			try {
+				console.log(`Checking automatic activation for ${fixture.file}`);
 				await runTests({
 					version,
 					extensionDevelopmentPath,
