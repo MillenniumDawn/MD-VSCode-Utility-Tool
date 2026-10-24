@@ -26,9 +26,9 @@ function filterChange(text: string) {
 // In-place update pushed by UpdateablePreviewBase when the .gfx file changed: swap only the sprite
 // list markup, so the filter bar, scroll and the filter input's listeners survive. The fresh nodes
 // need their .navigator click handlers re-bound and the current filter re-applied.
-onUpdateBody({ contentIds: ["gfx-image-list"], styleId: "gfx-server-styles" }, (data) => {
+onUpdateBody<[HTMLElement]>({ contentIds: ["gfx-image-list"], styleId: "gfx-server-styles" }, (data, [list]) => {
 	if (typeof data.contentHtml === "string") {
-		(document.getElementById("gfx-image-list") as HTMLDivElement).innerHTML = data.contentHtml;
+		list.innerHTML = data.contentHtml;
 		subscribeNavigators();
 		filterChange(getState().filter || "");
 	}

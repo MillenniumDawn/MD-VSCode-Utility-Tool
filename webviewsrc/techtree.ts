@@ -83,9 +83,7 @@ function labelForTag(tag: string): string {
 // <option> list), not data globals. The folder selector and name-mode dropdowns live in the fixed
 // toolbar OUTSIDE #techtreecontent, so their load-time change listeners are untouched and never rebind;
 // only #techtreecontent's inner markup is replaced.
-onUpdateBody({ contentIds: ['techtreecontent', 'folderSelector'], styleId: 'tech-server-styles' }, data => {
-    const contentElement = document.getElementById('techtreecontent') as HTMLDivElement;
-    const folderSelect = document.getElementById('folderSelector') as HTMLSelectElement;
+onUpdateBody<[HTMLDivElement, HTMLSelectElement]>({ contentIds: ['techtreecontent', 'folderSelector'], styleId: 'tech-server-styles' }, (data, [contentElement, folderSelect]) => {
     const folders: string[] = Array.isArray(data.folders) ? data.folders : [];
 
     // Before any folderChange below, so the re-list it does sees the new lists: an edit can add a

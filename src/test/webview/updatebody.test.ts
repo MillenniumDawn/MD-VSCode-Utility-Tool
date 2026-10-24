@@ -109,13 +109,15 @@ describe("webview/util/updatebody", () => {
 
 	describe("onUpdateBody", () => {
 		let received: Record<string, any>[] = [];
+		let receivedIds: string[][] = [];
 		let failure: Error | undefined;
 		let pageListeners: EntrypointListeners;
 
 		before(() => {
 			pageListeners = loadEntrypoint(() =>
-				onUpdateBody({ contentIds: ["testcontent", "testselect"], styleId: "test-server-styles" }, (data) => {
+				onUpdateBody({ contentIds: ["testcontent", "testselect"], styleId: "test-server-styles" }, (data, elements) => {
 					received.push(data);
+					receivedIds.push(elements.map((element) => element.id));
 					return failure ? Promise.reject(failure) : undefined;
 				}),
 			).listeners;
@@ -126,6 +128,7 @@ describe("webview/util/updatebody", () => {
 
 		beforeEach(() => {
 			received = [];
+			receivedIds = [];
 			failure = undefined;
 		});
 
@@ -144,10 +147,11 @@ describe("webview/util/updatebody", () => {
 			assert.deepStrictEqual(takeRuntimeErrors(), [failure]);
 		});
 
-		it("hands over the whole data block when every element it needs is there", () => {
+		it("hands over the whole data block and the elements it needs, in the order it named them", () => {
 			document.body.insertAdjacentHTML("beforeend", `<select id="testselect"></select>`);
 			push({ contentHtml: "<p></p>" });
 			assert.deepStrictEqual(received, [{ contentHtml: "<p></p>" }]);
+			assert.deepStrictEqual(receivedIds, [["testcontent", "testselect"]]);
 		});
 
 		it("asks for a reload instead when any one of them is missing", () => {
