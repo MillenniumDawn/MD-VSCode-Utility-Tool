@@ -36,6 +36,7 @@ Code stub. Webview tests use jsdom, not Chromium.
 ## Types, coverage, and the shipped webview code
 
 ```sh
+npx --no-install tsc --noEmit -p tsconfig.json
 npm run compile-ts
 npm run test:coverage
 node scripts/diff-coverage.js --base origin/main...HEAD --min 80
@@ -43,9 +44,12 @@ npm run package
 npm run smoke:webviews
 ```
 
-`compile-ts` type-checks the extension's production TypeScript project, but it also emits JavaScript
-and declaration files into `out/`, so it is not a check-only command. CI does not run it. CI
-type-checks that project in the ts-loader step of the webpack build behind `npm run package`.
+`tsc --noEmit -p tsconfig.json` checks the production TypeScript project without writing files.
+PR and release verification run this check once. Webpack only transpiles TypeScript, so neither
+`npm run webpack` nor `npm run package` replaces this check.
+
+`compile-ts` also checks the production project, but emits JavaScript and declaration files into
+`out/`. CI uses the no-emit command instead.
 
 `test:coverage` compiles and runs the normal unit and jsdom suites through c8. Thresholds are
 configured in `package.json`. The changed-line command checks the generated `coverage/lcov.info`

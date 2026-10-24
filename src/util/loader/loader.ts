@@ -8,7 +8,7 @@ import {
 import { error } from "../debug";
 import { mapLimit, UserError } from "../common";
 import { Dependency, getDependenciesFromText } from "../dependency";
-export { Dependency } from "../dependency";
+export type { Dependency } from "../dependency";
 
 export class LoaderSession {
 	private loadedLoader: Set<Loader<unknown, unknown>> = new Set();
