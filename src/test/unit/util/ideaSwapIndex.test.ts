@@ -283,13 +283,84 @@ describe("util/ideaSwapIndex", () => {
 	it("serves a warm build from the disk cache without reading the file again", async () => {
 		world.useDisk();
 		assert.deepStrictEqual(await swapFiles(), [SWAP_FILE]);
+		await world.drainCacheWrites();
 		const cache = world.cacheFile("ideaSwapIndex.workspace.manifest.json");
-		for (let i = 0; i < 100 && !world.disk.has(cache); i++) {
-			await settle();
-		}
+		assert.ok(world.disk.has(cache), "expected the manifest on the disk after the drain");
 		const reads = world.reads;
 		__resetIdeaSwapIndexForTests();
 		assert.deepStrictEqual(await swapFiles(), [SWAP_FILE]);
 		assert.strictEqual(world.reads, reads);
+	});
+
+	// A warm build must replace what the cache says about a file whose mtime moved, keep the
+	// still-fresh files it can restore without re-reading them, and drop a file that has been
+	// deleted -- rather than serving stale swaps or throwing the whole cache away.
+	describe("stale cache hydrate", () => {
+		const FRESH = "common/national_focus/fresh.txt";
+		const STALE = "common/national_focus/stale.txt";
+		const GONE = "common/national_focus/gone.txt";
+
+		function swapFile(from: string, to: string): Buffer {
+			return Buffer.from(
+				`focus = { completion_reward = { swap_ideas = { remove_idea = ${from} add_idea = ${to} } } }`,
+			);
+		}
+
+		beforeEach(() => {
+			world.useDisk();
+			world.list = (root, half) =>
+				half === "workspace" && root === "common"
+					? listed(["national_focus/fresh.txt", "national_focus/stale.txt", "national_focus/gone.txt"])
+					: [];
+			world.read = (relativePath) => {
+				switch (relativePath) {
+					case FRESH:
+						return swapFile("a", "b");
+					case STALE:
+						return swapFile("c", "d");
+					case GONE:
+						return swapFile("e", "f");
+					default:
+						throw new Error("no such file " + relativePath);
+				}
+			};
+		});
+
+		it("re-parses a stale file and restores the fresh ones from the cache", async () => {
+			assert.deepStrictEqual(
+				(await getIdeaSwaps(["a", "c", "e"])).map((found) => [found.from, found.to, found.file]),
+				[
+					["a", "b", FRESH],
+					["c", "d", STALE],
+					["e", "f", GONE],
+				],
+			);
+			await world.drainCacheWrites();
+			const readsBeforeWarmBuild = world.reads;
+
+			// One edit moved a file's mtime, and another file has since been deleted.
+			world.list = (root, half) =>
+				half === "workspace" && root === "common"
+					? [...listed(["national_focus/fresh.txt"], 1), ...listed(["national_focus/stale.txt"], 2)]
+					: [];
+			const parsed: string[] = [];
+			world.read = (relativePath) => {
+				parsed.push(relativePath);
+				return swapFile("c", "d2");
+			};
+
+			__resetIdeaSwapIndexForTests();
+			assert.deepStrictEqual(
+				(await getIdeaSwaps(["a", "b", "c", "d", "e", "f", "d2"])).map((found) => [found.from, found.to, found.file]),
+				[
+					// The still-fresh file kept its cached swaps without being read again.
+					["a", "b", FRESH],
+					// The stale file's cached swaps are gone, and the re-parsed ones stand in.
+					["c", "d2", STALE],
+				],
+			);
+			assert.deepStrictEqual(parsed, [STALE]);
+			assert.strictEqual(world.reads - readsBeforeWarmBuild, 1);
+		});
 	});
 });
