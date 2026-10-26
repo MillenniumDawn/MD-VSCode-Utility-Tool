@@ -468,10 +468,14 @@ focus_tree = {
 			focusBlock("row_b_first", 0, 1),
 			focusBlock("row_a_second", 1, 0),
 			focusBlock("row_b_second", 1, 1),
+			focusBlock("row_a_third", 2, 0),
+			focusBlock("row_b_third", 2, 1),
 		);
 		assert.deepStrictEqual(warningTexts(content), [
 			"Focuses row_a_first and row_a_second are less than 2 apart on the same row, so their icons overlap.",
 			"Focuses row_b_first and row_b_second are less than 2 apart on the same row, so their icons overlap.",
+			"Focuses row_a_second and row_a_third are less than 2 apart on the same row, so their icons overlap.",
+			"Focuses row_b_second and row_b_third are less than 2 apart on the same row, so their icons overlap.",
 		]);
 	});
 
