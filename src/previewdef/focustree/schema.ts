@@ -1280,20 +1280,31 @@ function validateFocusLayoutOfFile(
 
 	// Focus icons span two grid columns, so the remaining same-row pairs need at least two X
 	// units between them or the sprites overlap. Same-position pairs are covered by the stacks.
+	// Keep row members in entry order so warnings retain the original outer-i/inner-j order.
+	const entriesByY = new Map<number, Array<{ entry: (typeof entries)[number]; index: number }>>();
+	for (let index = 0; index < entries.length; index++) {
+		const entry = entries[index];
+		if (entry === undefined || Number.isNaN(entry.position.y)) {
+			continue;
+		}
+		const row = entriesByY.get(entry.position.y);
+		if (row === undefined) {
+			entriesByY.set(entry.position.y, [{ entry, index }]);
+		} else {
+			row.push({ entry, index });
+		}
+	}
 	for (let i = 0; i < entries.length; i++) {
 		const entryA = entries[i];
 		if (entryA === undefined) {
 			continue;
 		}
-		for (let j = i + 1; j < entries.length; j++) {
-			const entryB = entries[j];
-			if (entryB === undefined) {
-				continue;
-			}
-			if (
-				entryA.position.y !== entryB.position.y ||
-				entryA.position.x === entryB.position.x
-			) {
+		const row = entriesByY.get(entryA.position.y);
+		if (row === undefined) {
+			continue;
+		}
+		for (const { entry: entryB, index: j } of row) {
+			if (j <= i || entryA.position.x === entryB.position.x) {
 				continue;
 			}
 			if (
