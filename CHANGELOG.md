@@ -28,6 +28,7 @@ v1.1.43
 - [ Cleanup ] The previews' dropdowns, the focus tree and MIO condition lists, and the in-place refresh of the MIO, technology and GFX previews each have one implementation instead of several. Issue #491.
 - [ Cleanup ] The GFX, shared focus, localisation and idea swap indexes are built and kept up to date by one shared routine instead of four copies. A game `.gfx` file that fails to parse is now labeled `[Vanilla]` in the output, not `[Mod]`. Issue #489.
 - [ Testing ] The GFX, shared focus and localisation index tests run without the editor and share one setup, and the behavior every index shares is tested once for all four. Issue #567.
+- [ Testing ] File discovery and release-history tests now share their setup, and all idea swap tests run without the editor.
 - [ Testing ] Keep registry publishing tokens off the command line. Issue #578.
 
 v1.1.42

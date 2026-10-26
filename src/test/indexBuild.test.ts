@@ -8,24 +8,7 @@ import { CancelledError } from "../util/common";
 import { describeLiveIndexBuilds, IndexTimer } from "../util/indexCache";
 import { Logger } from "../util/logger";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
-
-function deferred<T>(): {
-	promise: Promise<T>;
-	resolve: (value: T) => void;
-	reject: (reason: unknown) => void;
-} {
-	let resolve!: (value: T) => void;
-	let reject!: (reason: unknown) => void;
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res;
-		reject = rej;
-	});
-	return { promise, resolve, reject };
-}
-
-function waitForAsyncTasks(): Promise<void> {
-	return new Promise((resolve) => setImmediate(resolve));
-}
+import { deferred, settle as waitForAsyncTasks } from "./unit/async";
 
 describe("util/indexBuild createIndexBuilder", function () {
 	let logs: string[];
