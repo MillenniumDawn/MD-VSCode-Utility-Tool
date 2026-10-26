@@ -1,7 +1,6 @@
 import { HOIDecision, HOIDecisionFile, getDecisionsFromFile } from "../decision/schema";
 import { listFilesFromModOrHOI4, parseHoi4FileCached, readFileFromModOrHOI4 } from "../../util/fileloader";
-import { Logger } from "../../util/logger";
-import { describeParseFailure } from "../../util/indexHalf";
+import { describeParseFailure, Logger } from "../../util/logger";
 
 export const decisionsFolder = "common/decisions";
 

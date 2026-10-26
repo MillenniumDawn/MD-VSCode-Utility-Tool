@@ -6,6 +6,7 @@ import {
 } from '../util/loader/loader';
 import { UserError } from '../util/common';
 import * as fileloader from '../util/fileloader';
+import { deferred } from './unit/async';
 
 // RecordingLoader counts loadImpl calls and can stall mid-load so concurrent load() calls
 // overlap in the dedup window.
@@ -30,12 +31,6 @@ class RecordingLoader extends Loader<{ id: number }> {
         }
         return { result: { id: 1 }, dependencies: [] };
     }
-}
-
-function deferred<T>(): { promise: Promise<T>; resolve(v: T): void } {
-    let resolve: (v: T) => void = () => undefined;
-    const promise = new Promise<T>(r => { resolve = r; });
-    return { promise, resolve };
 }
 
 describe('util/loader/loader', () => {

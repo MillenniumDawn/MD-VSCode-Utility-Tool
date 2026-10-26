@@ -1,6 +1,17 @@
 import type * as vscode from 'vscode';
 import { host } from './host';
 
+export function describeParseFailure(cause: unknown): string {
+    if (cause instanceof Error) {
+        return cause.stack || cause.message;
+    }
+    try {
+        return String(cause);
+    } catch {
+        return Object.prototype.toString.call(cause);
+    }
+}
+
 enum LogLevel {
     DEBUG = 'DEBUG',
     INFO = 'INFO',
