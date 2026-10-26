@@ -9,9 +9,8 @@ import {
 	parseAndResolveHoi4FileCached,
 	readFileFromModOrHOI4,
 } from "./fileloader";
-import { describeParseFailure } from "./indexHalf";
 import { localize } from "./i18n";
-import { Logger } from "./logger";
+import { describeParseFailure, Logger } from "./logger";
 
 // Finding a `containerwindowtype` by the name a script refers to it by. A focus inlay window and a
 // decision category's `scripted_gui` both name a window and leave the reader to find it, and the

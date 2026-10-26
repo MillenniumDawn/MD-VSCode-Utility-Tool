@@ -16,6 +16,7 @@ import {
 	__resetSharedFocusIndexForTests,
 } from "../util/sharedFocusIndex";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
+import { settle as waitForAsyncTasks } from "./unit/async";
 
 type FileloaderModule = {
 	listFileEntriesFromModOrHOI4: (
@@ -32,10 +33,6 @@ type FileloaderModule = {
 };
 
 const fileloader = require("../util/fileloader") as FileloaderModule;
-
-function waitForAsyncTasks(): Promise<void> {
-	return new Promise((resolve) => setImmediate(resolve));
-}
 
 describe("util index registration failure path", function () {
 	let logs: string[];

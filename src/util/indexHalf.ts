@@ -14,7 +14,7 @@ import { IndexFile, IndexListing, toIndexFiles } from "./indexListing";
 import { FileSourceOptions, readFileFromModOrHOI4 } from "./fileloader";
 import { createTimeSlicer } from "./common";
 import { localize } from "./i18n";
-import { Logger } from "./logger";
+import { describeParseFailure, Logger } from "./logger";
 import {
 	captureModDependencySnapshot,
 	isModDependencyGenerationCurrent,
@@ -271,29 +271,6 @@ export async function readIndexFileContent(
 	} catch (e) {
 		Logger.warn(`${indexName}: can't read ${file.path}: ${e}`);
 		return undefined;
-	}
-}
-
-/**
- * The detail half of a parse-failure log line: the stack where there is one, and something
- * printable in every other case, including a thrown value whose own toString throws.
- *
- * The four indexes each had their own version of this -- one preferred the stack, one logged only
- * the message, one wrapped the whole thing in a UserError and sent it to the debug console, where
- * it never reached the output channel at all. The wording around it stays with each index, because
- * that part is localised and user-facing; only the awkward part is shared.
- */
-export function describeParseFailure(cause: unknown): string {
-	if (cause instanceof Error) {
-		// `||`, not `??`: an Error can carry an empty-string stack, and reporting nothing at all
-		// would be worse than reporting the message.
-		return cause.stack || cause.message;
-	}
-
-	try {
-		return String(cause);
-	} catch {
-		return Object.prototype.toString.call(cause);
 	}
 }
 

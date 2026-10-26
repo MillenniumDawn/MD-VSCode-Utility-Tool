@@ -5,21 +5,7 @@ import { createIndexWatchers } from "../util/indexWatchers";
 import { publishParentMods, resetParentModsForTest } from "../util/parentmods";
 import { createBuildGate } from "../util/promiseUtils";
 import { stubVscode, restoreVscodeStubs } from "./_vscode_stub";
-
-function deferred(): {
-	promise: Promise<void>;
-	resolve: () => void;
-} {
-	let resolve!: () => void;
-	const promise = new Promise<void>((res) => {
-		resolve = () => res();
-	});
-	return { promise, resolve };
-}
-
-function waitForAsyncTasks(): Promise<void> {
-	return new Promise((resolve) => setImmediate(resolve));
-}
+import { deferred, settle as waitForAsyncTasks } from "./unit/async";
 
 function fileUri(relative: string): vscode.Uri {
 	return vscode.Uri.file(`/workspace/${relative}`);
@@ -29,7 +15,7 @@ describe("util/indexWatchers folder-change rebuild", function () {
 	let resets: number;
 	let rebuilds: number;
 	let removed: string[];
-	let rebuild: ReturnType<typeof deferred>;
+	let rebuild: ReturnType<typeof deferred<void>>;
 	let started: boolean;
 	let gate: ReturnType<typeof createBuildGate>;
 	let handlers: ReturnType<typeof createIndexWatchers>["handlers"];

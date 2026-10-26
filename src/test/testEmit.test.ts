@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
+import { walkFiles } from './unit/files';
 
 // c8 runs with `all: true` over out-test/src/**, which only reports what tsc actually emitted.
 // A source file that no test imports used to be left out of the emit and vanish from the
@@ -11,24 +12,10 @@ const repoRoot = path.join(__dirname, '..', '..', '..');
 const sourceRoot = path.join(repoRoot, 'src');
 const emitRoot = path.join(repoRoot, 'out-test', 'src');
 
-function shippedSources(dir: string): string[] {
-    const files: string[] = [];
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-            if (full !== path.join(sourceRoot, 'test')) {
-                files.push(...shippedSources(full));
-            }
-        } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
-            files.push(full);
-        }
-    }
-    return files;
-}
-
 describe('test emit', () => {
     it('emits every shipped source under src/ into out-test', () => {
-        const sources = shippedSources(sourceRoot);
+        const sources = walkFiles(sourceRoot, file => file.endsWith('.ts') && !file.endsWith('.d.ts'),
+            [path.join(sourceRoot, 'test')]);
         assert.ok(sources.length > 0, 'no sources found under src/');
 
         const missing = sources

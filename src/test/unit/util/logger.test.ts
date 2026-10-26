@@ -3,7 +3,7 @@ import { mock } from "node:test";
 import { UserError } from "../../../util/common";
 import { error } from "../../../util/debug";
 import * as loggerModule from "../../../util/logger";
-import { Logger } from "../../../util/logger";
+import { describeParseFailure, Logger } from "../../../util/logger";
 import { fresh, handOver } from "../host";
 
 interface Channel {
@@ -31,6 +31,45 @@ function channels(): Channel[] {
 	});
 	return opened;
 }
+
+describe("util/logger describeParseFailure", () => {
+	it("logs stack for an Error that has a stack", () => {
+		const error = new Error("boom");
+		assert.ok(error.stack);
+		assert.strictEqual(describeParseFailure(error), error.stack);
+	});
+
+	for (const stack of [undefined, ""]) {
+		it(`falls back to message when an Error has ${stack === undefined ? "no" : "an empty"} stack`, () => {
+			const error = new Error("no-stack");
+			error.stack = stack;
+			assert.strictEqual(describeParseFailure(error), "no-stack");
+		});
+	}
+
+	const thrownValues: [string, unknown, string][] = [
+		["a thrown string", "plain old string", "plain old string"],
+		["thrown 42", 42, "42"],
+		["thrown null", null, "null"],
+		["thrown undefined", undefined, "undefined"],
+		["thrown 0", 0, "0"],
+		["a thrown object", { toString: () => "custom-obj" }, "custom-obj"],
+		["a thrown Symbol", Symbol("sym"), "Symbol(sym)"],
+	];
+	for (const [title, thrown, expected] of thrownValues) {
+		it(`logs String(e) for ${title}`, () => {
+			assert.strictEqual(describeParseFailure(thrown), expected);
+		});
+	}
+
+	it("falls back to Object.prototype.toString when String(e) throws", () => {
+		assert.strictEqual(describeParseFailure({
+			toString() {
+				throw new Error("inner");
+			},
+		}), "[object Object]");
+	});
+});
 
 describe("util/logger", () => {
 	beforeEach(() => mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 2, 3, 4, 5) }));
