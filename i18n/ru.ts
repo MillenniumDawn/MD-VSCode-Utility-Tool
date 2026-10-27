@@ -192,6 +192,8 @@ const table: Partial<typeof __table> = {
     "focustree.reload": "Перезагрузить",
     "focustree.resetcheckboxes": "Сбросить флажки фокусов",
     "focustree.search": "Поиск: ",
+    "focustree.searchmatches": "{0}/{1}",
+    "focustree.nomatches": "нет совпадений",
     "focustree.sharedfocuses": "<Общие фокусы>",
     "focustree.shortcuts.toggle": "Показать или скрыть ярлыки",
     "focustree.traceclear": "Прекратить отслеживание линий требований",

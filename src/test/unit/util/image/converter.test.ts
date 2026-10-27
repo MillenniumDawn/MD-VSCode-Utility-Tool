@@ -1,6 +1,9 @@
 import * as assert from "assert";
+import { mock } from "node:test";
 import { PNG } from "pngjs";
+import zlib from "zlib";
 import {
+	assertDecodablePng,
 	ddsToPng,
 	isPngBuffer,
 	pngToPng,
@@ -8,6 +11,7 @@ import {
 	tgaToPng,
 } from "../../../../util/image/converter";
 import { isUserError, makeDds, parseDds } from "../../dds";
+import { makeZeroPng, pngChunk, pngEnd, pngFile, pngHeader } from "../../png";
 
 const TGA = require("tga") as typeof import("tga");
 
@@ -91,6 +95,72 @@ describe("PNG reading", () => {
 	it("reports a broken PNG as bad input, not as a failure of the tool", () => {
 		assert.throws(() => pngToPng(png.subarray(0, 40)), isUserError(/^Unsupported png format: /));
 		assert.throws(() => pngToPng(Buffer.from("not a png at all")), isUserError(/^Unsupported png format: /));
+	});
+});
+
+describe("PNG memory bound", () => {
+	// pngjs inflates an interlaced image with no limit, so a spy on zlib shows whether a refusal
+	// came before the allocation or after it.
+	afterEach(() => mock.restoreAll());
+
+	const inflatedBytes = 8 * 1024 * 1024;
+	const rgba = Array.from({ length: 8 * 8 * 4 }, (_, i) => (i * 37) % 256);
+	const flat = makePng(8, 8, rgba);
+	const interlaced = makeZeroPng([pngHeader(16, 16, 1)], inflatedBytes);
+	// An 8x8 image of zeros (a filter byte and 32 pixel bytes a row), its data cut into three chunks.
+	const deflated = zlib.deflateSync(Buffer.alloc(8 * 33));
+	const idats = [deflated.subarray(0, 4), deflated.subarray(4, 8), deflated.subarray(8)].map((part) =>
+		pngChunk("IDAT", part),
+	);
+
+	it("is needed: pngjs inflates an interlaced 16x16 image to many times what it holds", () => {
+		const inflate = mock.method(zlib, "inflateSync");
+		assert.ok(interlaced.length < 64 * 1024);
+		assert.throws(() => PNG.sync.read(interlaced));
+		assert.strictEqual(inflate.mock.callCount(), 1);
+		assert.strictEqual(inflate.mock.calls[0]?.result?.length, inflatedBytes);
+	});
+
+	const refused: [name: string, file: Buffer, message: RegExp][] = [
+		["an interlaced PNG whose data inflates past its header", interlaced, /interlaced images are not supported/],
+		[
+			"a flat header followed by an interlaced one",
+			makeZeroPng([pngHeader(16, 16, 0), pngHeader(16, 16, 1)], inflatedBytes),
+			/header is repeated/,
+		],
+		[
+			"a header repeated after the pixel data",
+			pngFile(pngHeader(8, 8, 0), ...idats, pngHeader(8, 8, 1), pngEnd()),
+			/header is repeated/,
+		],
+		[
+			"a header over the size limit",
+			makeZeroPng([pngHeader(20000, 20000, 0)], 1024),
+			/PNG image size 20000x20000 exceeds the supported maximum/,
+		],
+		["no header", Buffer.from("not a png at all"), /header is missing/],
+		["a header cut before its last byte", interlaced.subarray(0, 28), /header is cut short/],
+	];
+	for (const [name, file, message] of refused) {
+		it(`refuses ${name} before inflating it`, () => {
+			const inflate = mock.method(zlib, "inflateSync");
+			assert.throws(() => assertDecodablePng(file), isUserError(message));
+			assert.throws(() => pngToPng(file), isUserError(message));
+			assert.strictEqual(inflate.mock.callCount(), 0);
+		});
+	}
+
+	it("reads the size of a flat PNG and decodes it to the pixels pngjs gives", () => {
+		assert.deepStrictEqual(assertDecodablePng(flat), { width: 8, height: 8 });
+		const decoded = pngToPng(flat);
+		assert.deepStrictEqual(decoded.data, Buffer.from(rgba));
+		assert.deepStrictEqual(decoded.data, PNG.sync.read(flat).data);
+	});
+
+	it("walks past every chunk of a PNG whose pixel data is split into several", () => {
+		const split = pngFile(pngHeader(8, 8, 0), ...idats, pngEnd());
+		assert.deepStrictEqual(assertDecodablePng(split), { width: 8, height: 8 });
+		assert.deepStrictEqual(pngToPng(split).data, Buffer.alloc(8 * 8 * 4));
 	});
 });
 

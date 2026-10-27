@@ -208,6 +208,8 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"focustree.reload": "Reload",
 	"focustree.resetcheckboxes": "Reset focus checkboxes",
 	"focustree.search": "Search: ",
+	"focustree.searchmatches": "{0}/{1}",
+	"focustree.nomatches": "no matches",
 	"focustree.sharedfocuses": "<Shared focuses>",
 	"focustree.shortcuts.toggle": "Show or hide the shortcuts",
 	"focustree.traceclear": "Stop tracing prerequisite lines",

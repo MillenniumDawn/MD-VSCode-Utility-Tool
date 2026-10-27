@@ -412,6 +412,18 @@ describe("webview entrypoints", () => {
 		});
 	});
 
+	for (const id of ["techtreecontent", "folderSelector"]) {
+		it(`asks the host to reload when the technology page has no #${id}`, () => {
+			installTechShell();
+			document.getElementById(id)!.remove();
+
+			withPosts((posts) => {
+				runMessage(techtree, { type: "updateBody", data: {} });
+				assert.deepStrictEqual(posts, [{ command: "reload" }]);
+			});
+		});
+	}
+
 	it("keeps the technology folder selection while replacing its content", () => {
 		installTechShell();
 		vscode.setState({ folder: "techfolder_a" });

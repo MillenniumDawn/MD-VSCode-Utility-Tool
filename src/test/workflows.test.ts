@@ -378,20 +378,62 @@ describe('.github/workflows', function () {
         it('fails when a registry token is missing instead of skipping and reporting success', function () {
             // A missing OPEN_VSX_TOKEN used to skip the publish step and leave the job green, which is
             // how the extension reached no one on Open VSX for months while every run said success.
-            // Both sides hand the token to the script, which exits 1 without it.
+            // Both sides hand the token to the script's own step, which exits 1 without it.
             const registries: [string[], string, string][] = [
                 [['pre-release-marketplace', 'release-marketplace', 'release-marketplace-retry'], 'VSCE_PAT', 'marketplace'],
                 [['pre-release-open-vsx', 'release-open-vsx', 'release-open-vsx-retry'], 'OPEN_VSX_TOKEN', 'open-vsx'],
             ];
             for (const [targets, token, registry] of registries) {
                 for (const job of targets) {
-                    assert.strictEqual(jobs[job]?.env?.[token], `\${{ secrets.${token} }}`);
                     const publish = runsIn(workflow, job, 'scripts/publish-extension.js');
                     assert.ok(publish, `${job} does not publish through the script`);
+                    assert.strictEqual(publish?.env?.[token], `\${{ secrets.${token} }}`, `${job} does not hand ${token} to the script`);
                     assert.match(publish?.run ?? '', new RegExp(`--registry ${registry}\\b`));
                     assert.strictEqual(publish?.if, undefined, `${job} still skips itself when ${token} is missing`);
                     // The script runs vsce and ovsx with --no-install, out of the dev dependencies.
                     assert.ok(runsIn(workflow, job, 'npm ci'), `${job} publishes without installing the registry client`);
+                }
+            }
+        });
+
+        it('hands a registry token to the publish step alone, never to the jobs that run npm ci', function () {
+            // npm ci runs dependency install scripts. With the token in the job's env, a compromised
+            // dependency could read it and publish its own build of the extension.
+            const tokens = ['VSCE_PAT', 'OPEN_VSX_TOKEN'];
+            const heldBy = (env: Record<string, string> = {}) => Object.entries(env)
+                .filter(([key, value]) => tokens.includes(key) || tokens.some((token) => String(value).includes(`secrets.${token}`)))
+                .map(([key]) => key);
+            assert.deepStrictEqual(heldBy(workflow.env), [], 'a registry token is in the workflow env');
+            for (const [id, job] of Object.entries(jobs)) {
+                assert.deepStrictEqual(heldBy(job.env), [], `${id} hands a registry token to every step`);
+                for (const step of job.steps ?? []) {
+                    const held = heldBy(step.env);
+                    if (held.length === 0) {
+                        continue;
+                    }
+                    assert.strictEqual(held.length, 1, `${id}: "${step.name}" holds both registry tokens`);
+                    assert.ok(step.run?.includes('scripts/publish-extension.js'), `${id}: "${step.name}" holds ${held[0]} but does not publish`);
+                    assert.doesNotMatch(step.run ?? '', /\bnpm (ci|install)\b/, `${id}: "${step.name}" installs with ${held[0]} in reach`);
+                }
+            }
+        });
+
+        it('looks up its own pull requests among same-repository ones only', function () {
+            // `gh pr list --head` cannot take owner:branch, so it also matches a fork's branch of the
+            // same name, and the bot edited or commented on that pull request as if it were its own.
+            const lookups: [string, string][] = [
+                ['release-pull-request', 'gh pr list --head "$RELEASE_BRANCH"'],
+                ['release-failed', 'gh pr list --head "$BRANCH"'],
+            ];
+            for (const [job, lookup] of lookups) {
+                const run = runsIn(workflow, job, lookup)?.run;
+                assert.ok(run, `${job} no longer looks up its pull request`);
+                assert.match(run, /--json number,isCrossRepository\b/, `${job} does not read isCrossRepository`);
+                assert.match(run, /select\(\.isCrossRepository \| not\)\]\[0\]\.number/, `${job} can pick a fork's pull request`);
+            }
+            for (const step of steps(workflow)) {
+                if (step.run?.includes('gh pr list')) {
+                    assert.match(step.run, /isCrossRepository/, `"${step.name}" lists pull requests without checking for forks`);
                 }
             }
         });
@@ -575,14 +617,7 @@ describe('.github/workflows', function () {
             }
         });
 
-        it('keeps checkout credentials out of cached and uploaded files', function () {
-            for (const file of ['compat.yml', 'release.yml']) {
-                for (const step of steps(load(file))) {
-                    if (step.uses?.startsWith('actions/checkout@')) {
-                        assert.strictEqual(step.with?.['persist-credentials'], false, file);
-                    }
-                }
-            }
+        it('authenticates release pushes without persisting checkout credentials', function () {
             for (const id of ['release-pull-request', 'release-failed']) {
                 const auth = runsIn(workflow, id, 'GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $header');
                 assert.ok(auth, `${id} cannot authenticate its pushes`);

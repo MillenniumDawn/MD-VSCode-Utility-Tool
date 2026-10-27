@@ -56,6 +56,7 @@ export class MioLoader extends ContentLoader<MioLoaderResult> {
                 ideaGFX,
                 exclusiveLinkGFX,
                 ...gfxDependencies,
+                `${mioOrgDir}/*`,
                 ...mioDependencies,
                 ...mergeInLoadResult(mioDepFiles, 'dependencies')
             ]),

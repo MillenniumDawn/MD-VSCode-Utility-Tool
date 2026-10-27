@@ -160,6 +160,23 @@ describe("util/nativewalk walkFilesWithMtime", function () {
 		assert.ok(warnings[0]!.includes("already walked"), warnings[0]);
 	});
 
+	it("keeps a folder named with a backslash apart from the nested folder it reads like", async function () {
+		if (isWindows) {
+			this.skip(); // a backslash is a separator there, not a name character
+		}
+		await writeFile(root, "a\\b/x.txt");
+		await writeFile(root, "a/b/y.txt");
+		const warnings: string[] = [];
+
+		const entries = await walkFilesWithMtime(root, {
+			recursively: true,
+			onWarning: (m) => warnings.push(m),
+		});
+
+		assert.deepStrictEqual(sorted(entries.map((e) => e.relativePath)), ["a/b/y.txt", "a\\b/x.txt"]);
+		assert.deepStrictEqual(warnings, []);
+	});
+
 	it("walks a directory reached through a link", async function () {
 		const outside = await fs.mkdtemp(path.join(os.tmpdir(), "hoi4walk-out-"));
 		try {

@@ -1,6 +1,6 @@
 import { tryRun, subscribeNavigators, initCommon, getState, setState } from "./util/common";
 import { applyNav } from "./util/card";
-import { gateToggle, toggleBinder } from "./util/toolbar";
+import { bindLocalisationToggle, gateToggle, toggleBinder } from "./util/toolbar";
 import { feLocalize } from "./util/i18n";
 import { wireUpdateBody } from "./util/updatebody";
 import { buildGuiFrame } from "./util/guiframe";
@@ -329,7 +329,7 @@ function fillDecisions(frame: HTMLElement, card: BopCard): void {
 			name.textContent = textFor(decision.name);
 		}
 		row.title = decision.id;
-		applyNav(row, decision.nav, true);
+		applyNav(row, decision.nav);
 	}
 }
 
@@ -342,7 +342,7 @@ function decisionList(card: BopCard): HTMLElement {
 		row.className = "bop-decision";
 		row.textContent = textFor(decision.name);
 		row.title = decision.id;
-		applyNav(row, decision.nav, true);
+		applyNav(row, decision.nav);
 		list.appendChild(row);
 	}
 	return list;
@@ -388,10 +388,7 @@ wireUpdateBody<BopPreviewPayload>({
 window.addEventListener(
 	"load",
 	tryRun(function () {
-		bindToggle("show-localisation", showLocalisation, (value) => {
-			showLocalisation = value;
-			setState({ showLocalisation: value });
-		});
+		bindLocalisationToggle(bindToggle, showLocalisation, (value) => (showLocalisation = value));
 		bindControls();
 		buildContent();
 	}),

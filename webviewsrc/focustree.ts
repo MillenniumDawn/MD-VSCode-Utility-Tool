@@ -38,8 +38,11 @@ import { GridBoxType } from "../src/hoiformat/gui";
 import { toNumberLike } from "../src/hoiformat/schema";
 import { feLocalize } from "./util/i18n";
 import { applyIconState } from "../src/previewdef/toolbaricons";
+import { TOOLBAR_HEIGHT } from "../src/previewdef/toolbarparts";
 import { Checkbox } from "./util/checkbox";
 import { vscode } from "./util/vscode";
+import { SearchBox } from "./util/searchbox";
+import { conditionDropdown, setConditionOptions } from "./util/conditiontree";
 
 // Shared with the MIO preview; re-exported so the focus tree tests reach them through this entry.
 export { applyPrerequisiteTrace } from "./util/trace";
@@ -71,45 +74,19 @@ function showBranch(visibility: boolean, optionClass: string) {
 	}
 }
 
-// The highlight used to be two inline style writes on every focus in the tree, on every keystroke.
-// Remembering which nodes carry it means a keystroke only touches the ones that actually changed.
-const searchHitClass = "focus-search-hit";
-let highlightedFocuses = new Set<HTMLDivElement>();
+const search = new SearchBox<HTMLDivElement>({
+	boxId: "focus-searchbox",
+	countId: "focus-search-count",
+	stateKey: "searchboxValue",
+	noMatchesKey: "focustree.nomatches",
+	countKey: "focustree.searchmatches",
+	navigateOnEdit: true,
+	matches: matchesFocusSearch,
+	target: (focus) => ({ id: focus.id, element: focus, highlight: focus }),
+});
 
-export function search(searchContent: string, navigate: boolean = true) {
-	const focuses = document.getElementsByClassName("focus");
-	const searchedFocus: HTMLDivElement[] = [];
-	const hits = new Set<HTMLDivElement>();
-	let navigated = false;
-	for (let i = 0; i < focuses.length; i++) {
-		const focus = focuses[i] as HTMLDivElement;
-		if (
-			searchContent &&
-			focus.id
-				.toLowerCase()
-				.replace(/^focus_/, "")
-				.includes(searchContent)
-		) {
-			hits.add(focus);
-			// delete() reports whether it was already highlighted, so what is left in
-			// highlightedFocuses afterwards is exactly the set that has to be cleared.
-			if (!highlightedFocuses.delete(focus)) {
-				focus.classList.add(searchHitClass);
-			}
-			if (navigate && !navigated) {
-				focus.scrollIntoView({ block: "center", inline: "center" });
-				navigated = true;
-			}
-			searchedFocus.push(focus);
-		}
-	}
-
-	for (const stale of highlightedFocuses) {
-		stale.classList.remove(searchHitClass);
-	}
-	highlightedFocuses = hits;
-
-	return searchedFocus;
+export function matchesFocusSearch(focus: HTMLDivElement, query: string): boolean {
+	return focus.id.toLowerCase().replace(/^focus_/, "").includes(query);
 }
 
 // Shift+click a focus to isolate its prerequisite lines. Set up once the shell has loaded.
@@ -470,18 +447,7 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 		}
 
 		if (conditions) {
-			conditions.select.innerHTML = `<span class="value"></span>
-                ${conditionExprs
-									.map(
-										(option) =>
-											`<div class="option" value="${escapeAttr(`${option.scopeName}!|${option.nodeContent}`)}">${option.scopeName ? `[${escapeAttr(option.scopeName)}]` : ""}${escapeAttr(option.nodeContent)}</div>`,
-									)
-									.join("")}`;
-			conditions.selectedValues$.next(
-				clearCondition
-					? []
-					: selectedExprs.map((e) => `${e.scopeName}!|${e.nodeContent}`),
-			);
+			setConditionOptions(conditions, conditionExprs, clearCondition ? [] : selectedExprs);
 		}
 
 		const inlayConditionContainerElement = document.getElementById(
@@ -493,17 +459,10 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 		}
 
 		if (inlayConditions) {
-			inlayConditions.select.innerHTML = `<span class="value"></span>
-                ${inlayConditionExprs
-									.map(
-										(option) =>
-											`<div class="option" value="${escapeAttr(`${option.scopeName}!|${option.nodeContent}`)}">${option.scopeName ? `[${escapeAttr(option.scopeName)}]` : ""}${escapeAttr(option.nodeContent)}</div>`,
-									)
-									.join("")}`;
-			inlayConditions.selectedValues$.next(
-				clearCondition
-					? []
-					: selectedInlayExprs.map((e) => `${e.scopeName}!|${e.nodeContent}`),
+			setConditionOptions(
+				inlayConditions,
+				inlayConditionExprs,
+				clearCondition ? [] : selectedInlayExprs,
 			);
 		}
 	} else {
@@ -919,7 +878,7 @@ function setupCheckedFocuses(focuses: Focus[], focusTree: FocusTree) {
 						window.scrollBy(newLeft - oldLeft, newTop - oldTop);
 					}
 
-					retriggerSearch();
+					refreshFocusSearch();
 				}));
 			} else {
 				checkbox.parentElement?.remove();
@@ -997,7 +956,7 @@ function renderInlayWindows(
 	return selectedInlayWindow.scriptedImages.reduce((content, slot) => {
 		const activeOption = getActiveInlayOption(slot.gfxOptions, exprs);
 		return content
-			.split(`{{inlay_slot_class:${slot.id}}}`)
+			.split(`{{inlay_slot_class:${encodeURIComponent(slot.id)}}}`)
 			.join(
 				activeOption
 					? getInlayGfxClassName(activeOption.gfxName, activeOption.gfxFile)
@@ -1029,7 +988,12 @@ function getInlayGfxClassName(
 	);
 }
 
-let retriggerSearch: () => void = () => {};
+function refreshFocusSearch(): void {
+	const visibleFocuses = Array.from(
+		document.getElementsByClassName("focus"),
+	).filter((element) => (element as HTMLDivElement).style.display !== "none") as HTMLDivElement[];
+	search.refresh(visibleFocuses);
+}
 
 window.addEventListener("message", tryRun(async (event) => {
 	const msg = event.data;
@@ -1076,7 +1040,7 @@ window.addEventListener("message", tryRun(async (event) => {
 
 	updateSelectedFocusTree(false);
 	await buildContent();
-	retriggerSearch();
+	refreshFocusSearch();
 }));
 
 window.addEventListener(
@@ -1113,7 +1077,7 @@ window.addEventListener(
 				(window as any).__showInlayWindows = showInlayWindowsElement.checked;
 				updateSelectedFocusTree(false);
 				await buildContent();
-				retriggerSearch();
+				refreshFocusSearch();
 			}));
 		}
 
@@ -1128,7 +1092,7 @@ window.addEventListener(
 				setState({ selectedFocusTreeIndex });
 				updateSelectedFocusTree(true);
 				await buildContent();
-				retriggerSearch();
+				refreshFocusSearch();
 			}));
 		}
 
@@ -1148,7 +1112,7 @@ window.addEventListener(
 				}
 				setSelectedInlayWindowId(focusTree, inlayWindowsElement.value);
 				await buildContent();
-				retriggerSearch();
+				refreshFocusSearch();
 			}));
 		}
 
@@ -1181,130 +1145,45 @@ window.addEventListener(
 
 					const hiddenBranches = difference(allValues, selection);
 					setState({ hiddenBranches });
+					refreshFocusSearch();
 				});
 			}
 		}
 
-		// Searchbox
-		const searchbox = document.getElementById("searchbox") as HTMLInputElement;
-		let currentNavigatedIndex = 0;
-		let oldSearchboxValue: string = getState().searchboxValue || "";
-		let searchedFocus: HTMLDivElement[] = search(oldSearchboxValue, false);
-
-		searchbox.value = oldSearchboxValue;
-
-		const searchboxChangeFunc = function (this: HTMLInputElement) {
-			const searchboxValue = this.value.toLowerCase();
-			if (oldSearchboxValue !== searchboxValue) {
-				currentNavigatedIndex = 0;
-				searchedFocus = search(searchboxValue);
-				oldSearchboxValue = searchboxValue;
-				setState({ searchboxValue });
-			}
-		};
-
-		searchbox.addEventListener("change", searchboxChangeFunc);
-		searchbox.addEventListener("keypress", function (e) {
-			if (e.key === "Enter") {
-				const visibleSearchedFocus = searchedFocus.filter(
-					(f) => f.style.display !== "none",
-				);
-				if (visibleSearchedFocus.length > 0) {
-					currentNavigatedIndex =
-						(currentNavigatedIndex +
-							(e.shiftKey ? visibleSearchedFocus.length - 1 : 1)) %
-						visibleSearchedFocus.length;
-					visibleSearchedFocus[currentNavigatedIndex]?.scrollIntoView({
-						block: "center",
-						inline: "center",
-					});
-				}
-			} else {
-				searchboxChangeFunc.apply(this);
-			}
-		});
-		searchbox.addEventListener("keyup", searchboxChangeFunc);
-		searchbox.addEventListener("paste", searchboxChangeFunc);
-		searchbox.addEventListener("cut", searchboxChangeFunc);
-
-		retriggerSearch = () => {
-			searchedFocus = search(oldSearchboxValue, false);
-		};
+		// Bind before the first build so a stored query is applied to the first rendered tree.
+		search.wire();
 
 		// Conditions
 		if (useConditionInFocus) {
-			const conditionsElement = document.getElementById(
-				"conditions",
-			) as HTMLDivElement | null;
-			if (conditionsElement) {
-				conditions = new DivDropdown(conditionsElement, true);
-
-				conditions.selectedValues$.next(
-					selectedExprs.map((e) => `${e.scopeName}!|${e.nodeContent}`),
-				);
-				conditions.selectedValues$.subscribe(tryRun(async (selection) => {
-					selectedExprs = selection.map<ConditionItem>((selection) => {
-						const index = selection.indexOf("!|");
-						if (index === -1) {
-							return {
-								scopeName: "",
-								nodeContent: selection,
-							};
-						} else {
-							return {
-								scopeName: selection.substring(0, index),
-								nodeContent: selection.substring(index + 2),
-							};
-						}
-					});
-
-					setState({ selectedExprs });
-
+			const wireConditions = (
+				id: string,
+				selected: ConditionItem[],
+				store: (selection: ConditionItem[]) => void,
+			) => {
+				const element = document.getElementById(id) as HTMLDivElement | null;
+				if (!element) {
+					return undefined;
+				}
+				return conditionDropdown(element, selected, async (selection) => {
+					store(selection);
 					await buildContent();
-					retriggerSearch();
-				}));
-			}
-
-			const inlayConditionsElement = document.getElementById(
-				"inlay-conditions",
-			) as HTMLDivElement | null;
-			if (inlayConditionsElement) {
-				inlayConditions = new DivDropdown(inlayConditionsElement, true);
-
-				inlayConditions.selectedValues$.next(
-					selectedInlayExprs.map((e) => `${e.scopeName}!|${e.nodeContent}`),
-				);
-				inlayConditions.selectedValues$.subscribe(tryRun(async (selection) => {
-					selectedInlayExprs = selection.map<ConditionItem>((selection) => {
-						const index = selection.indexOf("!|");
-						if (index === -1) {
-							return {
-								scopeName: "",
-								nodeContent: selection,
-							};
-						} else {
-							return {
-								scopeName: selection.substring(0, index),
-								nodeContent: selection.substring(index + 2),
-							};
-						}
-					});
-
-					setState({ selectedInlayExprs });
-
-					await buildContent();
-					retriggerSearch();
-				}));
-			}
+					refreshFocusSearch();
+				});
+			};
+			conditions = wireConditions("conditions", selectedExprs, (selection) => {
+				selectedExprs = selection;
+				setState({ selectedExprs });
+			});
+			inlayConditions = wireConditions("inlay-conditions", selectedInlayExprs, (selection) => {
+				selectedInlayExprs = selection;
+				setState({ selectedInlayExprs });
+			});
 		}
 
-		// Zoom. The anchor is the toolbar strip's height, which is what #focustreecontent is offset
-		// by -- it was 40 here against a 52px strip, and the drift shows up as the view sliding as
-		// you zoom, now that a button zoom anchors on the middle of the canvas rather than a cursor.
 		const contentElement = document.getElementById(
 			"focustreecontent",
 		) as HTMLDivElement;
-		enableZoom(contentElement, 0, 52);
+		enableZoom(contentElement, 0, TOOLBAR_HEIGHT);
 
 		// Shift+click a focus to isolate its prerequisite lines
 		tracing = subscribeTracing({
@@ -1362,7 +1241,7 @@ window.addEventListener(
 			resetFocusCheckboxes.addEventListener("click", tryRun(async () => {
 				setState({ checkedFocuses: {} });
 				await buildContent();
-				retriggerSearch();
+				refreshFocusSearch();
 			}));
 		}
 
@@ -1372,6 +1251,7 @@ window.addEventListener(
 		const firstOpen = state.xOffset === undefined && state.yOffset === undefined;
 		updateSelectedFocusTree(false);
 		await buildContent();
+		refreshFocusSearch();
 		if (!firstOpen || !scrollToInitialShowPosition()) {
 			scrollToState();
 		}

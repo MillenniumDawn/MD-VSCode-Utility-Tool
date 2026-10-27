@@ -5,9 +5,10 @@ import * as assert from "assert";
 import {
 	CharacterCard,
 	CharacterPreviewPayload,
-	ModifierLine,
 	TraitCard,
 } from "../../previewdef/character/payload";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
+import { getState } from "../../../webviewsrc/util/common";
 
 // characterpreview.ts reads window.characterPreview at module scope, so the payload has to exist
 // before the import runs. This mirrors Millennium Dawn's AFG.txt: one character wearing three
@@ -191,8 +192,7 @@ const shellHtml = `
 const { module: characterpreview, listeners } = loadEntrypoint(
 	() => require("../../../webviewsrc/characterpreview") as typeof import("../../../webviewsrc/characterpreview"),
 );
-const { readFilters, matchesFilters, matchesQuery, modifierLineToDom, traitToDom } =
-	characterpreview;
+const { readFilters, matchesFilters, matchesQuery, traitToDom } = characterpreview;
 
 function byId(cardId: string): CharacterCard {
 	const found = integrationPayload.cards.find((c) => c.cardId === cardId);
@@ -285,44 +285,6 @@ describe("webview/characterpreview matchesQuery", () => {
 
 	it("does not match a character that has nothing to do with the query", () => {
 		assert.strictEqual(matchesQuery(byId("AFG_faceless:advisor:0"), "trickster"), false);
-	});
-});
-
-describe("webview/characterpreview modifierLineToDom", () => {
-	function lineOf(extra: Partial<ModifierLine>): HTMLDivElement {
-		return modifierLineToDom({
-			key: "recon_factor",
-			name: "Recon",
-			value: "+25%",
-			tone: "good",
-			...extra,
-		});
-	}
-
-	it("writes the name, the value and the tone the payload decided", () => {
-		const row = lineOf({});
-		assert.strictEqual(row.querySelector(".char-mod-name")?.textContent, "Recon");
-		const value = row.querySelector(".char-mod-value");
-		assert.strictEqual(value?.textContent, "+25%");
-		assert.ok(value?.classList.contains("char-mod-good"));
-	});
-
-	it("keeps the raw token as the name's tooltip", () => {
-		const name = lineOf({}).querySelector(".char-mod-name") as HTMLElement;
-		assert.strictEqual(name.title, "recon_factor");
-	});
-
-	it("carries the bad and neutral tones through as well", () => {
-		assert.ok(
-			lineOf({ tone: "bad" })
-				.querySelector(".char-mod-value")
-				?.classList.contains("char-mod-bad"),
-		);
-		assert.ok(
-			lineOf({ tone: "neutral" })
-				.querySelector(".char-mod-value")
-				?.classList.contains("char-mod-neutral"),
-		);
 	});
 });
 
@@ -533,6 +495,21 @@ describe("webview/characterpreview rendering", () => {
 		assert.strictEqual(content().querySelectorAll(".char-trait-unknown").length, 1);
 	});
 
+	it("draws a condition panel for each condition once conditions are asked for", () => {
+		assert.strictEqual(content().querySelectorAll(".ev-cond").length, 0);
+
+		const toggle = document.getElementById("show-conditions") as HTMLInputElement;
+		toggle.checked = true;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+
+		const heads = Array.from(content().querySelectorAll(".ev-cond-head")).map((e) => e.textContent);
+		assert.deepStrictEqual(heads, ["Available"]);
+
+		toggle.checked = false;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+		assert.strictEqual(content().querySelectorAll(".ev-cond").length, 0);
+	});
+
 	it("draws the skills", () => {
 		const skills = content().querySelector(".char-skills");
 		assert.ok(skills);
@@ -553,6 +530,91 @@ describe("webview/characterpreview rendering", () => {
 		assert.ok(details.length > 0);
 		for (const detail of Array.from(details)) {
 			assert.strictEqual((detail as HTMLElement).hidden, true);
+		}
+	});
+
+	function post(next: CharacterPreviewPayload): void {
+		window.dispatchEvent(
+			new (window as any).MessageEvent("message", {
+				data: { type: "updateBody", data: { characterPreview: next } },
+			}),
+		);
+	}
+
+	function setToggle(id: string, checked: boolean): void {
+		const toggle = document.getElementById(id) as HTMLInputElement;
+		toggle.checked = checked;
+		toggle.dispatchEvent(new (window as any).Event("change"));
+	}
+
+	it("shows the key in place of the localised name once localisation is turned off", () => {
+		const subs = () => Array.from(content().querySelectorAll(".ev-sub")).map((e) => e.textContent);
+		setToggle("show-localisation", false);
+		try {
+			assert.ok(!subs().includes("Ahmad Shah Massoud"));
+			assert.strictEqual(getState().showLocalisation, false);
+		} finally {
+			setToggle("show-localisation", true);
+		}
+		assert.ok(subs().includes("Ahmad Shah Massoud"));
+	});
+
+	it("draws every condition panel in the card wording, and the card's own modifier lists", () => {
+		const atLeastOne = (leaf: string) =>
+			({
+				type: "count",
+				amount: 1,
+				items: [
+					{ scopeName: "", nodeContent: leaf },
+					{ scopeName: "", nodeContent: "has_war = yes" },
+				],
+			}) as ConditionComplexExpr;
+		const full = card("AFG_full", "advisor", {
+			allowed: atLeastOne("tag = AFG"),
+			available: atLeastOne("has_government = neutrality"),
+			visible: atLeastOne("is_ai = no"),
+			modifiers: [{ key: "stability_factor", name: "Stability", value: "+5%", tone: "good" }],
+			research: [{ key: "infantry_weapons", name: "Infantry weapons", value: "+10%", tone: "good" }],
+		});
+		post({
+			...integrationPayload,
+			groups: [{ kind: "advisor", title: "Advisors", cardIds: [full.cardId] }],
+			cards: [full],
+		});
+		setToggle("show-conditions", true);
+		try {
+			const texts = (selector: string) =>
+				Array.from(content().querySelectorAll(selector)).map((e) => e.textContent);
+			assert.deepStrictEqual(texts(".ev-cond-head"), ["Allowed", "Available", "Visible"]);
+			assert.deepStrictEqual(texts(".ev-fold"), ["at least == 1", "at least == 1", "at least == 1"]);
+			assert.deepStrictEqual(texts(".char-mod-name"), ["Stability", "Infantry weapons"]);
+			assert.deepStrictEqual(texts(".char-mods-head"), ["Research bonus"]);
+		} finally {
+			setToggle("show-conditions", false);
+			post(integrationPayload);
+		}
+	});
+
+	it("stops painting the previous roster when the next one is empty", () => {
+		const frames: (() => void)[] = [];
+		const realNow = Date.now;
+		let now = 0;
+		// Every clock read spends most of a frame, so the roster takes a frame per group.
+		(globalThis as any).requestAnimationFrame = (fn: () => void) => frames.push(fn);
+		Date.now = () => (now += 5);
+		try {
+			post(integrationPayload);
+			post({ ...integrationPayload, cards: [], groups: [] });
+			while (frames.length > 0) {
+				frames.shift()!();
+			}
+
+			assert.strictEqual(content().querySelectorAll(".char-group").length, 0);
+			assert.strictEqual(content().querySelectorAll(".char-empty").length, 1);
+		} finally {
+			delete (globalThis as any).requestAnimationFrame;
+			Date.now = realNow;
+			post(integrationPayload);
 		}
 	});
 
@@ -589,6 +651,95 @@ describe("webview/characterpreview rendering", () => {
 			);
 		});
 
+		for (const [key, code] of [["Enter", "Enter"], [" ", "Space"]]) {
+			it(`expands on an unmodified ${key === " " ? "Space" : key} and does not open the trait's file`, () => {
+				const { pill, detail } = navigablePill();
+				const wasHidden = detail.hidden;
+				const event = new (window as any).KeyboardEvent("keydown", {
+					key,
+					code,
+					bubbles: true,
+					cancelable: true,
+				});
+
+				pill.dispatchEvent(event);
+
+				assert.strictEqual(event.defaultPrevented, true);
+				assert.strictEqual(detail.hidden, !wasHidden);
+				assert.strictEqual(pill.getAttribute("aria-expanded"), String(!detail.hidden));
+				assert.deepStrictEqual(
+					takePostedMessages().filter((m) => m.command === "navigate"),
+					[],
+				);
+			});
+
+			it(`expands on Shift+${key === " " ? "Space" : key}, as on a Shift-click`, () => {
+				const { pill, detail } = navigablePill();
+				const wasHidden = detail.hidden;
+
+				pill.dispatchEvent(new (window as any).KeyboardEvent("keydown", {
+					key,
+					code,
+					bubbles: true,
+					cancelable: true,
+					shiftKey: true,
+				}));
+
+				assert.strictEqual(detail.hidden, !wasHidden);
+				assert.deepStrictEqual(
+					takePostedMessages().filter((m) => m.command === "navigate"),
+					[],
+				);
+			});
+
+			it(`toggles once while ${key === " " ? "Space" : key} is held down`, () => {
+				const { pill, detail } = navigablePill();
+				const wasHidden = detail.hidden;
+
+				for (const repeat of [false, true]) {
+					pill.dispatchEvent(new (window as any).KeyboardEvent("keydown", {
+						key,
+						code,
+						bubbles: true,
+						cancelable: true,
+						repeat,
+					}));
+				}
+
+				assert.strictEqual(detail.hidden, !wasHidden);
+				assert.deepStrictEqual(
+					takePostedMessages().filter((m) => m.command === "navigate"),
+					[],
+				);
+			});
+
+			for (const modifier of ["ctrlKey", "metaKey"] as const) {
+				it(`keeps ${modifier === "ctrlKey" ? "Ctrl" : "Meta"}+${key === " " ? "Space" : key} navigation`, () => {
+					const { pill, detail } = navigablePill();
+					const wasHidden = detail.hidden;
+
+					pill.dispatchEvent(new (window as any).KeyboardEvent("keydown", {
+						key,
+						code,
+						bubbles: true,
+						cancelable: true,
+						[modifier]: true,
+					}));
+
+					assert.strictEqual(detail.hidden, wasHidden);
+					assert.strictEqual(pill.getAttribute("aria-expanded"), String(!wasHidden));
+					const navigations = takePostedMessages().filter((m) => m.command === "navigate");
+					assert.strictEqual(navigations.length, 1);
+					assert.deepStrictEqual(navigations[0], {
+						command: "navigate",
+						start: 8,
+						end: 30,
+						file: "common/country_leader/01_army.txt",
+					});
+				});
+			}
+		}
+
 		it("opens the trait's file on a ctrl-click, and leaves it closed", () => {
 			const { pill, detail } = navigablePill();
 			const wasHidden = detail.hidden;
@@ -608,6 +759,26 @@ describe("webview/characterpreview rendering", () => {
 				assert.strictEqual(navigation.file, "common/country_leader/01_army.txt");
 				assert.strictEqual(navigation.start, 8);
 			}
+		});
+
+		it("opens the trait's file on a meta-click, and leaves it closed", () => {
+			const { pill, detail } = navigablePill();
+			const wasHidden = detail.hidden;
+
+			pill.dispatchEvent(
+				new (window as any).MouseEvent("click", { bubbles: true, metaKey: true }),
+			);
+
+			assert.strictEqual(detail.hidden, wasHidden);
+			assert.strictEqual(pill.getAttribute("aria-expanded"), String(!wasHidden));
+			const navigations = takePostedMessages().filter((m) => m.command === "navigate");
+			assert.strictEqual(navigations.length, 1);
+			assert.deepStrictEqual(navigations[0], {
+				command: "navigate",
+				start: 8,
+				end: 30,
+				file: "common/country_leader/01_army.txt",
+			});
 		});
 
 		it("does not carry the click up to the card underneath", () => {

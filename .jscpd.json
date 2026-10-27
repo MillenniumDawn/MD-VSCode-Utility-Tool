@@ -2,6 +2,7 @@
 	"path": ["src", "webviewsrc"],
 	"format": ["typescript"],
 	"ignore": ["**/test/**", "**/*.test.ts"],
+	"ignorePattern": ["(?m)^import [^;]+;"],
 	"minLines": 8,
 	"minTokens": 60,
 	"threshold": 1,

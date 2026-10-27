@@ -14,13 +14,13 @@
 
 'use strict';
 
-const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 const { compareVersions, nextVersion, readVersion, versionHeadingPattern } = require('./bump-version');
 const { warn, notice } = require('./lib/actions-log');
 const { parseFlags } = require('./lib/flags');
+const { git, tagExists } = require('./lib/git');
 
 // Paths that cannot change what the packaged extension does, so a change touching only these does
 // not need a version bump. scripts/release-check.js reads this same list to decide whether a push
@@ -32,10 +32,6 @@ const exemptPatterns = [
 	/^LICENSE$/,
 	/^\.gitignore$/,
 ];
-
-function git(args) {
-	return execFileSync('git', args, { encoding: 'utf8' }).trim();
-}
 
 function isExempt(file) {
 	return exemptPatterns.some((pattern) => pattern.test(file));
@@ -66,17 +62,6 @@ function changedFiles(baseRef) {
 	// Three-dot: what this branch added on top of the merge base, not whatever main moved on to.
 	const output = git(['diff', '--name-only', `${baseRef}...HEAD`]);
 	return output ? output.split(/\r?\n/).filter(Boolean) : [];
-}
-
-function tagExists(tag) {
-	try {
-		// --quiet keeps a missing tag from writing "Needed a single revision" to stderr; a miss is an
-		// expected answer here, not a failure.
-		git(['rev-parse', '--verify', '--quiet', `refs/tags/${tag}`]);
-		return true;
-	} catch {
-		return false;
-	}
 }
 
 function baseVersion(baseRef) {

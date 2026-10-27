@@ -192,6 +192,8 @@ const table: Partial<typeof __table> = {
     "focustree.reload": "다시 불러오기",
     "focustree.resetcheckboxes": "중점 체크박스 초기화",
     "focustree.search": "검색: ",
+    "focustree.searchmatches": "{0}/{1}",
+    "focustree.nomatches": "일치 항목 없음",
     "focustree.sharedfocuses": "<공유 중점>",
     "focustree.shortcuts.toggle": "바로가기 표시/숨기기",
     "focustree.traceclear": "선행 조건 선 추적 중지",

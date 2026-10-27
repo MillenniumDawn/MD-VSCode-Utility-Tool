@@ -192,6 +192,8 @@ const table: Partial<typeof __table> = {
     "focustree.reload": "重新载入",
     "focustree.resetcheckboxes": "重置国策勾选",
     "focustree.search": "搜索：",
+    "focustree.searchmatches": "{0}/{1}",
+    "focustree.nomatches": "无匹配",
     "focustree.sharedfocuses": "<共享国策>",
     "focustree.shortcuts.toggle": "显示或隐藏快捷方式",
     "focustree.traceclear": "停止追踪前置国策连线",

@@ -1,5 +1,30 @@
 Unreleased
 
+  Functionality:
+- [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
+
+- [ Previews ] Replacing a dropdown while its menu is open now closes the old menu and restores canvas zoom correctly. Issue #635.
+- [ CI ] Version checks now update their existing note even on pull requests with more than 30 comments, and workflow checkouts no longer retain their credentials. Issue #564.
+- [ Previews ] Opening a mod workspace with only MIO organization files or `.gui` files under `interface/` now activates the preview button without opening another file first. Issue #481.
+- [ CI ] The release workflow now gives the registry tokens only to the publish step, and no longer mistakes a fork's pull request for its own release or fix pull request. Issues #573, #574.
+- [ Previews ] The idea, decision, event and character previews now refresh when you edit a `.gfx` file they use. The MIO preview now refreshes when an organization file is added or removed. Issues #479, #544.
+- [ Previews ] A focus label, an inlay slot name or a text box `format` holding quotes, `<` or `</style>` can no longer add elements to a preview, and previews no longer submit forms. Issue #572.
+- [ Previews ] Clicking a preview link can no longer copy a file into a hidden folder in your workspace, such as `.git` or `.vscode`. Issue #571.
+- [ GFX ] A PNG texture that is interlaced or larger than the supported size is now skipped instead of decoded, so a small malformed file can no longer use up the editor's memory. Issue #570.
+- [ CI ] Workflow warnings and notices now safely display multiline text without triggering extra workflow commands. Issue #577.
+- [ Character Previewer ] Pressing Enter or Space on a trait pill now expands its details instead of opening the trait file; Ctrl/Meta navigation still works. Issue #548.
+- [ Focus Tree Previewer ] Editing an inlay window's `.gui` file, or adding its missing sprite to a `.gfx` file, now refreshes an open focus tree. Before, the preview kept the old window until the focus file itself changed. Issue #608.
+- [ DDS ] Legacy textures with unused bits before their color channels now show the correct colors. Issue #530.
+- [ Cleanup ] The previews take their toolbar height from one place instead of four. Issue #557.
+- [ Cleanup ] Parent mods, the mod registry and the index cache now share one rule for when two spellings of a path are the same folder. Issue #558.
+- [ Cleanup ] Message placeholders, `else_if` and `else` conditions, and GUI icons and buttons each have one implementation instead of two. Issue #559.
+- [ Cleanup ] The world map walks its provinces, states, regions, railways and supply nodes through one loop, and decides when edges, labels and rivers show through one check. Issue #560.
+- [ Previews ] The character and idea previews no longer keep drawing the old cards under "No characters to show." or "No ideas to show." when an edit or a filter empties a long list that is still appearing. Issue #491.
+- [ Cleanup ] The previews' dropdowns, the focus tree and MIO condition lists, and the in-place refresh of the MIO, technology and GFX previews each have one implementation instead of several. Issue #491.
+- [ Cleanup ] The GFX, shared focus, localisation and idea swap indexes are built and kept up to date by one shared routine instead of four copies. A game `.gfx` file that fails to parse is now labeled `[Vanilla]` in the output, not `[Mod]`. Issue #489.
+- [ Testing ] The GFX, shared focus and localisation index tests run without the editor and share one setup, and the behavior every index shares is tested once for all four. Issue #567.
+- [ Testing ] File discovery and release-history tests now share their setup, and all idea swap tests run without the editor.
+- [ Cleanup ] The DDS decoder, the focus tree's two condition lists and the in-place refresh of the technology and GFX previews each drop a leftover copy of their code. Issue #633.
   Bugfixes:
 - [ CI ] Release notes are worded by a free model again. The old free model was withdrawn, so every seeded bullet had fallen back to its pull request title. Issue #534.
 

@@ -1,5 +1,6 @@
 import { setState, getState, scrollToState, tryRun, subscribeRefreshButton, subscribeNavigators, enableZoom, initCommon } from "./util/common";
 import { vscode } from "./util/vscode";
+import { onUpdateBody } from "./util/updatebody";
 
 initCommon();
 
@@ -81,29 +82,8 @@ function labelForTag(tag: string): string {
 // mode survive. The tree is rendered on the host, so the payload carries HTML (contentHtml, the folder
 // <option> list), not data globals. The folder selector and name-mode dropdowns live in the fixed
 // toolbar OUTSIDE #techtreecontent, so their load-time change listeners are untouched and never rebind;
-// only #techtreecontent's inner markup is replaced. Falls back to a full reload if the DOM the swap
-// needs is gone (e.g. the webview shows the "no technology tree" / error page, which has no listener).
-window.addEventListener('message', tryRun(function(event: MessageEvent) {
-    const msg = event.data;
-    if (!msg || msg.type !== 'updateBody') {
-        return;
-    }
-
-    const contentElement = document.getElementById('techtreecontent') as HTMLDivElement | null;
-    const folderSelect = document.getElementById('folderSelector') as HTMLSelectElement | null;
-    if (!contentElement || !folderSelect) {
-        vscode.postMessage({ command: 'reload' });
-        return;
-    }
-
-    if (typeof msg.styleCss === 'string') {
-        const serverStyles = document.getElementById('tech-server-styles');
-        if (serverStyles) {
-            serverStyles.textContent = msg.styleCss;
-        }
-    }
-
-    const data = msg.data ?? {};
+// only #techtreecontent's inner markup is replaced.
+onUpdateBody<[HTMLDivElement, HTMLSelectElement]>({ contentIds: ['techtreecontent', 'folderSelector'], styleId: 'tech-server-styles' }, (data, [contentElement, folderSelect]) => {
     const folders: string[] = Array.isArray(data.folders) ? data.folders : [];
 
     // Before any folderChange below, so the re-list it does sees the new lists: an edit can add a
@@ -153,7 +133,7 @@ window.addEventListener('message', tryRun(function(event: MessageEvent) {
     } else if (target !== previous) {
         folderChange(target);
     }
-}));
+});
 
 window.addEventListener('load', tryRun(function() {
     const element = document.getElementById('folderSelector') as HTMLSelectElement;

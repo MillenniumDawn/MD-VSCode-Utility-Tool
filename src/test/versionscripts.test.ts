@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { mock } from 'node:test';
+import { createGitRepository } from './unit/git';
 
 // Plain CommonJS helpers shared by the version-check and version-bump workflows. They deliberately
 // live outside src/ so CI can run them without a build, so they are pulled in through require.
@@ -833,12 +834,9 @@ describe('scripts/check-version', function () {
     describe('evaluate', function () {
         // The repository the script reads is the one it runs in, so these drive it through a
         // throwaway clone rather than stubbing git.
+        let repository: ReturnType<typeof createGitRepository>;
         let dir: string;
-        let cwd: string;
-
-        function git(...args: string[]): string {
-            return require('child_process').execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
-        }
+        let git: typeof repository.git;
 
         function write(version: string, changelog: string): void {
             fs.writeFileSync(path.join(dir, 'package.json'), `{\n\t"version": "${version}"\n}\n`);
@@ -846,25 +844,20 @@ describe('scripts/check-version', function () {
         }
 
         beforeEach(function () {
-            dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'check-')));
-            git('init', '-q', '-b', 'main');
-            git('config', 'user.email', 'a@b.c');
-            git('config', 'user.name', 'Tester');
-            // Keeps the line-ending warnings out of the test output on Windows.
-            git('config', 'core.autocrlf', 'false');
+            repository = createGitRepository('check-');
+            dir = repository.directory;
+            git = repository.git;
             write('1.1.22', 'v1.1.22\n\n  Bugfixes:\n\n- Shipped.\n');
             fs.writeFileSync(path.join(dir, 'extension.ts'), 'source\n');
             git('add', '-A');
             git('commit', '-qm', 'Initial');
             git('tag', 'v1.1.22');
             git('checkout', '-qb', 'feature');
-            cwd = process.cwd();
-            process.chdir(dir);
+            repository.enter();
         });
 
         afterEach(function () {
-            process.chdir(cwd);
-            fs.rmSync(dir, { recursive: true, force: true });
+            repository.dispose();
         });
 
         it('passes a branch that leaves the version alone', function () {
@@ -1135,12 +1128,9 @@ describe('scripts/release-check', function () {
         // The pickaxe and the first-parent walk are git features, so this drives the real thing
         // through a throwaway repository, without gh: the release branch is recognised by the
         // remote ref left behind, the way the script falls back when the API answers nothing.
+        let repository: ReturnType<typeof createGitRepository>;
         let dir: string;
-        let cwd: string;
-
-        function git(...args: string[]): string {
-            return require('child_process').execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
-        }
+        let git: typeof repository.git;
 
         function setVersion(version: string) {
             fs.writeFileSync(path.join(dir, 'package.json'), `{\n\t"name": "x",\n\t"version": "${version}"\n}\n`);
@@ -1153,23 +1143,19 @@ describe('scripts/release-check', function () {
         }
 
         beforeEach(function () {
-            dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bumpcommit-')));
-            git('init', '-q', '-b', 'main');
-            git('config', 'user.email', 'a@b.c');
-            git('config', 'user.name', 'Tester');
-            git('config', 'core.autocrlf', 'false');
+            repository = createGitRepository('bumpcommit-');
+            dir = repository.directory;
+            git = repository.git;
             setVersion('1.1.30');
             fs.writeFileSync(path.join(dir, 'extension.ts'), 'source\n');
             git('add', '-A');
             git('commit', '-qm', 'Initial');
             git('tag', 'v1.1.30');
-            cwd = process.cwd();
-            process.chdir(dir);
+            repository.enter();
         });
 
         afterEach(function () {
-            process.chdir(cwd);
-            fs.rmSync(dir, { recursive: true, force: true });
+            repository.dispose();
         });
 
         // The release pull request merged as a merge commit, and the remote ref still points at
@@ -1292,31 +1278,23 @@ describe('scripts/release-check', function () {
     describe('lastReleaseTag', function () {
         // Tag globs are a git feature, so this drives the real thing through a throwaway repository
         // rather than stubbing describe.
+        let repository: ReturnType<typeof createGitRepository>;
         let dir: string;
-        let cwd: string;
-
-        function git(...args: string[]): string {
-            return require('child_process').execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
-        }
+        let git: typeof repository.git;
 
         beforeEach(function () {
-            dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'lasttag-')));
-            git('init', '-q', '-b', 'main');
-            git('config', 'user.email', 'a@b.c');
-            git('config', 'user.name', 'Tester');
-            // Keeps the line-ending warnings out of the test output on Windows.
-            git('config', 'core.autocrlf', 'false');
+            repository = createGitRepository('lasttag-');
+            dir = repository.directory;
+            git = repository.git;
             fs.writeFileSync(path.join(dir, 'extension.ts'), 'source\n');
             git('add', '-A');
             git('commit', '-qm', 'Initial');
             git('tag', 'v1.1.31');
-            cwd = process.cwd();
-            process.chdir(dir);
+            repository.enter();
         });
 
         afterEach(function () {
-            process.chdir(cwd);
-            fs.rmSync(dir, { recursive: true, force: true });
+            repository.dispose();
         });
 
         it('skips the pre-release tags written on every push to main', function () {
@@ -1436,15 +1414,15 @@ describe('scripts/publish-extension', function () {
     });
 
     describe('commandFor', function () {
-        it('publishes to the Marketplace through vsce, skipping a version it already has', function () {
+        it('publishes to the Marketplace through vsce, with no token on the command line', function () {
             const args = publishExtension.commandFor({ registry: 'marketplace', vsix: 'ext.vsix', pat: 'secret', preRelease: false });
-            assert.deepStrictEqual(args, ['--no-install', '@vscode/vsce', 'publish', '--packagePath', 'ext.vsix', '--skip-duplicate', '--pat', 'secret']);
+            assert.deepStrictEqual(args, ['--no-install', '@vscode/vsce', 'publish', '--packagePath', 'ext.vsix', '--skip-duplicate']);
             assert.ok(publishExtension.commandFor({ registry: 'marketplace', vsix: 'ext.vsix', pat: 'secret', preRelease: true }).includes('--pre-release'));
         });
 
-        it('publishes to Open VSX through ovsx, skipping a version it already has', function () {
+        it('publishes to Open VSX through ovsx, with no token on the command line', function () {
             const args = publishExtension.commandFor({ registry: 'open-vsx', vsix: 'ext.vsix', pat: 'secret', preRelease: false });
-            assert.deepStrictEqual(args, ['--no-install', 'ovsx', 'publish', 'ext.vsix', '--skip-duplicate', '-p', 'secret']);
+            assert.deepStrictEqual(args, ['--no-install', 'ovsx', 'publish', 'ext.vsix', '--skip-duplicate']);
         });
 
         it('never hands ovsx --pre-release, which it ignores for a built vsix', function () {
@@ -1522,21 +1500,17 @@ describe('scripts/publish-extension', function () {
 
 describe('scripts/pr-bullets', function () {
     it('does not seed a placeholder when the only merged pull request is a dependency bump', function () {
-        const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pr-bullets-')));
-        const cwd = process.cwd();
-        const git = (...args: string[]) => childProcess.execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+        const repository = createGitRepository('pr-bullets-');
+        const { directory: dir, git } = repository;
 
         try {
-            git('init', '-q', '-b', 'main');
-            git('config', 'user.email', 'test@example.com');
-            git('config', 'user.name', 'Tester');
             fs.writeFileSync(path.join(dir, 'file.txt'), 'base\n');
             git('add', '-A');
             git('commit', '-qm', 'Base');
             git('tag', 'v1.0.0');
             git('commit', '--allow-empty', '-qm', 'Dependency bump');
 
-            process.chdir(dir);
+            repository.enter();
             mock.method(childProcess, 'execFileSync', (command: string) => {
                 assert.strictEqual(command, 'gh');
                 return JSON.stringify([{
@@ -1551,8 +1525,7 @@ describe('scripts/pr-bullets', function () {
             });
         } finally {
             mock.restoreAll();
-            process.chdir(cwd);
-            fs.rmSync(dir, { recursive: true, force: true });
+            repository.dispose();
         }
     });
 

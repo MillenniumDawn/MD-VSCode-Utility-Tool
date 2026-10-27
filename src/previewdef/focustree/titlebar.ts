@@ -3,8 +3,7 @@ import { getSpriteByGfxName, Image } from "../../util/image/imagecache";
 import { getDescriptorFocusOverlayGfx, parseHoi4FileCached } from "../../util/fileloader";
 import { resolveConfiguredGfxFiles } from "../../util/configuredgfxfiles";
 import { nationalFocusViewGfxFile } from "../../util/hoi4gui/exclusivelinkimages";
-import { describeParseFailure } from "../../util/indexHalf";
-import { Logger } from "../../util/logger";
+import { describeParseFailure, Logger } from "../../util/logger";
 import { getConfiguration } from "../../util/vsccommon";
 
 export const focusTitlebarStylesFile = 'common/national_focus/00_titlebar_styles.txt';

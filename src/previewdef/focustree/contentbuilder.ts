@@ -24,10 +24,9 @@ import { loadExclusiveLinkImages, nationalFocusViewGfxFile } from "../../util/ho
 import { registerFocusLinkStyles } from "../../util/hoi4gui/focuslink";
 import { loadFocusLinkImages } from "../../util/hoi4gui/focuslinkimages";
 import { FocusItemLayout, FocusShortcutGui, FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "./layout";
-import { describeParseFailure } from "../../util/indexHalf";
 import { actionGroupHtml, iconButtonHtml, iconClassOf } from "../toolbaricons";
-import { Logger } from "../../util/logger";
-import { TOOLBAR_HEIGHT, toolbarWrapper, traceStatusHtml, warningPanelHtml } from "../toolbarparts";
+import { describeParseFailure, Logger } from "../../util/logger";
+import { TOOLBAR_HEIGHT, toolbarWrapper, traceStatusHtml, warningPanelHtml, searchHtml } from "../toolbarparts";
 import { spriteIconStyle } from "../iconstyle";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
@@ -56,14 +55,14 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
     toolbarFlags: ToolbarFlags;
 }
 
-export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean }): Promise<FocusTreePayload | null> {
+export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean; dependencyChanged?: boolean }): Promise<FocusTreePayload | null> {
     const resolveIcons = options?.resolveIcons !== false;
     try {
         // Per-phase timing of parsing/loading, icon resolution, and DDS->PNG conversion, logged via debug() in dev builds.
         resetIconResolveStats();
         const tStart = Date.now();
 
-        const session = new LoaderSession(false);
+        const session = new LoaderSession(options?.dependencyChanged ?? false);
         const loadResult = await loader.load(session);
         const loadedLoaders = session.loadedLoaderNames();
         debug('Loader session focus tree', loadedLoaders);
@@ -275,12 +274,21 @@ function renderFocusTreeShell(focusTrees: FocusTree[], styleTable: StyleTable, t
     // can still attach classes against after a render. See tracestyles.ts.
     registerTraceStyles(styleTable, 'focustreeplaceholder');
 
-    // The search highlight. Same id-prefixed `raw` trick as the trace styles: the webview attaches
-    // this class after a render, so the rule has to exist in the shell stylesheet, and the id keeps
-    // it ahead of the node's own classes without reaching for !important.
-    styleTable.raw(`#focustreeplaceholder .focus-search-hit`, `
-        outline: 1px solid #E33;
-        background: rgba(255, 0, 0, 0.5);
+    // The webview attaches search classes after a render, so their styles live in the shell.
+    styleTable.raw(`#focustreeplaceholder .focus.ev-hit`, `
+        outline: 1px solid var(--vscode-editor-findMatchHighlightBorder, #E33);
+        background: var(--vscode-editor-findMatchHighlightBackground, rgba(255, 0, 0, 0.33));
+    `);
+    styleTable.raw(`#focustreeplaceholder .focus.ev-hit-current`, `
+        outline: 2px solid var(--vscode-editor-findMatchBorder, #E33);
+        background: var(--vscode-editor-findMatchBackground, rgba(255, 0, 0, 0.5));
+    `);
+    styleTable.raw(`#focus-search-count`, `
+        align-self: center;
+        min-width: 5em;
+        margin-right: 12px;
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
     `);
 
     // Set by the webview while the continuous focus box can be dragged.
@@ -339,13 +347,12 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
             </select>
         </div>`;
 
-    const searchbox = `
-        <label for="searchbox" class="${styleTable.style('searchboxLabel', () => `margin-right:5px`)}">${localize('focustree.search', 'Search: ')}</label>
-        <input
-            class="${styleTable.style('searchbox', () => `margin-right:10px`)}"
-            id="searchbox"
-            type="text"
-        />`;
+    const searchbox = searchHtml(
+        styleTable.style('searchboxLabel', () => `margin-right:5px`),
+        "focus",
+        localize('focustree.search', 'Search: '),
+        styleTable.style('searchbox', () => `margin-right:10px`),
+    );
 
     const customTitlebars = !flags.hasCustomTitlebar ? '' : `
         <div class="${styleTable.style('customTitlebarsContainer', () => `margin-right:10px; display:flex; align-items:center;`)}">
@@ -565,7 +572,7 @@ async function renderInlayOverrideChild<T extends keyof RenderChildTypeMap>(
     }
 
     const scale = iconLikeChild.scale ?? 1;
-    const gfxClassPlaceholder = `{{inlay_slot_class:${slot.id}}}`;
+    const gfxClassPlaceholder = `{{inlay_slot_class:${encodeURIComponent(slot.id)}}}`;
     // The image comes only from the placeholder, which the webview swaps for the option whose
     // condition is met. A background of this first option here would sit later in the stylesheet
     // and win over whichever option was chosen; the sprite only sizes the slot.
@@ -834,12 +841,12 @@ async function renderFocus(
         if (localizedText === focus.id || !localizedText){
             if (focus.text){
                 localizedText = await getLocalisedTextQuick(focus.text);
-                if (localizedText !== focus.text && localizedText !== null){
-                    textContent += `<br/>${localizedText}`;
+                if (localizedText !== focus.text && localizedText !== undefined){
+                    textContent += `<br/>${escapeAttr(localizedText)}`;
                 }
             }
         }else {
-            textContent += `<br/>${localizedText}`;
+            textContent += `<br/>${escapeAttr(localizedText)}`;
         }
     }
 

@@ -7,7 +7,7 @@ import { escapeAttr, htmlEscape } from '../../util/html';
 import { GridBoxType } from '../../hoiformat/gui';
 import { MioLoader } from './loader';
 import { renderLoaderFile } from '../loaderrender';
-import { TOOLBAR_HEIGHT as toolbarHeight, toolbarWrapper, traceStatusHtml, warningPanelHtml } from '../toolbarparts';
+import { TOOLBAR_HEIGHT, toolbarWrapper, traceStatusHtml, warningPanelHtml } from '../toolbarparts';
 import { StyleTable, normalizeForStyle } from '../../util/styletable';
 import { Mio, MioTrait, TraitEffect } from './schema';
 import { getLocalisedTextQuick } from "../../util/localisationIndex";
@@ -88,7 +88,7 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
             left:0;
             top:0;
         `)}"></div>` +
-        `<div id="miopreviewcontent" class="${styleTable.style('miopreviewcontent', () => `top:${toolbarHeight}px;left:-20px;position:relative`)}">
+        `<div id="miopreviewcontent" class="${styleTable.style('miopreviewcontent', () => `top:${TOOLBAR_HEIGHT}px;left:-20px;position:relative`)}">
             <div id="miopreviewplaceholder"></div>
         </div>` +
         warningPanelHtml(styleTable) +
@@ -117,7 +117,6 @@ async function renderMios(mios: Mio[], styleTable: StyleTable, gfxFiles: string[
     jsCodes.push('window.gridBox = ' + jsonForScript(gridBox));
     jsCodes.push('window.styleNonce = ' + jsonForScript(styleNonce));
     jsCodes.push('window.xGridSize = ' + xGridSize);
-    jsCodes.push('window.toolbarHeight = ' + toolbarHeight);
     jsCodes.push('window.previewOptions = ' + jsonForScript(getPreviewOptions(previewOptionKeys)));
 
     return {

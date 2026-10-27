@@ -19,6 +19,7 @@ import { renderWorldMapIcons } from "../previewdef/worldmap/toolbar";
 import { toNumberLike } from "../hoiformat/schema";
 import { refreshFeatureFlags } from "../util/featureflags";
 import { restoreVscodeStubs, stubVscode } from "./_vscode_stub";
+import { walkFiles } from "./unit/files";
 
 // The icon rules of issue #446, as a test. A new icon cannot ship until it passes, so every failure
 // message says what to change without the reader having to find the issue first. When a rule
@@ -41,18 +42,6 @@ for (const id of actionIds) {
 	}
 }
 
-function walk(dir: string, accept: (file: string) => boolean, out: string[] = []): string[] {
-	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-		const full = path.join(dir, entry.name);
-		if (entry.isDirectory()) {
-			walk(full, accept, out);
-		} else if (accept(full)) {
-			out.push(full);
-		}
-	}
-	return out;
-}
-
 function relative(file: string): string {
 	return path.relative(root, file).replace(/\\/g, "/");
 }
@@ -61,9 +50,9 @@ function relative(file: string): string {
 // classes, `$(<name>)` in status bar text and package.json.
 function iconsInSources(): { file: string; icon: string }[] {
 	const files = [
-		...walk(path.join(root, "src"), f => /\.(ts|html)$/.test(f) && !relative(f).startsWith("src/test/")),
-		...walk(path.join(root, "webviewsrc"), f => /\.(ts|html)$/.test(f)),
-		...walk(path.join(root, "resource"), f => /\.(css|html)$/.test(f)),
+		...walkFiles(path.join(root, "src"), f => /\.(ts|html)$/.test(f) && !relative(f).startsWith("src/test/")),
+		...walkFiles(path.join(root, "webviewsrc"), f => /\.(ts|html)$/.test(f)),
+		...walkFiles(path.join(root, "resource"), f => /\.(css|html)$/.test(f)),
 		path.join(root, "package.json"),
 	];
 	const found: { file: string; icon: string }[] = [];

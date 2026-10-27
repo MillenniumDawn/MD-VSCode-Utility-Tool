@@ -55,13 +55,13 @@ describe("loader preview rendering contracts", () => {
 				hashes[name] = createHash("sha256").update(normalized).digest("hex");
 			}
 			assert.deepStrictEqual(hashes, {
-				bop: "61ccdcddc6268847ad6544915643d2c1f3cb2f705cb3a56968603747d5537a20",
-				character: "dcdc496d41c97b51971da6aa5075c88935b648e5572eff21119d8363bf21fb50",
-				decision: "4ac0d726aa48af74dbedfbfb480eff6dc04c147108edce91789544a2e97e45d2",
-				event: "033e4e77ffbd288ffe918b8e34525530ced87443b1ce1ea6ddeffc14489f39a0",
-				idea: "f02eaa8998ff4a286508c199b2b87ac30b837ca8b7d3712b363572f12fcf580c",
-				mio: "4f275808043cd5b730a69f29c66d55297d32a3d2cf174ebf53c580841c5887a2",
-				technology: "fe8d2cc647532bb67abed467fd3866548a7de7497cbe1654499408c3b48e56a6",
+				bop: "b7bc633f04e203efbe51b0baea4ba809ed21372ee11da34e9320cd79915fdc11",
+				character: "452d3ad15573c56dcb76bcdfa42bcdc8d0db344e8401a0f8d76ac1c3585faec3",
+				decision: "043bdb408a3f4aa573a662017769dfbbd215e139a76d5660c9466ae301ebd352",
+				event: "645ea5311473a9ef81ded8881a0219d5de7842d6e5ffdabd625949c2655900ab",
+				idea: "49688e3838f745d0612aaec58a3f46b2983291ba6af5373f914cc8681e016fd9",
+				mio: "2870121f4b2774e43597d1b8d6c558f005f5926750bbcb110d6463f9e3a4eb07",
+				technology: "cc32c8963c6fe8843265609b3a778fee9e00bda7fdb448fb8e1903cfbf119bad",
 			});
 		} finally {
 			contextContainer.current = previous;

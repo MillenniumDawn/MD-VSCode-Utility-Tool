@@ -798,4 +798,31 @@ describe("webview/decisiontree rendering", () => {
 		);
 		assert.deepStrictEqual(takePostedMessages().filter((m) => m.command === "navigate"), []);
 	});
+
+	it("wires the navigable card as a tab stop and opens the file on Enter and Space", () => {
+		const card = cardFor("d:POL_start_sre");
+		assert.strictEqual(card.getAttribute("role"), "button");
+		assert.strictEqual(card.tabIndex, 0);
+
+		assert.strictEqual(cardFor("d:POL_sre_main_countdown_mission").getAttribute("role"), null);
+		assert.strictEqual(
+			cardFor("d:POL_sre_main_countdown_mission").getAttribute("tabindex"),
+			null,
+		);
+
+		takePostedMessages();
+		card.dispatchEvent(
+			new (window as any).KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+		);
+		assert.deepStrictEqual(takePostedMessages().filter((m) => m.command === "navigate"), [
+			{ command: "navigate", start: 20, end: 30, file: "common/decisions/Poland.txt" },
+		]);
+
+		card.dispatchEvent(
+			new (window as any).KeyboardEvent("keydown", { key: " ", bubbles: true }),
+		);
+		assert.deepStrictEqual(takePostedMessages().filter((m) => m.command === "navigate"), [
+			{ command: "navigate", start: 20, end: 30, file: "common/decisions/Poland.txt" },
+		]);
+	});
 });
