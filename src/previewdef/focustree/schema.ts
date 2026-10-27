@@ -1280,20 +1280,32 @@ function validateFocusLayoutOfFile(
 
 	// Focus icons span two grid columns, so the remaining same-row pairs need at least two X
 	// units between them or the sprites overlap. Same-position pairs are covered by the stacks.
-	for (let i = 0; i < entries.length; i++) {
-		const entryA = entries[i];
-		if (entryA === undefined) {
+	// Keep row members in entry order so warnings retain the original outer-i/inner-j order.
+	const entriesByY = new Map<
+		number,
+		{ entries: (typeof entries)[number][]; next: number }
+	>();
+	for (const entry of entries) {
+		if (Number.isNaN(entry.position.y)) {
 			continue;
 		}
-		for (let j = i + 1; j < entries.length; j++) {
-			const entryB = entries[j];
-			if (entryB === undefined) {
-				continue;
-			}
-			if (
-				entryA.position.y !== entryB.position.y ||
-				entryA.position.x === entryB.position.x
-			) {
+		const row = entriesByY.get(entry.position.y);
+		if (row === undefined) {
+			entriesByY.set(entry.position.y, { entries: [entry], next: 0 });
+		} else {
+			row.entries.push(entry);
+		}
+	}
+	for (const entryA of entries) {
+		const row = entriesByY.get(entryA.position.y);
+		if (row === undefined) {
+			continue;
+		}
+		// Entries reach this row in insertion order, so its cursor points at entryA.
+		row.next++;
+		for (let j = row.next; j < row.entries.length; j++) {
+			const entryB = row.entries[j];
+			if (entryB === undefined || entryA.position.x === entryB.position.x) {
 				continue;
 			}
 			if (
