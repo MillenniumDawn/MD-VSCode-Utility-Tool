@@ -8,6 +8,8 @@ v1.1.43
 - [ Testing ] Load the four world map page modules in the module-load test. Issue #532.
 - [ Testing ] Move the schema tests into the pure suite. Issue #565.
 - Let shared navigation make preview cards keyboard-focusable. Issue #561.
+- [ Focus Tree ] Avoid cross-row comparisons when checking focus overlaps. Issue #540.
+- [ Testing ] Check world-map loader results with exact assertions. Issue #566.
 
   Bugfixes:
 - [ Previews ] Replacing a dropdown while its menu is open now closes the old menu and restores canvas zoom correctly. Issue #635.
@@ -34,6 +36,7 @@ v1.1.43
 - [ Cleanup ] The DDS decoder, the focus tree's two condition lists and the in-place refresh of the technology and GFX previews each drop a leftover copy of their code. Issue #633.
 - [ CI ] Release notes are worded by a free model again. The old free model was withdrawn, so every seeded bullet had fallen back to its pull request title. Issue #534.
 - [ Testing ] Keep registry publishing tokens off the command line. Issue #578.
+- [ Testing ] Keep index cache writes out of later tests. Issue #636.
 
 v1.1.42
 
