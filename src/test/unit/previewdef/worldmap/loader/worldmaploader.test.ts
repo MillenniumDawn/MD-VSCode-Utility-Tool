@@ -1,7 +1,7 @@
 import * as assert from "assert";
-import { WorldMapLoader } from "../previewdef/worldmap/loader/worldmaploader";
-import { LoaderSession } from "../util/loader/loader";
-import { restoreVscodeStubs, stubVscode } from "./_vscode_stub";
+import { WorldMapLoader } from "../../../../../previewdef/worldmap/loader/worldmaploader";
+import { LoaderSession } from "../../../../../util/loader/loader";
+import { handOver } from "../../../host";
 
 type LoaderResult = {
 	result: unknown;
@@ -101,12 +101,10 @@ function replaceLoaders(loader: WorldMapLoader, calls: string[]): void {
 }
 
 describe("previewdef/worldmap/loader WorldMapLoader", () => {
-	afterEach(() => {
-		restoreVscodeStubs();
-	});
-
 	it("merges every loader and uses railways when supply areas are disabled", async () => {
-		stubVscode({ configuration: { enableSupplyArea: false } });
+		handOver({
+			workspace: { getConfiguration: () => ({ enableSupplyArea: false }) },
+		});
 		const calls: string[] = [];
 		const loader = new WorldMapLoader();
 		replaceLoaders(loader, calls);
@@ -139,20 +137,34 @@ describe("previewdef/worldmap/loader WorldMapLoader", () => {
 	});
 
 	it("uses supply-area data instead of railway data when enabled", async () => {
-		stubVscode({ configuration: { enableSupplyArea: true } });
+		handOver({
+			workspace: { getConfiguration: () => ({ enableSupplyArea: true }) },
+		});
 		const calls: string[] = [];
 		const loader = new WorldMapLoader();
 		replaceLoaders(loader, calls);
 
 		const result = await loader.loadImpl(new LoaderSession(true));
 
-		assert.ok(calls.includes("supply-areas"));
-		assert.ok(!calls.includes("railways"));
-		assert.ok(!calls.includes("supply-nodes"));
+		assert.deepStrictEqual(calls, [
+			"default",
+			"states",
+			"countries",
+			"strategic-regions",
+			"supply-areas",
+			"resources",
+		]);
 		assert.strictEqual(result.result.supplyAreasCount, 1);
 		assert.strictEqual(result.result.railwaysCount, 0);
 		assert.strictEqual(result.result.supplyNodesCount, 0);
-		assert.ok(result.dependencies.includes("common/supplyareas"));
+		assert.deepStrictEqual(result.dependencies, [
+			"map/default.map",
+			"history/states/1.txt",
+			"common/countries",
+			"common/strategicregions",
+			"common/supplyareas",
+			"common/resources",
+		]);
 	});
 
 	it("marks itself for reload after a shallow force request", async () => {

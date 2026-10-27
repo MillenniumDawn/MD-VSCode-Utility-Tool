@@ -3,8 +3,8 @@
 const timers = require('timers/promises');
 
 const endpoint = 'https://openrouter.ai/api/v1';
-// Free default; use OPENROUTER_MODEL for an explicitly selected alternative.
-const defaultModel = 'z-ai/glm-5.2:free';
+// OpenRouter's free-model router, so no single free model's removal breaks it; OPENROUTER_MODEL overrides.
+const defaultModel = 'openrouter/free';
 const timeoutMs = 120000;
 // Shared by rewrite-bullets (release job: 15 minutes) and close-fixed-issues (10 minutes). Six
 // minutes leaves room for the release job's commit/push work and later issue-closing steps.

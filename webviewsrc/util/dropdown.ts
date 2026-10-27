@@ -34,6 +34,7 @@ abstract class DropdownBase<E extends HTMLElement> extends Subscriber {
 		protected readonly multiSelection: boolean = false,
 	) {
 		super();
+		this.addSubscription({ dispose: () => this.closeDropdown?.() });
 		this.addSubscription(
 			fromEvent<MouseEvent>(this.select, "mousedown").subscribe((e) => {
 				e.preventDefault();
@@ -90,16 +91,16 @@ abstract class DropdownBase<E extends HTMLElement> extends Subscriber {
 			),
 		);
 
-		numDropDownOpened$.next(numDropDownOpened$.value + 1);
 		this.closeDropdown = () => {
+			this.closeDropdown = undefined;
 			this.select.classList.remove("dropdown-opened");
 			dropdownMenu.hide();
 			dropdownMenuSubscriptions.forEach((d) => d.dispose());
 			numDropDownOpened$.next(numDropDownOpened$.value - 1);
-			this.closeDropdown = undefined;
 		};
 
 		dropdownMenu.show(this.select);
+		numDropDownOpened$.next(numDropDownOpened$.value + 1);
 	}
 }
 

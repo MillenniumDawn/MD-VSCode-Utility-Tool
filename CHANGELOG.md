@@ -10,6 +10,8 @@ v1.1.43
 - Let shared navigation make preview cards keyboard-focusable. Issue #561.
 
   Bugfixes:
+- [ Previews ] Replacing a dropdown while its menu is open now closes the old menu and restores canvas zoom correctly. Issue #635.
+- [ CI ] Version checks now update their existing note even on pull requests with more than 30 comments, and workflow checkouts no longer retain their credentials. Issue #564.
 - [ Previews ] Opening a mod workspace with only MIO organization files or `.gui` files under `interface/` now activates the preview button without opening another file first. Issue #481.
 - [ CI ] The release workflow now gives the registry tokens only to the publish step, and no longer mistakes a fork's pull request for its own release or fix pull request. Issues #573, #574.
 - [ Previews ] The idea, decision, event and character previews now refresh when you edit a `.gfx` file they use. The MIO preview now refreshes when an organization file is added or removed. Issues #479, #544.
@@ -29,6 +31,8 @@ v1.1.43
 - [ Cleanup ] The GFX, shared focus, localisation and idea swap indexes are built and kept up to date by one shared routine instead of four copies. A game `.gfx` file that fails to parse is now labeled `[Vanilla]` in the output, not `[Mod]`. Issue #489.
 - [ Testing ] The GFX, shared focus and localisation index tests run without the editor and share one setup, and the behavior every index shares is tested once for all four. Issue #567.
 - [ Testing ] File discovery and release-history tests now share their setup, and all idea swap tests run without the editor.
+- [ Cleanup ] The DDS decoder, the focus tree's two condition lists and the in-place refresh of the technology and GFX previews each drop a leftover copy of their code. Issue #633.
+- [ CI ] Release notes are worded by a free model again. The old free model was withdrawn, so every seeded bullet had fallen back to its pull request title. Issue #534.
 - [ Testing ] Keep registry publishing tokens off the command line. Issue #578.
 
 v1.1.42
