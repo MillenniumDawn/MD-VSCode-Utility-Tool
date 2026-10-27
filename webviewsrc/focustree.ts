@@ -1155,33 +1155,29 @@ window.addEventListener(
 
 		// Conditions
 		if (useConditionInFocus) {
-			const conditionsElement = document.getElementById(
-				"conditions",
-			) as HTMLDivElement | null;
-			if (conditionsElement) {
-				conditions = conditionDropdown(conditionsElement, selectedExprs, async (selection) => {
-					selectedExprs = selection;
-					setState({ selectedExprs });
+			const wireConditions = (
+				id: string,
+				selected: ConditionItem[],
+				store: (selection: ConditionItem[]) => void,
+			) => {
+				const element = document.getElementById(id) as HTMLDivElement | null;
+				if (!element) {
+					return undefined;
+				}
+				return conditionDropdown(element, selected, async (selection) => {
+					store(selection);
 					await buildContent();
 					refreshFocusSearch();
 				});
-			}
-
-			const inlayConditionsElement = document.getElementById(
-				"inlay-conditions",
-			) as HTMLDivElement | null;
-			if (inlayConditionsElement) {
-				inlayConditions = conditionDropdown(
-					inlayConditionsElement,
-					selectedInlayExprs,
-					async (selection) => {
-						selectedInlayExprs = selection;
-						setState({ selectedInlayExprs });
-						await buildContent();
-						refreshFocusSearch();
-					},
-				);
-			}
+			};
+			conditions = wireConditions("conditions", selectedExprs, (selection) => {
+				selectedExprs = selection;
+				setState({ selectedExprs });
+			});
+			inlayConditions = wireConditions("inlay-conditions", selectedInlayExprs, (selection) => {
+				selectedInlayExprs = selection;
+				setState({ selectedInlayExprs });
+			});
 		}
 
 		const contentElement = document.getElementById(

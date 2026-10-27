@@ -10,17 +10,17 @@
 import { tryRun } from "./common";
 import { vscode } from "./vscode";
 
-export interface UpdateBodyTarget {
-	// The elements the re-render needs. A missing one is what says the page on screen is not the one
-	// this handler can update.
-	contentIds: string[];
+export interface UpdateBodyTarget<E extends HTMLElement[]> {
+	// The elements the re-render needs, handed to it in this order as E. A missing one is what says
+	// the page on screen is not the one this handler can update.
+	contentIds: { [K in keyof E]: string };
 	// The <style> holding the host-rendered sprite rules, which travel with the update.
 	styleId: string;
 }
 
-export function onUpdateBody(
-	target: UpdateBodyTarget,
-	apply: (data: Record<string, any>) => void | Promise<void>,
+export function onUpdateBody<E extends HTMLElement[] = HTMLElement[]>(
+	target: UpdateBodyTarget<E>,
+	apply: (data: Record<string, any>, elements: E) => void | Promise<void>,
 ): void {
 	window.addEventListener(
 		"message",
@@ -32,7 +32,8 @@ export function onUpdateBody(
 
 			// Falls back to a full reload if the DOM the re-render needs is gone -- the webview may be
 			// showing the error page, which has no canvas to draw into.
-			if (target.contentIds.some((id) => !document.getElementById(id))) {
+			const elements = target.contentIds.map((id) => document.getElementById(id));
+			if (elements.some((element) => !element)) {
 				vscode.postMessage({ command: "reload" });
 				return;
 			}
@@ -44,7 +45,7 @@ export function onUpdateBody(
 				}
 			}
 
-			await apply(msg.data ?? {});
+			await apply(msg.data ?? {}, elements as E);
 		}),
 	);
 }
