@@ -5,8 +5,9 @@ import { contextContainer } from "../../context";
 import { refreshFeatureFlags } from "../../util/featureflags";
 import * as fileloader from "../../util/fileloader";
 import { __resetIndexProgressForTests } from "../../util/indexBuild";
-import { captureCacheScope } from "../../util/indexCache";
+import * as indexCache from "../../util/indexCache";
 import { clearParentModCache } from "../../util/parentmods";
+import { settle } from "./async";
 import { handOver } from "./host";
 
 // What the gfx, shared focus, localisation and idea swap index tests share: an editor with one
@@ -47,6 +48,32 @@ class FakeUri {
 	}
 }
 
+// Every world gets a storage root of its own, and its editor's sinks only file paths under that
+// root: the cache scope a build captures carries the root down into every cache file URI, so a
+// write whose URI belongs to a world that already ended has nowhere to go and is dropped, instead
+// of landing in whatever world holds the editor when the write settles.
+let nextStorageRoot = 0;
+
+// The disk cache saves are what the builds fire-and-forget, so a test or the afterEach that must
+// see a settled disk waits on the saves the mocks in useIndexWorld catch at their call instead of
+// guessing how many scheduling rounds a write takes. What a completion queues next is picked up by
+// the next round, and the round after every completion caught nothing.
+const realSaveCacheRecords = indexCache.saveCacheRecords;
+const realSaveCacheManifest = indexCache.saveCacheManifest;
+
+async function drainCacheSaves(pending: Promise<unknown>[]): Promise<number> {
+	let saved = 0;
+	for (;;) {
+		await settle();
+		const inFlight = pending.splice(0, pending.length);
+		if (inFlight.length === 0) {
+			return saved;
+		}
+		saved += inFlight.length;
+		await Promise.all(inFlight);
+	}
+}
+
 /** A workspace file, named the way the editor names it in an event. */
 export function workspaceFile(relativePath: string): vscode.Uri {
 	return new FakeUri(posix.join("/ws", relativePath)) as unknown as vscode.Uri;
@@ -72,13 +99,22 @@ export interface IndexWorld {
 	cancelled: boolean;
 	/** The cache files, by full path, once the test has given the indexes a disk with useDisk. */
 	disk: Map<string, Uint8Array>;
+	/** The storage root this world's cache URIs answer to; no two worlds share one. */
+	storageRoot: string;
 	useDisk(): void;
+	/** Resolves once every cache save the builds have asked for is on the disk; returns how many. */
+	drainCacheWrites(): Promise<number>;
 	/** Where a cache file of this name sits in the cache directory the current settings pick. */
 	cacheFile(name: string): string;
 }
 
 function editorFor(world: IndexWorld) {
 	const disposable = () => ({ dispose: () => undefined });
+	// The editor keeps the disk and root it was handed with, so a continuation that reaches it after
+	// the world moved on still answers for its own world and no other.
+	const storageRoot = world.storageRoot;
+	const disk = world.disk;
+	const underThisRoot = (path: string) => path === storageRoot || path.startsWith(`${storageRoot}/`);
 	return {
 		ProgressLocation: { Notification: 15 },
 		Uri: {
@@ -101,14 +137,16 @@ function editorFor(world: IndexWorld) {
 				readDirectory: async () => [],
 				createDirectory: async () => undefined,
 				readFile: async (uri: FakeUri) => {
-					const data = world.disk.get(uri.path);
+					const data = underThisRoot(uri.path) ? disk.get(uri.path) : undefined;
 					if (!data) {
 						throw new Error(`no such cache file: ${uri.path}`);
 					}
 					return data;
 				},
 				writeFile: async (uri: FakeUri, content: Uint8Array) => {
-					world.disk.set(uri.path, content);
+					if (underThisRoot(uri.path)) {
+						disk.set(uri.path, content);
+					}
 				},
 			},
 		},
@@ -127,8 +165,13 @@ function editorFor(world: IndexWorld) {
  */
 export function useIndexWorld(reset: () => void, settings: Record<string, unknown>): IndexWorld {
 	const world = {} as IndexWorld;
+	let pendingSaves: Promise<unknown>[] = [];
 
 	beforeEach(() => {
+		const storageRoot = `/storage/${++nextStorageRoot}`;
+		const disk = new Map<string, Uint8Array>();
+		pendingSaves = [];
+
 		Object.assign(world, {
 			settings: { ...settings },
 			list: () => [],
@@ -136,14 +179,16 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 			listings: 0,
 			reads: 0,
 			cancelled: false,
-			disk: new Map(),
+			disk,
+			storageRoot,
 			useDisk: () => {
 				contextContainer.current = {
-					globalStorageUri: new FakeUri("/storage"),
+					globalStorageUri: new FakeUri(storageRoot),
 				} as unknown as vscode.ExtensionContext;
 			},
+			drainCacheWrites: () => drainCacheSaves(pendingSaves),
 			cacheFile: (name) => {
-				const dir = captureCacheScope();
+				const dir = indexCache.captureCacheScope();
 				if (!dir) {
 					throw new Error("the test has no disk: call useDisk first");
 				}
@@ -152,6 +197,25 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 		} satisfies IndexWorld);
 
 		handOver(editorFor(world) as never);
+		// The saves pass straight through to the real writers; catching each call to the real save is
+		// what makes drainCacheWrites exact.
+		const trackSave = <T>(save: () => Promise<T>): Promise<T> => {
+			const saved = save();
+			pendingSaves.push(saved);
+			return saved;
+		};
+		mock.method(
+			indexCache,
+			"saveCacheRecords",
+			(indexName: string, records: readonly unknown[], scope?: indexCache.CacheScope) =>
+				trackSave(() => realSaveCacheRecords(indexName, records, scope)),
+		);
+		mock.method(
+			indexCache,
+			"saveCacheManifest",
+			(indexName: string, filePaths: string[], mtimes: Map<string, number>, version: number, scope?: indexCache.CacheScope) =>
+				trackSave(() => realSaveCacheManifest(indexName, filePaths, mtimes, version, scope)),
+		);
 		mock.method(fileloader, "listFileEntriesFromModOrHOI4", async (root: string, options?: fileloader.FileSourceOptions) => {
 			world.listings++;
 			return world.list(root, halfOf(options));
@@ -166,7 +230,9 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 		reset();
 	});
 
-	afterEach(() => {
+	afterEach(async () => {
+		// A save scheduled by this test reaches the disk before anything resets.
+		await drainCacheSaves(pendingSaves);
 		reset();
 		mock.restoreAll();
 		contextContainer.current = null;
@@ -178,4 +244,11 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 	});
 
 	return world;
+}
+
+/** Hands over the editor the next test would get: a fresh disk under a storage root of its own. */
+export function handOverLaterWorldEditorFor(previous: IndexWorld): Map<string, Uint8Array> {
+	const disk = new Map<string, Uint8Array>();
+	handOver(editorFor({ ...previous, disk, storageRoot: `/storage/${++nextStorageRoot}` }) as never);
+	return disk;
 }

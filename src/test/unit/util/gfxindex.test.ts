@@ -203,4 +203,30 @@ describe("util/gfxindex", () => {
 			assert.deepStrictEqual(listedHalves, []);
 		});
 	});
+
+	// What the next editor session starts from: an empty index over the cache the last build wrote.
+	describe("warm cache restore", () => {
+		beforeEach(() => {
+			world.useDisk();
+			world.list = (_root, half) => (half === "global" ? listed(["vanilla.gfx"]) : listed(["sprite.gfx"]));
+			world.read = (_relativePath, half) =>
+				half === "global" ? sprites("GFX_shared", "GFX_vanilla_only") : sprites("GFX_shared", "GFX_workspace_only");
+		});
+
+		// The cache writes sit behind the build promise, so the reset below must first wait for the
+		// manifests and data files to be on the disk; otherwise the warm build would find no cache and
+		// re-read the sources, and the test would measure the cold path.
+		it("restores both halves from the cache without reading a source file again", async () => {
+			assert.ok((await getIndexedGfxNames()).includes("GFX_vanilla_only"));
+			const readsAfterColdBuild = world.reads;
+			await world.drainCacheWrites();
+
+			__resetGfxIndexForTests();
+			assert.deepStrictEqual((await getIndexedGfxNames()).sort(), ["GFX_shared", "GFX_vanilla_only", "GFX_workspace_only"]);
+			// The whole point of the cache: the cold build was the last one to read the sources.
+			assert.strictEqual(world.reads, readsAfterColdBuild);
+			// The restored halves keep their order: the working mod's file wins over the vanilla one.
+			assert.strictEqual(await getGfxContainerFile("GFX_shared"), "interface/sprite.gfx");
+		});
+	});
 });
