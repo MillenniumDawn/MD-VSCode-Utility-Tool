@@ -167,5 +167,32 @@ describe("previewdef/definition", () => {
 			assert.strictEqual(gui.canPreview(document("/mod/interface/SOV.gfx")), undefined);
 			assert.deepStrictEqual([gui.type, gui.displayName(), "onPreview" in gui && gui.onPreview], ["gui", "Preview", own.onPreview]);
 		});
+
+		it("answers for every preview, and nothing for the wrong suffix or a setting that is off", () => {
+			const homes: [keyof typeof previewFiles, string][] = [
+				["focustree", "/mod/common/national_focus/SOV.txt"],
+				["gfx", "/mod/interface/SOV.gfx"],
+				["technology", "/mod/common/technologies/infantry.txt"],
+				["worldmap", "/mod/map/default.map"],
+				["event", "/mod/events/SOV.txt"],
+				["gui", "/mod/interface/SOV.gui"],
+				["mio", "/mod/common/military_industrial_organization/organizations/SOV.txt"],
+				["idea", "/mod/common/ideas/SOV.txt"],
+				["decision", "/mod/common/decisions/SOV.txt"],
+				["character", "/mod/common/characters/SOV.txt"],
+				["bop", "/mod/common/bop/SOV.txt"],
+			];
+			settings(everyPreviewOn);
+			for (const [type, home] of homes) {
+				const preview = definePreview({ type, ...own });
+				assert.strictEqual(preview.canPreview(document(home)), 0, type);
+				assert.strictEqual(preview.canPreview(document(`${home}.md`)), undefined, `${type} suffix`);
+			}
+			settings({});
+			for (const type of ["event", "idea", "decision", "character", "bop"] as const) {
+				const home = homes.find(([name]) => name === type)?.[1];
+				assert.strictEqual(definePreview({ type, ...own }).canPreview(document(home!)), undefined, type);
+			}
+		});
 	});
 });

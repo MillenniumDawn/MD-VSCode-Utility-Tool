@@ -2,7 +2,39 @@ import * as assert from "assert";
 import * as vscode from "vscode";
 import { afterEach, describe, it } from "mocha";
 import { WorldMap } from "../previewdef/worldmap/worldmap";
+import { WorldMapData } from "../previewdef/worldmap/definitions";
 import { restoreVscodeStubs, stubVscode } from "./_vscode_stub";
+
+function emptyMap(over: Partial<WorldMapData> = {}): WorldMapData {
+	return {
+		width: 2,
+		height: 2,
+		provinces: [],
+		states: [],
+		countries: [],
+		strategicRegions: [],
+		supplyAreas: [],
+		railways: [],
+		supplyNodes: [],
+		provincesCount: 0,
+		statesCount: 0,
+		countriesCount: 0,
+		strategicRegionsCount: 0,
+		supplyAreasCount: 0,
+		railwaysCount: 0,
+		supplyNodesCount: 0,
+		badProvincesCount: 0,
+		badStatesCount: 0,
+		badStrategicRegionsCount: 0,
+		badSupplyAreasCount: 0,
+		continents: [],
+		terrains: [],
+		resources: [],
+		rivers: [],
+		warnings: [],
+		...over,
+	};
+}
 
 function panel(posts: unknown[]): unknown {
 	return {
@@ -264,5 +296,68 @@ describe("previewdef/worldmap/WorldMap", () => {
 		stubVscode({ configuration: {} });
 		const html = (new WorldMap({ webview } as any) as any).renderWorldMap(webview);
 		assert.ok(html.includes("window.__enableSupplyArea = false;"));
+	});
+
+	it("posts a province summary, then the difference when the map is loaded again", async () => {
+		const posts: unknown[] = [];
+		const worldMap = new WorldMap(panel(posts) as any);
+		const first = emptyMap();
+		const second = emptyMap({ warnings: [{ text: "moved", source: [], relatedFiles: [] } as any] });
+		const loads = [first, second];
+		(worldMap as any).worldMapLoader = {
+			shallowForceReload: () => undefined,
+			load: async () => ({ result: loads.shift(), dependencies: ["map/default.map"] }),
+			onProgress: () => undefined,
+		};
+
+		await (worldMap as any).onMessage({ command: "loaded", force: true });
+		assert.strictEqual((posts.at(-1) as any).command, "provincemapsummary");
+
+		await (worldMap as any).onMessage({ command: "loaded", force: false });
+		assert.ok(posts.some((message) => (message as any).command === "warnings"), JSON.stringify(posts));
+		assert.ok(posts.some((message) => (message as any).command === "progress"));
+	});
+
+	it("asks which folder to copy a state file into when none is open", async () => {
+		const errors: string[] = [];
+		stubVscode({ showErrorMessage: async (message: string) => { errors.push(message); } });
+		const worldMap = new WorldMap(panel([]) as any);
+
+		await (worldMap as any).onMessage({
+			command: "openfile",
+			file: "history/states/1.txt",
+			type: "state",
+			start: 1,
+			end: 4,
+		});
+
+		assert.ok(errors.some((message) => message.includes("Must open a folder")), errors.join("\n"));
+	});
+
+	it("asks the page to export once a save path is chosen, and stops when it is not", async () => {
+		const posts: unknown[] = [];
+		const saves: unknown[] = [undefined, vscode.Uri.file("/tmp/world-map.png")];
+		stubVscode({});
+		(vscode.window as any).showSaveDialog = async () => saves.shift();
+		const worldMap = new WorldMap(panel(posts) as any);
+
+		await (worldMap as any).onMessage({ command: "requestexportmap" });
+		assert.deepStrictEqual(posts, []);
+		assert.strictEqual((worldMap as any).lastRequestedExportUri, undefined);
+
+		await (worldMap as any).onMessage({ command: "requestexportmap" });
+		assert.deepStrictEqual(posts, [{ command: "requestexportmap" }]);
+		assert.strictEqual((worldMap as any).lastRequestedExportUri.fsPath, "/tmp/world-map.png");
+	});
+
+	it("drops the cached map when the panel is hidden", () => {
+		const worldMap = new WorldMap(panel([]) as any);
+		const state = worldMap as any;
+		state.cachedWorldMap = emptyMap();
+		state.panel = { visible: false, webview: { postMessage: async () => true } };
+
+		state.onViewStateChanged();
+
+		assert.strictEqual(state.cachedWorldMap, undefined);
 	});
 });
