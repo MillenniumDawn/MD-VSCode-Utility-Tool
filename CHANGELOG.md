@@ -4,6 +4,7 @@ Unreleased
 - [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
 
   Bugfixes:
+- [ Previews ] Replacing a dropdown while its menu is open now closes the old menu and restores canvas zoom correctly. Issue #635.
 - [ CI ] Version checks now update their existing note even on pull requests with more than 30 comments, and workflow checkouts no longer retain their credentials. Issue #564.
 - [ Previews ] Opening a mod workspace with only MIO organization files or `.gui` files under `interface/` now activates the preview button without opening another file first. Issue #481.
 - [ CI ] The release workflow now gives the registry tokens only to the publish step, and no longer mistakes a fork's pull request for its own release or fix pull request. Issues #573, #574.
@@ -23,6 +24,7 @@ Unreleased
 - [ Cleanup ] The previews' dropdowns, the focus tree and MIO condition lists, and the in-place refresh of the MIO, technology and GFX previews each have one implementation instead of several. Issue #491.
 - [ Cleanup ] The GFX, shared focus, localisation and idea swap indexes are built and kept up to date by one shared routine instead of four copies. A game `.gfx` file that fails to parse is now labeled `[Vanilla]` in the output, not `[Mod]`. Issue #489.
 - [ Testing ] The GFX, shared focus and localisation index tests run without the editor and share one setup, and the behavior every index shares is tested once for all four. Issue #567.
+- [ Testing ] File discovery and release-history tests now share their setup, and all idea swap tests run without the editor.
 
 v1.1.42
 

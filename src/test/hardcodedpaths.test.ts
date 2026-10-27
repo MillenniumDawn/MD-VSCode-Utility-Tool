@@ -4,6 +4,7 @@ import * as path from 'path';
 import {
 	AllowlistEntry, ManifestIndex, checkHardcoded, findRepoRoot, formatHit, loadManifest, scanHardcoded, scanPackageDefaults,
 } from './compat/manifest';
+import { walkFiles } from './unit/files';
 
 // Every game path and `GFX_` sprite the extension's source names has to exist in the base game,
 // or be allowlisted with a reason. #448–#451 were Millennium Dawn-only names that made a preview go
@@ -15,23 +16,10 @@ const repoRoot = findRepoRoot();
 const modPacksDir = path.join(repoRoot, 'src', 'modtools', 'packs');
 const allowlistFile = path.join(repoRoot, 'compat', 'hardcoded-allowlist.json');
 
-function sourceFiles(dir: string): string[] {
-	const result: string[] = [];
-	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-		const full = path.join(dir, entry.name);
-		if (entry.isDirectory()) {
-			if (full !== path.join(repoRoot, 'src', 'test') && full !== modPacksDir) {
-				result.push(...sourceFiles(full));
-			}
-		} else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
-			result.push(full);
-		}
-	}
-	return result;
-}
-
 function allHits() {
-	const hits = sourceFiles(path.join(repoRoot, 'src')).flatMap(file =>
+	const hits = walkFiles(path.join(repoRoot, 'src'),
+		file => file.endsWith('.ts') && !file.endsWith('.d.ts'),
+		[path.join(repoRoot, 'src', 'test'), modPacksDir]).flatMap(file =>
 		scanHardcoded(fs.readFileSync(file, 'utf8'), path.relative(repoRoot, file).replace(/\\/g, '/')));
 	return [...hits, ...scanPackageDefaults(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'))];
 }

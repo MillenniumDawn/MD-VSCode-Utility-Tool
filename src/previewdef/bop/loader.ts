@@ -13,8 +13,7 @@ import { ResolvedGuiWindow, findContainerWindows } from "../../util/guiwindowind
 import { parseAndResolveHoi4FileCached } from "../../util/fileloader";
 import { ContainerWindowType, GuiFile, IconType, guiFileSchema } from "../../hoiformat/gui";
 import { HOIPartial, convertNodeToJson } from "../../hoiformat/schema";
-import { Logger } from "../../util/logger";
-import { describeParseFailure } from "../../util/indexHalf";
+import { describeParseFailure, Logger } from "../../util/logger";
 import { HOIDecision } from "../decision/schema";
 import { decisionSpriteName, getDecisionGfxFiles } from "../decision/loader";
 import { decisionItemWindowName, decisionsFolder, loadCategoryDecisions } from "./decisions";
