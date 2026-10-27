@@ -24,9 +24,8 @@ import { loadExclusiveLinkImages, nationalFocusViewGfxFile } from "../../util/ho
 import { registerFocusLinkStyles } from "../../util/hoi4gui/focuslink";
 import { loadFocusLinkImages } from "../../util/hoi4gui/focuslinkimages";
 import { FocusItemLayout, FocusShortcutGui, FocusTreeLayout, focusTreeGridBoxFor, standardFocusTreeLayout } from "./layout";
-import { describeParseFailure } from "../../util/indexHalf";
 import { actionGroupHtml, iconButtonHtml, iconClassOf } from "../toolbaricons";
-import { Logger } from "../../util/logger";
+import { describeParseFailure, Logger } from "../../util/logger";
 import { TOOLBAR_HEIGHT, toolbarWrapper, traceStatusHtml, warningPanelHtml, searchHtml } from "../toolbarparts";
 import { spriteIconStyle } from "../iconstyle";
 

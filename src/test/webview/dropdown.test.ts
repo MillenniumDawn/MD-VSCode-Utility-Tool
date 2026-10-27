@@ -140,6 +140,44 @@ describe('webview/util/dropdown', function () {
         assert.strictEqual(numDropDownOpened$.value, 0);
     });
 
+    for (const multi of [false, true]) {
+        it(`closes an open ${multi ? 'multi' : 'single'} menu when disposed`, function () {
+            const dd = buildDivDropdown(['a', 'b'], multi);
+            dd.select.dispatchEvent(new Event('mousedown', { cancelable: true }));
+            const item = document.querySelectorAll('ul.select-dropdown li')[1] as HTMLElement;
+            assert.strictEqual(numDropDownOpened$.value, 1);
+
+            dd.dispose();
+            assert.strictEqual(numDropDownOpened$.value, 0);
+            assert.strictEqual(document.querySelector('ul.select-dropdown'), null);
+            assert.strictEqual(dd.select.classList.contains('dropdown-opened'), false);
+            const selection = dd.selectedValues$.value;
+
+            item.click();
+            document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true }));
+            dd.dispose();
+            assert.strictEqual(numDropDownOpened$.value, 0);
+            assert.deepStrictEqual(dd.selectedValues$.value, selection);
+        });
+    }
+
+    it('closes an open native menu before rebuilding dropdowns', function () {
+        document.body.innerHTML = '<div class="select-container"><select><option>a</option></select></div>';
+        enableDropdowns();
+        const select = document.querySelector('select')!;
+        select.dispatchEvent(new Event('mousedown', { cancelable: true }));
+        assert.strictEqual(numDropDownOpened$.value, 1);
+
+        enableDropdowns();
+        assert.strictEqual(numDropDownOpened$.value, 0);
+        assert.strictEqual(document.querySelector('ul.select-dropdown'), null);
+        select.dispatchEvent(new Event('mousedown', { cancelable: true }));
+        assert.strictEqual(numDropDownOpened$.value, 1);
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        assert.strictEqual(numDropDownOpened$.value, 0);
+    });
+
     it('increments open counter when dropdown opens', function (done) {
         const dd = buildDivDropdown(['a', 'b']);
         const sub = numDropDownOpened$.subscribe(n => {
@@ -150,5 +188,7 @@ describe('webview/util/dropdown', function () {
             }
         });
         dd.select.dispatchEvent(new Event('mousedown'));
+        assert.strictEqual(numDropDownOpened$.value, 0);
+        assert.strictEqual(document.querySelector('ul.select-dropdown'), null);
     });
 });

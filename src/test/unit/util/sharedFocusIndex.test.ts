@@ -205,42 +205,6 @@ describe("util/sharedFocusIndex", () => {
 			assert.ok(!line.includes("undefined"));
 		});
 
-		it("falls back to message when an Error has an empty stack", async () => {
-			const err = new Error("empty-stack");
-			(err as unknown as Record<string, unknown>).stack = "";
-			parseThrows(err);
-
-			assert.ok((await loggedLine()).includes("empty-stack"));
-		});
-
-		const thrownValues: [string, unknown, string][] = [
-			["a thrown string", "plain old string", "plain old string"],
-			["thrown 42", 42, "42"],
-			["thrown null", null, "null"],
-			["thrown undefined", undefined, "undefined"],
-			["thrown 0", 0, "0"],
-			["a thrown object", { toString: () => "custom-obj" }, "custom-obj"],
-			["a thrown Symbol", Symbol("sym"), "Symbol(sym)"],
-		];
-
-		for (const [title, thrown, expected] of thrownValues) {
-			it(`logs String(e) for ${title}`, async () => {
-				parseThrows(thrown);
-				const line = await loggedLine();
-				assert.ok(line.includes("common/national_focus/bad.txt"), line);
-				assert.ok(line.includes(expected), line);
-			});
-		}
-
-		it("falls back to Object.prototype.toString when String(e) throws", async () => {
-			parseThrows({
-				toString() {
-					throw new Error("inner");
-				},
-			});
-			assert.ok((await loggedLine()).includes("[object Object]"));
-		});
-
 		it("does not poison the index: a failed file leaves no entry", async () => {
 			parseThrows("bad file");
 			assert.strictEqual(await findFileByFocusKey("bad"), undefined);

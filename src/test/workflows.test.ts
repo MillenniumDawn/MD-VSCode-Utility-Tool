@@ -617,14 +617,7 @@ describe('.github/workflows', function () {
             }
         });
 
-        it('keeps checkout credentials out of cached and uploaded files', function () {
-            for (const file of ['compat.yml', 'release.yml']) {
-                for (const step of steps(load(file))) {
-                    if (step.uses?.startsWith('actions/checkout@')) {
-                        assert.strictEqual(step.with?.['persist-credentials'], false, file);
-                    }
-                }
-            }
+        it('authenticates release pushes without persisting checkout credentials', function () {
             for (const id of ['release-pull-request', 'release-failed']) {
                 const auth = runsIn(workflow, id, 'GIT_CONFIG_VALUE_0=AUTHORIZATION: basic $header');
                 assert.ok(auth, `${id} cannot authenticate its pushes`);

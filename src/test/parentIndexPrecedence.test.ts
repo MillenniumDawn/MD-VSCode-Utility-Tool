@@ -23,6 +23,7 @@ import { refreshModDependencies } from "../util/moddependencies";
 import { captureCacheScope } from "../util/indexCache";
 import { __resetIndexProgressForTests } from "../util/indexBuild";
 import { restoreVscodeStubs, stubVscode } from "./_vscode_stub";
+import { deferred, settle as waitForAsyncTasks } from "./unit/async";
 
 type ListedEntry = {
 	relativePath: string;
@@ -71,14 +72,6 @@ function toEntries(names: string[]): ListedEntry[] {
 	}));
 }
 
-function deferred(): { resolve: () => void; promise: Promise<void> } {
-	let resolve: () => void = () => undefined;
-	const promise = new Promise<void>((done) => {
-		resolve = done;
-	});
-	return { resolve, promise };
-}
-
 function parentNumber(options: SourceOptions | undefined): number {
 	const path = options?.parentModUris?.[0]?.path ?? "";
 	return path.includes("parent-one") ? 0 : 1;
@@ -114,10 +107,6 @@ function contentForParent(parent: number): Buffer {
 				`focus = { completion_reward = { swap_ideas = { remove_idea = parent_precedence_from add_idea = parent_precedence_to_${parent} } } }`,
 			);
 	}
-}
-
-function waitForAsyncTasks(): Promise<void> {
-	return new Promise((resolve) => setImmediate(resolve));
 }
 
 async function lookupAfterSecondParentRead<T>(lookup: Promise<T>): Promise<T> {

@@ -4,6 +4,7 @@ import * as path from 'path';
 import { ModToolPack } from '../modtools/api';
 import { modToolPacks } from '../modtools/registry';
 import { findRepoRoot } from './compat/manifest';
+import { walkFiles } from './unit/files';
 
 // What keeps mod packs apart from the rest of the extension, and what a pack owes before it is
 // accepted (src/modtools/README.md): a settings page of its own with one switch per tool, a
@@ -76,13 +77,8 @@ function packContractProblems(packs: readonly ModToolPack[], sections: readonly 
 }
 
 function sourceFiles(dir: string): string[] {
-    return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-            return full === path.join(repoRoot, 'src', 'test') ? [] : sourceFiles(full);
-        }
-        return entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts') ? [full] : [];
-    });
+    return walkFiles(dir, file => file.endsWith('.ts') && !file.endsWith('.d.ts'),
+        [path.join(repoRoot, 'src', 'test')]);
 }
 
 const importPattern = /(?:from\s+|require\(\s*|import\(\s*)['"]([^'"]+)['"]/g;
