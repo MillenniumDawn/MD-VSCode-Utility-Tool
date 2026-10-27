@@ -26,6 +26,7 @@ Unreleased
 - [ Testing ] The GFX, shared focus and localisation index tests run without the editor and share one setup, and the behavior every index shares is tested once for all four. Issue #567.
 - [ Testing ] File discovery and release-history tests now share their setup, and all idea swap tests run without the editor.
 - [ Cleanup ] The DDS decoder, the focus tree's two condition lists and the in-place refresh of the technology and GFX previews each drop a leftover copy of their code. Issue #633.
+- [ CI ] Release notes are worded by a free model again. The old free model was withdrawn, so every seeded bullet had fallen back to its pull request title. Issue #534.
 
 v1.1.42
 
