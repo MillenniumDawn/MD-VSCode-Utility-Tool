@@ -9,7 +9,7 @@ import { CharacterRoleKind } from "./schema";
 // LoaderPreview hashes it to decide whether an edit changed anything, so a stable order and
 // counter-free ids are what make an unchanged edit skip the re-render.
 
-export {
+export type {
 	ModifierLine,
 	ModifierGroup,
 } from "../sharedpayload";

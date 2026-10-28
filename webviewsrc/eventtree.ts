@@ -54,9 +54,9 @@ export {
 	countEffectLines,
 } from "./util/conditiontree";
 export {
-	ChipInput,
-	LayoutInput,
-	LayoutResult,
+	type ChipInput,
+	type LayoutInput,
+	type LayoutResult,
 	layoutGraph,
 	separateChips,
 } from "./util/graphlayout";

@@ -16,6 +16,7 @@
 		"noUnusedLocals": true,
 		"noUnusedParameters": true,
 		"noImplicitOverride": true,
+		"isolatedModules": true,
 		"importHelpers": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true
