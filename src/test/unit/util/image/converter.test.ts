@@ -264,6 +264,19 @@ describe("tgaToPng", () => {
 		assert.deepStrictEqual(Array.from(tgaToPng(file).data), [0, 0, 255, 255, 255, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255]);
 	});
 
+	it("leaves a colour index outside the map transparent black", () => {
+		const header = Buffer.alloc(18);
+		header[1] = 1;
+		header[2] = 1;
+		header.writeUInt16LE(1, 5);
+		header[7] = 24;
+		header.writeUInt16LE(2, 12);
+		header.writeUInt16LE(1, 14);
+		header[16] = 8;
+		const png = tgaToPng(Buffer.concat([header, Buffer.from([0, 0, 255]), Buffer.from([0, 5])]));
+		assert.deepStrictEqual(Array.from(png.data), [255, 0, 0, 255, 0, 0, 0, 0]);
+	});
+
 	it("honours the image ID, colour-map first index, descriptor origins, and 16-bit alpha", () => {
 		const header = Buffer.alloc(18);
 		header[0] = 1;
