@@ -37,7 +37,13 @@ export function ensureFileScheme(uri: vscode.Uri) {
 }
 
 export function isSameUri(uriA: vscode.Uri, uriB: vscode.Uri) {
-    return (isFileScheme(uriA) && isFileScheme(uriB) && pathIdentity(path.resolve(uriA.fsPath)) === pathIdentity(path.resolve(uriB.fsPath))) || uriA.toString() === uriB.toString();
+    return (isFileScheme(uriA) && isFileScheme(uriB) && filePathIdentity(uriA.fsPath) === filePathIdentity(uriB.fsPath)) || uriA.toString() === uriB.toString();
+}
+
+// Off Windows a backslash is part of a file name, so only Windows paths fold slashes and case.
+function filePathIdentity(fsPath: string): string {
+    const resolved = path.resolve(fsPath);
+    return process.platform === 'win32' ? pathIdentity(resolved) : resolved;
 }
 
 export async function getLastModifiedAsync(path: vscode.Uri): Promise<number> {

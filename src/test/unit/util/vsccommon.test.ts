@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import * as path from "path";
 import type * as vscode from "vscode";
 import { isSameUri } from "../../../util/vsccommon";
 
@@ -16,6 +17,15 @@ describe("util/vsccommon URI identity", () => {
 			assert.strictEqual(isSameUri(uri("/mods/Parent/x.txt"), uri("/mods/parent/x.txt")), os === "win32");
 		});
 	}
+
+	it("keeps a backslash in a Linux file name apart from a folder separator", function () {
+		// Windows path.resolve turns the backslash into a separator before the comparison.
+		if (path.sep === "\\") {
+			this.skip();
+		}
+		Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+		assert.strictEqual(isSameUri(uri("/mods/a\\b.txt"), uri("/mods/a/b.txt")), false);
+	});
 
 	it("normalizes file path segments and ignores file URI fragments", () => {
 		assert.strictEqual(isSameUri(uri("/mods/parent/common/../x.txt"), uri("/mods/parent/x.txt", "file", ":opened")), true);
