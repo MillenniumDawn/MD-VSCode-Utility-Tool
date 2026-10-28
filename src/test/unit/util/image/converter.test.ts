@@ -12,8 +12,7 @@ import {
 } from "../../../../util/image/converter";
 import { isUserError, makeDds, parseDds } from "../../dds";
 import { makeZeroPng, pngChunk, pngEnd, pngFile, pngHeader } from "../../png";
-
-const TGA = require("tga") as typeof import("tga");
+import * as tgaDecoder from "../../../../util/image/tga";
 
 function withoutRasterAllocation(convert: () => PNG, rasterBytes: number): PNG {
 	const original = Buffer.alloc;
@@ -24,7 +23,7 @@ function withoutRasterAllocation(convert: () => PNG, rasterBytes: number): PNG {
 	};
 	try {
 		const png = convert();
-		assert.ok(!sizes.includes(rasterBytes), "the PNG must not allocate an unused RGBA canvas");
+		assert.ok(!sizes.includes(rasterBytes), "conversion must not allocate an unused RGBA canvas");
 		return png;
 	} finally {
 		Buffer.alloc = original;
@@ -229,23 +228,125 @@ describe("tgaToPng", () => {
 		});
 	}
 
-	it("retains the decoder-owned pixels without allocating a PNG canvas or pixel copy", () => {
-		const source = makeTga({ width: 16, height: 16, data: new Array<number>(16 * 16 * 4).fill(37) });
-		const parse = TGA.prototype.parse;
-		let pixels: Uint8Array | undefined;
-		TGA.prototype.parse = function () {
-			parse.call(this);
-			pixels = this.pixels;
-		};
+	it("decodes every supported image type to the expected RGBA bytes", () => {
+		const colourMap = Buffer.from([0, 0, 255, 255, 255, 0, 0, 255]);
+		const fixtures: [number, Buffer, number[]][] = [
+			[1, Buffer.from([0, 1]), [255, 0, 0, 255, 0, 0, 255, 255]],
+			[2, Buffer.from([0, 0, 255, 255, 0, 255, 0, 255]), [255, 0, 0, 255, 0, 255, 0, 255]],
+			[3, Buffer.from([12, 200]), [12, 12, 12, 255, 200, 200, 200, 255]],
+			[9, Buffer.from([1, 0, 1]), [255, 0, 0, 255, 0, 0, 255, 255]],
+			[10, Buffer.from([1, 0, 0, 255, 255, 0, 255, 0, 255]), [255, 0, 0, 255, 0, 255, 0, 255]],
+			[11, Buffer.from([1, 12, 200]), [12, 12, 12, 255, 200, 200, 200, 255]],
+		];
+		for (const [type, payload, expected] of fixtures) {
+			const indexed = type === 1 || type === 9;
+			const header = Buffer.alloc(18);
+			header[1] = indexed ? 1 : 0;
+			header[2] = type;
+			header.writeUInt16LE(2, 5);
+			header[7] = indexed ? 32 : 0;
+			header.writeUInt16LE(2, 12);
+			header.writeUInt16LE(1, 14);
+			header[16] = indexed ? 8 : type === 3 || type === 11 ? 8 : 32;
+			const image = Buffer.concat([header, ...(indexed ? [colourMap] : []), payload]);
+			const png = tgaToPng(image);
+			assert.deepStrictEqual(Array.from(png.data), expected, `TGA image type ${type}`);
+		}
+	});
+
+	it("decodes mixed raw and repeated RLE packets across a row boundary", () => {
+		const file = makeTga({
+			width: 2,
+			height: 2,
+			type: 10,
+			data: [1, 0, 0, 255, 255, 0, 255, 0, 255, 0x80, 255, 0, 0, 255, 0x80, 0, 255, 255, 255],
+		});
+		assert.deepStrictEqual(Array.from(tgaToPng(file).data), [0, 0, 255, 255, 255, 255, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255]);
+	});
+
+	it("honours the image ID, colour-map first index, descriptor origins, and 16-bit alpha", () => {
+		const header = Buffer.alloc(18);
+		header[0] = 1;
+		header[1] = 1;
+		header[2] = 1;
+		header.writeUInt16LE(1, 3);
+		header.writeUInt16LE(4, 5);
+		header[7] = 32;
+		header.writeUInt16LE(2, 12);
+		header.writeUInt16LE(2, 14);
+		header[16] = 8;
+		const palette = Buffer.from([0, 0, 255, 255, 0, 255, 0, 255, 255, 0, 0, 255, 0, 255, 255, 255]);
+		const indices = Buffer.from([1, 2, 3, 4]);
+		const colours = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], [255, 255, 0, 255]];
+		for (const origin of [0, 0x10, 0x20, 0x30]) {
+			header[17] = origin;
+			const png = tgaToPng(Buffer.concat([header, Buffer.from([65]), palette, indices]));
+			const flipX = (origin & 0x10) !== 0;
+			const flipY = (origin & 0x20) === 0;
+			const expected: number[][] = new Array(4);
+			for (let i = 0; i < 4; i++) {
+				const x = i % 2;
+				const y = Math.floor(i / 2);
+				expected[(flipY ? 1 - y : y) * 2 + (flipX ? 1 - x : x)] = colours[(indices[i] - 1)];
+			}
+			assert.deepStrictEqual(Array.from(png.data), expected.flat());
+		}
+		const trueColour = Buffer.alloc(20);
+		trueColour[2] = 2;
+		trueColour.writeUInt16LE(1, 12);
+		trueColour.writeUInt16LE(1, 14);
+		trueColour[16] = 16;
+		trueColour[17] = 1;
+		trueColour.writeUInt16LE(0x8000 | (31 << 10), 18);
+		assert.deepStrictEqual(Array.from(tgaToPng(trueColour).data), [248, 0, 0, 128]);
+		const grayscale = Buffer.alloc(20);
+		grayscale[2] = 3;
+		grayscale.writeUInt16LE(1, 12);
+		grayscale.writeUInt16LE(1, 14);
+		grayscale[16] = 16;
+		grayscale.set([80, 64], 18);
+		assert.deepStrictEqual(Array.from(tgaToPng(grayscale).data), [80, 80, 80, 64]);
+	});
+
+	it("uses TGA 2.0 extension attributes to determine whether 32-bit alpha is meaningful", () => {
+		const image = Buffer.alloc(18 + 4 + 495 + 26);
+		image[2] = 2;
+		image.writeUInt16LE(1, 12);
+		image.writeUInt16LE(1, 14);
+		image[16] = 32;
+		image.set([0, 0, 255, 0], 18);
+		image.writeUInt32LE(22, image.length - 26);
+		image[22 + 494] = 0;
+		image.write("TRUEVISION-XFILE.\0", image.length - 18, "ascii");
+		assert.deepStrictEqual(Array.from(tgaToPng(image).data), [255, 0, 0, 255]);
+		image[22 + 494] = 3;
+		assert.deepStrictEqual(Array.from(tgaToPng(image).data), [255, 0, 0, 0]);
+		const grayscale = Buffer.alloc(18 + 2 + 495 + 26);
+		grayscale[2] = 3;
+		grayscale.writeUInt16LE(1, 12);
+		grayscale.writeUInt16LE(1, 14);
+		grayscale[16] = 16;
+		grayscale.set([80, 64], 18);
+		grayscale.writeUInt32LE(20, grayscale.length - 26);
+		grayscale[20 + 494] = 0;
+		grayscale.write("TRUEVISION-XFILE.\0", grayscale.length - 18, "ascii");
+		assert.deepStrictEqual(Array.from(tgaToPng(grayscale).data), [80, 80, 80, 255]);
+		grayscale[20 + 494] = 3;
+		assert.deepStrictEqual(Array.from(tgaToPng(grayscale).data), [80, 80, 80, 64]);
+	});
+
+	it("keeps the decoder-owned pixels without allocating a PNG canvas or copy", () => {
+		const pixels = new Uint8Array(16 * 16 * 4 + 23).subarray(7, 7 + 16 * 16 * 4);
+		pixels.fill(37);
+		const decoder = mock.method(tgaDecoder, "decodeTga", () => ({ width: 16, height: 16, pixels: Buffer.from(pixels.buffer, pixels.byteOffset, pixels.byteLength) }));
 		try {
-			const png = withoutRasterAllocation(() => tgaToPng(source), 16 * 16 * 4);
-			assert.ok(pixels);
+			const png = withoutRasterAllocation(() => tgaToPng(Buffer.alloc(18)), pixels.byteLength);
 			assert.strictEqual(png.data.buffer, pixels.buffer);
 			assert.strictEqual(png.data.byteOffset, pixels.byteOffset);
 			assert.strictEqual(png.data.byteLength, pixels.byteLength);
 			assert.deepStrictEqual(PNG.sync.write(png), makePng(16, 16, Array.from(pixels)));
 		} finally {
-			TGA.prototype.parse = parse;
+			decoder.mock.restore();
 		}
 	});
 
