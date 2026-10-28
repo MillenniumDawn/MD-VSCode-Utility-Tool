@@ -3,7 +3,7 @@ import * as path from 'path';
 import { host } from './host';
 import { localize } from './i18n';
 import { UserError, mapLimit } from './common';
-import { isSamePath } from './nodecommon';
+import { pathIdentity } from './nodecommon';
 import { ConfigurationKey } from '../constants';
 import { defaultYmlSuffix, ymlSuffixBySettingName } from './locales';
 import { contextContainer } from '../context';
@@ -37,7 +37,7 @@ export function ensureFileScheme(uri: vscode.Uri) {
 }
 
 export function isSameUri(uriA: vscode.Uri, uriB: vscode.Uri) {
-    return (isFileScheme(uriA) && isFileScheme(uriB) && isSamePath(uriA.fsPath, uriB.fsPath)) || uriA.toString() === uriB.toString();
+    return (isFileScheme(uriA) && isFileScheme(uriB) && pathIdentity(path.resolve(uriA.fsPath)) === pathIdentity(path.resolve(uriB.fsPath))) || uriA.toString() === uriB.toString();
 }
 
 export async function getLastModifiedAsync(path: vscode.Uri): Promise<number> {
