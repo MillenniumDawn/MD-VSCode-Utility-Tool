@@ -13,6 +13,7 @@ v1.1.43
 - [ Testing ] Check world-map loader results with exact assertions. Issue #566.
 
   Bugfixes:
+- [ Previews ] Opening a folder that contains mods now activates their previews, just as opening a mod folder directly does. Issue #621.
 - [ World Map Preview ] Panning and zooming with province edges shown no longer repeats the border search for sea crossings on every redraw. Issue #553.
 - [ Loading ] On Linux, files in folders whose names differ only by case no longer use the wrong open document. Issue #634.
 - [ Image Preview ] Grayscale TGA files with 16-bit pixels now keep their gray value and transparency when decoded. Issue #487.
