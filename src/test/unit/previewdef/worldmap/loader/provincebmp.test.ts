@@ -9,6 +9,16 @@ import {
 import { localize } from '../../../../../util/i18n';
 
 describe('worldmap/provincebmp getProvincesByPosition', () => {
+    function bitmapWithDistinctColors(count: number) {
+        const width = 512;
+        const height = 256;
+        const data = Buffer.alloc(width * height * 3);
+        for (let i = 0; i < count; i++) {
+            data.writeUIntLE(i, i * 3, 3);
+        }
+        return { width, height, bitsPerPixel: 24, bytesPerRow: width * 3, data };
+    }
+
     it('lists each color once in the order read, and turns the bottom-up rows the right way up', () => {
         // Quadrants, with the top-left color again at the bottom right, so a color comes back
         // after another one was read.
@@ -28,6 +38,18 @@ describe('worldmap/provincebmp getProvincesByPosition', () => {
         const result = getProvincesByPosition({ width: size, height: size, bitsPerPixel: 24, bytesPerRow: size * 3, data });
         assert.deepStrictEqual(result.colorByPosition, expected);
         assert.deepStrictEqual(result.provinces, [{ color: 0x998877 }, { color: 0x332211 }, { color: 0x665544 }]);
+    });
+
+    it('accepts the preview limit of distinct province colors', () => {
+        const result = getProvincesByPosition(bitmapWithDistinctColors(65_536));
+        assert.strictEqual(result.provinces.length, 65_536);
+    });
+
+    it('stops after finding more than the preview limit of distinct province colors', () => {
+        assert.throws(
+            () => getProvincesByPosition(bitmapWithDistinctColors(65_537)),
+            /more than 65536 distinct colors, exceeding the preview limit/,
+        );
     });
 });
 
