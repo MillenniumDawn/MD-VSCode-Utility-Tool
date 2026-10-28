@@ -1,5 +1,6 @@
 import * as assert from "assert";
 import { mock } from "node:test";
+import * as nodePath from "path";
 import { parseHoi4File } from "../../../../hoiformat/hoiparser";
 import { ScriptedGuisLoader, scriptedGuisByName } from "../../../../previewdef/decision/scriptedgui";
 import * as fileloader from "../../../../util/fileloader";
@@ -53,7 +54,7 @@ describe("previewdef/decision/scriptedgui", () => {
 		assert.strictEqual(loader.toString(), "[ScriptedGuisLoader]");
 		assert.strictEqual(
 			(loader as any).subLoaders["good.txt"].toString(),
-			"[ScriptedGuiFileLoader: common/scripted_guis/good.txt]",
+			`[ScriptedGuiFileLoader: ${nodePath.join("common/scripted_guis", "good.txt")}]`,
 		);
 	});
 });
