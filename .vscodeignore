@@ -25,6 +25,7 @@ resource/**
 coverage/**
 .nyc_output/**
 .opencode/**
+.pi/**
 .pi-subagents/**
 CLAUDE.md
 AGENTS.md
