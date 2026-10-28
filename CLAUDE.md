@@ -187,9 +187,11 @@ did not write one. And **label** the pull request `bug` or `enhancement`, or clo
 an issue that carries one, because that is what decides whether a seeded bullet
 lands under `Functionality:` or `Bugfixes:`.
 
-For a merged pull request that should appear in the release pull request's includes but should
-not seed a user-facing changelog bullet, apply the `no-changelog` label. Dependabot updates and
-pull requests that change `CHANGELOG.md` already skip seeded bullets automatically.
+A pull request that changes nothing a user sees, such as tests or tooling, gets the `no-changelog`
+label before it is merged. It is still listed in the release pull request, but seeds no bullet. The
+label has to be there at merge time: the release run on that push seeds the bullet and marks the
+pull request covered, so a label added later changes nothing. Dependabot updates and pull requests
+that change `CHANGELOG.md` already skip seeded bullets.
 
 ## Writing a preview — the checks a green suite does not make
 

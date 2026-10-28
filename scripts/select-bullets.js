@@ -10,10 +10,10 @@
 //   --covered  every pull request the open release pull request has already written a bullet for,
 //              read from its body. This is what stops a bullet reworded by hand from being rewritten
 //              on the next merge.
-//   no-changelog the pull request was explicitly labelled to omit its generated bullet.
 //
 // A pull request that changed CHANGELOG.md itself is dropped as well: it wrote its own bullet on
-// main, and the release pull request takes main's section as it stands.
+// main, and the release pull request takes main's section as it stands. So is one labelled
+// `no-changelog`, which asked for no bullet at all.
 //
 // bullets[i], pullRequests[i] and entries[i] describe the same pull request, so all three are
 // filtered together. Bullets past the end of pullRequests came from a commit with no pull request

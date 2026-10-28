@@ -18,7 +18,7 @@
 const fs = require('fs');
 
 const { bulletFor, issueFromBody } = require('./bump-version');
-const { componentForFiles, sectionForPullRequest } = require('./changelog-bullets');
+const { componentForFiles, hasLabel, sectionForPullRequest } = require('./changelog-bullets');
 const { warn, notice } = require('./lib/actions-log');
 const { parseFlags } = require('./lib/flags');
 const { gh } = require('./lib/github');
@@ -65,10 +65,6 @@ function bulletsFromPullRequests(pullRequests) {
 	}
 
 	return { bullets, pullRequests: numbers, entries };
-}
-
-function hasLabel(labels, wanted) {
-	return (labels ?? []).some((label) => String(label?.name ?? label ?? '').toLowerCase() === wanted);
 }
 
 // A pull request Dependabot opened. A dependency bump says nothing to a user of the extension, and
@@ -133,22 +129,13 @@ function issueLabels(repo, issue) {
 	return Array.isArray(parsed?.labels) ? parsed.labels : [];
 }
 
-// The commits endpoint's embedded pull request can omit labels. Fetch the canonical pull request
-// record so the opt-out label and section labels are available to the pure bullet builder.
-function pullRequestLabels(repo, number) {
-	const parsed = api(`repos/${repo}/pulls/${number}`);
-	return Array.isArray(parsed?.labels) ? parsed.labels : undefined;
-}
-
 // Everything bulletsFromPullRequests needs that the commits endpoint does not already return.
 function enrich(repo, pullRequest) {
 	if (!repo || !pullRequest) {
 		return pullRequest;
 	}
-	const labels = pullRequestLabels(repo, pullRequest.number);
 	return {
 		...pullRequest,
-		labels: labels ?? pullRequest.labels ?? [],
 		files: filesForPullRequest(repo, pullRequest.number),
 		issueLabels: issueLabels(repo, issueFromBody(pullRequest.body)),
 	};
@@ -236,7 +223,6 @@ module.exports = {
 	filesForPullRequest,
 	isDependencyBump,
 	issueLabels,
-	pullRequestLabels,
 	parseArgs,
 	pullRequestsForCommit,
 	withComponent,
