@@ -11,11 +11,11 @@ import { getRelativePathInWorkspace } from "../util/vsccommon";
 // tracking, hidden-panel flush) and its pure helpers live in updateablepreview.ts; re-exported here
 // so the loader previews and their tests keep importing from one place.
 export {
-	LoaderRenderResult,
-	LoaderRender,
-	LoaderUpdateAction,
-	LoaderRenderPrevious,
-	RenderContentOptions,
+	type LoaderRenderResult,
+	type LoaderRender,
+	type LoaderUpdateAction,
+	type LoaderRenderPrevious,
+	type RenderContentOptions,
 	normalizeRender,
 	renderedHtml,
 	hashUpdate,
