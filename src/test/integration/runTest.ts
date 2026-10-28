@@ -16,6 +16,8 @@ const previewFiles = [
 	"common/military_industrial_organization/organizations/sov.txt",
 	"common/technologies/sov.txt",
 	"events/sov.txt",
+	"interface/sov.gfx",
+	"interface/sov.gui",
 	"interface/sub/sov.gfx",
 	"interface/sub/sov.gui",
 	"map/default.map",
