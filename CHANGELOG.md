@@ -12,6 +12,7 @@ v1.1.43
 - [ Testing ] Check world-map loader results with exact assertions. Issue #566.
 
   Bugfixes:
+- [ Loading ] On Linux, files in folders whose names differ only by case no longer use the wrong open document. Issue #634.
 - [ Image Preview ] Grayscale TGA files with 16-bit pixels now keep their gray value and transparency when decoded. Issue #487.
 - [ World Map Preview ] Province images with more than 65,536 distinct colors now stop loading with an error that says so, instead of using up the editor's memory. Issue #575.
 - [ DDS ] Signed and floating-point texture channels outside the display range now clamp to its nearest endpoint instead of wrapping. Issue #529.
