@@ -198,6 +198,7 @@ module.exports = {
 	componentForFiles,
 	componentRules,
 	componentTokens,
+	hasLabel,
 	ignored,
 	labelFor,
 	newBullets,

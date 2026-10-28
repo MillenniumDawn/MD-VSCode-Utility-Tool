@@ -18,7 +18,7 @@
 const fs = require('fs');
 
 const { bulletFor, issueFromBody } = require('./bump-version');
-const { componentForFiles, sectionForPullRequest } = require('./changelog-bullets');
+const { componentForFiles, hasLabel, sectionForPullRequest } = require('./changelog-bullets');
 const { warn, notice } = require('./lib/actions-log');
 const { parseFlags } = require('./lib/flags');
 const { gh } = require('./lib/github');
@@ -50,7 +50,8 @@ function bulletsFromPullRequests(pullRequests) {
 		const issue = issueFromBody(pr.body);
 		const component = componentForFiles(pr.files);
 		const section = sectionForPullRequest(pr);
-		bullets.push(withComponent(bulletFor(pr.title, issue), component));
+		const noChangelog = hasLabel(pr.labels, 'no-changelog');
+		bullets.push(noChangelog ? '' : withComponent(bulletFor(pr.title, issue), component));
 		entries.push({
 			number,
 			title: String(pr.title ?? '').trim(),
@@ -58,6 +59,7 @@ function bulletsFromPullRequests(pullRequests) {
 			component,
 			section,
 			issue,
+			...(noChangelog ? { noChangelog: true } : {}),
 			wroteChangelog: wroteChangelog(pr),
 		});
 	}

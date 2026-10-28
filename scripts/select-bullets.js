@@ -12,7 +12,8 @@
 //              on the next merge.
 //
 // A pull request that changed CHANGELOG.md itself is dropped as well: it wrote its own bullet on
-// main, and the release pull request takes main's section as it stands.
+// main, and the release pull request takes main's section as it stands. So is one labelled
+// `no-changelog`, which asked for no bullet at all.
 //
 // bullets[i], pullRequests[i] and entries[i] describe the same pull request, so all three are
 // filtered together. Bullets past the end of pullRequests came from a commit with no pull request
@@ -36,7 +37,8 @@ function select(found, options) {
 		.map((_, index) => index)
 		.filter((index) => {
 			const number = String(pullRequests[index]);
-			return number !== skip && !covered.has(number) && !entries[index]?.wroteChangelog;
+			return number !== skip && !covered.has(number) && !entries[index]?.wroteChangelog
+				&& !entries[index]?.noChangelog;
 		});
 
 	return {
