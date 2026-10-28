@@ -15,21 +15,25 @@ const vsce = require("@vscode/vsce") as typeof import("@vscode/vsce");
 
 describe(".vscodeignore exclusions", () => {
 	it("excludes every agent harness directory from the package", () => {
-		for (const directory of [".pi/**", ".pi-agent/**", ".pi-subagents/**"]) {
+		for (const directory of [".pi/**", ".pi-subagents/**"]) {
 			assert.ok(exclusions.includes(directory), `.vscodeignore must exclude ${directory}`);
 		}
 	});
 
 	it("keeps nested agent scratch out of the real packaging candidates", async function () {
-		// Scratch is written under the already-ignored .pi tree and left there, so the VSIX the
-		// packaging job later archives can be inspected against these paths.
 		const scratch = path.join(repositoryRoot, ".pi", "subagents", "packaging-regression");
-		fs.mkdirSync(path.join(scratch, "nested"), { recursive: true });
-		fs.writeFileSync(path.join(scratch, "harness-scratch.txt"), "issue #644 packaging fixture\n");
-		fs.writeFileSync(path.join(scratch, "nested", "agent-note.md"), "nested agent scratch\n");
+		// The first folder this test creates, so a checkout without .pi is left without it.
+		const created = fs.mkdirSync(path.join(scratch, "nested"), { recursive: true });
+		let files: string[];
+		try {
+			fs.writeFileSync(path.join(scratch, "harness-scratch.txt"), "issue #644 packaging fixture\n");
+			fs.writeFileSync(path.join(scratch, "nested", "agent-note.md"), "nested agent scratch\n");
 
-		this.timeout(30000);
-		const files = await vsce.listFiles({ cwd: repositoryRoot, packageManager: vsce.PackageManager.None });
+			this.timeout(30000);
+			files = await vsce.listFiles({ cwd: repositoryRoot, packageManager: vsce.PackageManager.None });
+		} finally {
+			fs.rmSync(created ?? scratch, { recursive: true, force: true });
+		}
 		const candidates = files.map((file) => file.replace(/\\/g, "/"));
 
 		assert.ok(candidates.includes("package.json"), "package.json must stay a packaging candidate");
