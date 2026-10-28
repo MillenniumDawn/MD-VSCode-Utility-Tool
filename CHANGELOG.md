@@ -1,6 +1,7 @@
 Unreleased
 
   Functionality:
+- [ World Map Preview ] The world map prepares province borders a little faster when it opens. Issue #555.
 - [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
 
   Bugfixes:
