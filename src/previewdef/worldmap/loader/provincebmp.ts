@@ -295,7 +295,9 @@ export function fillEdges<T extends ColorContainer>(
 		...province,
 		edges: [],
 	}));
-	const colorToProvince = byColor(provinces);
+	const colorToProvince = new Map(
+		provinces.map((province) => [province.color, province]),
+	);
 
 	for (let y = 0, yi = 0; y < height; y++, yi += width) {
 		for (let x = 0, xi = yi; x < width; x++, xi++) {
@@ -319,7 +321,7 @@ export function fillEdges<T extends ColorContainer>(
 
 function fillEdgesOfProvince<T extends EdgeDef>(
 	index: number,
-	colorToProvince: Record<number, T>,
+	colorToProvince: Map<number, T>,
 	colorByPosition: Uint32Array,
 	accessedPixels: Uint8Array,
 	width: number,
@@ -335,7 +337,7 @@ function fillEdgesOfProvince<T extends EdgeDef>(
 		height,
 	);
 
-	const province = colorToProvince[color];
+	const province = colorToProvince.get(color);
 	if (province === undefined) {
 		return;
 	}
@@ -343,18 +345,21 @@ function fillEdgesOfProvince<T extends EdgeDef>(
 	for (const edgeSet of province.edges) {
 		edgeSetByColor.set(edgeSet.toColor, edgeSet);
 	}
-	for (const [key, value] of Object.entries(edgePixelsByAdjecentProvince)) {
-		const numKey = parseInt(key);
-		let edgeSet = edgeSetByColor.get(numKey);
+	// Preserve numeric object-key order, with the off-map color (-1) last.
+	const sortedEdges = [...edgePixelsByAdjecentProvince].sort(
+		([a], [b]) => (a >>> 0) - (b >>> 0),
+	);
+	for (const [toColor, value] of sortedEdges) {
+		let edgeSet = edgeSetByColor.get(toColor);
 		const isNew = edgeSet === undefined;
 		if (edgeSet === undefined) {
-			edgeSet = { toColor: numKey, path: [] };
+			edgeSet = { toColor, path: [] };
 		}
 		const concatedEdges = concatFlatEdges(value, height + 1);
 		edgeSet.path.push(...concatedEdges);
 		if (isNew) {
 			province.edges.push(edgeSet);
-			edgeSetByColor.set(numKey, edgeSet);
+			edgeSetByColor.set(toColor, edgeSet);
 		}
 	}
 }
@@ -370,8 +375,8 @@ function findEdgePixels(
 	colorByPosition: Uint32Array,
 	width: number,
 	height: number,
-): Record<number, number[]> {
-	const edgesByAdjecentColor: Record<number, number[]> = {};
+): Map<number, number[]> {
+	const edgesByAdjecentColor = new Map<number, number[]>();
 	const pixelStack: number[] = [index];
 
 	const addEdge = (
@@ -381,9 +386,10 @@ function findEdgePixels(
 		x1: number,
 		y1: number,
 	): void => {
-		let edges = edgesByAdjecentColor[adjecentColor];
+		let edges = edgesByAdjecentColor.get(adjecentColor);
 		if (edges === undefined) {
-			edgesByAdjecentColor[adjecentColor] = edges = [];
+			edges = [];
+			edgesByAdjecentColor.set(adjecentColor, edges);
 		}
 		edges.push(x0, y0, x1, y1);
 	};

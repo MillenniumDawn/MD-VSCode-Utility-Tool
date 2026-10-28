@@ -14,7 +14,7 @@
 // themselves. Compare a before and an after on one machine; do not compare across machines.
 // Point BENCH_FOCUS_FILE at a real focus file to run the parser and condition scenarios over
 // mod content instead of the generated stand-in, and BENCH_PROVINCES_BMP at a real
-// map/provinces.bmp to run the province color pass over a real map.
+// map/provinces.bmp to run the province color and full-map edge passes over a real map.
 
 'use strict';
 
@@ -264,6 +264,11 @@ function main() {
 	const provinceBmp = loadProvinceBmp();
 	bench('getProvincesByPosition', provinceBmp.label, 5, () => {
 		getProvincesByPosition(provinceBmp.image);
+	}, { gc: true });
+
+	const fullGrid = getProvincesByPosition(provinceBmp.image);
+	bench('fillEdges (full map)', provinceBmp.label, 3, () => {
+		fillEdges(fullGrid.provinces, fullGrid.colorByPosition, provinceBmp.image.width, provinceBmp.image.height);
 	}, { gc: true });
 
 	// 5. Texture decoding, the cost behind every icon a preview shows. DXT5 is what the game's
