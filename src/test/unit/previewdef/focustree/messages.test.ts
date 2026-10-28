@@ -54,6 +54,7 @@ describe("previewdef/focustree messages", () => {
 		warnings.length = 0;
 		edits.length = 0;
 		clipboard.length = 0;
+		infos.length = 0;
 		const listened = listen(posts);
 		fire = listened.fire;
 		handOver({

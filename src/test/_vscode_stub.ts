@@ -180,6 +180,7 @@ function buildStub() {
         showQuickPick: async () => undefined,
         showTextDocument: async () => undefined,
         showOpenDialog: async () => undefined,
+        showSaveDialog: async () => undefined,
         showWorkspaceFolderPick: async () => undefined,
         setStatusBarMessage: () => disposable(),
         // Runs the task rather than ignoring it: an index build does all of its work inside this
@@ -349,6 +350,7 @@ const pristine = {
     createWebviewPanel: stub.window.createWebviewPanel,
     registerWebviewPanelSerializer: stub.window.registerWebviewPanelSerializer,
     showOpenDialog: stub.window.showOpenDialog,
+    showSaveDialog: stub.window.showSaveDialog,
     showQuickPick: stub.window.showQuickPick,
     showTextDocument: stub.window.showTextDocument,
     clipboardWriteText: stub.env.clipboard.writeText,
@@ -398,6 +400,8 @@ export interface VscodeStubOverrides {
     registerWebviewPanelSerializer?: (viewType: string, serializer: any) => { dispose(): void };
     /** Answers the folder or file picker, for suites driving a command that opens one. */
     showOpenDialog?: (options?: any) => Promise<any>;
+    /** Answers the save picker, for suites driving an export. */
+    showSaveDialog?: (options?: any) => Promise<any>;
     /** Answers a quick pick, for suites driving a command that asks one. */
     showQuickPick?: (items: any, options?: any) => Promise<any>;
     /** Captures what a command opens in an editor. */
@@ -517,6 +521,9 @@ export function stubVscode(overrides: VscodeStubOverrides): void {
     if (overrides.showOpenDialog !== undefined) {
         window.showOpenDialog = overrides.showOpenDialog;
     }
+    if (overrides.showSaveDialog !== undefined) {
+        window.showSaveDialog = overrides.showSaveDialog;
+    }
     if (overrides.showQuickPick !== undefined) {
         window.showQuickPick = overrides.showQuickPick;
     }
@@ -573,6 +580,7 @@ export function restoreVscodeStubs(): void {
     window.createWebviewPanel = pristine.createWebviewPanel;
     window.registerWebviewPanelSerializer = pristine.registerWebviewPanelSerializer;
     window.showOpenDialog = pristine.showOpenDialog;
+    window.showSaveDialog = pristine.showSaveDialog;
     window.showQuickPick = pristine.showQuickPick;
     window.showTextDocument = pristine.showTextDocument;
     (stub.env.clipboard as any).writeText = pristine.clipboardWriteText;

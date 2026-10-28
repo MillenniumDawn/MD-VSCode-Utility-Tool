@@ -337,8 +337,7 @@ describe("previewdef/worldmap/WorldMap", () => {
 	it("asks the page to export once a save path is chosen, and stops when it is not", async () => {
 		const posts: unknown[] = [];
 		const saves: unknown[] = [undefined, vscode.Uri.file("/tmp/world-map.png")];
-		stubVscode({});
-		(vscode.window as any).showSaveDialog = async () => saves.shift();
+		stubVscode({ showSaveDialog: async () => saves.shift() });
 		const worldMap = new WorldMap(panel(posts) as any);
 
 		await (worldMap as any).onMessage({ command: "requestexportmap" });

@@ -2,7 +2,7 @@ import * as assert from "assert";
 import { activate, deactivate } from "../extension";
 
 describe("extension activate", () => {
-	it("hands the editor over and registers every preview before it counts as loaded", () => {
+	it("activates and deactivates against the editor stub, registering its disposables", () => {
 		const subscriptions: { dispose(): void }[] = [];
 		activate({
 			subscriptions,
