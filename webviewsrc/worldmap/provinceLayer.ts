@@ -1,4 +1,4 @@
-import { Point, Province } from "./definitions";
+import { Point, Province, ProvinceEdge } from "./definitions";
 import { bboxCenter, distanceHamming, distanceSqr } from "./graphutils";
 import { FEWorldMap } from "./loader";
 import { ViewPoint } from "./viewpoint";
@@ -55,9 +55,8 @@ export function renderMapBackground(
 					continue;
 				}
 
-				const [startPoint, endPoint] = findNearestPoints(
-					edge.start,
-					edge.stop,
+				const [startPoint, endPoint] = adjacencyPoints(
+					edge,
 					province,
 					toProvince,
 				);
@@ -292,9 +291,8 @@ function renderEdges(
 
 		if (paths.length === 0 && provinceEdge.type !== "impassable") {
 			const toProvince = renderedProvincesById[provinceEdge.to];
-			const [startPoint, endPoint] = findNearestPoints(
-				provinceEdge.start,
-				provinceEdge.stop,
+			const [startPoint, endPoint] = adjacencyPoints(
+				provinceEdge,
 				province,
 				toProvince,
 			);
@@ -309,6 +307,27 @@ function renderEdges(
 			);
 		}
 	}
+}
+
+const adjacencyEndpoints = new WeakMap<ProvinceEdge, {
+	from: Province;
+	to: Province;
+	points: [Point, Point];
+}>();
+
+function adjacencyPoints(edge: ProvinceEdge, from: Province, to: Province | undefined): [Point, Point] {
+	// With no target drawn there is no border scan to save, and caching it would replace the one
+	// the background pass made.
+	if (!to) {
+		return findNearestPoints(edge.start, edge.stop, from, to);
+	}
+	const cached = adjacencyEndpoints.get(edge);
+	if (cached && cached.from === from && cached.to === to) {
+		return cached.points;
+	}
+	const points = findNearestPoints(edge.start, edge.stop, from, to);
+	adjacencyEndpoints.set(edge, { from, to, points });
+	return points;
 }
 
 function findNearestPoints(
