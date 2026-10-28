@@ -294,5 +294,10 @@ const configs = [ mainConfig, imageWorkerConfig, mainWebConfig, webviewJsConfig 
 module.exports = (_env, argv) => configs.map((config) => ({
   ...config,
   devtool: argv.mode === 'production' ? false : 'source-map',
+  performance: {
+    hints: argv.mode === 'production' ? 'warning' : false,
+    maxAssetSize: config.name === 'imageWorker' ? 96 * 1024 : 1250 * 1024,
+    maxEntrypointSize: config.name === 'imageWorker' ? 96 * 1024 : 1250 * 1024,
+  },
   cache: { type: 'filesystem' },
 }));

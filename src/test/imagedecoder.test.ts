@@ -17,14 +17,14 @@ import { UserError } from "../util/common";
 // thread (its message handler attaches only when actually run as a worker_threads worker).
 import "../util/image/imageWorker";
 
-const TGA = require("tga") as typeof import("tga");
-
-// A tiny 2x2 RGBA TGA built with the same library the converter uses. Pixel indices are r,g,b,a.
+// A tiny 2x2 RGBA TGA. Pixel indices are r,g,b,a.
 function makeTga(): Buffer {
-	const rgba = [
-		255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 128,
-	];
-	return TGA.createTgaBuffer(2, 2, rgba as unknown as [], false);
+	const header = Buffer.alloc(18);
+	header[2] = 2;
+	header.writeUInt16LE(2, 12);
+	header.writeUInt16LE(2, 14);
+	header[16] = 32;
+	return Buffer.concat([header, Buffer.from([255, 0, 0, 255, 0, 255, 255, 128, 0, 0, 255, 255, 0, 255, 0, 255])]);
 }
 
 function makePng(width: number, height: number): Buffer {

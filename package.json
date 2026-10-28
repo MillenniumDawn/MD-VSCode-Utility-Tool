@@ -582,7 +582,6 @@
 		"process": "^0.11.10",
 		"rxjs": "^7.8.2",
 		"stream-browserify": "^3.0.0",
-		"tga": "^1.0.7",
 		"util": "^0.12.5"
 	},
 	"allowScripts": {

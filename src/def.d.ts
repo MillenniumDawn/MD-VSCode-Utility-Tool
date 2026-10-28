@@ -49,15 +49,3 @@ declare module '*.css' {
 declare const VERSION: string;
 declare const EXTENSION_ID: string;
 declare const IS_WEB_EXT: boolean;
-
-declare module 'tga' {
-    class TGA {
-        constructor(buffer: Buffer, opt?: { dontFixAlpha?: boolean });
-        static createTgaBuffer(width: number, height: number, pixels: [], dontFlipY: boolean): Buffer;
-        parse(): void;
-        width: number;
-        height: number;
-        pixels: Uint8Array;
-    }
-    export = TGA;
-}
