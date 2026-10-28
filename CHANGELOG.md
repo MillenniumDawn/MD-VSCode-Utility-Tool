@@ -40,6 +40,7 @@ v1.1.43
 - [ CI ] Release notes are worded by a free model again. The old free model was withdrawn, so every seeded bullet had fallen back to its pull request title. Issue #534.
 - [ Testing ] Keep registry publishing tokens off the command line. Issue #578.
 - [ Testing ] Keep index cache writes out of later tests. Issue #636.
+- [ Build ] Keep agent scratch files out of extension packages. Issue #644.
 
 v1.1.42
 
