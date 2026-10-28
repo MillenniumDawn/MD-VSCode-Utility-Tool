@@ -5,6 +5,11 @@ import * as fs from "fs";
 import { openOrCopyHoiFile } from "../util/previewfileopener";
 import { restoreVscodeStubs, stubVscode } from "./_vscode_stub";
 
+// The stub's joinPath keeps forward slashes in fsPath. path.join does not, on Windows.
+function withSlashes(value: string): string {
+	return value.replace(/\\/g, "/");
+}
+
 describe("util/previewfileopener", () => {
 	afterEach(() => {
 		restoreVscodeStubs();
@@ -123,10 +128,10 @@ describe("util/previewfileopener", () => {
 			"single-folder.txt",
 		);
 		assert.strictEqual(pickerCalls, 0);
-		assert.deepStrictEqual(created, [path.dirname(targetPath)]);
-		assert.deepStrictEqual(written, [targetPath]);
+		assert.deepStrictEqual(created.map(withSlashes), [withSlashes(path.dirname(targetPath))]);
+		assert.deepStrictEqual(written.map(withSlashes), [withSlashes(targetPath)]);
 		assert.strictEqual(shown.length, 1);
-		assert.strictEqual(shown[0].document.uri.fsPath, targetPath);
+		assert.strictEqual(withSlashes(shown[0].document.uri.fsPath), withSlashes(targetPath));
 		assert.deepStrictEqual(shown[0].options.selection.start, { offset: 2 });
 		assert.deepStrictEqual(shown[0].options.selection.end, { offset: 7 });
 		assert.strictEqual(shown[0].options.viewColumn, vscode.ViewColumn.Beside);
@@ -199,10 +204,10 @@ describe("util/previewfileopener", () => {
 			"multiple-folders.txt",
 		);
 		assert.strictEqual(pickerCalls, 1);
-		assert.deepStrictEqual(created, [path.dirname(targetPath)]);
-		assert.deepStrictEqual(written, [targetPath]);
+		assert.deepStrictEqual(created.map(withSlashes), [withSlashes(path.dirname(targetPath))]);
+		assert.deepStrictEqual(written.map(withSlashes), [withSlashes(targetPath)]);
 		assert.strictEqual(shown.length, 1);
-		assert.strictEqual(shown[0].document.uri.fsPath, targetPath);
+		assert.strictEqual(withSlashes(shown[0].document.uri.fsPath), withSlashes(targetPath));
 		assert.deepStrictEqual(shown[0].options.selection.start, { offset: 3 });
 		assert.deepStrictEqual(shown[0].options.selection.end, { offset: 8 });
 	});
