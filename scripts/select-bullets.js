@@ -10,6 +10,7 @@
 //   --covered  every pull request the open release pull request has already written a bullet for,
 //              read from its body. This is what stops a bullet reworded by hand from being rewritten
 //              on the next merge.
+//   no-changelog the pull request was explicitly labelled to omit its generated bullet.
 //
 // A pull request that changed CHANGELOG.md itself is dropped as well: it wrote its own bullet on
 // main, and the release pull request takes main's section as it stands.
@@ -36,7 +37,8 @@ function select(found, options) {
 		.map((_, index) => index)
 		.filter((index) => {
 			const number = String(pullRequests[index]);
-			return number !== skip && !covered.has(number) && !entries[index]?.wroteChangelog;
+			return number !== skip && !covered.has(number) && !entries[index]?.wroteChangelog
+				&& !entries[index]?.noChangelog;
 		});
 
 	return {

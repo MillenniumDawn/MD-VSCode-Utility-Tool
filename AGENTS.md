@@ -187,6 +187,10 @@ did not write one. And **label** the pull request `bug` or `enhancement`, or clo
 an issue that carries one, because that is what decides whether a seeded bullet
 lands under `Functionality:` or `Bugfixes:`.
 
+For a merged pull request that should appear in the release pull request's includes but should
+not seed a user-facing changelog bullet, apply the `no-changelog` label. Dependabot updates and
+pull requests that change `CHANGELOG.md` already skip seeded bullets automatically.
+
 ## Writing a preview — the checks a green suite does not make
 
 A preview is a loader, a payload and a webview, and the same handful of mistakes gets
