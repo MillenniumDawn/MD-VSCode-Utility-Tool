@@ -1142,7 +1142,7 @@ describe("webview/worldmap/provinceLayer edges", function () {
 });
 
 describe("webview/worldmap/adjacency endpoint caching", function () {
-	function draw(a: Province | undefined, b: Province, offset = 0, scale = 1) {
+	function draw(a: Province | undefined, b: Province, offset = 0, scale = 1, targetDrawn = true) {
 		const { canvasContext, calls } = recordingCanvasContext();
 		const map = emptyMap({ provinces: [undefined, a, b], provincesCount: 3 });
 		const renderContext = context({
@@ -1154,7 +1154,7 @@ describe("webview/worldmap/adjacency endpoint caching", function () {
 				convertY: (y: number) => y * scale,
 			}),
 			mapCanvasContext: canvasContext,
-			renderedProvincesById: a ? { [a.id]: a } : {},
+			renderedProvincesById: a && targetDrawn ? { [a.id]: a } : {},
 		});
 		renderMapBackground(map, offset, renderContext);
 		renderAllEdges(renderContext, map, canvasContext, offset);
@@ -1172,6 +1172,19 @@ describe("webview/worldmap/adjacency endpoint caching", function () {
 
 		assert.ok(drewStroke(draw(a, b, 10, 2), "red", 20, 2, 32, 2));
 		assert.strictEqual(reads, firstReads + 1, "only drawing the cached endpoint should read its x again");
+	});
+
+	it("keeps the border scan when the source is in view and the crossing and target are not", function () {
+		let reads = 0;
+		const nearest = { get x() { reads++; return 6; }, y: 1 };
+		const a = province({ id: 1, edges: [{ to: 0, type: "", path: [[nearest, { x: 9, y: 1 }]] }] });
+		const b = province({ id: 2, edges: [{ to: 1, type: "", path: [], start: { x: 0, y: 1 } }] });
+		draw(a, b, 0, 1, false);
+		const firstReads = reads;
+		assert.ok(firstReads > 0, "the first render must inspect the border");
+
+		draw(a, b, 0, 1, false);
+		assert.strictEqual(reads, firstReads, "a redraw must not scan the border again");
 	});
 
 	it("recomputes when a target arrives or is replaced during loading", function () {

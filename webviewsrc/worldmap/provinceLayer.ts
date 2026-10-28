@@ -311,11 +311,16 @@ function renderEdges(
 
 const adjacencyEndpoints = new WeakMap<ProvinceEdge, {
 	from: Province;
-	to: Province | undefined;
+	to: Province;
 	points: [Point, Point];
 }>();
 
 function adjacencyPoints(edge: ProvinceEdge, from: Province, to: Province | undefined): [Point, Point] {
+	// With no target drawn there is no border scan to save, and caching it would replace the one
+	// the background pass made.
+	if (!to) {
+		return findNearestPoints(edge.start, edge.stop, from, to);
+	}
 	const cached = adjacencyEndpoints.get(edge);
 	if (cached && cached.from === from && cached.to === to) {
 		return cached.points;
