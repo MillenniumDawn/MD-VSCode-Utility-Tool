@@ -12,6 +12,7 @@ v1.1.43
 - [ Testing ] Check world-map loader results with exact assertions. Issue #566.
 
   Bugfixes:
+- [ DDS ] Signed and floating-point texture channels outside the display range now clamp to its nearest endpoint instead of wrapping. Issue #529.
 - [ Previews ] Replacing a dropdown while its menu is open now closes the old menu and restores canvas zoom correctly. Issue #635.
 - [ CI ] Version checks now update their existing note even on pull requests with more than 30 comments, and workflow checkouts no longer retain their credentials. Issue #564.
 - [ Previews ] Opening a mod workspace with only MIO organization files or `.gui` files under `interface/` now activates the preview button without opening another file first. Issue #481.
