@@ -13,6 +13,7 @@ v1.1.43
 - [ Testing ] Check world-map loader results with exact assertions. Issue #566.
 
   Bugfixes:
+- [ Build ] Building the extension from scratch is faster, while CI still checks production types. Issue #610.
 - [ Previews ] Opening a folder that contains mods now activates their previews, just as opening a mod folder directly does. Issue #621.
 - [ World Map Preview ] Panning and zooming with province edges shown no longer repeats the border search for sea crossings on every redraw. Issue #553.
 - [ Loading ] On Linux, files in folders whose names differ only by case no longer use the wrong open document. Issue #634.

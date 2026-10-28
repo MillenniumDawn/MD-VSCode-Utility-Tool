@@ -12,7 +12,7 @@ import { HOIEventType } from "./schema";
 // LocText, NavTarget and the effect tree are shared with the other previews and live in
 // sharedpayload.ts; they are re-exported here so every importer of this module keeps working
 // unchanged.
-export {
+export type {
 	LocText,
 	EffectTreeNode,
 } from "../sharedpayload";

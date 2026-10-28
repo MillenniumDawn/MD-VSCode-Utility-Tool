@@ -38,7 +38,8 @@ const mainConfig = {
         exclude: /node_modules/,
         use: [
           {
-            loader: 'ts-loader'
+            loader: 'ts-loader',
+            options: { transpileOnly: true }
           }
         ]
       }
@@ -98,7 +99,8 @@ const imageWorkerConfig = {
         exclude: /node_modules/,
         use: [
           {
-            loader: 'ts-loader'
+            loader: 'ts-loader',
+            options: { transpileOnly: true }
           }
         ]
       }
@@ -167,7 +169,8 @@ const mainWebConfig = {
         exclude: /node_modules/,
         use: [
           {
-            loader: 'ts-loader'
+            loader: 'ts-loader',
+            options: { transpileOnly: true }
           }
         ]
       }
@@ -239,7 +242,8 @@ const webviewJsConfig = {
         exclude: /node_modules/,
         use: [
           {
-            loader: 'ts-loader'
+            loader: 'ts-loader',
+            options: { transpileOnly: true }
           }
         ]
       }
