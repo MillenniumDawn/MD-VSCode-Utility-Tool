@@ -5,7 +5,8 @@ import * as path from "path";
 
 export function createGitRepository(prefix: string) {
 	const cwd = process.cwd();
-	const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+	// native: on Windows the plain call keeps the runner's 8.3 short temp path.
+	const directory = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 	const git = (...args: string[]): string => execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim();
 	git("init", "-q", "-b", "main");
 	git("config", "user.email", "a@b.c");

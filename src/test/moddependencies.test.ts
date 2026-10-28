@@ -356,7 +356,7 @@ describe("util/moddependencies", function () {
 
 		await withoutDefaultUserDataDir(async () => {
 			const found = await findUserDataDir(vscode.Uri.file(nestedModFile));
-			assert.strictEqual(realPathOf(found), nodePath.resolve(siblingUserData));
+			assert.strictEqual(nodePath.resolve(realPathOf(found)), nodePath.resolve(siblingUserData));
 		});
 	});
 
