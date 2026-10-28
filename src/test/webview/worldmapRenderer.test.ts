@@ -23,7 +23,7 @@ import {
 	renderMapLabels,
 	resourceImages,
 } from "../../../webviewsrc/worldmap/stateLayer";
-import { renderAllEdges, renderProvince } from "../../../webviewsrc/worldmap/provinceLayer";
+import { renderAllEdges, renderMapBackground, renderProvince } from "../../../webviewsrc/worldmap/provinceLayer";
 import {
 	renderHoverSelectionByViewMode,
 	renderLoadingText,
@@ -1138,6 +1138,49 @@ describe("webview/worldmap/provinceLayer edges", function () {
 			0,
 		);
 		assert.ok(drewStroke(calls, "red", 0, 1, 6, 1));
+	});
+});
+
+describe("webview/worldmap/adjacency endpoint caching", function () {
+	function draw(a: Province | undefined, b: Province, offset = 0, scale = 1) {
+		const { canvasContext, calls } = recordingCanvasContext();
+		const map = emptyMap({ provinces: [undefined, a, b], provincesCount: 3 });
+		const renderContext = context({
+			topBar: { ...displayBar(["edge"]), colorSet$: { value: "provinceid" } } as unknown as TopBar,
+			viewPoint: Object.assign(identityViewPoint(), {
+				scale,
+				bboxInView: (box: Province["boundingBox"]) => box === b.boundingBox,
+				convertX: (x: number) => x * scale,
+				convertY: (y: number) => y * scale,
+			}),
+			mapCanvasContext: canvasContext,
+			renderedProvincesById: a ? { [a.id]: a } : {},
+		});
+		renderMapBackground(map, offset, renderContext);
+		renderAllEdges(renderContext, map, canvasContext, offset);
+		return calls;
+	}
+
+	it("shares the border scan between culling, drawing, panning and zooming", function () {
+		let reads = 0;
+		const nearest = { get x() { reads++; return 6; }, y: 1 };
+		const a = province({ id: 1, edges: [{ to: 0, type: "", path: [[nearest, { x: 9, y: 1 }]] }] });
+		const b = province({ id: 2, edges: [{ to: 1, type: "", path: [], start: { x: 0, y: 1 } }] });
+		assert.ok(drewStroke(draw(a, b), "red", 0, 1, 6, 1));
+		const firstReads = reads;
+		assert.ok(firstReads > 1, "the first render must inspect the border");
+
+		assert.ok(drewStroke(draw(a, b, 10, 2), "red", 20, 2, 32, 2));
+		assert.strictEqual(reads, firstReads + 1, "only drawing the cached endpoint should read its x again");
+	});
+
+	it("recomputes when a target arrives or is replaced during loading", function () {
+		const b = province({ id: 2, edges: [{ to: 1, type: "", path: [], start: { x: 0, y: 1 } }] });
+		draw(undefined, b);
+		const a = province({ id: 1, edges: [{ to: 0, type: "", path: [[{ x: 6, y: 1 }]] }] });
+		assert.ok(drewStroke(draw(a, b), "red", 0, 1, 6, 1));
+		const replacement = province({ id: 1, edges: [{ to: 0, type: "", path: [[{ x: 9, y: 1 }]] }] });
+		assert.ok(drewStroke(draw(replacement, b), "red", 0, 1, 9, 1));
 	});
 });
 
