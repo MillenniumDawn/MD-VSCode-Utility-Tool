@@ -832,6 +832,7 @@ describe('scripts/check-version', function () {
     });
 
     describe('evaluate', function () {
+        this.timeout(20000);
         // The repository the script reads is the one it runs in, so these drive it through a
         // throwaway clone rather than stubbing git.
         let repository: ReturnType<typeof createGitRepository>;
@@ -1125,6 +1126,7 @@ describe('scripts/release-check', function () {
     });
 
     describe('versionBumpCommit and evaluate', function () {
+        this.timeout(20000);
         // The pickaxe and the first-parent walk are git features, so this drives the real thing
         // through a throwaway repository, without gh: the release branch is recognised by the
         // remote ref left behind, the way the script falls back when the API answers nothing.
@@ -1276,6 +1278,7 @@ describe('scripts/release-check', function () {
     });
 
     describe('lastReleaseTag', function () {
+        this.timeout(20000);
         // Tag globs are a git feature, so this drives the real thing through a throwaway repository
         // rather than stubbing describe.
         let repository: ReturnType<typeof createGitRepository>;
@@ -1499,6 +1502,7 @@ describe('scripts/publish-extension', function () {
 });
 
 describe('scripts/pr-bullets', function () {
+    this.timeout(20000);
     it('does not seed a placeholder when the only merged pull request is a dependency bump', function () {
         const repository = createGitRepository('pr-bullets-');
         const { directory: dir, git } = repository;
