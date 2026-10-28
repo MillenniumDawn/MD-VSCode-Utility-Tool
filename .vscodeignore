@@ -22,12 +22,10 @@ scripts/**
 webviewsrc/**
 resource/**
 .github/**
-original/**
 coverage/**
 .nyc_output/**
 .opencode/**
 .pi-subagents/**
-.pi-agent/**
 CLAUDE.md
 AGENTS.md
 eslint.config.cjs
