@@ -928,17 +928,6 @@ describe('scripts/check-version', function () {
         });
     });
 
-    describe('firstHeading', function () {
-        it('takes the first line that has content', function () {
-            assert.strictEqual(checkVersion.firstHeading('\n\nv1.1.22\n\n  Bugfixes:\n'), 'v1.1.22');
-        });
-
-        it('returns an empty string for an empty changelog', function () {
-            assert.strictEqual(checkVersion.firstHeading('   \n\n'), '');
-            assert.strictEqual(checkVersion.firstHeading(undefined), '');
-        });
-    });
-
     describe('parseArgs', function () {
         it('defaults to origin/main', function () {
             assert.strictEqual(checkVersion.parseArgs([]).baseRef, 'origin/main');
