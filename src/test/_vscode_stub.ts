@@ -276,13 +276,8 @@ const origResolve = (Module as any)._resolveFilename;
     return origResolve.call(this, request, parent, ...rest);
 };
 
-// `def.d.ts` declares a handful of compile-time globals (IS_WEB_EXT, VERSION,
-// EXTENSION_ID). The webpack build wires these up via DefinePlugin; under
-// Node + tsc they are undefined. Tests that load modules referencing them
-// (e.g. fileloader.ts) need them set on globalThis.
+// Webpack supplies IS_WEB_EXT through DefinePlugin; tsc tests provide it here.
 (globalThis as any).IS_WEB_EXT = false;
-(globalThis as any).VERSION = 'test';
-(globalThis as any).EXTENSION_ID = 'test.test';
 
 const stub = buildStub();
 // Modules that reach the editor through util/host get the same object `vscode` resolves to here.
