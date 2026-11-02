@@ -368,6 +368,9 @@ class FocusTreePreview extends UpdateablePreviewBase {
      * newer load superseded it (generation mismatch) or the panel was disposed.
      */
     private async pushIconStyles(generation: number): Promise<void> {
+        if (this.isDisposed) {
+            return;
+        }
         try {
             const full = await buildFocusTreePayload(this.focusTreeLoader);
             if (!full || generation !== this.iconRenderGeneration || this.isDisposed) {
@@ -392,6 +395,9 @@ class FocusTreePreview extends UpdateablePreviewBase {
      * in-place DOM rebuild, so this needs no full reload.
      */
     private async repushResolvedIconStyles(): Promise<void> {
+        if (this.isDisposed) {
+            return;
+        }
         let full: FocusTreePayload | null = null;
         try {
             full = await withTimeout(buildFocusTreePayload(this.focusTreeLoader), focusTreeRenderTimeout);
