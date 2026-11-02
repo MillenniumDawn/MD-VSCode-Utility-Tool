@@ -7,6 +7,7 @@ Unreleased
 
   Bugfixes:
 - [ World Map Preview ] Hiding the map while it is loading now releases the loaded data after pending responses finish, instead of keeping it until the panel changes again. Issue #662.
+- [ Previews ] Closing a preview during an update no longer starts follow-up work for the closed panel. Issue #672.
 - [ Build ] Building the extension from scratch is faster, while CI still checks production types. Issue #610.
 - [ Previews ] Opening a folder that contains mods now activates their previews, just as opening a mod folder directly does. Issue #621.
 - [ World Map Preview ] Panning and zooming with province edges shown no longer repeats the border search for sea crossings on every redraw. Issue #553.

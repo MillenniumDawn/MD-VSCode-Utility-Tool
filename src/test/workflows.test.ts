@@ -682,14 +682,16 @@ describe('.github/workflows', function () {
             assert.strictEqual(usesIn(workflow, 'test', 'actions/checkout')?.with?.['fetch-depth'], 2);
         });
 
-        it('runs the unit suite on Ubuntu and Windows, and nothing else there', function () {
+        it('runs the unit suite standalone on Windows only, and Ubuntu under coverage', function () {
             const unit = workflow.jobs?.unit as {
                 strategy?: { matrix?: { os?: string[] } };
                 steps?: { run?: string }[];
             };
-            assert.deepStrictEqual(unit?.strategy?.matrix?.os, ['ubuntu-latest', 'windows-latest']);
+            assert.deepStrictEqual(unit?.strategy?.matrix?.os, ['windows-latest']);
             assert.ok(unit?.steps?.some((step) => step.run === 'npm test'), 'the unit job does not run the suite');
             assert.ok(!unit?.steps?.some((step) => step.run?.includes('npm run package') || step.run?.includes('test:integration') || step.run?.includes('test:web')));
+            assert.ok(jobSteps(workflow, 'test').some((step) => step.run?.includes('test:coverage')),
+                'the removed Ubuntu unit run is not covered by the test job');
         });
     });
 });

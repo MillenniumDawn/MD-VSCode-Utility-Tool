@@ -37,15 +37,6 @@ function isExempt(file) {
 	return exemptPatterns.some((pattern) => pattern.test(file));
 }
 
-function firstHeading(changelogText) {
-	for (const line of String(changelogText ?? '').split(/\r?\n/)) {
-		if (line.trim()) {
-			return line.trim();
-		}
-	}
-	return '';
-}
-
 // The heading of the newest version section, skipping the Unreleased section above it. A branch
 // that carries its own bump renames Unreleased to that version, so this is the heading that has to
 // agree with package.json; the Unreleased heading itself never does.
@@ -211,7 +202,6 @@ module.exports = {
 	compareVersions,
 	evaluate,
 	exemptPatterns,
-	firstHeading,
 	firstVersionHeading,
 	isExempt,
 	parseArgs,
