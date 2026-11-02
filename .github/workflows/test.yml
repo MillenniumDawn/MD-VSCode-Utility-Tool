@@ -1,23 +1,17 @@
-on:
-  # No branch filter: it would name the base branch, and "*" does not match a "/" -- so a pull
-  # request into a branch such as release/version-bump ran no tests at all.
+---
+"on":
+  # No base-branch filter: "*" does not match the "/" in release/version-bump.
   pull_request:
-  # For re-running the suite against a branch by hand. The release pull request no longer needs it:
-  # it is opened by the release bot's App token, and a pull request from one of those starts a run
-  # like anyone else's.
+  # Manual reruns. The release bot's App token starts PR runs automatically.
   workflow_dispatch:
 
 name: Test
 
-# The job runs npm lifecycle scripts and webpack over branch code, so the token it gets should open
-# nothing but the tree.
+# Branch code runs npm scripts and webpack; its token only needs to read.
 permissions:
   contents: read
 
-# The release pull request is pushed to again on every merge into main, so without this a run would
-# be left going while its own commit is already outdated. A dispatched run has no pull request
-# number, so it groups by ref instead: reruns of the same branch still supersede each other, while
-# dispatches on unrelated refs no longer cancel one another.
+# Cancel outdated runs of the same PR, or the same ref for manual dispatches.
 concurrency:
   group: test-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -25,46 +19,43 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # A normal run is two to three minutes; the cap leaves room for a VS Code download on a cache
-    # miss without letting a hung Electron sit for GitHub's six-hour default.
+    # Leave room for a VS Code download, but cap a hung Electron run.
     timeout-minutes: 30
 
     steps:
-      # Depth 2, not 1: on a pull request HEAD is the merge commit, so its first parent is the base
-      # branch as of this run, and that is what the changed-lines coverage step diffs against.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # PR HEAD is the merge commit; coverage diffs against its first parent.
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 2
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # actions/setup-node v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version-file: .nvmrc
           cache: "npm"
       - name: Install dependencies
         run: npm ci
-      # @vscode/test-electron skips the download when .vscode-test/vscode-<version> already exists.
-      # Keyed on the file that carries the pinned version, so moving the pin is the only thing that
-      # fetches a new build.
+      # Key reusable test-electron builds on their version pin.
       - name: Cache VS Code build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: .vscode-test/vscode-*
-          key: vscode-test-${{ runner.os }}-${{ hashFiles('src/test/integration/runTest.ts') }}
+          key: >-
+            vscode-test-${{ runner.os }}-${{
+            hashFiles('src/test/integration/runTest.ts') }}
       - name: Lint
         run: npm run lint
       - name: Type-check production sources
         run: npx --no-install tsc --noEmit -p tsconfig.json
       - name: Check unused code
         run: npm run knip
-      # Fails only above the threshold in .jscpd.json, so the number can be walked down over time
-      # instead of blocking every branch that touches a file already carrying a clone.
+      # The .jscpd.json threshold allows existing clones while it is lowered.
       - name: Duplication
         run: npm run dupes
-      # test:coverage compiles the tests first, through its pre hook. The c8 thresholds in
-      # package.json sit a few points under the real figure, which leaves room for thousands of
-      # untested lines before they fail. This is the rule that matters: the lines a pull request
-      # adds or changes must themselves be covered. Skipped on a dispatch, which has no base to
-      # diff against.
+      # The pre hook compiles both projects. Check changed-line coverage too;
+      # whole-suite thresholds leave room for untested additions.
+      # Manual dispatches have no PR base to diff against.
       - name: Test with coverage
         run: npm run test:coverage
       - name: Coverage on changed lines
@@ -79,10 +70,8 @@ jobs:
           retention-days: 5
       - name: Package VSIX
         run: npm run package
-      # The unit tests compile webviewsrc to commonjs, where an exported const read before its
-      # declaration answers `undefined` instead of throwing. What ships is ESM, where the same read
-      # throws and the preview draws its toolbar over an empty canvas, so the bundles are evaluated
-      # here -- against the production build `npm run package` just wrote.
+      # ESM throws on a const read before declaration where test CommonJS may
+      # return undefined. Evaluate the production bundles, not only test output.
       - name: Smoke test webview bundles
         run: npm run smoke:webviews
       - name: Upload VSIX
@@ -91,21 +80,19 @@ jobs:
           name: md-vscode-utility-tool.vsix
           path: "*.vsix"
           retention-days: 5
-      # Runs against the production bundle `npm run package` wrote to dist/ and the test build the
-      # coverage step wrote to out-test/, so nothing is installed or compiled a second time for it.
-      # It comes after the uploads so the .vsix and coverage are still there when this step fails.
+      # Reuse dist/ and out-test/. Upload first to keep artifacts on failure.
       - name: Run integration smoke tests
         run: xvfb-run -a npm run test:integration
       - name: Run browser smoke tests
         run: npm run test:web
 
-  # Unit tests on both runners. Lint, packaging and smoke tests stay on Ubuntu.
+  # Ubuntu runs the suite under coverage; keep a separate Windows check.
   unit:
     name: Unit tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
