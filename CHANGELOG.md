@@ -1,6 +1,7 @@
 Unreleased
 
   Functionality:
+- [ Loading ] A warm index build where nothing changed no longer writes the index cache back, which saves a copy of the whole index on every unchanged reload. Issue #661.
 - [ World Map Preview ] Each redraw of the world map now classifies province borders once instead of once per color, which makes redrawing a little faster. Issue #554.
 - [ World Map Preview ] The world map prepares province borders a little faster when it opens. Issue #555.
 - [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
