@@ -1,6 +1,7 @@
 Unreleased
 
   Functionality:
+- [ Previews ] Rapidly editing a previewed file now redraws once for the newest state instead of stacking a redraw per delivered change, and the redraw still forces a full reload when a dependency changed. Issue #670.
 - [ World Map Preview ] Each redraw of the world map now classifies province borders once instead of once per color, which makes redrawing a little faster. Issue #554.
 - [ World Map Preview ] The world map prepares province borders a little faster when it opens. Issue #555.
 - [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
