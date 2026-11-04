@@ -112,7 +112,7 @@ function installBuildMocks(hooks: BuildHooks): Marks {
 		if (hooks.gateSprites) {
 			await hooks.gateSprites;
 		}
-		return { width: 8, height: 8, frames: [] };
+		return { width: 8, height: 8, frame: () => undefined };
 	});
 	mock.method(imagecache, "getImageByPath", async () => {
 		marks.shortcutRenders++;

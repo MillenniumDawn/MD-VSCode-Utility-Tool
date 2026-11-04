@@ -263,11 +263,11 @@ async function buildTraitIcon(
 		return undefined;
 	}
 
-	// Sprite.frames slices a strip into per-frame images with their own data URLs, so a frame is
+	// Sprite.frame slices a strip into per-frame images with their own data URLs, so a frame is
 	// drawn with the same background-image rule as a whole sprite and needs no background-position
 	// arithmetic. A frame index the sheet does not have falls back to the whole image rather than
 	// dropping the medal: a trait written with `sprite = 40` is still a trait.
-	const image = sprite.frames[wanted.frame] ?? sprite.image;
+	const image = sprite.frame(wanted.frame) ?? sprite.image;
 
 	return spriteIconStyle(styleTable, "char-trait-icon-", `${wanted.name}-${wanted.frame}`, image);
 }

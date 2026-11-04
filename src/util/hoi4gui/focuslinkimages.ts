@@ -19,8 +19,8 @@ export async function loadFocusLinkImages(
     for (const shape of focusLinkShapes) {
         const sprite = await getSpriteByGfxName(spec.gfx[shape], gfxFiles);
         // A frame rather than the sprite, as for the exclusive link: the strip holds all four.
-        const solidFrame = sprite?.frames[frames.solid];
-        const dashedFrame = sprite?.frames[frames.dashed];
+        const solidFrame = sprite?.frame(frames.solid);
+        const dashedFrame = sprite?.frame(frames.dashed);
         if (solidFrame === undefined || dashedFrame === undefined) {
             return undefined;
         }

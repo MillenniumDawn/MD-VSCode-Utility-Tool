@@ -50,7 +50,7 @@ export function renderSprite(
 	}
 
 	// Use first frame if frame is not found
-	if (!sprite.frames[frame] && frame > 0) {
+	if (!sprite.frame(frame) && frame > 0) {
 		frame = 0;
 	}
 
@@ -71,7 +71,7 @@ export function renderSprite(
         ${options.styleTable.style(
 					`sprite-img-${normalizeForStyle(sprite.id)}-${frame}-${normalizeForStyle(String(scale))}`,
 					() => `
-            background-image: url(${sprite.frames[frame]?.uri});
+            background-image: url(${sprite.frame(frame)?.uri});
             background-size: ${sprite.width * scale}px ${sprite.height * scale}px;
         `,
 				)}

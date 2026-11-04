@@ -50,7 +50,7 @@ describe("util/hoi4gui/icon", () => {
 			width: 32,
 			height: 32,
 			image: fakeImage,
-			frames: fakeImage.frames,
+			frame: (i: number) => fakeImage.frames[i],
 			uri: "file:///fake.png",
 		};
 		const html = await renderIcon(icon, parent(), {
@@ -75,7 +75,7 @@ describe("util/hoi4gui/icon", () => {
 			width: 20,
 			height: 20,
 			uri: "file:///a.png",
-			frames: [{ x: 0, y: 0, width: 20, height: 20, uri: "file:///a.png" }],
+			frame: (i: number) => [{ x: 0, y: 0, width: 20, height: 20, uri: "file:///a.png" }][i],
 		};
 		await renderIcon(icon, parent(), {
 			styleTable: table,
@@ -97,7 +97,7 @@ describe("util/hoi4gui/icon", () => {
 			width: 10,
 			height: 10,
 			uri: "file:///q.png",
-			frames: [],
+			frame: () => undefined,
 		};
 		const html = await renderIcon(icon, parent(), {
 			styleTable: styleTable(),

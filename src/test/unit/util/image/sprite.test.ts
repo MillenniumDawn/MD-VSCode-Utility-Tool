@@ -48,27 +48,23 @@ describe("util/image/sprite retainedBytes", () => {
 		const sprite = new Sprite("s", image, 1);
 		assert.strictEqual(sprite.retainedBytes, image.retainedBytes);
 
-		assert.strictEqual(sprite.frames[0], image);
+		assert.strictEqual(sprite.frame(0), image);
 		assert.strictEqual(sprite.retainedBytes, image.retainedBytes);
 	});
 
-	it("adds the split frames and their URIs to a multi-frame sprite", () => {
+	it("counts only the frames that were read, and nothing of the decoded strip", () => {
 		const image = makeImage(8, 4);
 		const sprite = new Sprite("s", image, 2);
 		assert.strictEqual(sprite.retainedBytes, image.retainedBytes);
 
-		const frames = sprite.frames;
-		assert.strictEqual(frames.length, 2);
-		assert.strictEqual(
-			sprite.retainedBytes,
-			image.retainedBytes + sum(frames),
-		);
+		const last = sprite.frame(1)!;
+		assert.strictEqual(sprite.retainedBytes, image.retainedBytes + last.retainedBytes);
 
-		const frame = frames[1]!;
-		const uri = frame.uri;
+		const first = sprite.frame(0)!;
+		const uri = first.uri;
 		assert.strictEqual(
 			sprite.retainedBytes,
-			image.retainedBytes + sum(frames) + uri.length,
+			image.retainedBytes + sum([first, last]) + uri.length,
 		);
 	});
 
@@ -118,16 +114,48 @@ describe("util/image/sprite frames", () => {
 		return result;
 	}
 
+	afterEach(() => mock.restoreAll());
+
+	// PNG.sync.write runs again for every fixture the helpers create, so the mock goes up only
+	// after the sprite is built and the count is frame encodes only.
+	function writeSpy(): { count(): number } {
+		const write = mock.method(PNG.sync, "write");
+		return { count: () => write.mock.callCount() };
+	}
+
+	it("encodes only the frame that was read", () => {
+		const sprite = new Sprite("s", makeColumnImage(10, 2), 5);
+		const writes = writeSpy();
+
+		const first = sprite.frame(0);
+		assert.strictEqual(first!.width, 2);
+		assert.strictEqual(writes.count(), 1);
+
+		// Reading the same frame again encodes nothing further.
+		assert.strictEqual(sprite.frame(0), first);
+		assert.strictEqual(writes.count(), 1);
+
+		// A neighbouring frame is one encode of its own.
+		assert.deepStrictEqual(columns(sprite.frame(1)!), [2, 3]);
+		assert.strictEqual(writes.count(), 2);
+	});
+
+	it("has no frame outside the strip or between two frames", () => {
+		const sprite = new Sprite("s", makeColumnImage(10, 2), 5);
+		for (const index of [-1, 5, 0.5, NaN]) {
+			assert.strictEqual(sprite.frame(index), undefined, `frame ${index}`);
+		}
+	});
+
 	it("floors the frame width when the texture does not divide evenly", () => {
 		const sprite = new Sprite("s", makeColumnImage(10, 2), 3);
 		assert.strictEqual(sprite.width, 3);
 		assert.strictEqual(sprite.height, 2);
 
-		const frames = sprite.frames;
-		assert.strictEqual(frames.length, 3);
-		assert.deepStrictEqual(frames.map((frame) => frame.width), [3, 3, 3]);
-		assert.deepStrictEqual(columns(frames[1]!), [3, 4, 5]);
-		assert.deepStrictEqual(columns(frames[2]!), [6, 7, 8]);
+		assert.deepStrictEqual([0, 1, 2].map((i) => sprite.frame(i)!.width), [3, 3, 3]);
+		assert.deepStrictEqual(columns(sprite.frame(1)!), [3, 4, 5]);
+		assert.deepStrictEqual(columns(sprite.frame(2)!), [6, 7, 8]);
+		assert.strictEqual(sprite.frame(3), undefined);
 	});
 
 	it("treats noofframes = 0 as a single frame", () => {
@@ -135,7 +163,8 @@ describe("util/image/sprite frames", () => {
 		const sprite = new Sprite("s", image, 0);
 		assert.strictEqual(sprite.noOfFrames, 1);
 		assert.strictEqual(sprite.width, 4);
-		assert.deepStrictEqual(sprite.frames, [image]);
+		assert.strictEqual(sprite.frame(0), image);
+		assert.strictEqual(sprite.frame(1), undefined);
 	});
 
 	it("caps noofframes at the texture width", () => {
@@ -143,7 +172,7 @@ describe("util/image/sprite frames", () => {
 		assert.strictEqual(sprite.noOfFrames, 4);
 		assert.strictEqual(sprite.width, 1);
 		assert.deepStrictEqual(
-			sprite.frames.map((frame) => columns(frame)),
+			[0, 1, 2, 3].map((i) => columns(sprite.frame(i)!)),
 			[[0], [1], [2], [3]],
 		);
 	});
@@ -214,7 +243,7 @@ describe("util/image/sprite hostile texture", () => {
 		it(`cuts no frame or tile from ${name}`, () => {
 			const inflate = mock.method(zlib, "inflateSync");
 			const image = new Image(file, 16, 16, texturePath);
-			assert.throws(() => new Sprite("s", image, 2).frames, isUserError(message));
+			assert.throws(() => new Sprite("s", image, 2).frame(0), isUserError(message));
 			const border = { x: 2, y: 2 };
 			const tiles = new CorneredTileSprite("s", image, 1, { x: 16, y: 16 }, border);
 			assert.throws(() => tiles.getTiles(), isUserError(message));
