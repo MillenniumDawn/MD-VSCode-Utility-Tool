@@ -2,13 +2,16 @@ Unreleased
 
   Functionality:
 - [ Previews ] Rapidly editing a previewed file now redraws once for the newest state instead of stacking a redraw per delivered change, and the redraw still forces a full reload when a dependency changed. Issue #670.
+- [ Loading ] A warm index build where nothing changed no longer writes the index cache back, which saves a copy of the whole index on every unchanged reload. Issue #661.
 - [ World Map Preview ] Each redraw of the world map now classifies province borders once instead of once per color, which makes redrawing a little faster. Issue #554.
 - [ World Map Preview ] The world map prepares province borders a little faster when it opens. Issue #555.
 - [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
 
   Bugfixes:
+- [ Previews ] Updating a focus tree or MIO organization now redraws the preview once instead of once more for every condition filter it refreshes. Issue #669.
 - [ World Map Preview ] Hiding the map while it is loading now releases the loaded data after pending responses finish, instead of keeping it until the panel changes again. Issue #662.
 - [ Previews ] Closing a preview during an update no longer starts follow-up work for the closed panel. Issue #672.
+- [ Focus Tree Previewer ] A focus tree that takes too long to render, is replaced by a newer render, or has its preview closed now stops building in the background instead of finishing unseen. It also no longer shows "No focus tree." when the render was merely stopped. Issue #671.
 - [ Build ] Building the extension from scratch is faster, while CI still checks production types. Issue #610.
 - [ Previews ] Opening a folder that contains mods now activates their previews, just as opening a mod folder directly does. Issue #621.
 - [ World Map Preview ] Panning and zooming with province edges shown no longer repeats the border search for sea crossings on every redraw. Issue #553.

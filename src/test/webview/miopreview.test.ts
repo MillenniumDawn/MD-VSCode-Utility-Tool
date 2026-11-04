@@ -421,4 +421,97 @@ describe('webview/miopreview rendering', () => {
             document.getElementById('miopreviewcontent')!.appendChild(element);
         }
     });
+
+    // Every full build renders the grid box once, before the stale-render guard can drop what a
+    // superseded one produced, so counting those calls counts full buildContent runs. The page
+    // looks the function up on the compiled module's exports each time it renders, so the patch
+    // intercepts it. Installed around a single trigger and removed again, though the export is
+    // shared.
+    async function countBuilds(run: () => Promise<void>): Promise<number> {
+        const gridbox = require('../../util/hoi4gui/gridboxcommon') as {
+            renderGridBoxCommon: (...args: unknown[]) => unknown;
+        };
+        const original = gridbox.renderGridBoxCommon;
+        let builds = 0;
+        gridbox.renderGridBoxCommon = (...args: unknown[]) => {
+            builds++;
+            return original(...args);
+        };
+        try {
+            await run();
+        } finally {
+            gridbox.renderGridBoxCommon = original;
+        }
+        return builds;
+    }
+
+    // Refreshing which options and selections the condition filter shows is not a pick by the
+    // reader, so it must not start a build of its own: the same update used to rebuild the preview
+    // once per sync it made.
+    it('rebuilds once when the reader picks a condition', async () => {
+        const conditions = document.getElementById('conditions')!;
+        conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+        try {
+            const item = document.querySelector('ul.select-dropdown li') as HTMLElement;
+            const builds = await countBuilds(async () => {
+                item.click();
+                await settled();
+            });
+            assert.strictEqual(builds, 1);
+            assert.deepStrictEqual(getState().selectedExprs, [{ scopeName: 'ROOT', nodeContent: hostileCondition }]);
+        } finally {
+            const item = document.querySelector('ul.select-dropdown li') as HTMLElement;
+            await countBuilds(async () => {
+                item.click();
+                await settled();
+            });
+            conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+            takePostedMessages();
+        }
+    });
+
+    it('rebuilds once on an in-place update and keeps the picked condition', async () => {
+        const conditions = document.getElementById('conditions')!;
+        // Pick the filter first, so the update has something to preserve.
+        conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+        try {
+            (document.querySelector('ul.select-dropdown li') as HTMLElement).click();
+            await settled();
+            const builds = await countBuilds(async () => {
+                pushUpdate();
+                await settled();
+            });
+            assert.strictEqual(builds, 1);
+            assert.deepStrictEqual(getState().selectedExprs, [{ scopeName: 'ROOT', nodeContent: hostileCondition }]);
+            assert.strictEqual(placeholder().querySelectorAll('.trait').length, 3);
+        } finally {
+            const item = document.querySelector('ul.select-dropdown li') as HTMLElement;
+            item.click();
+            await settled();
+            conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+            takePostedMessages();
+        }
+    });
+
+    it('rebuilds once when another organization is picked and clears the condition filter', async () => {
+        const conditions = document.getElementById('conditions')!;
+        const mioSelect = document.getElementById('mios') as HTMLSelectElement;
+        // Pick the filter first, so the organization change has something to clear.
+        conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+        try {
+            (document.querySelector('ul.select-dropdown li') as HTMLElement).click();
+            await settled();
+            conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+            const builds = await countBuilds(async () => {
+                mioSelect.dispatchEvent(new (window as any).Event('change'));
+                await settled();
+            });
+            assert.strictEqual(builds, 1);
+            assert.deepStrictEqual(getState().selectedExprs, []);
+            assert.strictEqual(placeholder().querySelectorAll('.trait').length, 3);
+        } finally {
+            conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+            takePostedMessages();
+        }
+    });
 });

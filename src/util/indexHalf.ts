@@ -191,9 +191,16 @@ async function buildIndexHalfWithTimer<TRecord>(
 		: await loadCacheManifest(cacheName, version, cacheScope);
 	let filesToParse = filePaths;
 
+	// Set when a warm build can reuse the whole cache: every record hydrated, nothing stale, added
+	// or removed. Set false by anything that falls back to parsing -- a missing manifest, a corrupt
+	// data file, a changed dependency generation that skips the manifest, or a half that rebuilds on
+	// any change.
+	let cacheRestored = false;
+	let hasChanges = false;
+
 	if (manifest) {
 		const staleness = computeStaleFiles(manifest, mtimes);
-		const hasChanges =
+		hasChanges =
 			staleness.stale.length > 0 ||
 			staleness.removed.length > 0 ||
 			staleness.added.length > 0;
@@ -215,6 +222,9 @@ async function buildIndexHalfWithTimer<TRecord>(
 						await slice();
 					}
 					filesToParse = [...staleness.stale, ...staleness.added];
+					// Only after every record survived: a hydrate that throws above lands in the
+					// catch below and parses everything.
+					cacheRestored = true;
 				}
 			} catch {
 				Logger.warn(`${cacheName}: cache data corrupted, full rebuild`);
@@ -241,16 +251,23 @@ async function buildIndexHalfWithTimer<TRecord>(
 	// Fire-and-forget, but data must finish before the manifest can point readers at it. The payload
 	// is captured before a follow-on rebuild resets the live index, and writes are serialized per
 	// namespace so an old generation cannot finish after its corrective build.
-	queueCacheWrite(
-		writeKey,
-		cacheName,
-		spec.serialize(),
-		filePaths,
-		mtimes,
-		version,
-		cacheScope,
-		spec.dependencyGeneration,
-	);
+	// Skip the serialize-and-write when nobody can persist it, and when the restored cache
+	// already is the whole listing. Every other arrival still writes.
+	const skipCacheWrite =
+		writeKey === undefined ||
+		(cacheRestored && !hasChanges && !dependencyChanged && filesToParse.length === 0);
+	if (!skipCacheWrite) {
+		queueCacheWrite(
+			writeKey,
+			cacheName,
+			spec.serialize(),
+			filePaths,
+			mtimes,
+			version,
+			cacheScope,
+			spec.dependencyGeneration,
+		);
+	}
 }
 
 /**

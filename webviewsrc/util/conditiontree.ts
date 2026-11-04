@@ -1,6 +1,5 @@
 import { ConditionComplexExpr, ConditionItem } from "../../src/hoiformat/condition";
 import { EffectTreeNode } from "../../src/previewdef/sharedpayload";
-import { escapeAttr } from "../../src/util/escape";
 import { tryRun } from "./common";
 import { DivDropdown } from "./dropdown";
 import { feLocalize } from "./i18n";
@@ -165,6 +164,11 @@ function parseConditionValue(value: string): ConditionItem {
 		: { scopeName: value.substring(0, index), nodeContent: value.substring(index + 2) };
 }
 
+// Raised only by setConditionOptions, around the selectedValues$ emission that syncs the control to
+// the payload: which options and selections it shows is not a pick by the reader, and running the
+// change handler for it would rebuild the whole preview on top of the build the caller makes anyway.
+const pendingSilentSelection = new WeakSet<DivDropdown>();
+
 // Starts the dropdown at `selected` and reports every selection, the first one included.
 export function conditionDropdown(
 	element: HTMLDivElement,
@@ -175,7 +179,13 @@ export function conditionDropdown(
 	dropdown.selectedValues$.next(selected.map(conditionValue));
 	dropdown.addSubscription(
 		dropdown.selectedValues$.subscribe(
-			tryRun((values: readonly string[]) => onChange(values.map(parseConditionValue))),
+			tryRun((values: readonly string[]) => {
+				// The emission setConditionOptions makes is the sync that raised the flag, not a pick.
+				if (pendingSilentSelection.delete(dropdown)) {
+					return;
+				}
+				void onChange(values.map(parseConditionValue));
+			}),
 		),
 	);
 	return dropdown;
@@ -187,12 +197,27 @@ export function setConditionOptions(
 	exprs: ConditionItem[],
 	selected: ConditionItem[],
 ): void {
-	const options = exprs.map(
-		(item) =>
-			`<div class="option" value="${escapeAttr(conditionValue(item))}">${item.scopeName ? `[${escapeAttr(item.scopeName)}]` : ""}${escapeAttr(item.nodeContent)}</div>`,
-	);
-	dropdown.select.innerHTML = `<span class="value"></span>${options.join("")}`;
+	// Built as elements rather than one markup string, so a trigger can never close the attribute it
+	// is written into. The condition keeps the shape the dropdown reads: class option, value as its
+	// `!|`-joined scope and trigger, and the scope in brackets in front of the text.
+	const valueSpan = document.createElement("span");
+	valueSpan.className = "value";
+	dropdown.select.replaceChildren(valueSpan);
+	for (const item of exprs) {
+		const option = document.createElement("div");
+		option.className = "option";
+		option.setAttribute("value", conditionValue(item));
+		if (item.scopeName) {
+			option.append(`[${item.scopeName}]`);
+		}
+		option.append(item.nodeContent);
+		dropdown.select.appendChild(option);
+	}
+	// The subscription runs synchronously on next, so the flag is consumed before this returns and
+	// cannot swallow a reader pick made afterwards.
+	pendingSilentSelection.add(dropdown);
 	dropdown.selectedValues$.next(selected.map(conditionValue));
+	pendingSilentSelection.delete(dropdown);
 }
 
 //#endregion
