@@ -350,15 +350,57 @@ describe('previewdef/updateablepreview extension points', () => {
             await h.preview.onDocumentChange(document); // first render -> assign
 
             const open = h.preview.gateNext();
-            const older = h.preview.onDocumentChange(document);
-            const newer = h.preview.onDocumentChange(document);
+            const inFlight = h.preview.onDocumentChange(document);
             await settle();
             assert.strictEqual(h.preview.started, 2);
 
+            const older = h.preview.onDocumentChange(document);
+            const newer = h.preview.onDocumentChange(document);
+            await settle();
+            // Issue #670: both change calls collapse into the single pending render, and that
+            // render has not started while the one in flight is still gated.
+            assert.strictEqual(h.preview.started, 2);
+
             open();
-            await Promise.all([older, newer]);
+            await Promise.all([inFlight, older, newer]);
+            // One render ran for both changes, after the in-flight one finished, and it read the
+            // latest document.
             assert.strictEqual(h.preview.started, 3);
             assert.deepStrictEqual(h.posted.map(m => m.data.n), ['S2', 'S3']);
+        });
+
+        it('keeps dependencyChanged when changes coalesce into the pending render', async () => {
+            const h = makePreview(true);
+            h.preview.queueRender(updateRender('S1'), updateRender('S2'));
+            await h.preview.onDocumentChange(document);
+
+            await Promise.all([
+                h.preview.onDocumentChange(document),
+                h.preview.onDocumentChange(document, true),
+            ]);
+            assert.strictEqual(h.preview.started, 2);
+            assert.deepStrictEqual(h.preview.lastOptions, { partial: true, dependencyChanged: true });
+        });
+
+        it('joins a queued full render instead of scheduling a partial update behind it', async () => {
+            stubVscode({ textDocuments: [document] });
+            const h = makePreview(true);
+            h.preview.queueRender(updateRender('S1'), updateRender('S2'));
+
+            const open = h.preview.gateNext();
+            const initial = h.preview.initializePanelContent(document);
+            h.preview.reloadNow(true); // queued, but not started, behind the gated initial render
+            const merged = h.preview.onDocumentChange(document, true); // joins the reload
+            open();
+            await Promise.all([initial, merged]);
+            await h.preview.idle();
+
+            // Two full renders: the initial content and the reload the change joined. No partial
+            // update ran for the merged change, and the reload carried its dependencyChanged.
+            assert.strictEqual(h.preview.started, 2);
+            assert.deepStrictEqual(h.preview.lastOptions, { partial: false, dependencyChanged: true });
+            assert.deepStrictEqual(h.preview.applied.map(a => a.assigned), [true, true]);
+            assert.strictEqual(h.postCount, 0);
         });
 
         it('keeps a reload requested during a full render a full render', async () => {
@@ -386,10 +428,18 @@ describe('previewdef/updateablepreview extension points', () => {
             const consoleError = console.error;
             console.error = () => undefined;
             try {
+                // The two change calls collapse into the single pending render; it throws, the
+                // ordinary path swallows the error, and both callers settle with it.
                 await Promise.all([h.preview.onDocumentChange(document), h.preview.onDocumentChange(document)]);
             } finally {
                 console.error = consoleError;
             }
+            assert.strictEqual(h.preview.started, 1);
+            assert.strictEqual(h.lastAssignedHtml, undefined);
+
+            // A render that threw must not wedge the queue: the next change renders.
+            // failNext was consumed before the queue shift, so S1 is still queued for this render.
+            await h.preview.onDocumentChange(document);
             assert.strictEqual(h.preview.started, 2);
             assert.strictEqual(h.lastAssignedHtml, '<full>S1</full>');
         });

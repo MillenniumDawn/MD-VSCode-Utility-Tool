@@ -11,6 +11,14 @@ import { setPreviewOption } from '../util/previewoptions';
 import { ConfigurationKey } from '../constants';
 import { waitForRenderAck } from './renderack';
 
+// One render request waiting to start: the document of the latest request in the group, whether
+// any request in the group saw a dependency change, and the promise every caller settles with.
+interface PendingChange {
+    document: vscode.TextDocument;
+    dependencyChanged: boolean;
+    promise: Promise<void>;
+}
+
 export abstract class PreviewBase {
     private cachedDependencies: string[] | undefined = undefined;
 
@@ -26,8 +34,16 @@ export abstract class PreviewBase {
     protected readonly subscriptions: vscode.Disposable[] = [];
     protected panelInitialized = false;
     // Renders run one at a time, so a slow render can never land after a newer one and overwrite
-    // it. A queued render reads the live document when it starts, so edits in between coalesce.
+    // it. A queued render reads the live document when it starts. Issue #670: the queue is also
+    // bounded -- ordinary changes collapse into the single pending render below instead of one
+    // task being enqueued per delivered change.
     private renderQueue: Promise<void> = Promise.resolve();
+    // The render a group of ordinary change requests collapsed into, still waiting to start.
+    private pendingChange: PendingChange | undefined;
+    // An explicit full render (initializePanelContent, reload) that is queued but not started. A
+    // change arriving while one is queued joins it instead of scheduling a partial update behind
+    // it, so the render that eventually runs stays a full render.
+    private pendingFullRender: PendingChange | undefined;
     private browserSmokeRenderedIds: string[] | undefined;
     private browserSmokeWaiter: ((ids: string[]) => void) | undefined;
 
@@ -40,7 +56,35 @@ export abstract class PreviewBase {
     }
 
     public onDocumentChange(document: vscode.TextDocument, dependencyChanged = false): Promise<void> {
-        return this.enqueueRender(() => this.renderDocument(document, dependencyChanged));
+        // A full render is queued but not started: join it. It renders this document anyway, and a
+        // partial update behind it would pay for a second render of the same state.
+        if (this.pendingFullRender !== undefined) {
+            this.pendingFullRender.document = document;
+            this.pendingFullRender.dependencyChanged ||= dependencyChanged;
+            return this.pendingFullRender.promise;
+        }
+        // First request of its group: it becomes the one pending render. Later requests join it
+        // and settle with its promise; nothing further is enqueued while it waits.
+        if (this.pendingChange === undefined) {
+            const promise = this.renderQueue.then(() => this.runPendingChange());
+            this.renderQueue = promise.catch(() => undefined);
+            this.pendingChange = { document, dependencyChanged, promise };
+            return promise;
+        }
+        this.pendingChange.document = document;
+        this.pendingChange.dependencyChanged ||= dependencyChanged;
+        return this.pendingChange.promise;
+    }
+
+    // Starts the render the pending group of change requests collapsed into.
+    private async runPendingChange(): Promise<void> {
+        const pending = this.pendingChange;
+        this.pendingChange = undefined;
+        // Consumed either way: after dispose the pending render must not start.
+        if (pending === undefined || this.isDisposed) {
+            return;
+        }
+        await this.renderDocument(pending.document, pending.dependencyChanged);
     }
 
     protected enqueueRender(task: () => Promise<void>): Promise<void> {
@@ -99,14 +143,41 @@ export abstract class PreviewBase {
         return this.disposed;
     }
 
-    public initializePanelContent(document: vscode.TextDocument): Promise<void> {
-        return this.enqueueRender(async () => {
+    // Schedules an explicit full render: initializePanelContent and reload. Ordinary changes that
+    // arrive while it is queued join it instead of scheduling a partial update behind it, so a
+    // coalescing change never demotes a requested full render, and every caller in the group
+    // settles with the full render's promise.
+    private scheduleFullRender(
+        document: vscode.TextDocument,
+        dependencyChanged: boolean,
+        run: (document: vscode.TextDocument, dependencyChanged: boolean) => Promise<void>,
+    ): Promise<void> {
+        const pending: PendingChange = { document, dependencyChanged, promise: Promise.resolve() };
+        const promise = this.renderQueue.then(() => {
+            // A later full render queued behind this one owns the record; this task still renders
+            // with what was joined into it before it started.
+            if (this.pendingFullRender === pending) {
+                this.pendingFullRender = undefined;
+            }
             if (this.isDisposed) {
                 return;
             }
+            return run(pending.document, pending.dependencyChanged);
+        });
+        this.renderQueue = promise.catch(() => undefined);
+        pending.promise = promise;
+        this.pendingFullRender = pending;
+        return promise;
+    }
+
+    public initializePanelContent(document: vscode.TextDocument): Promise<void> {
+        return this.scheduleFullRender(document, false, (latest, dependencyChanged) => {
+            if (this.isDisposed) {
+                return Promise.resolve();
+            }
             this.panelInitialized = false;
             this.panel.webview.html = this.getLoadingShellHtml();
-            await this.renderDocument(document, false, this.browserSmoke);
+            return this.renderDocument(latest, dependencyChanged, this.browserSmoke);
         });
     }
 
@@ -249,9 +320,9 @@ export abstract class PreviewBase {
 
         // The reset runs inside the queue: set now, a render in flight would set it back on
         // finishing and this full reload would go out as a partial update.
-        void this.enqueueRender(() => {
+        void this.scheduleFullRender(document, dependencyChanged, (latest, dependencyChanged) => {
             this.panelInitialized = false;
-            return this.renderDocument(document, dependencyChanged);
+            return this.renderDocument(latest, dependencyChanged);
         });
     }
 
