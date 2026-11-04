@@ -35,8 +35,12 @@ updates:
     # Three packages are pinned to something else in the repository and cannot move on their own;
     # a bump of any of them broke `npm ci`, the workflows test or `vsce package` in one go (#334).
     ignore:
-      # TypeScript 7 on npm is the native compiler and ships no JavaScript API, so ts-loader and
-      # typescript-eslint cannot load it. Lift this once typescript-eslint accepts TypeScript 7.
+      # `typescript` is the alias for @typescript/typescript6, the
+      # JavaScript API that ts-loader and typescript-eslint load; the
+      # native TypeScript 7 compiler is the separate @typescript/native
+      # alias beside it. A major bump would replace the API alias with
+      # native TypeScript 7, which typescript-eslint still cannot load.
+      # Lift this once typescript-eslint accepts TypeScript 7.
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
       # The types follow the Node major in .nvmrc and engines.node; bump those first.

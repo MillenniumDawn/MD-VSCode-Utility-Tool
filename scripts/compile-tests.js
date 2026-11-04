@@ -21,19 +21,41 @@
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const { nativeTscCommand } = require("./native-tsc");
 
 const repoRoot = path.resolve(__dirname, "..");
 
 const projects = ["tsconfig.test.json", "tsconfig.webview.test.json"];
 
-// `spawn('tsc')` does not find the local binary, and on Windows what is on disk is `tsc.cmd`, which
-// only `shell: true` will run. Go through the local typescript package's own entry point instead,
-// with the node that is already running this script.
+// The compiler is the native TypeScript 7 of the @typescript/native alias -- the `typescript`
+// alias is the JavaScript API whose `tsc6` does not type-check the build. native-tsc.js reads the
+// installed package's own bin field and only runs its entry point under node when it has verified
+// the file is a JavaScript shim. Either way it is an argument vector with no shell, so the `tsc.cmd`
+// that once pushed this toward `shell: true` on Windows stays out of it.
 function spawnTsc(project) {
-	const tsc = path.join(repoRoot, "node_modules", "typescript", "bin", "tsc");
-	return spawn(process.execPath, [tsc, "-p", path.join(repoRoot, project)], {
-		cwd: repoRoot,
-	});
+	try {
+		const { command, args } = nativeTscCommand();
+		return spawn(command, [...args, "-p", path.join(repoRoot, project)], {
+			cwd: repoRoot,
+		});
+	} catch (error) {
+		return erroredChild(error);
+	}
+}
+
+// The child shape compile() consumes, failed before any process exists: a missing install is a
+// child that never starts and must fail its own project, not reject the run before the other
+// project can print.
+function erroredChild(error) {
+	return {
+		stdout: null,
+		stderr: null,
+		on(event, handler) {
+			if (event === "error") {
+				handler(error);
+			}
+		},
+	};
 }
 
 function normalizedPath(value) {
