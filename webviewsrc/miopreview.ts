@@ -279,7 +279,14 @@ function updateSelectedMio(clearCondition: boolean) {
         conditionContainerElement.style.display = conditionExprs.length > 0 ? 'block' : 'none';
     }
 
+    // A clear arrives with an organization change. The programmatic sync below no longer reports
+    // through the dropdown's change handler, so the stored selection is reset here to what the
+    // control will show -- otherwise the old conditions would keep filtering the rebuilt tree.
     if (conditions) {
+        if (clearCondition) {
+            selectedExprs = [];
+            setState({ selectedExprs });
+        }
         setConditionOptions(conditions, conditionExprs, clearCondition ? [] : selectedExprs);
     }
 
@@ -428,6 +435,9 @@ window.addEventListener('load', tryRun(async function() {
             selectedMioIndex = parseInt(mioSelect.value);
             setState({ selectedMioIndex });
             updateSelectedMio(true);
+            // The condition sync no longer redraws as a side effect, so an organization pick makes
+            // its redraw here, the way the focus tree does for its own selection.
+            void buildContent();
         });
     }
 

@@ -15,6 +15,7 @@ v1.1.43
 - [ Testing ] Check world-map loader results with exact assertions. Issue #566.
 
   Bugfixes:
+- [ Previews ] Updating a focus tree or MIO organization now redraws the preview once instead of once more for every condition filter it refreshes. Issue #669.
 - [ World Map Preview ] Hiding the map while it is loading now releases the loaded data after pending responses finish, instead of keeping it until the panel changes again. Issue #662.
 - [ Previews ] Closing a preview during an update no longer starts follow-up work for the closed panel. Issue #672.
 - [ Focus Tree Previewer ] A focus tree that takes too long to render, is replaced by a newer render, or has its preview closed now stops building in the background instead of finishing unseen. It also no longer shows "No focus tree." when the render was merely stopped. Issue #671.

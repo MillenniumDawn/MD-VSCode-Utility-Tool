@@ -446,7 +446,14 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 				conditionExprs.length > 0 ? "block" : "none";
 		}
 
+		// A clear arrives with a tree change. The programmatic sync below no longer reports through the
+		// dropdown's change handler, so the stored selections are reset here to what the control will
+		// show -- otherwise the old conditions would keep filtering the rebuilt tree.
 		if (conditions) {
+			if (clearCondition) {
+				selectedExprs = [];
+				setState({ selectedExprs });
+			}
 			setConditionOptions(conditions, conditionExprs, clearCondition ? [] : selectedExprs);
 		}
 
@@ -459,6 +466,10 @@ function updateSelectedFocusTree(clearCondition: boolean) {
 		}
 
 		if (inlayConditions) {
+			if (clearCondition) {
+				selectedInlayExprs = [];
+				setState({ selectedInlayExprs });
+			}
 			setConditionOptions(
 				inlayConditions,
 				inlayConditionExprs,

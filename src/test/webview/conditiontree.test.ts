@@ -19,9 +19,12 @@ describe("webview/util/conditiontree condition dropdown", () => {
 		const dropdown = conditionDropdown(dropdownElement(), [scoped], async (selection) => {
 			reported.push(selection);
 		});
+		// Syncing the options and selection from the payload is not a pick: it stays silent.
 		setConditionOptions(dropdown, [war, scoped, separator], [war, separator]);
 
-		assert.deepStrictEqual(reported, [[scoped], [war, separator]]);
+		assert.deepStrictEqual(reported, [[scoped]]);
+		dropdown.selectedValues$.next(["has_war = yes"]);
+		assert.deepStrictEqual(reported[reported.length - 1], [war]);
 		dropdown.dispose();
 		dropdown.selectedValues$.next(["has_war = yes"]);
 		assert.strictEqual(reported.length, 2, "a disposed dropdown reports nothing more");
