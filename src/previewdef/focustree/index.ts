@@ -9,7 +9,7 @@ import { copyTreeWarnings } from './warningreport';
 import { getRelativePathInWorkspace, getDocumentByUri, getConfiguration } from '../../util/vsccommon';
 import { localize } from '../../util/i18n';
 import { loadingShellHtml } from '../../util/html';
-import { withTimeout, TimeoutError } from '../../util/common';
+import { withTimeout, TimeoutError, CancelledError, CancellationLike, throwIfCancelled } from '../../util/common';
 import { error } from '../../util/debug';
 import { getFlags } from '../../util/featureflags';
 import { FocusTreeLayout, focusTreeGridBoxFor } from './layout';
@@ -19,6 +19,22 @@ import { computeStructuralFingerprint, computeIconSourceFingerprint, computeTree
 // A render taking longer than this is treated as stuck. The underlying load keeps running
 // in the background, but the user gets a recoverable panel instead of an endless spinner.
 const focusTreeRenderTimeout = 60 * 1000;
+
+// Cancellation for one buildFocusTreePayload call. `cancel()` is the build's own withTimeout
+// giving up (the wrapper rejects but the build runs on); the poll is read at every render check
+// and also covers the preview being disposed and a newer render or icon generation superseding
+// the build. It touches nothing shared: the loader, the image decoder and the caches keep serving
+// every other consumer while this build stops starting more of its own work.
+class BuildToken implements CancellationLike {
+    private cancelled = false;
+    public constructor(private readonly obsolete: () => boolean) {}
+    public get isCancellationRequested(): boolean {
+        return this.cancelled || this.obsolete();
+    }
+    public cancel(): void {
+        this.cancelled = true;
+    }
+}
 
 // The shared in-place update machinery (the render fingerprint skip, the post-versus-assign
 // decision, the loaded-page capability tracking and the hidden-panel html flush) lives in
@@ -50,6 +66,9 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // Generation token: each full (re)load bumps it so a slow background icon push from an earlier
     // load is dropped instead of overwriting a newer render.
     private iconRenderGeneration = 0;
+    // Counts renders. A build abandoned by its timeout keeps running in the background, and this is
+    // what its token polls to see that a newer render has superseded it.
+    private renderEpoch = 0;
     // Counts dependency changes. A dependency .gfx edit can swap a sprite's texturefile without
     // changing the structure or the icon identity (same GFX name -> same icon key), so neither
     // fingerprint would move; folding this into the side fingerprint is what forces the (expensive)
@@ -211,6 +230,12 @@ class FocusTreePreview extends UpdateablePreviewBase {
         if (options.dependencyChanged) {
             this.dependencyEpoch++;
         }
+        const renderEpoch = ++this.renderEpoch;
+        if (!options.partial) {
+            // A full render replaces the page, so the previous icon push is already obsolete.
+            this.iconRenderGeneration++;
+        }
+        const token = new BuildToken(() => this.isDisposed || this.renderEpoch !== renderEpoch);
         this.pendingTreeFingerprints = undefined;
         this.fingerprintedTrees = undefined;
         this.content = document.getText();
@@ -232,14 +257,26 @@ class FocusTreePreview extends UpdateablePreviewBase {
             let structure: FocusTreePayload | null;
             try {
                 structure = await withTimeout(
-                    buildFocusTreePayload(this.focusTreeLoader, progress, { resolveIcons: false, dependencyChanged: options.dependencyChanged }),
+                    buildFocusTreePayload(this.focusTreeLoader, progress, { resolveIcons: false, dependencyChanged: options.dependencyChanged, token }),
                     focusTreeRenderTimeout,
-                    options.partial ? undefined : () => {
+                    () => {
+                        // The wrapper gives up but the build runs on: cancel it so the abandoned work
+                        // stops at its next check instead of rendering the whole tree unseen.
+                        token.cancel();
+                        if (options.partial) {
+                            return undefined;
+                        }
                         progress?.(localize('focustree.loading.slow', 'Still working on a heavy focus tree...'));
                         return new TimeoutError();
                     },
                 );
             } catch (e) {
+                // A cancelled build is one the preview no longer wants (closed or superseded): keep
+                // the current page and report nothing. An error page or "No focus tree" would
+                // misdescribe why the render stopped.
+                if (e instanceof CancelledError) {
+                    return null;
+                }
                 error(e);
                 if (options.partial) {
                     // Slow/stuck transient render: keep the current preview rather than flipping to
@@ -252,6 +289,12 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 // full-reload path instead of posting into a listener-less page.
                 this.resetStructureState();
                 return buildFocusTreeErrorHtml(webview, uri, e);
+            }
+
+            // Cancelled after its last check: the result is as obsolete as a cancelled build's
+            // failure, and must not fall into the "No focus tree" path below.
+            if (token.isCancellationRequested) {
+                return null;
             }
 
             if (structure === null) {
@@ -371,8 +414,11 @@ class FocusTreePreview extends UpdateablePreviewBase {
         if (this.isDisposed) {
             return;
         }
+        // Cancelled when this push is superseded: the icon generation moves when a newer focus
+        // render tears the page down or a newer icon push replaces this one.
+        const token = new BuildToken(() => this.isDisposed || this.iconRenderGeneration !== generation);
         try {
-            const full = await buildFocusTreePayload(this.focusTreeLoader);
+            const full = await buildFocusTreePayload(this.focusTreeLoader, undefined, { token });
             if (!full || generation !== this.iconRenderGeneration || this.isDisposed) {
                 return;
             }
@@ -380,12 +426,18 @@ class FocusTreePreview extends UpdateablePreviewBase {
             if (generation !== this.iconRenderGeneration || this.isDisposed) {
                 return;
             }
+            // Checked again right before posting: a build cancelled after its last render check
+            // must not publish.
+            throwIfCancelled(token);
             const css = full.styleTable.toRawCss();
             this.lastPushedIconCss = css;
             this.lastPushedIconGeneration = generation;
             void this.panel.webview.postMessage({ type: 'iconStyles', css });
         } catch (e) {
-            error(e);
+            // A cancelled build is expected (superseded or closed), not an error to report.
+            if (!(e instanceof CancelledError)) {
+                error(e);
+            }
         }
     }
 
@@ -398,17 +450,31 @@ class FocusTreePreview extends UpdateablePreviewBase {
         if (this.isDisposed) {
             return;
         }
+        const startGeneration = this.iconRenderGeneration;
+        const token = new BuildToken(() => this.isDisposed || this.iconRenderGeneration !== startGeneration);
         let full: FocusTreePayload | null = null;
         try {
-            full = await withTimeout(buildFocusTreePayload(this.focusTreeLoader), focusTreeRenderTimeout);
+            full = await withTimeout(
+                buildFocusTreePayload(this.focusTreeLoader, undefined, { token }),
+                focusTreeRenderTimeout,
+                () => {
+                    // The wrapper gives up but the build runs on: cancel it here too.
+                    token.cancel();
+                },
+            );
         } catch (e) {
-            // Slow icon pass: keep the previously pushed icons rather than blanking them.
-            error(e);
+            // Slow or cancelled icon pass: keep the previously pushed icons rather than blanking them.
+            if (!(e instanceof CancelledError)) {
+                error(e);
+            }
             return;
         }
         if (!full || this.isDisposed) {
             return;
         }
+        // Checked again right before posting: a build cancelled after its last render check
+        // must not publish.
+        throwIfCancelled(token);
         // Advance the generation so a still-in-flight background pushIconStyles from an earlier load
         // fails its post-await guard instead of overwriting this newer icon CSS (and the cache).
         // The bump + tag + post run without an await between them, so the older push can only post

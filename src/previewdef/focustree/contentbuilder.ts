@@ -2,7 +2,7 @@ import type * as vscode from 'vscode';
 import { FocusTree, Focus, FocusTreeShortcut, focusTreesToDisplay } from './schema';
 import { getSpriteByGfxName, Image, getImageByPath, iconResolveStats, resetIconResolveStats } from '../../util/image/imagecache';
 import { localize, i18nTableAsScript } from '../../util/i18n';
-import { randomString, mapLimit, jsonForScript } from '../../util/common';
+import { randomString, mapLimit, jsonForScript, CancelledError, CancellationLike, UserError, throwIfCancelled } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { errorPage, escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
 import { GridBoxType, IconType, ButtonType, InstantTextBoxType } from '../../hoiformat/gui';
@@ -31,6 +31,11 @@ import { spriteIconStyle } from "../iconstyle";
 
 const defaultFocusIcon = 'gfx/interface/goals/goal_unknown.dds';
 
+// LoaderSession.throwIfCancelled's message. The loader keeps throwing its pinned UserError for a
+// cancelled session, so the type cannot tell a cancelled session from another loader failure; the
+// message can.
+const loadSessionCancelledMessage = 'Load session cancelled.';
+
 // Caps how many focus/inlay renders run concurrently.
 const renderConcurrency = 8;
 
@@ -55,14 +60,18 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
     toolbarFlags: ToolbarFlags;
 }
 
-export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean; dependencyChanged?: boolean }): Promise<FocusTreePayload | null> {
+export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean; dependencyChanged?: boolean; token?: CancellationLike }): Promise<FocusTreePayload | null> {
     const resolveIcons = options?.resolveIcons !== false;
+    // This build's own cancellation: set when the caller timed out, was superseded or was closed.
+    const token = options?.token;
     try {
         // Per-phase timing of parsing/loading, icon resolution, and DDS->PNG conversion, logged via debug() in dev builds.
         resetIconResolveStats();
         const tStart = Date.now();
 
-        const session = new LoaderSession(options?.dependencyChanged ?? false);
+        // The cancelled callback is this build's token alone. The loader and its caches are shared
+        // with every other consumer of the same files, whose sessions must keep running.
+        const session = new LoaderSession(options?.dependencyChanged ?? false, () => token?.isCancellationRequested ?? false);
         const loadResult = await loader.load(session);
         const loadedLoaders = session.loadedLoaderNames();
         debug('Loader session focus tree', loadedLoaders);
@@ -112,6 +121,9 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         }
         let renderedFocusCount = 0;
         await mapLimit(allFocuses, renderConcurrency, async (focus) => {
+            // Throwing, not returning: mapLimit keeps taking items until a callback throws, so a
+            // check that only returned would leave the other workers rendering for a dead build.
+            throwIfCancelled(token);
             renderedFocus[focus.id] = (await renderFocus(focus, styleTable, loadResult.result.gfxFiles, loadResult.result.overlayGfxFiles, loader.file, titlebarStyles, layout.item, resolveIcons)).replace(/\s\s+/g, ' ');
             renderedFocusCount++;
             if (progress) {
@@ -132,6 +144,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         }
         let renderedInlayCount = 0;
         await mapLimit(allInlays, renderConcurrency, async (inlay) => {
+            throwIfCancelled(token);
             renderedInlayWindows[inlay.id] = (await renderInlayWindow(inlay, styleTable, loadResult.result.gfxFiles)).replace(/\s\s+/g, ' ');
             renderedInlayCount++;
             if (progress) {
@@ -160,6 +173,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         for (const tree of focusTrees) {
             const items: string[] = [];
             for (const [index, shortcut] of (tree.shortcuts ?? []).entries()) {
+                throwIfCancelled(token);
                 items.push((await renderShortcut(shortcut, index, tree, shortcutGui?.item, styleTable, loadResult.result.gfxFiles, resolveIcons)).replace(/\s\s+/g, ' '));
             }
             renderedShortcuts.push(items);
@@ -181,6 +195,17 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
             renderedShortcutToggle,
         };
     } catch (e) {
+        // A cancelled build is obsolete, not broken: it leaves as a CancelledError so the caller
+        // can tell a render nobody wants (keep the current page) from malformed mod data, whose
+        // null below keeps its current meaning.
+        if (e instanceof CancelledError) {
+            throw e;
+        }
+        if (e instanceof UserError && e.message === loadSessionCancelledMessage) {
+            // This session's cancelled callback fired (LoaderSession.throwIfCancelled); its error
+            // type is pinned to UserError by the loader tests, so it is mapped here instead.
+            throw new CancelledError();
+        }
         error(e);
         return null;
     }
