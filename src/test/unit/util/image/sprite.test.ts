@@ -52,23 +52,38 @@ describe("util/image/sprite retainedBytes", () => {
 		assert.strictEqual(sprite.retainedBytes, image.retainedBytes);
 	});
 
-	it("adds the split frames and their URIs to a multi-frame sprite", () => {
+	it("counts only the frames that were actually read", () => {
 		const image = makeImage(8, 4);
 		const sprite = new Sprite("s", image, 2);
 		assert.strictEqual(sprite.retainedBytes, image.retainedBytes);
 
 		const frames = sprite.frames;
 		assert.strictEqual(frames.length, 2);
+		const decoded = PNG.sync.read(image.pngBuffer);
 		assert.strictEqual(
 			sprite.retainedBytes,
-			image.retainedBytes + sum(frames),
+			image.retainedBytes + decoded.data.length,
 		);
 
-		const frame = frames[1]!;
-		const uri = frame.uri;
+		const last = frames[1]!;
 		assert.strictEqual(
 			sprite.retainedBytes,
-			image.retainedBytes + sum(frames) + uri.length,
+			image.retainedBytes +
+				decoded.data.length +
+				sprite.width * decoded.height * 4 +
+				last.retainedBytes,
+		);
+
+		// Visiting every index may encode all of them, URIs included.
+		const all = frames.map((frame) => frame);
+		assert.strictEqual(all.length, 2);
+		assert.strictEqual(sprite.retainedBytes, image.retainedBytes + sum(all));
+		for (const frame of all) {
+			frame.uri;
+		}
+		assert.strictEqual(
+			sprite.retainedBytes,
+			image.retainedBytes + sum(all) + all[0]!.uri.length + all[1]!.uri.length,
 		);
 	});
 
@@ -117,6 +132,45 @@ describe("util/image/sprite frames", () => {
 		}
 		return result;
 	}
+
+	afterEach(() => mock.restoreAll());
+
+	// PNG.sync.write runs again for every fixture the helpers create, so the mock goes up only
+	// after the sprite is built and the count is frame encodes only.
+	function writeSpy(): { count(): number } {
+		const write = mock.method(PNG.sync, "write");
+		return { count: () => write.mock.callCount() };
+	}
+
+	it("encodes only the frame that was read", () => {
+		const sprite = new Sprite("s", makeColumnImage(10, 2), 5);
+		const writes = writeSpy();
+
+		const first = sprite.frames[0];
+		assert.strictEqual(first!.width, 2);
+		assert.strictEqual(writes.count(), 1);
+
+		// Reading the length and re-reading the same index encode nothing further.
+		assert.strictEqual(sprite.frames.length, 5);
+		assert.strictEqual(sprite.frames[0], first);
+		assert.strictEqual(writes.count(), 1);
+
+		// A neighbouring frame is one encode of its own.
+		assert.strictEqual(sprite.frames[1]!.width, 2);
+		assert.strictEqual(writes.count(), 2);
+
+		// Visiting every remaining index encodes each of them once.
+		const frames = sprite.frames;
+		assert.deepStrictEqual(frames.map((frame) => frame.width), [2, 2, 2, 2, 2]);
+		assert.strictEqual(writes.count(), 5);
+
+		// Everything is materialized, so byte accounting covers the whole strip.
+		assert.strictEqual(
+			sprite.retainedBytes,
+			sprite.image.retainedBytes +
+				frames.reduce((total, frame) => total + frame.retainedBytes, 0),
+		);
+	});
 
 	it("floors the frame width when the texture does not divide evenly", () => {
 		const sprite = new Sprite("s", makeColumnImage(10, 2), 3);
