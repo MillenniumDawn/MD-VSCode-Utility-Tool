@@ -150,7 +150,8 @@ describe("util/image/imagedecoder fallback", () => {
 	});
 
 	it("never retries queued timeouts and can decode again with a fresh worker", async function () {
-		this.timeout(5000);
+		// Each posted hang times out and hands the queue to a replacement worker, one at a time.
+		this.timeout(20000);
 		decoder._setImageWorkerPathForTest(path.resolve(__dirname, "../../../hangingImageWorker.js"));
 		decoder._setImageJobTimeoutForTest(50);
 		const results = await Promise.allSettled(Array.from({ length: 16 }, () => decoder.decodeImageToPng(tga, "tga")));
@@ -222,7 +223,8 @@ describe("util/image/imagedecoder fallback", () => {
 			worker.failNextPost = true;
 			const second = decoder.decodeImageToPng(tga, "tga");
 			const third = decoder.decodeImageToPng(tga, "tga");
-			assert.strictEqual(worker.posted.length, 2);
+			// Only the first request reaches a worker while it is busy; the burst waits for a slot.
+			assert.strictEqual(worker.posted.length, 1);
 			worker.answer();
 			worker.answer();
 			assert.deepStrictEqual(
@@ -236,6 +238,68 @@ describe("util/image/imagedecoder fallback", () => {
 			const fourth = decoder.decodeImageToPng(tga, "tga");
 			worker.answer();
 			assert.strictEqual((await fourth).width, SCRIPTED_WIDTH);
+		});
+
+		it("copies and transfers a burst only up to the live worker pool size", async () => {
+			handOver({
+				workspace: { getConfiguration: () => ({ imageDecodeWorkers: 2 }) },
+				window: { createOutputChannel: () => ({ appendLine: () => undefined }) },
+			});
+			const jobs = Array.from({ length: 6 }, () => decoder.decodeImageToPng(tga, "tga"));
+			const pool = ScriptedWorker.instances;
+			assert.strictEqual(pool.length, 2);
+			// The whole burst is queued, but only one payload per live worker has been transferred.
+			assert.deepStrictEqual(pool.map((w) => w.posted.length), [1, 1]);
+			pool[0].answer();
+			assert.deepStrictEqual(pool.map((w) => w.posted.length), [1, 1]);
+			pool[1].answer();
+			pool[0].answer();
+			pool[1].answer();
+			pool[0].answer();
+			pool[1].answer();
+			assert.deepStrictEqual(
+				(await Promise.all(jobs)).map((r) => r.width),
+				[SCRIPTED_WIDTH, SCRIPTED_WIDTH, SCRIPTED_WIDTH, SCRIPTED_WIDTH, SCRIPTED_WIDTH, SCRIPTED_WIDTH],
+			);
+			assert.deepStrictEqual(syncCalls, []);
+		});
+
+		it("aborting a queued decode rejects only that caller and never transfers it", async () => {
+			const first = decoder.decodeImageToPng(tga, "tga");
+			const controller = new AbortController();
+			const second = decoder.decodeImageToPng(tga, "tga", controller.signal);
+			const worker = ScriptedWorker.instances[0];
+			assert.strictEqual(worker.posted.length, 1);
+			const secondSettled = assert.rejects(
+				second,
+				(e: unknown) => e instanceof Error && e.name === "AbortError",
+			);
+			controller.abort();
+			await secondSettled;
+			assert.strictEqual(worker.posted.length, 1);
+			assert.deepStrictEqual(syncCalls, []);
+			worker.answer();
+			assert.strictEqual((await first).width, SCRIPTED_WIDTH);
+			assert.deepStrictEqual(syncCalls, []);
+		});
+
+		it("a decode waiting behind a healthy worker is never reported stuck", async () => {
+			decoder._setImageJobTimeoutForTest(600);
+			const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+			const jobs = [1, 2, 3].map(() => decoder.decodeImageToPng(tga, "tga"));
+			const worker = ScriptedWorker.instances[0];
+			// Each answer comes after the short timeout would have fired for the job still queued.
+			await sleep(350);
+			worker.answer();
+			await sleep(350);
+			worker.answer();
+			await sleep(350);
+			worker.answer();
+			assert.deepStrictEqual(
+				(await Promise.all(jobs)).map((r) => r.width),
+				[SCRIPTED_WIDTH, SCRIPTED_WIDTH, SCRIPTED_WIDTH],
+			);
+			assert.deepStrictEqual(logged, []);
 		});
 	});
 });
