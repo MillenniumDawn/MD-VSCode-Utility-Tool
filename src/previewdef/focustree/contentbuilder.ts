@@ -5,7 +5,7 @@ import { localize, i18nTableAsScript } from '../../util/i18n';
 import { randomString, mapLimit, jsonForScript, CancelledError, CancellationLike, UserError, throwIfCancelled } from '../../util/common';
 import { HOIPartial, toNumberLike, toStringAsSymbolIgnoreCase } from '../../hoiformat/schema';
 import { errorPage, escapeAttr, html, htmlEscape, previewedFileUriScript } from '../../util/html';
-import { GridBoxType, IconType, ButtonType, InstantTextBoxType } from '../../hoiformat/gui';
+import { GridBoxType, IconType, ButtonType, ContainerWindowType, InstantTextBoxType } from '../../hoiformat/gui';
 import { FocusTreeLoader, ProgressCallback } from './loader';
 import { LoaderSession } from '../../util/loader/loader';
 import { debug, error } from '../../util/debug';
@@ -204,6 +204,104 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
         if (e instanceof UserError && e.message === loadSessionCancelledMessage) {
             // This session's cancelled callback fired (LoaderSession.throwIfCancelled); its error
             // type is pinned to UserError by the loader tests, so it is mapped here instead.
+            throw new CancelledError();
+        }
+        error(e);
+        return null;
+    }
+}
+
+/**
+ * Resolves only the styles the icon push streams into the rendered structure. The structure pass
+ * renders focus, inlay and shortcut HTML with placeholders beside them, so this pass must not
+ * re-render any of that HTML: it registers the same class names the full resolveIcons build mints
+ * (the focus icons and their missing-icon fallback, the shortcut picture classes, the exclusive and
+ * prerequisite link textures, the titlebar/overlay layers and the inlay gfx classes) without
+ * building any of the markup, and returns the resulting CSS. A partial update can only get a
+ * newly-minted class name onto the page through this CSS, so it carries every identity in the same
+ * categories the full build does, resolved or not. Returns null when the tree is empty or malformed.
+ */
+export interface FocusTreeIconStyles {
+    styleTable: StyleTable;
+}
+
+export async function buildFocusTreeIconStyles(
+    loader: FocusTreeLoader,
+    options?: { token?: CancellationLike },
+): Promise<FocusTreeIconStyles | null> {
+    const token = options?.token;
+    try {
+        const tStart = Date.now();
+        resetIconResolveStats();
+        // Like today's icon push sites, this pass starts no dependencyChanged session: the loader
+        // reparses its own document only when it must, against the same caches the structure pass
+        // shares. The token is this push's cancellation alone.
+        const session = new LoaderSession(false, () => token?.isCancellationRequested ?? false);
+        const loadResult = await loader.load(session);
+        const focusTrees = focusTreesToDisplay(loadResult.result.focusTrees);
+        if (focusTrees.length === 0) {
+            return null;
+        }
+        const layout = loadResult.result.layout ?? standardFocusTreeLayout;
+        const styleTable = new StyleTable();
+
+        // Registered by the structure pass too, with the plain line branches, so what this pass adds
+        // is exclusively the classes the resolved textures produce.
+        const exclusiveLinkImages = layout.mode === 'gui'
+            ? await loadExclusiveLinkImages(layout.exclusive.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
+            : await loadExclusiveLinkImages();
+        registerExclusiveLinkStyles(styleTable, exclusiveLinkImages, layout.spacing.x, {
+            startX: layout.exclusive.startX,
+            endX: layout.exclusive.endX,
+            y: layout.exclusive.offsetY,
+        }, layout.spacing.y, {
+            // Above the focus layers (up to 3), which it crosses on the name bar row, and below the
+            // traced lines (5) and warning markers (6).
+            zIndex: 4,
+            gapUnderMid: true,
+            clampToCentre: true,
+        });
+
+        const focusLinkState = getFlags().focusTreePrerequisiteLines;
+        const focusLinkImages = layout.mode === 'gui'
+            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles], focusLinkState)
+            : await loadFocusLinkImages(undefined, undefined, focusLinkState);
+        registerFocusLinkStyles(styleTable, focusLinkImages, focusLinkState);
+
+        const titlebarStyles = await loadFocusTitlebarStyles();
+        for (const focus of flatMap(focusTrees, tree => Object.values(tree.focuses))) {
+            throwIfCancelled(token);
+            await registerFocusIconAndLayerStyles(focus, styleTable, loadResult.result.gfxFiles, loadResult.result.overlayGfxFiles, titlebarStyles, true);
+        }
+
+        await prepareInlayGfxStyles(focusTrees, styleTable);
+
+        // What renderShortcut would mint on the page's part: one picture class per shortcut for every
+        // focus_button scale the item window declares, or the one fallback scale when there is none.
+        const shortcutGui = loadResult.result.shortcutGui;
+        const shortcutScales = shortcutGui?.item ? focusButtonScalesOf(shortcutGui.item) : [fallbackShortcutItem.icon.scale];
+        for (const tree of focusTrees) {
+            for (const shortcut of tree.shortcuts ?? []) {
+                throwIfCancelled(token);
+                const iconName = tree.focuses[shortcut.target]?.icon.find(i => i.icon)?.icon;
+                const image = iconName ? await getFocusIcon(iconName, loadResult.result.gfxFiles) : await getImageByPath(defaultFocusIcon);
+                for (const scale of shortcutScales) {
+                    styleTable.style(shortcutIconStyleName(iconName, scale), () => shortcutIconCss(image, scale));
+                }
+            }
+        }
+
+        debug(`[focustree] icon style pass: load=${Date.now() - tStart}ms | focuses=${focusTrees.length} ` +
+            `imageDecodes=${iconResolveStats.imageDecodes} decodeTime=${iconResolveStats.imageDecodeMs}ms`);
+
+        return { styleTable };
+    } catch (e) {
+        // Mirrors buildFocusTreePayload: a cancelled pass rethrows so the caller's guards hold, and
+        // any other failure keeps whatever CSS is already on the page.
+        if (e instanceof CancelledError) {
+            throw e;
+        }
+        if (e instanceof UserError && e.message === loadSessionCancelledMessage) {
             throw new CancelledError();
         }
         error(e);
@@ -678,6 +776,47 @@ const fallbackShortcutItem = {
     name: { x: 63, y: 6, width: 112, height: 60, fontSize: 14 },
 };
 
+// The class name and CSS of a shortcut's picture class, shared between renderShortcut and
+// buildFocusTreeIconStyles so both mint the same rule for the same (icon, scale). The scale rides
+// in the name because it comes from the gui's focus_button, which the icon-only pass never renders.
+function shortcutIconStyleName(iconName: string | undefined, scale: number): string {
+    return `shortcut-icon-${normalizeForStyle(iconName ?? '-empty')}-${Math.round(scale * 100)}`;
+}
+
+function shortcutIconCss(image: Image | undefined, scale: number): string {
+    return image ? `
+            width: ${image.width * scale}px;
+            height: ${image.height * scale}px;
+            background-image: url(${image.uri});
+            background-size: ${image.width * scale}px ${image.height * scale}px;
+        ` : `
+            width: ${94 * scale}px;
+            height: ${86 * scale}px;
+            background: rgba(127, 127, 127, 0.35);
+        `;
+}
+
+// The scale of every focus_button child of the shortcut item window, in render order (the order only
+// shapes the CSS, and distinct scales stay distinct class names regardless). Mirrors the traversal
+// renderShortcut reaches them through: containers recurse (renderContainerWindowChildren), the three
+// button kinds match like renderShortcut's onRenderChild, and grid boxes yield nothing because
+// renderGridBox there is handed no items.
+function focusButtonScalesOf(item: HOIPartial<ContainerWindowType>): number[] {
+    const scales: number[] = [];
+    const walk = (window: HOIPartial<ContainerWindowType>): void => {
+        for (const button of [...window.buttontype, ...window.checkboxtype, ...window.guibuttontype]) {
+            if (button.name === 'focus_button') {
+                scales.push(button.scale ?? 1);
+            }
+        }
+        for (const child of [...window.containerwindowtype, ...window.windowtype]) {
+            walk(child);
+        }
+    };
+    walk(item);
+    return scales;
+}
+
 // One shortcut as the game draws it: the item window from nationalfocusview.gui, with the
 // localised shortcut name in its `name` textbox and the target focus's icon in its `focus_button`.
 async function renderShortcut(
@@ -697,16 +836,7 @@ async function renderShortcut(
     // writes a placeholder under that name and the icon pass pushes the real one over it, so its size
     // lives there too. Centring by transform keeps the position independent of that size.
     const icon = (x: number, y: number, scale: number, centered: boolean) => {
-        const pictureClass = styleTable.style(`shortcut-icon-${normalizeForStyle(iconName ?? '-empty')}-${Math.round(scale * 100)}`, () => image ? `
-            width: ${image.width * scale}px;
-            height: ${image.height * scale}px;
-            background-image: url(${image.uri});
-            background-size: ${image.width * scale}px ${image.height * scale}px;
-        ` : `
-            width: ${94 * scale}px;
-            height: ${86 * scale}px;
-            background: rgba(127, 127, 127, 0.35);
-        `);
+        const pictureClass = styleTable.style(shortcutIconStyleName(iconName, scale), () => shortcutIconCss(image, scale));
         return `<div class="${pictureClass} ${styleTable.oneTimeStyle('shortcut-icon', () => `
             position: absolute;
             left: ${x}px;
@@ -821,44 +951,8 @@ async function renderFocus(
     item: FocusItemLayout,
     resolveIcons: boolean = true,
 ): Promise<string> {
-    // Skips the expensive per-texture DDS->PNG conversions in the structure-only pass and registers a neutral placeholder.
-    for (const focusIcon of focus.icon) {
-        const iconName = focusIcon.icon;
-        const iconObject = resolveIcons && iconName ? await getFocusIcon(iconName, gfxFiles) : null;
-        styleTable.style('focus-icon-' + normalizeForStyle(iconName ?? '-empty'), () =>
-            iconObject
-                ? `background-image: url(${iconObject.uri}); background-size: ${iconObject.width}px; background-color: transparent;`
-                : resolveIcons
-                    ? `background: grey; background-size: 0px;`
-                    : `background-color: rgba(127, 127, 127, 0.25); background-size: 0px;`
-        );
-    }
-
-    styleTable.style('focus-icon-' + normalizeForStyle('-empty'), () => 'background: grey;');
-
-    const titlebarObject = await getFocusTitlebarImage(focus.textIcon, titlebarStyles);
-    const titlebarClass = styleTable.style('focus-titlebar-' + normalizeForStyle(focus.textIcon ?? '-empty'), () =>
-        titlebarObject ? `
-            background-image: url(${titlebarObject.uri});
-            width: ${titlebarObject.width}px;
-            height: ${titlebarObject.height}px;
-            background-size: ${titlebarObject.width}px ${titlebarObject.height}px;
-        ` : `
-            display: none;
-        `
-    );
-    const overlayObject = await getFocusOverlayImage(focus.overlay, overlayGfxFiles);
-    const overlayClass = styleTable.style('focus-overlay-' + normalizeForStyle(focus.overlay ?? '-empty'), () =>
-        overlayObject ? `
-            background-image: url(${overlayObject.uri});
-            width: ${overlayObject.width}px;
-            height: ${overlayObject.height}px;
-            background-size: ${overlayObject.width}px ${overlayObject.height}px;
-            display: block;
-        ` : `
-            display: none;
-        `
-    );
+    const { titlebarClass, overlayClass, titlebarObject, overlayObject } =
+        await registerFocusIconAndLayerStyles(focus, styleTable, gfxFiles, overlayGfxFiles, titlebarStyles, resolveIcons);
 
     let textContent = htmlEscape(focus.id);
     if (getFlags().localisationIndex){
@@ -938,6 +1032,62 @@ async function renderFocus(
         ${textContent}
         </span>
     </div>`;
+}
+
+/**
+ * Registers the styleTable classes of one focus's icons and titlebar/overlay layers, shared by
+ * renderFocus (the payload build) and buildFocusTreeIconStyles (the icon-only pass), so both mint
+ * the same class names and CSS for the same focus whatever each pass renders. Returns the resolved
+ * images and the two layer class names renderFocus's markup needs.
+ */
+async function registerFocusIconAndLayerStyles(
+    focus: Focus,
+    styleTable: StyleTable,
+    gfxFiles: string[],
+    overlayGfxFiles: string[],
+    titlebarStyles: Record<string, string>,
+    resolveIcons: boolean,
+): Promise<{ titlebarClass: string; overlayClass: string; titlebarObject: Image | undefined; overlayObject: Image | undefined }> {
+    // Skips the expensive per-texture DDS->PNG conversions in the structure-only pass and registers a neutral placeholder.
+    for (const focusIcon of focus.icon) {
+        const iconName = focusIcon.icon;
+        const iconObject = resolveIcons && iconName ? await getFocusIcon(iconName, gfxFiles) : null;
+        styleTable.style('focus-icon-' + normalizeForStyle(iconName ?? '-empty'), () =>
+            iconObject
+                ? `background-image: url(${iconObject.uri}); background-size: ${iconObject.width}px; background-color: transparent;`
+                : resolveIcons
+                    ? `background: grey; background-size: 0px;`
+                    : `background-color: rgba(127, 127, 127, 0.25); background-size: 0px;`
+        );
+    }
+
+    styleTable.style('focus-icon-' + normalizeForStyle('-empty'), () => 'background: grey;');
+
+    const titlebarObject = await getFocusTitlebarImage(focus.textIcon, titlebarStyles);
+    const titlebarClass = styleTable.style('focus-titlebar-' + normalizeForStyle(focus.textIcon ?? '-empty'), () =>
+        titlebarObject ? `
+            background-image: url(${titlebarObject.uri});
+            width: ${titlebarObject.width}px;
+            height: ${titlebarObject.height}px;
+            background-size: ${titlebarObject.width}px ${titlebarObject.height}px;
+        ` : `
+            display: none;
+        `
+    );
+    const overlayObject = await getFocusOverlayImage(focus.overlay, overlayGfxFiles);
+    const overlayClass = styleTable.style('focus-overlay-' + normalizeForStyle(focus.overlay ?? '-empty'), () =>
+        overlayObject ? `
+            background-image: url(${overlayObject.uri});
+            width: ${overlayObject.width}px;
+            height: ${overlayObject.height}px;
+            background-size: ${overlayObject.width}px ${overlayObject.height}px;
+            display: block;
+        ` : `
+            display: none;
+        `
+    );
+
+    return { titlebarClass, overlayClass, titlebarObject, overlayObject };
 }
 
 // `base` moved by `offset` pixels, written the way the standard layout always has been.

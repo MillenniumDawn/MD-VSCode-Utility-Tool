@@ -3,6 +3,7 @@ Unreleased
 v1.1.43
 
   Functionality:
+- [ Focus Tree Previewer ] Focus tree icons fill in without drawing the rest of the tree again. Issue #664.
 - [ Previews ] Opening one frame of a multi-frame sprite no longer builds the unused frames first. Issue #673.
 - [ Previews ] Rapidly editing a previewed file now redraws once for the newest state instead of stacking a redraw per delivered change, and the redraw still forces a full reload when a dependency changed. Issue #670.
 - [ Loading ] A warm index build where nothing changed no longer writes the index cache back, which saves a copy of the whole index on every unchanged reload. Issue #661.
