@@ -382,11 +382,11 @@ describe('webview/focustree rendering toolbar toggles', () => {
     useEntrypoint(listeners);
 
     const settled = () => new Promise(resolve => setTimeout(resolve, 0));
-    let previousBody = '';
+    let previousBody: Node[] = [];
     let previousTrees: unknown;
 
     before(async () => {
-        previousBody = document.body.innerHTML;
+        previousBody = [...document.body.childNodes];
         previousTrees = (window as any).focusTrees;
         (window as any).focusTrees = [updateBody('first_focus').data.focusTrees[0]];
         document.body.innerHTML = `
@@ -407,7 +407,7 @@ describe('webview/focustree rendering toolbar toggles', () => {
     });
 
     after(() => {
-        document.body.innerHTML = previousBody;
+        document.body.replaceChildren(...previousBody);
         (window as any).focusTrees = previousTrees;
     });
 
@@ -451,10 +451,10 @@ describe('webview/focustree condition dropdowns', () => {
     const settled = () => new Promise(resolve => setTimeout(resolve, 0));
     const war = { scopeName: '', nodeContent: 'has_war = yes' };
     const flag = { scopeName: 'ROOT', nodeContent: 'has_country_flag = inlay_flag' };
-    let previousBody = '';
+    let previousBody: Node[] = [];
 
     before(async () => {
-        previousBody = document.body.innerHTML;
+        previousBody = [...document.body.childNodes];
         resetWebviewState();
         document.body.innerHTML = `
             <div id="condition-container"><div id="conditions" class="select multiple-select"><span class="value"></span></div></div>
@@ -488,7 +488,7 @@ describe('webview/focustree condition dropdowns', () => {
     });
 
     after(() => {
-        document.body.innerHTML = previousBody;
+        document.body.replaceChildren(...previousBody);
         resetWebviewState();
     });
 
@@ -511,5 +511,139 @@ describe('webview/focustree condition dropdowns', () => {
         await pickFirst('inlay-conditions');
         assert.deepStrictEqual(getState().selectedExprs, [war]);
         assert.deepStrictEqual(getState().selectedInlayExprs, [flag]);
+    });
+});
+
+// Every full build renders the grid box once, before the stale-render guard can drop what a
+// superseded one produced, so counting those calls counts full buildContent runs. The page looks
+// the function up on the compiled module's exports each time it renders, so the patch intercepts
+// it. Installed around a single trigger and removed again, though the export is shared.
+async function countBuilds(run: () => Promise<void>): Promise<number> {
+    const gridbox = require('../../util/hoi4gui/gridboxcommon') as {
+        renderGridBoxCommon: (...args: unknown[]) => unknown;
+    };
+    const original = gridbox.renderGridBoxCommon;
+    let builds = 0;
+    gridbox.renderGridBoxCommon = (...args: unknown[]) => {
+        builds++;
+        return original(...args);
+    };
+    try {
+        await run();
+    } finally {
+        gridbox.renderGridBoxCommon = original;
+    }
+    return builds;
+}
+
+// The programmatic condition sync must not read as a pick: refreshing which options and selections
+// the control shows used to run the dropdown's change handler, which rebuilt the whole preview on
+// top of the build the same update already makes. Counted on the wired page, the way the reader
+// meets it.
+describe('webview/focustree condition dropdown build counts', () => {
+    useEntrypoint(listeners);
+
+    const settled = () => new Promise(resolve => setTimeout(resolve, 0));
+    const war = { scopeName: '', nodeContent: 'has_war = yes' };
+    const flag = { scopeName: 'ROOT', nodeContent: 'has_country_flag = inlay_flag' };
+    let previousBody: Node[] = [];
+    let loadBuilds = 0;
+
+    before(async () => {
+        previousBody = [...document.body.childNodes];
+        resetWebviewState();
+        document.body.innerHTML = `
+            <select id="focuses"><option value="0">test_tree</option></select>
+            <div id="condition-container"><div id="conditions" class="select multiple-select"><span class="value"></span></div></div>
+            <div id="inlay-condition-container"><div id="inlay-conditions" class="select multiple-select"><span class="value"></span></div></div>
+            <div id="continuousFocuses"></div>
+            <div id="focustreecontent"><div id="focustreeplaceholder"></div></div>
+            <div id="inlaywindowplaceholder"></div>
+            <div id="warnings-container" style="display:none"><div id="warnings"></div></div>`;
+        // Condition mode comes with the tree, and the load handler only builds the dropdowns in it.
+        const message = updateBody('cond_focus', { useConditionInFocus: true });
+        message.data.focusTrees[0].conditionExprs = [war];
+        message.data.focusTrees[0].inlayConditionExprs = [flag];
+        window.dispatchEvent(new (window as any).MessageEvent('message', { data: message }));
+        const originalScroll = window.scroll;
+        const originalScrollTo = window.scrollTo;
+        (window as any).scroll = () => undefined;
+        (window as any).scrollTo = () => undefined;
+        try {
+            loadBuilds = await countBuilds(async () => {
+                window.dispatchEvent(new (window as any).Event('load'));
+                for (let i = 0; i < 100 && !takePostedMessages().some(m => m.command === 'ready'); i++) {
+                    await settled();
+                }
+                for (let i = 0; i < 20; i++) {
+                    await settled();
+                }
+            });
+        } finally {
+            (window as any).scroll = originalScroll;
+            (window as any).scrollTo = originalScrollTo;
+        }
+        takePostedMessages();
+    });
+
+    after(() => {
+        document.body.replaceChildren(...previousBody);
+        resetWebviewState();
+    });
+
+    async function pickFirst(id: string): Promise<void> {
+        const select = document.getElementById(id)!;
+        select.dispatchEvent(new (window as any).MouseEvent('mousedown', { cancelable: true }));
+        (document.querySelector('ul.select-dropdown li') as HTMLElement).click();
+        select.dispatchEvent(new (window as any).MouseEvent('mousedown', { cancelable: true }));
+        for (let i = 0; i < 20; i++) {
+            await settled();
+        }
+        takePostedMessages();
+    }
+
+    it('renders the loaded tree once per dropdown replay plus the one explicit build', () => {
+        // Each condition dropdown reports its stored selection once when its subscription starts,
+        // and the load handler builds again. Refreshing what the dropdowns show during that same
+        // load adds no build of its own.
+        assert.strictEqual(loadBuilds, 3);
+    });
+
+    it('clears a stored selection when another tree is picked and rebuilds once', async () => {
+        // The previous describes left a stored selection; the new tree clears it on the way in.
+        const builds = await countBuilds(async () => {
+            document.getElementById('focuses')!.dispatchEvent(new (window as any).Event('change'));
+            for (let i = 0; i < 20; i++) {
+                await settled();
+            }
+        });
+        assert.strictEqual(builds, 1);
+        assert.deepStrictEqual(getState().selectedExprs, []);
+        assert.deepStrictEqual(getState().selectedInlayExprs, []);
+    });
+
+    it('rebuilds once when the reader picks a condition', async () => {
+        const builds = await countBuilds(async () => {
+            await pickFirst('conditions');
+        });
+        assert.strictEqual(builds, 1);
+        assert.deepStrictEqual(getState().selectedExprs, [war]);
+    });
+
+    it('rebuilds once on updateBody and keeps the picked conditions', async () => {
+        const message = updateBody('cond_focus', { useConditionInFocus: true });
+        message.data.focusTrees[0].conditionExprs = [war];
+        message.data.focusTrees[0].inlayConditionExprs = [flag];
+        const builds = await countBuilds(async () => {
+            window.dispatchEvent(new (window as any).MessageEvent('message', { data: message }));
+            for (let i = 0; i < 20; i++) {
+                await settled();
+            }
+        });
+        assert.strictEqual(builds, 1);
+        assert.deepStrictEqual(getState().selectedExprs, [war]);
+        const option = document.querySelector('#conditions .option') as HTMLElement | null;
+        assert.ok(option, 'expected the condition listed after the update');
+        assert.strictEqual(option.getAttribute('value'), '!|has_war = yes');
     });
 });
