@@ -23,7 +23,7 @@ The same as any other change to this extension:
 - `tsc` and ESLint clean, and `npm test` green, including `modtoolssettings.test.ts`.
 - Tests for its pure helpers: argument building, parsing what it reads, validation.
 - Every string a user sees goes through `localize` (`i18n/en.ts`) or an `%nls%` key in every
-  `package.nls*.json` and its `i18n/` copy.
+  `package.nls*.json`.
 - `desktopOnly: true` when it needs Node (`child_process`, `fs`), with the `require` behind
   `!IS_WEB_EXT` the way `src/util/fileloader.ts` does it, so the web bundle never references it.
 - `requiresTrust: true` when it runs or reads anything from the workspace.
