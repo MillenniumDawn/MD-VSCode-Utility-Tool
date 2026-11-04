@@ -20,6 +20,12 @@ describe('package.nls parity', () => {
         });
     }
 
+    it('does not keep a second copy of the manifest translations', () => {
+        const mirrors = locales.filter(locale =>
+            fs.existsSync(path.join(root, 'i18n', `package.nls.${locale}.json`)));
+        assert.deepStrictEqual(mirrors, []);
+    });
+
     it('every %placeholder% in package.json resolves in package.nls.json', () => {
         const manifest = readJson('package.json') as Record<string, unknown>;
         // The npm scripts carry shell variables such as %CERT_PATH%, which are not nls keys.
