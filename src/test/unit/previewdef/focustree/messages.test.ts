@@ -175,7 +175,7 @@ describe("previewdef/focustree messages", () => {
 
 	it("streams icons after a full page, and drops a push the page is no longer waiting for", async () => {
 		assert.ok(preview.getLoadingShellHtml().length > 0);
-		mock.method(contentbuilder, "buildFocusTreePayload", async () => ({
+		mock.method(contentbuilder, "buildFocusTreeIconStyles", async () => ({
 			styleTable: { toRawCss: () => ".resolved { }" },
 		}));
 		let releaseReady!: () => void;

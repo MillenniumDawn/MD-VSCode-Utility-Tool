@@ -1,6 +1,6 @@
 import type * as vscode from 'vscode';
 import { host } from '../../util/host';
-import { buildFocusTreeHtml, buildNoFocusTreeHtml, buildFocusTreeErrorHtml, buildFocusTreePayload, loadFocusTreesOnly, FocusTreePayload } from './contentbuilder';
+import { buildFocusTreeHtml, buildNoFocusTreeHtml, buildFocusTreeErrorHtml, buildFocusTreePayload, buildFocusTreeIconStyles, loadFocusTreesOnly, FocusTreePayload } from './contentbuilder';
 import { UpdateablePreviewBase, LoaderRender, LoaderRenderResult, RenderContentOptions } from '../updateablepreview';
 import { definePreview } from '../definition';
 import { FocusTreeLoader } from './loader';
@@ -13,6 +13,7 @@ import { withTimeout, TimeoutError, CancelledError, CancellationLike, throwIfCan
 import { error } from '../../util/debug';
 import { getFlags } from '../../util/featureflags';
 import { FocusTreeLayout, focusTreeGridBoxFor } from './layout';
+import { StyleTable } from '../../util/styletable';
 import { computeContinuousFocusEdit } from './continuousedit';
 import { computeStructuralFingerprint, computeIconSourceFingerprint, computeTreeStructuralFingerprint, computeTreeIconFingerprint } from './fingerprint';
 
@@ -57,6 +58,11 @@ class FocusTreePreview extends UpdateablePreviewBase {
     // result do not each serialise every tree. Cleared per render: the fingerprint folds in live
     // config, so it must not survive to the next one.
     private fingerprintedTrees: { trees: FocusTree[]; fingerprints: { structural: string; icon: string } } | undefined = undefined;
+    // The structure payload of the last render, kept so an icon push rides together with the CSS that
+    // page's structure minted: an in-place update posts markup data only, so its newly-minted class
+    // names (icon identities, inlay slot geometry) reach the live page only through this pushed CSS.
+    // Cleared when the preview shows a page that has no icon channel (error / no tree).
+    private lastStructurePayload: FocusTreePayload | undefined = undefined;
     private lastGoodHadFocusTrees = false;
     // Bug #36: the most recent real-icon CSS pushed to the webview, re-posted when the webview is
     // reloaded (hide->show tears it down) or the panel becomes visible again. Tagged with the
@@ -362,6 +368,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
      */
     private renderResultFor(structure: FocusTreePayload, webview: vscode.Webview, uri: vscode.Uri): LoaderRenderResult {
         const styleRecords = structure.styleTable.styleRecords;
+        this.lastStructurePayload = structure;
         this.pendingTreeFingerprints = this.treeFingerprintsFor(structure.focusTrees, structure.layout);
         this.lastGoodHadFocusTrees = true;
         return {
@@ -401,7 +408,19 @@ class FocusTreePreview extends UpdateablePreviewBase {
         this.lastTreeIcon = undefined;
         this.pendingTreeFingerprints = undefined;
         this.fingerprintedTrees = undefined;
+        this.lastStructurePayload = undefined;
         this.lastGoodHadFocusTrees = false;
+    }
+
+    /**
+     * The CSS an icon push posts, built as the icon pass runs today: only the icon pass's own
+     * styleTable when no structure render is in play (the caller is test or a superseded flow), or the
+     * latest structure pass's CSS with the icon pass's classes appended over it, which is what gives a
+     * page that was updated in place the rules its old stylesheet does not carry.
+     */
+    private pushedIconCss(iconTable: StyleTable): string {
+        const structure = this.lastStructurePayload;
+        return structure === undefined ? iconTable.toRawCss() : structure.styleTable.toRawCss() + iconTable.toRawCss();
     }
 
     /**
@@ -418,8 +437,8 @@ class FocusTreePreview extends UpdateablePreviewBase {
         // render tears the page down or a newer icon push replaces this one.
         const token = new BuildToken(() => this.isDisposed || this.iconRenderGeneration !== generation);
         try {
-            const full = await buildFocusTreePayload(this.focusTreeLoader, undefined, { token });
-            if (!full || generation !== this.iconRenderGeneration || this.isDisposed) {
+            const icons = await buildFocusTreeIconStyles(this.focusTreeLoader, { token });
+            if (!icons || generation !== this.iconRenderGeneration || this.isDisposed) {
                 return;
             }
             await this.webviewReady;
@@ -429,7 +448,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
             // Checked again right before posting: a build cancelled after its last render check
             // must not publish.
             throwIfCancelled(token);
-            const css = full.styleTable.toRawCss();
+            const css = this.pushedIconCss(icons.styleTable);
             this.lastPushedIconCss = css;
             this.lastPushedIconGeneration = generation;
             void this.panel.webview.postMessage({ type: 'iconStyles', css });
@@ -452,10 +471,10 @@ class FocusTreePreview extends UpdateablePreviewBase {
         }
         const startGeneration = this.iconRenderGeneration;
         const token = new BuildToken(() => this.isDisposed || this.iconRenderGeneration !== startGeneration);
-        let full: FocusTreePayload | null = null;
+        let icons: Awaited<ReturnType<typeof buildFocusTreeIconStyles>> = null;
         try {
-            full = await withTimeout(
-                buildFocusTreePayload(this.focusTreeLoader, undefined, { token }),
+            icons = await withTimeout(
+                buildFocusTreeIconStyles(this.focusTreeLoader, { token }),
                 focusTreeRenderTimeout,
                 () => {
                     // The wrapper gives up but the build runs on: cancel it here too.
@@ -469,7 +488,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
             }
             return;
         }
-        if (!full || this.isDisposed) {
+        if (!icons || this.isDisposed) {
             return;
         }
         // Checked again right before posting: a build cancelled after its last render check
@@ -480,7 +499,7 @@ class FocusTreePreview extends UpdateablePreviewBase {
         // The bump + tag + post run without an await between them, so the older push can only post
         // before the bump (then this fresh post lands after it) or drop after seeing the new value.
         const generation = ++this.iconRenderGeneration;
-        const css = full.styleTable.toRawCss();
+        const css = this.pushedIconCss(icons.styleTable);
         this.lastPushedIconCss = css;
         this.lastPushedIconGeneration = generation;
         void this.panel.webview.postMessage({ type: 'iconStyles', css });
