@@ -264,6 +264,31 @@ describe("util/image/imagedecoder fallback", () => {
 			assert.deepStrictEqual(syncCalls, []);
 		});
 
+		it("aborting a posted decode still frees a stuck worker for the job waiting behind it", async function () {
+			this.timeout(5000);
+			decoder._setImageJobTimeoutForTest(40);
+			const controller = new AbortController();
+			const posted = decoder.decodeImageToPng(tga, "tga", controller.signal);
+			const waiting = decoder.decodeImageToPng(tga, "tga");
+			const firstWorker = ScriptedWorker.instances[0];
+			assert.strictEqual(firstWorker.posted.length, 1);
+			const postedSettled = assert.rejects(
+				posted,
+				(e: unknown) => e instanceof Error && e.name === "AbortError",
+			);
+			controller.abort();
+			await postedSettled;
+			decoder._setImageJobTimeoutForTest(30_000);
+			assert.strictEqual(firstWorker.posted.length, 1);
+			assert.deepStrictEqual(syncCalls, []);
+			assert.strictEqual(ScriptedWorker.instances.length, 1);
+			await new Promise((resolve) => setTimeout(resolve, 120));
+			assert.ok(ScriptedWorker.instances.length >= 2);
+			ScriptedWorker.instances[ScriptedWorker.instances.length - 1]!.answer();
+			assert.strictEqual((await waiting).width, SCRIPTED_WIDTH);
+			assert.deepStrictEqual(syncCalls, []);
+		});
+
 		it("aborting a queued decode rejects only that caller and never transfers it", async () => {
 			const first = decoder.decodeImageToPng(tga, "tga");
 			const controller = new AbortController();

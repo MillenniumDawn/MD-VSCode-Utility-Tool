@@ -354,12 +354,19 @@ function queueJob(
 		const id = nextJobId++;
 		const job: PendingJob = { id, buffer, kind, resolve, reject, signal };
 		if (signal) {
-			// One caller's abort settles that caller alone, before its buffer is ever copied.
 			job.abortListener = () => {
-				if (pendingJobs.has(id)) {
+				if (!pendingJobs.has(id)) {
+					return;
+				}
+				// A posted job keeps its stuck-worker timer; clearing it leaks the slot.
+				if (job.state === undefined) {
 					settleJob(id, job);
 					reject(abortedError());
+					return;
 				}
+				reject(abortedError());
+				job.resolve = () => undefined;
+				job.reject = () => undefined;
 			};
 			signal.addEventListener("abort", job.abortListener, { once: true });
 		}
