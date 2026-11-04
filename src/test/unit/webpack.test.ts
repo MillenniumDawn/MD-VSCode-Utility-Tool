@@ -8,7 +8,8 @@ import type { Configuration, RuleSetRule } from "webpack";
 
 const root = path.resolve(__dirname, "../../../..");
 const configure: (env: object, argv: { mode: string }) => Configuration[] = require("../../../../webpack.config.js");
-const typecheck = "npx --no-install tsc --noEmit -p tsconfig.json";
+const { nativeTscCommand }: { nativeTscCommand: () => { command: string; args: string[] } } = require("../../../../scripts/native-tsc.js");
+const typecheck = "node scripts/native-tsc.js --noEmit -p tsconfig.json";
 
 interface Step {
 	run?: string;
@@ -78,11 +79,12 @@ describe("webpack type-checking", function () {
 				"class Base { method() {} }",
 				"export class Derived extends Base { method() {} }",
 			].join("\n"));
-			const result = spawnSync(process.execPath, [
-				path.join(root, "node_modules/typescript/bin/tsc"), "--noEmit", "-p", config,
-			], { encoding: "utf8" });
+			const { command, args } = nativeTscCommand();
+			const result = spawnSync(command, [...args, "--noEmit", "-p", config], { encoding: "utf8" });
 			assert.ifError(result.error);
-			assert.strictEqual(result.status, 2, result.stdout + result.stderr);
+			// The native compiler exits 1 on diagnostics where the JavaScript tsc exited 2; the
+			// failure itself is still exact, and the diagnostic codes below are what it must say.
+			assert.strictEqual(result.status, 1, result.stdout + result.stderr);
 			assert.match(result.stdout, /TS2322/);
 			assert.match(result.stdout, /TS6133: 'unused'/);
 			assert.match(result.stdout, /TS6133: 'ignored'/);
