@@ -47,11 +47,7 @@ export function effectiveFrameCount(
 }
 
 export class Sprite {
-	private cachedFrames: Array<Image | undefined> | undefined = undefined;
-	private framesList: Image[] | undefined = undefined;
-	private basePng: PNG | undefined = undefined;
-	private frameScratch: PNG | undefined = undefined;
-	private materializedFrames = 0;
+	private readonly cachedFrames: Array<Image | undefined> = [];
 	readonly noOfFrames: number;
 	constructor(
 		readonly id: string,
@@ -61,106 +57,31 @@ export class Sprite {
 		this.noOfFrames = effectiveFrameCount(noOfFrames, image.width);
 	}
 
-	// An index or a visit such as map encodes that frame only. Reading length encodes nothing.
-	public get frames(): Image[] {
-		if (this.framesList) {
-			return this.framesList;
+	// Cuts one frame off the strip the first time it is asked for. The strip is decoded again for
+	// each new frame rather than kept: decoded, it outweighs every frame cut from it.
+	public frame(index: number): Image | undefined {
+		if (!Number.isInteger(index) || index < 0 || index >= this.noOfFrames) {
+			return undefined;
 		}
-
 		if (this.noOfFrames === 1) {
-			return (this.framesList = [this.image]);
+			return this.image;
 		}
-
-		this.basePng = pngRead(this.image.pngBuffer);
-		this.cachedFrames = new Array<Image | undefined>(this.noOfFrames);
-		// The materialize path only ever stores Image, so the hole-array target presents as Image[].
-		const list: Array<Image | undefined> = new Proxy(this.cachedFrames, {
-			get: (target, property, receiver) => {
-				if (
-					typeof property === "string" &&
-					this.isFrameIndex(target, property)
-				) {
-					return this.materialize(Number(property), target);
-				}
-				if (property === "length") {
-					return target.length;
-				}
-				return Reflect.get(target, property, receiver);
-			},
-			// Array methods such as map skip holes, and a sparse array would turn a visit into a
-			// no-op, so an in-range index reports as present even while it is still a hole.
-			has: (target, property) =>
-				(typeof property === "string" && this.isFrameIndex(target, property)) ||
-				Reflect.has(target, property),
-		});
-		return (this.framesList = list as Image[]);
-	}
-
-	// A frame index in canonical decimal form: array indexing for "0", a miss for "10.5" or "01".
-	private isFrameIndex(
-		target: Array<Image | undefined>,
-		property: string,
-	): boolean {
-		const index = Number(property);
-		return (
-			String(index) === property &&
-			Number.isInteger(index) &&
-			index >= 0 &&
-			index < target.length
-		);
-	}
-
-	private materialize(
-		index: number,
-		frames: Array<Image | undefined>,
-	): Image {
-		const cached = frames[index];
-		if (cached !== undefined) {
+		const cached = this.cachedFrames[index];
+		if (cached) {
 			return cached;
 		}
-
-		const png = this.basePng ?? pngRead(this.image.pngBuffer);
-		const frameWidth = this.width;
-		const framePng =
-			this.frameScratch ??
-			(this.frameScratch = new PNG({
-				width: frameWidth,
-				height: png.height,
-			}));
-		png.bitblt(framePng, index * frameWidth, 0, frameWidth, png.height, 0, 0);
-		const frame = new Image(
-			PNG.sync.write(framePng),
-			frameWidth,
-			png.height,
-			this.image.path,
-		);
-		frames[index] = frame;
-		this.materializedFrames++;
-		// The decoded strip and the scratch PNG are only needed while frames are still missing.
-		if (this.materializedFrames >= this.noOfFrames) {
-			this.basePng = undefined;
-			this.frameScratch = undefined;
-		}
+		const png = pngRead(this.image.pngBuffer);
+		const frame = extractImageFromPng(png, index * this.width, 0, this.width, png.height, this.image.path);
+		this.cachedFrames[index] = frame;
 		return frame;
 	}
 
-	// The base image plus every frame actually split off it. The decoded strip and its scratch
-	// buffer stay until every frame is read, so the cache weighs those too. A single-frame sprite's
-	// frames array is just [image], so it is not counted twice.
+	// The base image plus every frame cut from it. A single-frame sprite's frame is the image
+	// itself, so it is not counted twice.
 	public get retainedBytes(): number {
 		let bytes = this.image.retainedBytes;
-		if (this.basePng) {
-			bytes += this.basePng.data.length;
-		}
-		if (this.frameScratch) {
-			bytes += this.frameScratch.data.length;
-		}
-		if (this.noOfFrames > 1 && this.cachedFrames) {
-			for (const frame of this.cachedFrames) {
-				if (frame !== undefined) {
-					bytes += frame.retainedBytes;
-				}
-			}
+		for (const frame of this.cachedFrames) {
+			bytes += frame?.retainedBytes ?? 0;
 		}
 		return bytes;
 	}
@@ -207,7 +128,7 @@ export class CorneredTileSprite extends Sprite {
 			return cached;
 		}
 
-		const frame = this.frames[frameId];
+		const frame = this.frame(frameId);
 		if (frame === undefined) {
 			return [];
 		}

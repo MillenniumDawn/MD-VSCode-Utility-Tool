@@ -48,42 +48,23 @@ describe("util/image/sprite retainedBytes", () => {
 		const sprite = new Sprite("s", image, 1);
 		assert.strictEqual(sprite.retainedBytes, image.retainedBytes);
 
-		assert.strictEqual(sprite.frames[0], image);
+		assert.strictEqual(sprite.frame(0), image);
 		assert.strictEqual(sprite.retainedBytes, image.retainedBytes);
 	});
 
-	it("counts only the frames that were actually read", () => {
+	it("counts only the frames that were read, and nothing of the decoded strip", () => {
 		const image = makeImage(8, 4);
 		const sprite = new Sprite("s", image, 2);
 		assert.strictEqual(sprite.retainedBytes, image.retainedBytes);
 
-		const frames = sprite.frames;
-		assert.strictEqual(frames.length, 2);
-		const decoded = PNG.sync.read(image.pngBuffer);
-		assert.strictEqual(
-			sprite.retainedBytes,
-			image.retainedBytes + decoded.data.length,
-		);
+		const last = sprite.frame(1)!;
+		assert.strictEqual(sprite.retainedBytes, image.retainedBytes + last.retainedBytes);
 
-		const last = frames[1]!;
+		const first = sprite.frame(0)!;
+		const uri = first.uri;
 		assert.strictEqual(
 			sprite.retainedBytes,
-			image.retainedBytes +
-				decoded.data.length +
-				sprite.width * decoded.height * 4 +
-				last.retainedBytes,
-		);
-
-		// Visiting every index may encode all of them, URIs included.
-		const all = frames.map((frame) => frame);
-		assert.strictEqual(all.length, 2);
-		assert.strictEqual(sprite.retainedBytes, image.retainedBytes + sum(all));
-		for (const frame of all) {
-			frame.uri;
-		}
-		assert.strictEqual(
-			sprite.retainedBytes,
-			image.retainedBytes + sum(all) + all[0]!.uri.length + all[1]!.uri.length,
+			image.retainedBytes + sum([first, last]) + uri.length,
 		);
 	});
 
@@ -146,30 +127,24 @@ describe("util/image/sprite frames", () => {
 		const sprite = new Sprite("s", makeColumnImage(10, 2), 5);
 		const writes = writeSpy();
 
-		const first = sprite.frames[0];
+		const first = sprite.frame(0);
 		assert.strictEqual(first!.width, 2);
 		assert.strictEqual(writes.count(), 1);
 
-		// Reading the length and re-reading the same index encode nothing further.
-		assert.strictEqual(sprite.frames.length, 5);
-		assert.strictEqual(sprite.frames[0], first);
+		// Reading the same frame again encodes nothing further.
+		assert.strictEqual(sprite.frame(0), first);
 		assert.strictEqual(writes.count(), 1);
 
 		// A neighbouring frame is one encode of its own.
-		assert.strictEqual(sprite.frames[1]!.width, 2);
+		assert.deepStrictEqual(columns(sprite.frame(1)!), [2, 3]);
 		assert.strictEqual(writes.count(), 2);
+	});
 
-		// Visiting every remaining index encodes each of them once.
-		const frames = sprite.frames;
-		assert.deepStrictEqual(frames.map((frame) => frame.width), [2, 2, 2, 2, 2]);
-		assert.strictEqual(writes.count(), 5);
-
-		// Everything is materialized, so byte accounting covers the whole strip.
-		assert.strictEqual(
-			sprite.retainedBytes,
-			sprite.image.retainedBytes +
-				frames.reduce((total, frame) => total + frame.retainedBytes, 0),
-		);
+	it("has no frame outside the strip or between two frames", () => {
+		const sprite = new Sprite("s", makeColumnImage(10, 2), 5);
+		for (const index of [-1, 5, 0.5, NaN]) {
+			assert.strictEqual(sprite.frame(index), undefined, `frame ${index}`);
+		}
 	});
 
 	it("floors the frame width when the texture does not divide evenly", () => {
@@ -177,11 +152,10 @@ describe("util/image/sprite frames", () => {
 		assert.strictEqual(sprite.width, 3);
 		assert.strictEqual(sprite.height, 2);
 
-		const frames = sprite.frames;
-		assert.strictEqual(frames.length, 3);
-		assert.deepStrictEqual(frames.map((frame) => frame.width), [3, 3, 3]);
-		assert.deepStrictEqual(columns(frames[1]!), [3, 4, 5]);
-		assert.deepStrictEqual(columns(frames[2]!), [6, 7, 8]);
+		assert.deepStrictEqual([0, 1, 2].map((i) => sprite.frame(i)!.width), [3, 3, 3]);
+		assert.deepStrictEqual(columns(sprite.frame(1)!), [3, 4, 5]);
+		assert.deepStrictEqual(columns(sprite.frame(2)!), [6, 7, 8]);
+		assert.strictEqual(sprite.frame(3), undefined);
 	});
 
 	it("treats noofframes = 0 as a single frame", () => {
@@ -189,7 +163,8 @@ describe("util/image/sprite frames", () => {
 		const sprite = new Sprite("s", image, 0);
 		assert.strictEqual(sprite.noOfFrames, 1);
 		assert.strictEqual(sprite.width, 4);
-		assert.deepStrictEqual(sprite.frames, [image]);
+		assert.strictEqual(sprite.frame(0), image);
+		assert.strictEqual(sprite.frame(1), undefined);
 	});
 
 	it("caps noofframes at the texture width", () => {
@@ -197,7 +172,7 @@ describe("util/image/sprite frames", () => {
 		assert.strictEqual(sprite.noOfFrames, 4);
 		assert.strictEqual(sprite.width, 1);
 		assert.deepStrictEqual(
-			sprite.frames.map((frame) => columns(frame)),
+			[0, 1, 2, 3].map((i) => columns(sprite.frame(i)!)),
 			[[0], [1], [2], [3]],
 		);
 	});
@@ -268,7 +243,7 @@ describe("util/image/sprite hostile texture", () => {
 		it(`cuts no frame or tile from ${name}`, () => {
 			const inflate = mock.method(zlib, "inflateSync");
 			const image = new Image(file, 16, 16, texturePath);
-			assert.throws(() => new Sprite("s", image, 2).frames, isUserError(message));
+			assert.throws(() => new Sprite("s", image, 2).frame(0), isUserError(message));
 			const border = { x: 2, y: 2 };
 			const tiles = new CorneredTileSprite("s", image, 1, { x: 16, y: 16 }, border);
 			assert.throws(() => tiles.getTiles(), isUserError(message));

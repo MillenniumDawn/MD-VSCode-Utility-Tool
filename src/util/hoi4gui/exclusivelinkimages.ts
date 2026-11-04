@@ -28,13 +28,13 @@ export async function loadExclusiveLinkImages(
         return undefined;
     }
 
-    // `frames` splits the strip horizontally. Taking a frame rather than the sprite also keeps the
+    // `frame` splits the strip horizontally. Taking a frame rather than the sprite also keeps the
     // line off the 9-slice path: it is declared as a corneredTileSpriteType but carries no
     // borderSize, so slicing it would cut the tile apart for nothing.
-    const line = lineSprite.frames[spec.lineFrame];
-    const left = leftSprite.frames[spec.leftFrame];
-    const mid = midSprite.frames[spec.midFrame];
-    const right = rightSprite.frames[spec.rightFrame];
+    const line = lineSprite.frame(spec.lineFrame);
+    const left = leftSprite.frame(spec.leftFrame);
+    const mid = midSprite.frame(spec.midFrame);
+    const right = rightSprite.frame(spec.rightFrame);
     if (line === undefined || left === undefined || mid === undefined || right === undefined) {
         return undefined;
     }

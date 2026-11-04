@@ -230,7 +230,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
     return `<div
     class="
         ${styleTable.style(trait.specialTraitBackground ? 'trait-bg-special' : 'trait-bg-normal',
-            () => traitBg ? `background-image: url(${(traitBg.frames[2] ?? traitBg.image).uri});` : '')}
+            () => traitBg ? `background-image: url(${(traitBg.frame(2) ?? traitBg.image).uri});` : '')}
         ${styleTable.style('trait-background', () => `
             background-position-x: center;
             background-position-y: center;
