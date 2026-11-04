@@ -1,6 +1,7 @@
 Unreleased
 
   Functionality:
+- [ Previews ] Moving the pointer or keyboard focus from one card to the next in the event and decision previews no longer restyles every card on the canvas, so large event files respond faster. Issue #675.
 - [ Focus Tree Previewer ] Focus tree icons fill in without drawing the rest of the tree again. Issue #664.
 - [ Previews ] Opening one frame of a multi-frame sprite no longer builds the unused frames first. Issue #673.
 - [ Previews ] Rapidly editing a previewed file now redraws once for the newest state instead of stacking a redraw per delivered change, and the redraw still forces a full reload when a dependency changed. Issue #670.
