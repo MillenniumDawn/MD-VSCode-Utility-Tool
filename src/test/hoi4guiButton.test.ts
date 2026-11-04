@@ -31,7 +31,7 @@ describe("util/hoi4gui/button", () => {
 		const fakeSprite: any = {
 			width: 40,
 			height: 20,
-			frames: [{ uri: "file:///fake.png", width: 40, height: 20 }],
+			frame: (i: number) => [{ uri: "file:///fake.png", width: 40, height: 20 }][i],
 			id: "s1",
 		};
 		const btn: any = {
@@ -55,7 +55,7 @@ describe("util/hoi4gui/button", () => {
 		const fakeSprite: any = {
 			width: 20,
 			height: 20,
-			frames: [{ uri: "file:///a.png", width: 20, height: 20 }],
+			frame: (i: number) => [{ uri: "file:///a.png", width: 20, height: 20 }][i],
 			id: "s2",
 		};
 		const btn: any = {
@@ -76,7 +76,7 @@ describe("util/hoi4gui/button", () => {
 		const fakeSprite: any = {
 			width: 10,
 			height: 10,
-			frames: [{ uri: "file:///q.png", width: 10, height: 10 }],
+			frame: (i: number) => [{ uri: "file:///q.png", width: 10, height: 10 }][i],
 			id: "q1",
 		};
 		let called: string | undefined;

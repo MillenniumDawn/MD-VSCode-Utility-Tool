@@ -2,7 +2,7 @@ import type * as vscode from 'vscode';
 import { html, loadingShellHtml, errorPageContent } from './util/html';
 import { StyleTable } from './util/styletable';
 import { previewWebviewOptions, readFile } from './util/vsccommon';
-import { decodeImageToPng } from './util/image/imagedecoder';
+import { decodeImageToPng, type DecodedImage } from './util/image/imagedecoder';
 
 // Runs in the viewer page: asks the host for the image bytes and shows them through a blob URL.
 // html() puts scripts in <head>, so the <img> does not exist yet when this runs; it is looked up
@@ -44,12 +44,21 @@ abstract class CommonViewProvider implements vscode.CustomReadonlyEditorProvider
                 return;
             }
 
-            // Decoding runs off the host thread in the image worker; race it against cancellation so a
-            // panel torn down mid-decode isn't reassigned html after disposal.
-            const decoded = await Promise.race([
-                decodeImageToPng(Buffer.from(buffer), this.imageKind),
-                new Promise<null>(resolve => token.onCancellationRequested(_ => resolve(null))),
-            ]);
+            // Decoding runs off the host thread in the image worker. A torn-down panel aborts its
+            // request, so a decode still waiting in the queue is dropped before it is ever copied
+            // or posted, instead of starting for a view that is already closed.
+            const controller = new AbortController();
+            const cancellation = token.onCancellationRequested(() => controller.abort());
+            let decoded: DecodedImage | null = null;
+            try {
+                decoded = await decodeImageToPng(Buffer.from(buffer), this.imageKind, controller.signal);
+            } catch (e) {
+                if (!controller.signal.aborted) {
+                    throw e;
+                }
+            } finally {
+                cancellation.dispose();
+            }
 
             if (decoded === null) {
                 return;

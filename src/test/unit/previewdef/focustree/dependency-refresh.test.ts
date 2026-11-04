@@ -164,7 +164,7 @@ function configure(): void {
 		}
 		const texture = "gfx/interface/refresh-old.png";
 		const width = imageWidths[texture]!;
-		return { frames: [{ width, height: 1, image: { width, height: 1, uri: `data:image/png;base64,${width}`, path: uri(`/mod/${texture}`) } }] };
+		return { frame: (i: number) => [{ width, height: 1, image: { width, height: 1, uri: `data:image/png;base64,${width}`, path: uri(`/mod/${texture}`) } }][i] };
 	};
 }
 

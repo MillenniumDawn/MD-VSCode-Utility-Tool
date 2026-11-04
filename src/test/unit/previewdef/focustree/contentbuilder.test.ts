@@ -38,7 +38,7 @@ describe("previewdef/focustree contentbuilder", () => {
 		configure({});
 		// Neither reads a file or an index here: the titlebar styles are empty and every sprite is 8 by 8.
 		mock.method(titlebar, "loadFocusTitlebarStyles", async () => ({}));
-		mock.method(imagecache, "getSpriteByGfxName", async () => ({ width: 8, height: 8, frames: [] }));
+		mock.method(imagecache, "getSpriteByGfxName", async () => ({ width: 8, height: 8, frame: () => undefined }));
 	});
 
 	afterEach(() => {

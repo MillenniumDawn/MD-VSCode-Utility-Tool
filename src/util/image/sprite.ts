@@ -47,7 +47,7 @@ export function effectiveFrameCount(
 }
 
 export class Sprite {
-	private cachedFrames: Image[] | undefined = undefined;
+	private readonly cachedFrames: Array<Image | undefined> = [];
 	readonly noOfFrames: number;
 	constructor(
 		readonly id: string,
@@ -57,39 +57,31 @@ export class Sprite {
 		this.noOfFrames = effectiveFrameCount(noOfFrames, image.width);
 	}
 
-	public get frames(): Image[] {
-		if (this.cachedFrames) {
-			return this.cachedFrames;
+	// Cuts one frame off the strip the first time it is asked for. The strip is decoded again for
+	// each new frame rather than kept: decoded, it outweighs every frame cut from it.
+	public frame(index: number): Image | undefined {
+		if (!Number.isInteger(index) || index < 0 || index >= this.noOfFrames) {
+			return undefined;
 		}
-
 		if (this.noOfFrames === 1) {
-			return (this.cachedFrames = [this.image]);
+			return this.image;
 		}
-
+		const cached = this.cachedFrames[index];
+		if (cached) {
+			return cached;
+		}
 		const png = pngRead(this.image.pngBuffer);
-		const frameWidth = this.width;
-		const framePng = new PNG({ width: frameWidth, height: png.height });
-		const result: Image[] = [];
-		const path = this.image.path;
-
-		for (let i = 0; i < this.noOfFrames; i++) {
-			png.bitblt(framePng, i * frameWidth, 0, frameWidth, png.height, 0, 0);
-			result.push(
-				new Image(PNG.sync.write(framePng), frameWidth, png.height, path),
-			);
-		}
-
-		return (this.cachedFrames = result);
+		const frame = extractImageFromPng(png, index * this.width, 0, this.width, png.height, this.image.path);
+		this.cachedFrames[index] = frame;
+		return frame;
 	}
 
-	// The base image plus every per-frame image split off it. A single-frame sprite's frames array
-	// is just [image], so it is not counted twice.
+	// The base image plus every frame cut from it. A single-frame sprite's frame is the image
+	// itself, so it is not counted twice.
 	public get retainedBytes(): number {
 		let bytes = this.image.retainedBytes;
-		if (this.noOfFrames > 1 && this.cachedFrames) {
-			for (const frame of this.cachedFrames) {
-				bytes += frame.retainedBytes;
-			}
+		for (const frame of this.cachedFrames) {
+			bytes += frame?.retainedBytes ?? 0;
 		}
 		return bytes;
 	}
@@ -136,7 +128,7 @@ export class CorneredTileSprite extends Sprite {
 			return cached;
 		}
 
-		const frame = this.frames[frameId];
+		const frame = this.frame(frameId);
 		if (frame === undefined) {
 			return [];
 		}

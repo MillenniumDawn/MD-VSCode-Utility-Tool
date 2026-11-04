@@ -34,9 +34,14 @@ interface WorkerResponse {
 }
 
 interface PendingJob {
+	// The caller-owned source Buffer, held by reference until the job is admitted to a worker.
+	buffer: Buffer;
+	kind: "dds" | "tga";
 	resolve: (value: DecodedImage) => void;
 	reject: (reason: unknown) => void;
-	state: WorkerState;
+	signal?: AbortSignal;
+	abortListener?: () => void;
+	state?: WorkerState;
 	timer?: NodeJS.Timeout;
 }
 
@@ -106,6 +111,13 @@ let workerPoolSize: number | undefined;
 const JOB_TIMEOUT_MS = 30_000;
 let jobTimeoutMs = JOB_TIMEOUT_MS;
 const TIMEOUT_ERROR_NAME = "ImageDecodeTimeoutError";
+const ABORT_ERROR_NAME = "AbortError";
+
+function abortedError(): Error {
+	const e = new Error("image decode aborted");
+	e.name = ABORT_ERROR_NAME;
+	return e;
+}
 
 let ensureWorkers: (() => WorkerState[] | null) | null = null;
 let spawnWorker: (() => WorkerState | null) | null = null;
@@ -156,23 +168,23 @@ if (!IS_WEB_EXT) {
 function onWorkerMessage(state: WorkerState, response: WorkerResponse): void {
 	state.inFlight = Math.max(0, state.inFlight - 1);
 	const job = pendingJobs.get(response.id);
-	if (!job) {
-		return;
+	if (job) {
+		settleJob(response.id, job);
+		if (response.error) {
+			job.reject(reviveError(response.error));
+		} else if (response.png) {
+			// Buffer.from(ArrayBuffer) wraps the transferred buffer without copying.
+			job.resolve({
+				pngBuffer: Buffer.from(response.png),
+				width: response.width ?? 0,
+				height: response.height ?? 0,
+			});
+		} else {
+			job.reject(new Error("image decode worker returned an empty response"));
+		}
 	}
-
-	settleJob(response.id, job);
-	if (response.error) {
-		job.reject(reviveError(response.error));
-	} else if (response.png) {
-		// Buffer.from(ArrayBuffer) wraps the transferred buffer without copying.
-		job.resolve({
-			pngBuffer: Buffer.from(response.png),
-			width: response.width ?? 0,
-			height: response.height ?? 0,
-		});
-	} else {
-		job.reject(new Error("image decode worker returned an empty response"));
-	}
+	// The worker is free again even when the response had no caller left (it may have aborted).
+	dispatchJobs();
 }
 
 function onWorkerError(state: WorkerState, e: unknown): void {
@@ -201,7 +213,7 @@ function onWorkerExit(state: WorkerState, code: number): void {
 // not cost the whole session its workers.
 function onJobTimeout(id: number): void {
 	const job = pendingJobs.get(id);
-	if (!job) {
+	if (!job || job.state === undefined) {
 		return;
 	}
 	const reason = new Error(
@@ -216,6 +228,9 @@ function onJobTimeout(id: number): void {
 	}
 	terminateWorker(state);
 	failWorkerJobs(state, reason);
+	// The wedged thread is replaced here so queued work starts on a fresh one, its own clock
+	// beginning only when it is posted.
+	dispatchJobs();
 }
 
 function removeWorker(state: WorkerState): void {
@@ -229,6 +244,7 @@ function removeWorker(state: WorkerState): void {
 	if (workers.length === 0) {
 		workerUnavailable = true;
 	}
+	dispatchJobs();
 }
 
 function terminateWorker(state: WorkerState): void {
@@ -264,6 +280,18 @@ function settleJob(id: number, job: PendingJob): void {
 	if (job.timer !== undefined) {
 		clearTimeout(job.timer);
 	}
+	if (job.signal && job.abortListener) {
+		job.signal.removeEventListener("abort", job.abortListener);
+	}
+}
+
+function failQueuedJobs(reason: Error): void {
+	for (const [id, job] of pendingJobs) {
+		if (job.state === undefined) {
+			settleJob(id, job);
+			job.reject(reason);
+		}
+	}
 }
 
 function failWorkerJobs(state: WorkerState, reason: Error): void {
@@ -288,85 +316,112 @@ function reviveError(info: { message: string; name: string }): Error {
 	return e;
 }
 
-// Least-busy worker, growing the pool when every worker is saturated and the cap isn't reached. A
-// single decode therefore spawns just one worker; a burst of concurrent decodes widens the pool so
-// the CPU-bound conversions run in parallel.
-function pickOrGrowWorker(): WorkerState {
-	if (workers.length === 0) {
-		throw new Error("no image decode worker available");
+// A worker that can take a job right now, growing the pool while every worker is busy and the cap
+// isn't reached. Null means the job must wait for a slot.
+function acquireWorker(): WorkerState | null {
+	if (workerUnavailable) {
+		return null;
 	}
-	const firstWorker = workers[0];
-	if (firstWorker === undefined) {
-		throw new Error("no image decode worker available");
-	}
-	let best = firstWorker;
-	let allBusy = true;
 	for (const state of workers) {
-		if (state.inFlight < best.inFlight) {
-			best = state;
-		}
 		if (state.inFlight === 0) {
-			allBusy = false;
+			return state;
 		}
 	}
-	if (allBusy && spawnWorker) {
-		workerPoolSize ??= resolveWorkerPoolSize(getConfiguration().imageDecodeWorkers);
-		if (workers.length < workerPoolSize) {
-			const spawned = spawnWorker();
-			if (spawned) {
-				return spawned;
-			}
-		}
-	}
-	return best;
+	workerPoolSize ??= resolveWorkerPoolSize(getConfiguration().imageDecodeWorkers);
+	return workers.length < workerPoolSize ? spawnWorker!() : null;
 }
 
-function postJob(buffer: Buffer, kind: "dds" | "tga"): Promise<DecodedImage> {
+function queueJob(
+	buffer: Buffer,
+	kind: "dds" | "tga",
+	signal?: AbortSignal,
+): Promise<DecodedImage> {
 	return new Promise<DecodedImage>((resolve, reject) => {
 		const id = nextJobId++;
-		let state: WorkerState;
-		try {
-			state = pickOrGrowWorker();
-		} catch (e) {
-			reject(e);
-			return;
+		const job: PendingJob = { buffer, kind, resolve, reject, signal };
+		if (signal) {
+			job.abortListener = () => {
+				// A posted job stays until its worker answers or times out: clearing its timer would
+				// leak a wedged worker. Its late answer settles a promise that is already rejected.
+				if (job.state === undefined) {
+					settleJob(id, job);
+				}
+				reject(abortedError());
+			};
+			signal.addEventListener("abort", job.abortListener, { once: true });
 		}
-		const job: PendingJob = { resolve, reject, state };
 		pendingJobs.set(id, job);
-		try {
-			// Copy into a private ArrayBuffer before transferring: the source Buffer is shared and
-			// cached in fileContentCache, so it must never be detached. The copy is the only cost
-			// paid on the main thread; the heavy decode and PNG encode run in the worker.
-			const payload = buffer.buffer.slice(
-				buffer.byteOffset,
-				buffer.byteOffset + buffer.byteLength,
-			) as ArrayBuffer;
-			state.inFlight++;
-			state.worker.postMessage({ id, kind, buffer: payload }, [payload]);
-		} catch (e) {
-			pendingJobs.delete(id);
-			state.inFlight = Math.max(0, state.inFlight - 1);
-			reject(e);
+		dispatchJobs();
+	});
+}
+
+// Hands queued requests to free workers in arrival order. The queue holds references to the
+// callers' source Buffers; only admitted jobs are copied and transferred, so at most one payload
+// per live worker is in flight no matter how large the burst is.
+function dispatchJobs(): void {
+	for (const [id, job] of pendingJobs) {
+		if (job.state !== undefined) {
+			continue;
+		}
+		const state = acquireWorker();
+		if (!state) {
+			// With no worker left nothing will take the queue: fail it so each caller falls back
+			// to the sync decode instead of waiting forever.
+			if (workers.length === 0) {
+				failQueuedJobs(new Error("no image decode worker available"));
+			}
 			return;
 		}
-		// unref: a pending decode must not keep the host process alive on its own.
-		job.timer = setTimeout(() => onJobTimeout(id), jobTimeoutMs);
-		job.timer.unref();
-	});
+		postToWorker(id, job, state);
+	}
+}
+
+function postToWorker(id: number, job: PendingJob, state: WorkerState): void {
+	try {
+		// Copy into a private ArrayBuffer before transferring: the source Buffer is shared and
+		// cached in fileContentCache, so it must never be detached. The copy is the only cost
+		// paid on the main thread; the heavy decode and PNG encode run in the worker.
+		const buffer = job.buffer;
+		const payload = buffer.buffer.slice(
+			buffer.byteOffset,
+			buffer.byteOffset + buffer.byteLength,
+		) as ArrayBuffer;
+		state.inFlight++;
+		state.worker.postMessage({ id, kind: job.kind, buffer: payload }, [payload]);
+	} catch (e) {
+		state.inFlight = Math.max(0, state.inFlight - 1);
+		settleJob(id, job);
+		job.reject(e);
+		return;
+	}
+	job.state = state;
+	// The stuck-worker clock starts only at the post: time spent waiting for a free worker is not
+	// being stuck. unref: a pending decode must not keep the host process alive on its own.
+	job.timer = setTimeout(() => onJobTimeout(id), jobTimeoutMs);
+	job.timer.unref();
 }
 
 export async function decodeImageToPng(
 	buffer: Buffer,
 	kind: "dds" | "tga",
+	signal?: AbortSignal,
 ): Promise<DecodedImage> {
+	if (signal?.aborted) {
+		throw abortedError();
+	}
 	if (!IS_WEB_EXT) {
 		const pool = ensureWorkers ? ensureWorkers() : null;
 		if (pool && pool.length > 0) {
 			try {
-				return await postJob(buffer, kind);
+				return await queueJob(buffer, kind, signal);
 			} catch (e) {
-				// Bad input and timed-out decodes must not be retried on the extension host.
-				if (e instanceof UserError || (e instanceof Error && e.name === TIMEOUT_ERROR_NAME)) {
+				// Bad input, a cancellation and a timed-out decode must not be retried on the
+				// extension host.
+				if (
+					e instanceof UserError ||
+					(e instanceof Error &&
+						(e.name === TIMEOUT_ERROR_NAME || e.name === ABORT_ERROR_NAME))
+				) {
 					throw e;
 				}
 				// `new Worker` reports a missing entry file asynchronously, so a pool that can never

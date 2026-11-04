@@ -46,14 +46,6 @@ const mainConfig = {
     ]
   },
   plugins: [
-    new CopyWebpackPlugin({
-      patterns: [
-        {
-          from: 'i18n/*.nls.*.json',
-          to: path.resolve(__dirname, '[name][ext]')
-        }
-      ]
-    }),
     new webpack.DefinePlugin({
       IS_WEB_EXT: false,
     }),
@@ -173,14 +165,6 @@ const mainWebConfig = {
     ]
   },
   plugins: [
-    new CopyWebpackPlugin({
-      patterns: [
-        {
-          from: 'i18n/*.nls.*.json',
-          to: path.resolve(__dirname, '[name][ext]')
-        }
-      ]
-    }),
     new webpack.DefinePlugin({
       IS_WEB_EXT: true,
     }),

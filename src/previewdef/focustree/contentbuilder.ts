@@ -502,7 +502,7 @@ async function prepareInlayGfxStyles(focusTrees: FocusTree[], styleTable: StyleT
                     }
 
                     const sprite = await getSpriteByGfxName(option.gfxName, option.gfxFile);
-                    const frame = sprite?.frames[0];
+                    const frame = sprite?.frame(0);
                     if (!frame) {
                         styleTable.style(key, () => `
                             width: 96px;

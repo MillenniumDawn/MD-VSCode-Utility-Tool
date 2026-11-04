@@ -19,7 +19,7 @@ describe("util/hoi4gui/nodecommon", () => {
 				id: "test",
 				width: 32,
 				height: 32,
-				frames: [{ uri: "file:///a.png", width: 32, height: 32 }],
+				frame: (i: number) => [{ uri: "file:///a.png", width: 32, height: 32 }][i],
 			};
 			renderSprite({ x: 10, y: 20 }, { width: 32, height: 32 }, sprite, 0, 1, {
 				styleTable: table,
@@ -35,7 +35,7 @@ describe("util/hoi4gui/nodecommon", () => {
 				id: "test2",
 				width: 16,
 				height: 16,
-				frames: [{ uri: "file:///a.png", width: 16, height: 16 }],
+				frame: (i: number) => [{ uri: "file:///a.png", width: 16, height: 16 }][i],
 			};
 			renderSprite({ x: 0, y: 0 }, { width: 16, height: 16 }, sprite, 5, 1, {
 				styleTable: table,
@@ -53,7 +53,7 @@ describe("util/hoi4gui/nodecommon", () => {
 				borderSize: { x: 5, y: 5 },
 				getTiles: () =>
 					Array(9).fill({ uri: "file:///tile.png", width: 10, height: 10 }),
-				frames: [{ uri: "file:///corner.png", width: 30, height: 30 }],
+				frame: (i: number) => [{ uri: "file:///corner.png", width: 30, height: 30 }][i],
 			};
 			// Make instanceof check pass by setting prototype
 			Object.setPrototypeOf(tileSprite, CorneredTileSprite.prototype);
@@ -76,7 +76,7 @@ describe("util/hoi4gui/nodecommon", () => {
 				id: "scaled",
 				width: 10,
 				height: 10,
-				frames: [{ uri: "file:///a.png", width: 10, height: 10 }],
+				frame: (i: number) => [{ uri: "file:///a.png", width: 10, height: 10 }][i],
 			};
 			renderSprite({ x: 0, y: 0 }, { width: 10, height: 10 }, sprite, 0, 2, {
 				styleTable: table,
@@ -90,7 +90,7 @@ describe("util/hoi4gui/nodecommon", () => {
 				id: "shared",
 				width: 10,
 				height: 10,
-				frames: [{ uri: "file:///a.png", width: 10, height: 10 }],
+				frame: (i: number) => [{ uri: "file:///a.png", width: 10, height: 10 }][i],
 			};
 			const small = renderSprite({ x: 0, y: 0 }, { width: 10, height: 10 }, sprite, 0, 1, {
 				styleTable: table,
@@ -110,7 +110,7 @@ describe("util/hoi4gui/nodecommon", () => {
 				id: "shared",
 				width: 10,
 				height: 10,
-				frames: [{ uri: "file:///a.png", width: 10, height: 10 }],
+				frame: (i: number) => [{ uri: "file:///a.png", width: 10, height: 10 }][i],
 			};
 			renderSprite({ x: 0, y: 0 }, { width: 10, height: 10 }, sprite, 0, 0.5, {
 				styleTable: table,
@@ -130,7 +130,7 @@ describe("util/hoi4gui/nodecommon", () => {
 				id: 'evil"}.x{color:red',
 				width: 10,
 				height: 10,
-				frames: [{ uri: "file:///a.png", width: 10, height: 10 }],
+				frame: (i: number) => [{ uri: "file:///a.png", width: 10, height: 10 }][i],
 			};
 			const html = renderSprite(
 				{ x: 0, y: 0 },
@@ -253,7 +253,7 @@ describe("util/hoi4gui/nodecommon", () => {
 				id: "bg",
 				width: 100,
 				height: 100,
-				frames: [{ uri: "file:///bg.png", width: 100, height: 100 }],
+				frame: (i: number) => [{ uri: "file:///bg.png", width: 100, height: 100 }][i],
 			};
 			const html = await renderBackground(
 				{ spritetype: "bg_sprite" } as any,
