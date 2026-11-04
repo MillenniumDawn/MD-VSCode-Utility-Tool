@@ -20,19 +20,23 @@ describe(".vscodeignore exclusions", () => {
 		}
 	});
 
-	it("keeps nested agent scratch out of the real packaging candidates", async function () {
-		const scratch = path.join(repositoryRoot, ".pi", "subagents", "packaging-regression");
-		// The first folder this test creates, so a checkout without .pi is left without it.
-		const created = fs.mkdirSync(path.join(scratch, "nested"), { recursive: true });
+	it("keeps agent scratch and .tmp scratch out of the real packaging candidates", async function () {
+		const agentScratch = path.join(repositoryRoot, ".pi", "subagents", "packaging-regression");
+		const tmpScratch = path.join(repositoryRoot, ".tmp", "vscodeignore-regression");
+		// The first folder each scratch creates, so a checkout without either is left without it.
+		const createdAgentRoot = fs.mkdirSync(path.join(agentScratch, "nested"), { recursive: true });
+		const createdTmpRoot = fs.mkdirSync(tmpScratch, { recursive: true });
 		let files: string[];
 		try {
-			fs.writeFileSync(path.join(scratch, "harness-scratch.txt"), "issue #644 packaging fixture\n");
-			fs.writeFileSync(path.join(scratch, "nested", "agent-note.md"), "nested agent scratch\n");
+			fs.writeFileSync(path.join(agentScratch, "harness-scratch.txt"), "issue #644 packaging fixture\n");
+			fs.writeFileSync(path.join(agentScratch, "nested", "agent-note.md"), "nested agent scratch\n");
+			fs.writeFileSync(path.join(tmpScratch, "scratch-edge-bench.js"), "issue #680 packaging fixture\n");
 
 			this.timeout(30000);
 			files = await vsce.listFiles({ cwd: repositoryRoot, packageManager: vsce.PackageManager.None });
 		} finally {
-			fs.rmSync(created ?? scratch, { recursive: true, force: true });
+			fs.rmSync(createdAgentRoot ?? agentScratch, { recursive: true, force: true });
+			fs.rmSync(createdTmpRoot ?? tmpScratch, { recursive: true, force: true });
 		}
 		const candidates = files.map((file) => file.replace(/\\/g, "/"));
 
@@ -42,6 +46,11 @@ describe(".vscodeignore exclusions", () => {
 			candidates.filter((file) => file.startsWith(".pi/")).join(", "),
 			"",
 			"no .pi path may be a packaging candidate",
+		);
+		assert.strictEqual(
+			candidates.filter((file) => file.startsWith(".tmp/")).join(", "),
+			"",
+			"no .tmp path may be a packaging candidate",
 		);
 	});
 });
