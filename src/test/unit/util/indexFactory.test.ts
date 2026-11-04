@@ -6,6 +6,7 @@ import * as fileloader from "../../../util/fileloader";
 import { createThreeHalfIndex, ThreeHalfIndex, ThreeHalfIndexSpec } from "../../../util/indexFactory";
 import { reportIndexParseFailure } from "../../../util/indexHalf";
 import { Logger } from "../../../util/logger";
+import { refreshModDependencies } from "../../../util/moddependencies";
 import { clearParentModCache } from "../../../util/parentmods";
 import { settle } from "../async";
 import { listed, useIndexWorld, workspaceFile } from "../indexes";
@@ -41,8 +42,10 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 			extension: ".txt",
 			cacheVersion: 1,
 			newHalf: (source) => ({ source, files: new Map() }),
-			hydrate: (half, [path, text]) => {
-				half.files.set(path, text);
+			hydrate: (half, [path, text], skipFiles) => {
+				if (!skipFiles.has(path)) {
+					half.files.set(path, text);
+				}
 			},
 			parseFile: async (half, file, options) => {
 				calls.push(`parse ${file.path}`);
@@ -190,6 +193,182 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 
 			assert.deepStrictEqual(calls, [`parse ${edited}`]);
 			assert.strictEqual(built.halves().workspace.files.get(edited), edited);
+		});
+	});
+
+	it("serializes nothing when the build has no cache namespace", async () => {
+		// Without a storage root the capture returns a null scope, which cannot be written to; the
+		// build still parses, but it must not pay the copy the serialize makes of every live record.
+		let serializeCalls = 0;
+		const built = create({
+			serialize: (half) => {
+				serializeCalls++;
+				return [...half.files];
+			},
+		});
+		await built.ensureBuilt();
+
+		assert.strictEqual(serializeCalls, 0);
+		assert.deepStrictEqual(files(built.halves().workspace), [`${ROOT}/workspace.txt`]);
+	});
+
+	// The disk cache writes fire and forget behind the build, so every test here counts the saves the
+	// world caught and awaits them through drainCacheWrites before reading the cache or rebuilding.
+	describe("disk cache writes", () => {
+		let serializeCalls: number;
+
+		beforeEach(() => {
+			world.useDisk();
+			serializeCalls = 0;
+		});
+
+		function countedSerialize(): ThreeHalfIndex<FakeHalf> {
+			return create({
+				serialize: (half) => {
+					serializeCalls++;
+					return [...half.files];
+				},
+			});
+		}
+
+		function parsedCalls(): string[] {
+			return calls.filter((call) => call.startsWith("parse")).sort();
+		}
+
+		it("parses everything and writes the cache when there is none yet", async () => {
+			const built = countedSerialize();
+			await built.ensureBuilt();
+			const writes = await world.drainCacheWrites();
+
+			assert.ok(serializeCalls > 0);
+			assert.ok(writes > 0);
+			assert.deepStrictEqual(files(built.halves().workspace), [`${ROOT}/workspace.txt`]);
+		});
+
+		it("serializes nothing and writes nothing on an unchanged warm build", async () => {
+			world.read = (relativePath) => Buffer.from(`${relativePath} v1`);
+			await countedSerialize().ensureBuilt();
+			await world.drainCacheWrites();
+
+			serializeCalls = 0;
+			const built = countedSerialize();
+			await built.ensureBuilt();
+			const writes = await world.drainCacheWrites();
+
+			assert.strictEqual(serializeCalls, 0);
+			assert.strictEqual(writes, 0);
+			assert.deepStrictEqual(parsedCalls(), []);
+			assert.deepStrictEqual(files(built.halves().workspace), [`${ROOT}/workspace.txt`]);
+			assert.strictEqual(built.halves().workspace.files.get(`${ROOT}/workspace.txt`), `${ROOT}/workspace.txt v1`);
+		});
+
+		it("serializes and writes when a file changed", async () => {
+			await countedSerialize().ensureBuilt();
+			await world.drainCacheWrites();
+
+			world.list = (_root, half) => listed([`${half}.txt`], 2);
+			world.read = (relativePath) => Buffer.from(`${relativePath} v2`);
+			const built = countedSerialize();
+			await built.ensureBuilt();
+			const writes = await world.drainCacheWrites();
+
+			assert.deepStrictEqual(parsedCalls(), [`parse ${ROOT}/global.txt`, `parse ${ROOT}/workspace.txt`]);
+			assert.ok(serializeCalls > 0);
+			assert.ok(writes > 0);
+			assert.strictEqual(built.halves().workspace.files.get(`${ROOT}/workspace.txt`), `${ROOT}/workspace.txt v2`);
+		});
+
+		it("serializes and writes when a file was added", async () => {
+			await countedSerialize().ensureBuilt();
+			await world.drainCacheWrites();
+
+			world.list = (_root, half) =>
+				half === "workspace" ? listed(["workspace.txt", "added.txt"]) : listed(["global.txt"]);
+			const built = countedSerialize();
+			await built.ensureBuilt();
+			const writes = await world.drainCacheWrites();
+
+			assert.deepStrictEqual(parsedCalls(), [`parse ${ROOT}/added.txt`]);
+			assert.ok(serializeCalls > 0);
+			assert.ok(writes > 0);
+			assert.deepStrictEqual(files(built.halves().workspace).sort(), [
+				`${ROOT}/added.txt`,
+				`${ROOT}/workspace.txt`,
+			]);
+		});
+
+		it("writes when a file was removed, even though nothing needed parsing", async () => {
+			world.list = (_root, half) =>
+				half === "workspace" ? listed(["workspace.txt", "extra.txt"]) : listed(["global.txt"]);
+			await countedSerialize().ensureBuilt();
+			await world.drainCacheWrites();
+
+			world.list = (_root, half) => listed([`${half}.txt`]);
+			const built = countedSerialize();
+			await built.ensureBuilt();
+			const writes = await world.drainCacheWrites();
+
+			assert.deepStrictEqual(parsedCalls(), []);
+			assert.ok(serializeCalls > 0);
+			assert.ok(writes > 0);
+			assert.deepStrictEqual(files(built.halves().workspace), [`${ROOT}/workspace.txt`]);
+			// The manifest on disk carries the removal, so the next build does not wait for extra.txt.
+			const manifest = JSON.parse(
+				Buffer.from(world.disk.get(world.cacheFile("fakeIndex.workspace.manifest.json"))!).toString(),
+			) as { entries: { filePath: string }[] };
+			assert.deepStrictEqual(manifest.entries.map((entry) => entry.filePath), [`${ROOT}/workspace.txt`]);
+		});
+
+		it("parses everything again and writes after the cache data vanished", async () => {
+			await countedSerialize().ensureBuilt();
+			await world.drainCacheWrites();
+
+			world.disk.delete(world.cacheFile("fakeIndex.workspace.data.jsonl"));
+			world.read = (relativePath) => Buffer.from(`${relativePath} v3`);
+			const built = countedSerialize();
+			await built.ensureBuilt();
+			const writes = await world.drainCacheWrites();
+
+			// The global half still restores from its cache; the workspace half lost its data file.
+			assert.deepStrictEqual(parsedCalls(), [`parse ${ROOT}/workspace.txt`]);
+			assert.ok(serializeCalls > 0);
+			assert.ok(writes > 0);
+			assert.strictEqual(built.halves().workspace.files.get(`${ROOT}/workspace.txt`), `${ROOT}/workspace.txt v3`);
+		});
+
+		it("parses everything again and writes after the cache data was corrupted", async () => {
+			await countedSerialize().ensureBuilt();
+			await world.drainCacheWrites();
+
+			mock.method(Logger, "warn", () => undefined);
+			world.disk.set(
+				world.cacheFile("fakeIndex.workspace.data.jsonl"),
+				new TextEncoder().encode("not a cache"),
+			);
+			world.read = (relativePath) => Buffer.from(`${relativePath} v4`);
+			const built = countedSerialize();
+			await built.ensureBuilt();
+			const writes = await world.drainCacheWrites();
+
+			assert.deepStrictEqual(parsedCalls(), [`parse ${ROOT}/workspace.txt`]);
+			assert.ok(serializeCalls > 0);
+			assert.ok(writes > 0);
+			assert.strictEqual(built.halves().workspace.files.get(`${ROOT}/workspace.txt`), `${ROOT}/workspace.txt v4`);
+		});
+
+		it("serializes and writes after the dependency generation changed", async () => {
+			await countedSerialize().ensureBuilt();
+			await world.drainCacheWrites();
+
+			await refreshModDependencies();
+			const built = countedSerialize();
+			await built.ensureBuilt();
+			const writes = await world.drainCacheWrites();
+
+			assert.deepStrictEqual(parsedCalls(), [`parse ${ROOT}/global.txt`, `parse ${ROOT}/workspace.txt`]);
+			assert.ok(serializeCalls > 0);
+			assert.ok(writes > 0);
+			assert.deepStrictEqual(files(built.halves().workspace), [`${ROOT}/workspace.txt`]);
 		});
 	});
 
