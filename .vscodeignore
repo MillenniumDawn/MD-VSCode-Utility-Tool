@@ -35,5 +35,6 @@ knip.json
 .nvmrc
 *.log
 *.tmp
+.tmp/**
 *.vsix
 compat/**
