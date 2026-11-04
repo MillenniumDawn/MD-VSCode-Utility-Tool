@@ -47,7 +47,7 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Type-check production sources
-        run: npx --no-install tsc --noEmit -p tsconfig.json
+        run: node scripts/native-tsc.js --noEmit -p tsconfig.json
       - name: Check unused code
         run: npm run knip
       # The .jscpd.json threshold allows existing clones while it is lowered.

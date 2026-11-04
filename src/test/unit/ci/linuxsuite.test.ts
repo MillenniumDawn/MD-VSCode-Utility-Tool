@@ -59,7 +59,7 @@ describe("the Windows-only unit job keeps Ubuntu coverage", () => {
 		const runs = (workflow.jobs.test?.steps ?? []).map(step => step.run ?? "");
 		for (const command of [
 			"npm run lint",
-			"npx --no-install tsc --noEmit -p tsconfig.json",
+			"node scripts/native-tsc.js --noEmit -p tsconfig.json",
 			"npm run knip",
 			"npm run dupes",
 			"npm run test:coverage",
