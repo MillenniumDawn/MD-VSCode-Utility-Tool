@@ -1,5 +1,6 @@
 import * as assert from "assert";
 import { EventEmitter } from "events";
+import { mock } from "node:test";
 import * as path from "path";
 import { PNG } from "pngjs";
 import { UserError } from "../../../../util/common";
@@ -204,6 +205,7 @@ describe("util/image/imagedecoder fallback", () => {
 		});
 
 		afterEach(() => {
+			mock.timers.reset();
 			threads.Worker = realWorker;
 		});
 
@@ -264,8 +266,8 @@ describe("util/image/imagedecoder fallback", () => {
 			assert.deepStrictEqual(syncCalls, []);
 		});
 
-		it("aborting a posted decode still frees a stuck worker for the job waiting behind it", async function () {
-			this.timeout(5000);
+		it("aborting a posted decode still frees a stuck worker for the job waiting behind it", async () => {
+			mock.timers.enable({ apis: ["setTimeout"] });
 			decoder._setImageJobTimeoutForTest(40);
 			const controller = new AbortController();
 			const posted = decoder.decodeImageToPng(tga, "tga", controller.signal);
@@ -278,14 +280,22 @@ describe("util/image/imagedecoder fallback", () => {
 			);
 			controller.abort();
 			await postedSettled;
-			decoder._setImageJobTimeoutForTest(30_000);
 			assert.strictEqual(firstWorker.posted.length, 1);
 			assert.deepStrictEqual(syncCalls, []);
 			assert.strictEqual(ScriptedWorker.instances.length, 1);
-			await new Promise((resolve) => setTimeout(resolve, 120));
-			assert.ok(ScriptedWorker.instances.length >= 2);
-			ScriptedWorker.instances[ScriptedWorker.instances.length - 1]!.answer();
+			mock.timers.tick(40);
+			assert.strictEqual(ScriptedWorker.instances.length, 2);
+			ScriptedWorker.instances[1]!.answer();
 			assert.strictEqual((await waiting).width, SCRIPTED_WIDTH);
+			assert.deepStrictEqual(syncCalls, []);
+		});
+
+		it("never posts a decode whose caller aborted before asking", async () => {
+			await assert.rejects(
+				decoder.decodeImageToPng(tga, "tga", AbortSignal.abort()),
+				(e: unknown) => e instanceof Error && e.name === "AbortError",
+			);
+			assert.deepStrictEqual(ScriptedWorker.instances, []);
 			assert.deepStrictEqual(syncCalls, []);
 		});
 
@@ -309,17 +319,15 @@ describe("util/image/imagedecoder fallback", () => {
 		});
 
 		it("a decode waiting behind a healthy worker is never reported stuck", async () => {
+			mock.timers.enable({ apis: ["setTimeout"] });
 			decoder._setImageJobTimeoutForTest(600);
-			const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 			const jobs = [1, 2, 3].map(() => decoder.decodeImageToPng(tga, "tga"));
 			const worker = ScriptedWorker.instances[0];
 			// Each answer comes after the short timeout would have fired for the job still queued.
-			await sleep(350);
-			worker.answer();
-			await sleep(350);
-			worker.answer();
-			await sleep(350);
-			worker.answer();
+			for (let i = 0; i < 3; i++) {
+				mock.timers.tick(350);
+				worker.answer();
+			}
 			assert.deepStrictEqual(
 				(await Promise.all(jobs)).map((r) => r.width),
 				[SCRIPTED_WIDTH, SCRIPTED_WIDTH, SCRIPTED_WIDTH],

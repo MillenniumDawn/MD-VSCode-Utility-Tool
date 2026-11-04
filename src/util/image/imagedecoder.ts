@@ -34,7 +34,6 @@ interface WorkerResponse {
 }
 
 interface PendingJob {
-	id: number;
 	// The caller-owned source Buffer, held by reference until the job is admitted to a worker.
 	buffer: Buffer;
 	kind: "dds" | "tga";
@@ -244,9 +243,6 @@ function removeWorker(state: WorkerState): void {
 	// than being cut off by disableWorker's terminate.
 	if (workers.length === 0) {
 		workerUnavailable = true;
-		// Nothing will ever accept the queued requests now; fail each one so its caller falls back
-		// to the sync decode instead of waiting forever.
-		failQueuedJobs(new Error("no image decode worker available"));
 	}
 	dispatchJobs();
 }
@@ -331,14 +327,8 @@ function acquireWorker(): WorkerState | null {
 			return state;
 		}
 	}
-	if (!spawnWorker) {
-		return null;
-	}
 	workerPoolSize ??= resolveWorkerPoolSize(getConfiguration().imageDecodeWorkers);
-	if (workers.length < workerPoolSize) {
-		return spawnWorker();
-	}
-	return null;
+	return workers.length < workerPoolSize ? spawnWorker!() : null;
 }
 
 function queueJob(
@@ -347,26 +337,16 @@ function queueJob(
 	signal?: AbortSignal,
 ): Promise<DecodedImage> {
 	return new Promise<DecodedImage>((resolve, reject) => {
-		if (signal?.aborted) {
-			reject(abortedError());
-			return;
-		}
 		const id = nextJobId++;
-		const job: PendingJob = { id, buffer, kind, resolve, reject, signal };
+		const job: PendingJob = { buffer, kind, resolve, reject, signal };
 		if (signal) {
 			job.abortListener = () => {
-				if (!pendingJobs.has(id)) {
-					return;
-				}
-				// A posted job keeps its stuck-worker timer; clearing it leaks the slot.
+				// A posted job stays until its worker answers or times out: clearing its timer would
+				// leak a wedged worker. Its late answer settles a promise that is already rejected.
 				if (job.state === undefined) {
 					settleJob(id, job);
-					reject(abortedError());
-					return;
 				}
 				reject(abortedError());
-				job.resolve = () => undefined;
-				job.reject = () => undefined;
 			};
 			signal.addEventListener("abort", job.abortListener, { once: true });
 		}
@@ -385,6 +365,8 @@ function dispatchJobs(): void {
 		}
 		const state = acquireWorker();
 		if (!state) {
+			// With no worker left nothing will take the queue: fail it so each caller falls back
+			// to the sync decode instead of waiting forever.
 			if (workers.length === 0) {
 				failQueuedJobs(new Error("no image decode worker available"));
 			}
