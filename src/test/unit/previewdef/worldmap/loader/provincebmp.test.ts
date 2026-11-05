@@ -165,6 +165,31 @@ describe('worldmap/provincebmp edge joining', function () {
     });
 
     describe('fillEdges', function () {
+        it('preserves ordered paths around a loop and a disconnected region', function () {
+            const grid = buildGrid([
+                [1, 1, 1, 2],
+                [1, 2, 1, 2],
+                [1, 1, 1, 2],
+                [2, 2, 2, 2],
+            ]);
+            const provinces = fillEdges(grid.provinces, grid.colorByPosition, grid.width, grid.height);
+            assert.deepStrictEqual(edgesOf(provinces, 1), [
+                { toColor: 2, path: [
+                    [pt(3, 0), pt(3, 3), pt(0, 3), pt(0, 0)],
+                    [pt(2, 2), pt(2, 1), pt(1, 1), pt(1, 2), pt(2, 2)],
+                ] },
+                { toColor: -1, path: [[pt(0, 0), pt(3, 0)]] },
+            ]);
+            assert.deepStrictEqual(edgesOf(provinces, 2), [
+                { toColor: 1, path: [
+                    [pt(0, 3), pt(3, 3), pt(3, 0)],
+                    [pt(4, 0), pt(4, 3)],
+                    [pt(2, 1), pt(2, 2), pt(1, 2), pt(1, 1), pt(2, 1)],
+                ] },
+                { toColor: -1, path: [[pt(3, 0), pt(4, 0)], [pt(4, 4), pt(0, 4)]] },
+            ]);
+        });
+
         // Horizontal wrap-around (cylinder map): the left column of A borders B, so
         // A<->B appears on both x=0 and x=2. Top/bottom border edges carry toColor -1.
         it('buckets edges by toColor for two provinces sharing a border', function () {

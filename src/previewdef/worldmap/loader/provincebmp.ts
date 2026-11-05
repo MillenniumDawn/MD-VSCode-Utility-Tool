@@ -407,7 +407,7 @@ function findEdgePixels(
 		const adjecentColor = colorByPosition[adjecentIndex] ?? 0;
 		if (color !== adjecentColor) {
 			addEdge(adjecentColor, x0, y0, x1, y1);
-		} else {
+		} else if (!accessedPixels[adjecentIndex]) {
 			pixelStack.push(adjecentIndex);
 		}
 	};
