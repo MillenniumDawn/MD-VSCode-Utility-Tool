@@ -1,6 +1,7 @@
 Unreleased
 
   Functionality:
+- [ World Map Preview ] The world map prepares province borders faster when it opens. Issue #695.
 - [ Focus Tree Previewer ] Focus tree icons fill in without drawing the rest of the tree again. Issue #664.
 - [ Previews ] Opening one frame of a multi-frame sprite no longer builds the unused frames first. Issue #673.
 - [ Previews ] Rapidly editing a previewed file now redraws once for the newest state instead of stacking a redraw per delivered change, and the redraw still forces a full reload when a dependency changed. Issue #670.
