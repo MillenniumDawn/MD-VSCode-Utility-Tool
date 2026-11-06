@@ -71,7 +71,7 @@ export class ViewPoint extends Subscriber {
             end = t;
         }
 
-        if (start.x >= r || end.x <= this.x) {
+        if (start.x + xoffset >= r || end.x + xoffset <= this.x) {
             return false;
         }
 
