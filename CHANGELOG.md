@@ -14,6 +14,7 @@ Unreleased
 - [ World Map Preview ] Opening the world map uses less temporary memory while it builds province borders, and finishes them a little sooner. Issue #663.
 
   Bugfixes:
+- [ Previews ] Cornered sprites with invalid border sizes no longer break previews or draw misaligned tiles. Issue #699.
 - [ Previews ] Condition and effect text now preserves quotation marks and backslashes inside strings. Issue #725.
 - [ Events Previewer ] Mean time to happen now adds days, months and years together instead of using only the first unit. Issue #724.
 - [ Previews ] Opening a file with long comments no longer freezes balance-of-power preview detection. Commented-out initial values no longer enable the preview. Issue #702.
