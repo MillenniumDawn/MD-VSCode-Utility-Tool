@@ -311,7 +311,7 @@ describe("tgaToPng", () => {
 		trueColour[16] = 16;
 		trueColour[17] = 1;
 		trueColour.writeUInt16LE(0x8000 | (31 << 10), 18);
-		assert.deepStrictEqual(Array.from(tgaToPng(trueColour).data), [248, 0, 0, 128]);
+		assert.deepStrictEqual(Array.from(tgaToPng(trueColour).data), [255, 0, 0, 255]);
 		const grayscale = Buffer.alloc(20);
 		grayscale[2] = 3;
 		grayscale.writeUInt16LE(1, 12);
