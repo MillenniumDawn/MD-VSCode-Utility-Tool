@@ -71,6 +71,9 @@ export async function loadRivers(
 }
 
 export function findRiverPointsList(riversImage: BMP): River[] {
+	// Flood-fill visitation must not overwrite the caller's pixel view or cached bytes.
+	riversImage = { ...riversImage, data: new Uint8Array(riversImage.data) };
+
 	const result: River[] = [];
 
 	for (
