@@ -1,5 +1,7 @@
 Unreleased
 
+v1.1.44
+
   Bugfixes:
 - [ World Map Preview ] Adjacency lines stay visible when the map wraps across the edge. Issue #736.
 
