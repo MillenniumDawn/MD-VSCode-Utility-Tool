@@ -2,7 +2,9 @@ import * as assert from "assert";
 import { mock } from "node:test";
 import * as fileloader from "../../../../../util/fileloader";
 import { UserError } from "../../../../../util/common";
-import { RiverLoader } from "../../../../../previewdef/worldmap/loader/river";
+import { RiverLoader, findRiverPointsList, loadRivers } from "../../../../../previewdef/worldmap/loader/river";
+import { parseBmp } from "../../../../../util/image/bmp/bmpparser";
+import type { WorldMapWarning } from "../../../../../previewdef/worldmap/definitions";
 import { LoaderSession } from "../../../../../util/loader/loader";
 
 function buildBmp(
@@ -116,5 +118,58 @@ describe("previewdef/worldmap/loader river", () => {
 			has("flow-in or flow-out mark") || has("may contain a loop"),
 			texts.join("\n"),
 		);
+	});
+
+	it("leaves the supplied BMP view unchanged across extractions", () => {
+		const buffer = buildBmp(3, 1, 8, { "0,0": 0, "1,0": 5, "2,0": 1 });
+		const image = parseBmp(buffer.buffer as ArrayBuffer, buffer.byteOffset);
+		const data = image.data;
+		const bytes = Buffer.from(buffer);
+		const first = findRiverPointsList(image);
+		assert.strictEqual(image.data, data);
+		assert.deepStrictEqual(buffer, bytes);
+		assert.strictEqual(first.length, 1);
+		assert.deepStrictEqual(findRiverPointsList(image), first);
+	});
+
+	it("preserves cached bytes, rivers and warnings through forced reloads", async () => {
+		const buffer = buildBmp(3, 3, 8, {
+			"0,2": 5,
+			"1,2": 5,
+			"2,2": 5,
+			"2,1": 5,
+			"2,0": 1,
+		});
+		mockRiverFile(buffer);
+		const originalBytes = Buffer.from(buffer);
+
+		const directWarnings: WorldMapWarning[] = [];
+		const direct1 = await loadRivers(
+			"map/rivers.bmp",
+			async () => undefined,
+			directWarnings,
+		);
+		const directWarnings2: WorldMapWarning[] = [];
+		const direct2 = await loadRivers(
+			"map/rivers.bmp",
+			async () => undefined,
+			directWarnings2,
+		);
+
+		assert.deepStrictEqual(direct2.rivers, direct1.rivers);
+		assert.deepStrictEqual(directWarnings2, directWarnings);
+		assert.strictEqual(direct1.rivers.length, 1);
+		assert.ok(directWarnings.some((warning) => warning.text.includes("has no source")));
+		assert.deepStrictEqual(buffer, originalBytes);
+
+		const loader = new RiverLoader("map/rivers.bmp");
+		const first = await loader.load(new LoaderSession(true));
+		const second = await loader.load(new LoaderSession(true));
+
+		assert.deepStrictEqual(second.result, first.result);
+		assert.deepStrictEqual(second.warnings, first.warnings);
+		assert.deepStrictEqual(second.dependencies, first.dependencies);
+		assert.deepStrictEqual(first.result.rivers, direct1.rivers);
+		assert.deepStrictEqual(buffer, originalBytes);
 	});
 });
