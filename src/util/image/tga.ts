@@ -19,10 +19,13 @@ function readColour(source: Buffer, offset: number, depth: number, hasAlpha: boo
 			return;
 		case 16: {
 			const high = source[offset + 1] ?? 0;
-			target[at] = (high & 0x7c) << 1;
-			target[at + 1] = ((high & 0x03) << 6) | ((low & 0xe0) >> 2);
-			target[at + 2] = (low & 0x1f) << 3;
-			target[at + 3] = hasAlpha ? high & 0x80 : 255;
+			const r = (high >> 2) & 0x1f;
+			const g = ((high & 3) << 3) | (low >> 5);
+			const b = low & 0x1f;
+			target[at] = (r << 3) | (r >> 2);
+			target[at + 1] = (g << 3) | (g >> 2);
+			target[at + 2] = (b << 3) | (b >> 2);
+			target[at + 3] = hasAlpha ? (high & 0x80 ? 255 : 0) : 255;
 			return;
 		}
 		default:
@@ -69,11 +72,13 @@ export function decodeTga(buffer: Buffer): { width: number; height: number; pixe
 	const descriptor = buffer.readUInt8(17);
 	const greyscale = TGA_GREYSCALE_TYPES.has(dataType);
 	let hasAlpha = (descriptor & 0x0f) !== 0 || pixelDepth === 32 || (TGA_COLOUR_MAPPED_TYPES.has(dataType) && colourMapDepth === 32) || (greyscale && pixelDepth === 16);
+	let premultiplied = false;
 	if (buffer.length >= 26 && buffer.toString("ascii", buffer.length - 18, buffer.length - 1) === "TRUEVISION-XFILE.") {
 		const extensionOffset = buffer.readUInt32LE(buffer.length - 26);
 		if (extensionOffset > 0 && extensionOffset + 495 <= buffer.length) {
 			const attributesType = buffer[extensionOffset + 494];
 			hasAlpha = attributesType === 3 || attributesType === 4;
+			premultiplied = attributesType === 4;
 		}
 	}
 
@@ -149,6 +154,14 @@ export function decodeTga(buffer: Buffer): { width: number; height: number; pixe
 			if (++x === width) {
 				x = 0;
 				y++;
+			}
+		}
+	}
+	if (premultiplied) {
+		for (let i = 0; i < pixels.length; i += 4) {
+			const alpha = pixels[i + 3]!;
+			for (let channel = 0; channel < 3; channel++) {
+				pixels[i + channel] = alpha === 0 ? 0 : Math.min(255, Math.round(pixels[i + channel]! * 255 / alpha));
 			}
 		}
 	}

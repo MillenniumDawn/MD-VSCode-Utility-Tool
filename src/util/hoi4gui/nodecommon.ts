@@ -87,8 +87,8 @@ export function renderCorneredTileSprite(
 ): string {
 	const sizeX = size.width;
 	const sizeY = size.height;
-	let borderX = sprite.borderSize.x;
-	let borderY = sprite.borderSize.y;
+	const borderX = sprite.borderSize.x;
+	const borderY = sprite.borderSize.y;
 	const xPos =
 		borderX * 2 > sizeX
 			? [0, sizeX / 2, sizeX / 2, sizeX]

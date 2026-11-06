@@ -174,6 +174,12 @@ export function installWindowClock(): { advance: (ms: number) => void; restore: 
     };
 }
 
+// Resolves once jsdom has run the next animation frame. Callbacks run in the order they were
+// requested, so anything the code under test queued before this call has already run.
+export function nextFrame(): Promise<void> {
+    return new Promise(resolve => window.requestAnimationFrame(() => resolve()));
+}
+
 // Mock acquireVsCodeApi for webview tests. The real `setState` replaces the persisted state
 // wholesale, so this one does too. The object lives for the whole mocha run, so a test that needs
 // a clean slate calls `resetWebviewState()` rather than relying on an earlier file to clear it.
