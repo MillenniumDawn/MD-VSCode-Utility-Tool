@@ -75,6 +75,10 @@ export class ViewPoint extends Subscriber {
             return false;
         }
 
+        if (start.x === end.x) {
+            return Math.max(start.y, end.y) > this.y && Math.min(start.y, end.y) < b;
+        }
+
         const k = (end.y - start.y) / (end.x - start.x);
         const y1 = k * (this.x - start.x - xoffset) + start.y;
         const y2 = k * (r - start.x - xoffset) + start.y;

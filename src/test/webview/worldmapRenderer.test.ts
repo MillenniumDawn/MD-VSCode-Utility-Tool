@@ -568,6 +568,12 @@ describe("webview/worldmap/ViewPoint", function () {
 		view.x = 0;
 		assert.strictEqual(view.lineInView(start, end, 0), true);
 		assert.strictEqual(view.lineInView({ x: 5, y: 200 }, { x: 15, y: 210 }, 0), false);
+		assert.strictEqual(view.lineInView({ x: 5, y: 20 }, { x: 5, y: 30 }, 0), true);
+		assert.strictEqual(view.lineInView({ x: 5, y: 30 }, { x: 5, y: 20 }, 0), true);
+		assert.strictEqual(view.lineInView({ x: 5, y: 200 }, { x: 5, y: 210 }, 0), false);
+		view.x = 100;
+		assert.strictEqual(view.lineInView({ x: 5, y: -10 }, { x: 5, y: 110 }, 100), true);
+		assert.strictEqual(view.lineInView({ x: 5, y: 200 }, { x: 5, y: 210 }, 100), false);
 	});
 	function bodyListenerCounter() {
 		const added: string[] = [];
