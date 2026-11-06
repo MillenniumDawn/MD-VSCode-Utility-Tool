@@ -269,12 +269,11 @@ function convertEvent<T extends HOIEventType>(
     const after = convertOption(eventDef.after, scope, conditionExprs);
     const options = eventDef.option.map(o => convertOption(o, scope, conditionExprs));
 
-    const meanTimeToHappenBase = eventDef.mean_time_to_happen ?
-        Math.floor(eventDef.mean_time_to_happen.factor ??
-            eventDef.mean_time_to_happen.base ??
-            eventDef.mean_time_to_happen.days ??
-            (eventDef.mean_time_to_happen.months ? Math.floor(eventDef.mean_time_to_happen.months) * 30 : undefined) ??
-            (eventDef.mean_time_to_happen.years ? Math.floor(eventDef.mean_time_to_happen.years) * 365 : undefined) ??
+    const meanTimeToHappen = eventDef.mean_time_to_happen;
+    const meanTimeToHappenBase = meanTimeToHappen ?
+        Math.floor(meanTimeToHappen.factor ??
+            meanTimeToHappen.base ??
+            meanTimeToHappenUnitDays(meanTimeToHappen) ??
             1) :
         1;
 
@@ -296,6 +295,14 @@ function convertEvent<T extends HOIEventType>(
         fire_only_once: !!eventDef.fire_only_once,
         trigger,
     };
+}
+
+function meanTimeToHappenUnitDays(meanTimeToHappen: HOIPartial<MeanTimeToHappen>): number | undefined {
+    const { days, months, years } = meanTimeToHappen;
+    if (days === undefined && months === undefined && years === undefined) {
+        return undefined;
+    }
+    return (days ?? 0) + Math.floor(months ?? 0) * 30 + Math.floor(years ?? 0) * 365;
 }
 
 function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs: ConditionItem[]): HOIEventOption {
