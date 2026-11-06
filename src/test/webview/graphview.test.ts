@@ -1,4 +1,4 @@
-import "./setup";
+import { nextFrame } from "./setup";
 import * as assert from "assert";
 import { renderGraph, wireIsolation } from "../../../webviewsrc/util/graphview";
 
@@ -177,12 +177,45 @@ describe("webview/util/graphview", () => {
 				.filter((item) => item.element.classList.contains("ev-dim"))
 				.map((item) => item.node.id);
 
-		it("dims everything the hovered node does not reach", () => {
+		const fire = (item: { element: HTMLElement }, type: string) =>
+			item.element.dispatchEvent(new (window as any).Event(type));
+
+		// The ids of the cards whose attributes change until the returned function is called, which
+		// also hands them back. An arrow shows as "edge".
+		const watchChanges = () => {
+			const touched: string[] = [];
+			const note = (records: MutationRecord[]) => {
+				for (const record of records) {
+					touched.push((record.target as Element).getAttribute("data-id") ?? "edge");
+				}
+			};
+			const observer = new (window as any).MutationObserver(note);
+			observer.observe(content, { attributes: true, subtree: true });
+			return () => {
+				note(observer.takeRecords());
+				observer.disconnect();
+				return touched;
+			};
+		};
+
+		// One root with two branches, so moving from one branch to the other leaves the root and
+		// both arrows dimmed throughout.
+		const fork = (): [TestNode[], TestEdge[], string[]] => [
+			[{ id: "r" }, { id: "x" }, { id: "y" }],
+			[
+				{ from: "r", to: "x" },
+				{ from: "r", to: "y" },
+			],
+			["r"],
+		];
+
+		it("dims everything the hovered node does not reach", async () => {
 			const [nodes, edges, roots] = chain();
 			const result = render(nodes, edges, roots);
 			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
 
-			result.rendered[1]!.element.dispatchEvent(new (window as any).Event("mouseenter"));
+			fire(result.rendered[1]!, "mouseenter");
+			await nextFrame();
 
 			// b reaches c, and nothing reaches back up to a.
 			assert.deepStrictEqual(dimmed(result), ["a"]);
@@ -190,30 +223,130 @@ describe("webview/util/graphview", () => {
 			assert.ok(!result.renderedEdges[1]!.path.classList.contains("ev-edge-dim"));
 		});
 
-		it("dims nothing when the whole chain is downstream", () => {
+		it("dims nothing when the whole chain is downstream", async () => {
 			const [nodes, edges, roots] = chain();
 			const result = render(nodes, edges, roots);
 			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
 
-			result.rendered[0]!.element.dispatchEvent(new (window as any).Event("mouseenter"));
+			fire(result.rendered[0]!, "mouseenter");
+			await nextFrame();
 
 			assert.deepStrictEqual(dimmed(result), []);
 		});
 
-		it("puts the canvas back when the pointer leaves", () => {
+		it("puts the canvas back when the pointer leaves", async () => {
 			const [nodes, edges, roots] = chain();
 			const result = render(nodes, edges, roots);
 			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
 
-			result.rendered[2]!.element.dispatchEvent(new (window as any).Event("mouseenter"));
+			fire(result.rendered[2]!, "mouseenter");
+			await nextFrame();
 			assert.deepStrictEqual(dimmed(result), ["a", "b"]);
 
-			result.rendered[2]!.element.dispatchEvent(new (window as any).Event("mouseleave"));
+			fire(result.rendered[2]!, "mouseleave");
+			await nextFrame();
 			assert.deepStrictEqual(dimmed(result), []);
+		});
+
+		it("dims the arrow labels with their arrows", async () => {
+			const [nodes, edges, roots] = chain();
+			const result = render(nodes, edges, roots);
+			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
+			const chip = result.renderedEdges[0]!.chip!;
+
+			fire(result.rendered[2]!, "mouseenter");
+			await nextFrame();
+			assert.ok(chip.classList.contains("ev-dim"));
+
+			fire(result.rendered[2]!, "mouseleave");
+			await nextFrame();
+			assert.ok(!chip.classList.contains("ev-dim"));
+		});
+
+		it("lights a chain that loops back on itself without walking it forever", async () => {
+			const result = render(
+				[{ id: "a" }, { id: "b" }, { id: "c" }],
+				[
+					{ from: "a", to: "b" },
+					{ from: "b", to: "a" },
+				],
+				["a"],
+			);
+			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
+
+			fire(result.rendered[1]!, "mouseenter");
+			await nextFrame();
+
+			assert.deepStrictEqual(dimmed(result), ["c"]);
+		});
+
+		// The leave and the enter of a card-to-card move arrive in one task, and the frame after it is
+		// the first one that can show either.
+		it("waits for the next frame before dimming", async () => {
+			const [nodes, edges, roots] = chain();
+			const result = render(nodes, edges, roots);
+			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
+
+			fire(result.rendered[2]!, "mouseenter");
+			assert.deepStrictEqual(dimmed(result), []);
+
+			await nextFrame();
+			assert.deepStrictEqual(dimmed(result), ["a", "b"]);
+		});
+
+		it("touches only the cards whose state changes when the pointer moves to the next card", async () => {
+			const [nodes, edges, roots] = fork();
+			const result = render(nodes, edges, roots);
+			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
+			fire(result.rendered[1]!, "mouseenter");
+			await nextFrame();
+			assert.deepStrictEqual(dimmed(result), ["r", "y"]);
+
+			const stop = watchChanges();
+			fire(result.rendered[1]!, "mouseleave");
+			fire(result.rendered[2]!, "mouseenter");
+			await nextFrame();
+			const touched = stop();
+
+			// The root and both arrows stay dimmed, so only the two branch cards change.
+			assert.deepStrictEqual(touched.sort(), ["x", "y"]);
+			assert.deepStrictEqual(dimmed(result), ["r", "x"]);
+		});
+
+		it("draws only the last transition made within one frame", async () => {
+			const [nodes, edges, roots] = fork();
+			const result = render(nodes, edges, roots);
+			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
+			const stop = watchChanges();
+
+			fire(result.rendered[1]!, "mouseenter");
+			fire(result.rendered[1]!, "mouseleave");
+			fire(result.rendered[2]!, "mouseenter");
+			await nextFrame();
+			const touched = stop();
+
+			// The branch x was never drawn as lit, so y is never dimmed and then lit again, and the
+			// root and arrows are dimmed once each.
+			assert.deepStrictEqual(touched.sort(), ["edge", "edge", "r", "x"]);
+			assert.deepStrictEqual(dimmed(result), ["r", "x"]);
+		});
+
+		it("keeps the chain lit when the pointer leaves and comes back in one frame", async () => {
+			const [nodes, edges, roots] = chain();
+			const result = render(nodes, edges, roots);
+			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
+			fire(result.rendered[2]!, "mouseenter");
+			await nextFrame();
+
+			fire(result.rendered[2]!, "mouseleave");
+			fire(result.rendered[2]!, "mouseenter");
+			await nextFrame();
+
+			assert.deepStrictEqual(dimmed(result), ["a", "b"]);
 		});
 
 		// What the drag sweep calls: nothing may be left hanging over the canvas while it is moved.
-		it("clears from the handle, for a drag that never touched a card", () => {
+		it("clears from the handle, for a drag that never touched a card", async () => {
 			const [nodes, edges, roots] = chain();
 			const result = render(nodes, edges, roots);
 			const isolation = wireIsolation(
@@ -222,7 +355,8 @@ describe("webview/util/graphview", () => {
 				result.childrenById,
 			);
 
-			result.rendered[2]!.element.dispatchEvent(new (window as any).Event("mouseenter"));
+			fire(result.rendered[2]!, "mouseenter");
+			await nextFrame();
 			assert.notDeepStrictEqual(dimmed(result), []);
 
 			isolation.clear();
@@ -230,18 +364,70 @@ describe("webview/util/graphview", () => {
 			assert.ok(result.renderedEdges.every((item) => !item.path.classList.contains("ev-edge-dim")));
 		});
 
+		// A drag that starts between an enter and the frame that would draw it must not be followed
+		// by the chain lighting up under the dragged canvas.
+		it("drops a queued enter when the handle clears", async () => {
+			const [nodes, edges, roots] = chain();
+			const result = render(nodes, edges, roots);
+			const isolation = wireIsolation(
+				result.rendered,
+				result.renderedEdges,
+				result.childrenById,
+			);
+
+			fire(result.rendered[2]!, "mouseenter");
+			isolation.clear();
+			await nextFrame();
+
+			assert.deepStrictEqual(dimmed(result), []);
+		});
+
 		// Keyboard focus is the same signal as the pointer, so a reader tabbing through the cards
 		// sees the same chain light up.
-		it("isolates on focus as well as on hover", () => {
+		it("isolates on focus as well as on hover", async () => {
 			const [nodes, edges, roots] = chain();
 			const result = render(nodes, edges, roots);
 			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
 
-			result.rendered[1]!.element.dispatchEvent(new (window as any).Event("focusin"));
+			fire(result.rendered[1]!, "focusin");
+			await nextFrame();
 			assert.deepStrictEqual(dimmed(result), ["a"]);
 
-			result.rendered[1]!.element.dispatchEvent(new (window as any).Event("focusout"));
+			fire(result.rendered[1]!, "focusout");
+			await nextFrame();
 			assert.deepStrictEqual(dimmed(result), []);
+		});
+
+		it("moves the chain with keyboard focus without a pass in between", async () => {
+			const [nodes, edges, roots] = fork();
+			const result = render(nodes, edges, roots);
+			wireIsolation(result.rendered, result.renderedEdges, result.childrenById);
+			fire(result.rendered[1]!, "focusin");
+			await nextFrame();
+
+			fire(result.rendered[1]!, "focusout");
+			fire(result.rendered[2]!, "focusin");
+			await nextFrame();
+
+			assert.deepStrictEqual(dimmed(result), ["r", "x"]);
+		});
+
+		// Re-rendering a preview empties the canvas and wires a new graph, and nothing tells the old
+		// wiring. Its frame must not go on to restyle cards that are no longer on the page.
+		it("does not touch a graph that was replaced before its frame ran", async () => {
+			const [nodes, edges, roots] = chain();
+			const old = render(nodes, edges, roots);
+			wireIsolation(old.rendered, old.renderedEdges, old.childrenById);
+			fire(old.rendered[2]!, "mouseenter");
+
+			content.textContent = "";
+			const next = render(nodes, edges, roots);
+			wireIsolation(next.rendered, next.renderedEdges, next.childrenById);
+			await nextFrame();
+
+			assert.deepStrictEqual(dimmed(old), []);
+			assert.ok(old.renderedEdges.every((item) => !item.path.classList.contains("ev-edge-dim")));
+			assert.deepStrictEqual(dimmed(next), []);
 		});
 	});
 });
