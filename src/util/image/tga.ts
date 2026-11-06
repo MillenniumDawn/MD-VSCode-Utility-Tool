@@ -69,11 +69,13 @@ export function decodeTga(buffer: Buffer): { width: number; height: number; pixe
 	const descriptor = buffer.readUInt8(17);
 	const greyscale = TGA_GREYSCALE_TYPES.has(dataType);
 	let hasAlpha = (descriptor & 0x0f) !== 0 || pixelDepth === 32 || (TGA_COLOUR_MAPPED_TYPES.has(dataType) && colourMapDepth === 32) || (greyscale && pixelDepth === 16);
+	let premultiplied = false;
 	if (buffer.length >= 26 && buffer.toString("ascii", buffer.length - 18, buffer.length - 1) === "TRUEVISION-XFILE.") {
 		const extensionOffset = buffer.readUInt32LE(buffer.length - 26);
 		if (extensionOffset > 0 && extensionOffset + 495 <= buffer.length) {
 			const attributesType = buffer[extensionOffset + 494];
 			hasAlpha = attributesType === 3 || attributesType === 4;
+			premultiplied = attributesType === 4;
 		}
 	}
 
@@ -149,6 +151,14 @@ export function decodeTga(buffer: Buffer): { width: number; height: number; pixe
 			if (++x === width) {
 				x = 0;
 				y++;
+			}
+		}
+	}
+	if (premultiplied) {
+		for (let i = 0; i < pixels.length; i += 4) {
+			const alpha = pixels[i + 3]!;
+			for (let channel = 0; channel < 3; channel++) {
+				pixels[i + channel] = alpha === 0 ? 0 : Math.min(255, Math.round(pixels[i + channel]! * 255 / alpha));
 			}
 		}
 	}
