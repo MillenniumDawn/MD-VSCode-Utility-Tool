@@ -11,6 +11,7 @@ Unreleased
 - [ Previews ] Loading many textures at once no longer fails the ones that were only waiting for a free decoder, and closing a texture view drops its decode if it has not started. Issue #674.
 
   Bugfixes:
+- [ Previews ] A preview that cannot open now closes its empty tab and reports the error. Issue #740.
 - [ Previews ] Condition and effect text now preserves quotation marks and backslashes inside strings. Issue #725.
 - [ Events Previewer ] Mean time to happen now adds days, months and years together instead of using only the first unit. Issue #724.
 - [ Previews ] Opening a file with long comments no longer freezes balance-of-power preview detection. Commented-out initial values no longer enable the preview. Issue #702.

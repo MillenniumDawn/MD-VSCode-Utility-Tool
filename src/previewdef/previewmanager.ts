@@ -229,7 +229,15 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
 
         const browserSmoke = options?.browserSmoke === true && previewProvider.type === 'event'
             && contextContainer.current?.extensionMode === host().ExtensionMode.Test;
-        const previewItem = new previewProvider.previewConstructor(uri, panel, browserSmoke);
+        let previewItem: PreviewBase;
+        try {
+            previewItem = new previewProvider.previewConstructor(uri, panel, browserSmoke);
+        } catch (e) {
+            panel.dispose();
+            error(e);
+            void host().window.showErrorMessage(localize('preview.openfailed', 'Could not open preview: {0}', e instanceof Error ? e.message : String(e)));
+            return;
+        }
         this._previews[key] = previewItem;
 
         previewItem.onDispose(() => {

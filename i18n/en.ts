@@ -362,6 +362,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"preview.loading": "Loading preview...",
 	"preview.mustopenafolder": 'Must open a folder before opening "{0}".',
 	"preview.noactivedoc": "No active document.",
+	"preview.openfailed": "Could not open preview: {0}",
 	"preview.selectafolder": 'Select a folder to copy "{0}"',
 	"preview.type.bop": "Balance of power (common/bop/*.txt)",
 	"preview.type.character": "Characters (common/characters/*.txt)",
