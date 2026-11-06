@@ -383,20 +383,48 @@ export interface IsolationHandle {
 }
 
 // Lights up the chain under the pointer and dims the rest. Class flipping only -- never a
-// re-layout, so isolating a chain stays cheap on a large file.
+// re-layout, so isolating a chain stays cheap on a large file. Moving from one card to the next
+// fires the leave and the enter in one task, so only the last is drawn, a frame later, and only
+// on the elements whose state changed.
 export function wireIsolation<N extends GraphNodeLike, E extends GraphEdgeLike>(
 	rendered: readonly RenderedNode<N>[],
 	renderedEdges: readonly RenderedEdge<E>[],
 	childrenById: Map<string, string[]>,
 ): IsolationHandle {
-	const setIsolation = (reached: Set<string> | undefined): void => {
-		for (const item of rendered) {
-			item.element.classList.toggle("ev-dim", reached !== undefined && !reached.has(item.node.id));
-		}
-		for (const item of renderedEdges) {
-			const on = reached === undefined || (reached.has(item.edge.from) && reached.has(item.edge.to));
-			item.path.classList.toggle("ev-edge-dim", !on);
-			item.chip?.classList.toggle("ev-dim", !on);
+	const dimmedNodes = rendered.map(() => false);
+	const dimmedEdges = renderedEdges.map(() => false);
+	let wanted: string | undefined = undefined;
+	let frame: number | undefined = undefined;
+
+	const apply = (): void => {
+		const reached = wanted === undefined ? undefined : downstreamOf(wanted, childrenById);
+		rendered.forEach((item, i) => {
+			const dim = reached !== undefined && !reached.has(item.node.id);
+			if (dim !== dimmedNodes[i]) {
+				dimmedNodes[i] = dim;
+				item.element.classList.toggle("ev-dim", dim);
+			}
+		});
+		renderedEdges.forEach((item, i) => {
+			const dim = reached !== undefined && !(reached.has(item.edge.from) && reached.has(item.edge.to));
+			if (dim !== dimmedEdges[i]) {
+				dimmedEdges[i] = dim;
+				item.path.classList.toggle("ev-edge-dim", dim);
+				item.chip?.classList.toggle("ev-dim", dim);
+			}
+		});
+	};
+
+	const want = (id: string | undefined): void => {
+		wanted = id;
+		if (frame === undefined) {
+			frame = window.requestAnimationFrame(() => {
+				frame = undefined;
+				// A re-render detaches this graph; there is nothing left to dim.
+				if (rendered[0]?.element.isConnected) {
+					apply();
+				}
+			});
 		}
 	};
 
@@ -407,14 +435,24 @@ export function wireIsolation<N extends GraphNodeLike, E extends GraphEdgeLike>(
 			if (panning$.value) {
 				return;
 			}
-			setIsolation(downstreamOf(item.node.id, childrenById));
+			want(item.node.id);
 		};
-		const leave = () => setIsolation(undefined);
+		const leave = () => want(undefined);
 		item.element.addEventListener("mouseenter", enter);
 		item.element.addEventListener("mouseleave", leave);
 		item.element.addEventListener("focusin", enter);
 		item.element.addEventListener("focusout", leave);
 	}
 
-	return { clear: () => setIsolation(undefined) };
+	return {
+		// Immediate, so a queued enter cannot light the chain after a drag has started.
+		clear: () => {
+			if (frame !== undefined) {
+				window.cancelAnimationFrame(frame);
+				frame = undefined;
+			}
+			wanted = undefined;
+			apply();
+		},
+	};
 }
