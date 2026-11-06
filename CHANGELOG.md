@@ -9,6 +9,7 @@ Unreleased
 - [ World Map Preview ] The world map prepares province borders a little faster when it opens. Issue #555.
 - [ Focus Tree Previewer ] Search now shows the match count, reports when nothing matches, and updates when text is pasted or cut. A search restored on reopen is highlighted right away, and hits use the editor's find colors. Issue #547.
 - [ Previews ] Loading many textures at once no longer fails the ones that were only waiting for a free decoder, and closing a texture view drops its decode if it has not started. Issue #674.
+- [ World Map Preview ] Opening the world map uses less temporary memory while it builds province borders, and finishes them a little sooner. Issue #663.
 
   Bugfixes:
 - [ Previews ] Condition and effect text now preserves quotation marks and backslashes inside strings. Issue #725.
