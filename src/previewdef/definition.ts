@@ -63,7 +63,7 @@ export const previewFiles = {
 		flag: "bopPreview",
 		extension: ".txt",
 		folder: ["common", "bop", "*"],
-		content: /^[ \t]*\w+[ \t]*=[ \t]*{\s*(?:#.*\s*)*initial_value\s*=/m,
+		content: /^[ \t]*\w+[ \t]*=[ \t]*{\s*(?:#[^\r\n]*[\r\n]\s*)*initial_value\s*=/m,
 	},
 } satisfies Record<string, PreviewFiles>;
 

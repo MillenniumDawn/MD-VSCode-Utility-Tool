@@ -492,6 +492,75 @@ describe('previewdef/event/schema option effects', () => {
     });
 });
 
+describe('previewdef/event/schema mean time to happen', () => {
+    function mtthBaseOf(mtthBlock: string | undefined): number {
+        const mtth = mtthBlock === undefined ? '' : `mean_time_to_happen = { ${mtthBlock} }`;
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                ${mtth}
+                option = { name = test.1.a }
+            }
+        `);
+        return byId(events, 'test.1').meanTimeToHappenBase;
+    }
+
+    it('defaults to 1 when the event has no mean_time_to_happen block', () => {
+        assert.strictEqual(mtthBaseOf(undefined), 1);
+    });
+
+    it('defaults to 1 for an empty block', () => {
+        assert.strictEqual(mtthBaseOf(''), 1);
+    });
+
+    it('keeps nested modifier factors separate from the base duration', () => {
+        assert.strictEqual(
+            mtthBaseOf('modifier = { factor = 1.5 has_idea = economic_boom } modifier = { factor = 0 has_war = yes }'),
+            1,
+        );
+        assert.strictEqual(mtthBaseOf('days = 2 months = 1 modifier = { factor = 100 has_war = yes }'), 32);
+    });
+
+    it('reads a single unit as the days it stands for', () => {
+        assert.strictEqual(mtthBaseOf('days = 5'), 5);
+        assert.strictEqual(mtthBaseOf('months = 2'), 60);
+        assert.strictEqual(mtthBaseOf('years = 1'), 365);
+    });
+
+    it('adds mixed units instead of letting the first one win', () => {
+        assert.strictEqual(mtthBaseOf('days = 2 months = 1'), 32);
+        assert.strictEqual(mtthBaseOf('days = 1 months = 1 years = 1'), 396);
+        assert.strictEqual(mtthBaseOf('years = 2 months = 1 days = 5'), 765);
+    });
+
+    it('treats an explicit zero as a component, not as a missing key', () => {
+        assert.strictEqual(mtthBaseOf('days = 0 months = 0 years = 0'), 0);
+        assert.strictEqual(mtthBaseOf('days = 0'), 0);
+        assert.strictEqual(mtthBaseOf('months = 0'), 0);
+        assert.strictEqual(mtthBaseOf('years = 0'), 0);
+        assert.strictEqual(mtthBaseOf('days = 0 months = 1 years = 0'), 30);
+        assert.strictEqual(mtthBaseOf('days = 0 months = 0 years = 1'), 365);
+    });
+
+    it('keeps factor above base, and both above the units', () => {
+        assert.strictEqual(mtthBaseOf('base = 30'), 30);
+        assert.strictEqual(mtthBaseOf('base = 10 factor = 5'), 5);
+        assert.strictEqual(mtthBaseOf('base = 10 days = 2 months = 1'), 10);
+        assert.strictEqual(mtthBaseOf('factor = 4 days = 2 months = 1'), 4);
+        assert.strictEqual(mtthBaseOf('factor = 0 base = 10 days = 2 months = 1'), 0);
+        assert.strictEqual(mtthBaseOf('base = 0 days = 2 months = 1'), 0);
+    });
+
+    it('keeps rounding down, a month floored before it is multiplied', () => {
+        assert.strictEqual(mtthBaseOf('days = 2.7'), 2);
+        assert.strictEqual(mtthBaseOf('months = 1.5'), 30);
+        assert.strictEqual(mtthBaseOf('days = 2.7 months = 1.9'), 32);
+    });
+});
+
 describe('previewdef/event/schema condition expressions', () => {
     it('collects the condition leaves reached across the file', () => {
         const parsed = getEvents(parseHoi4File(`
