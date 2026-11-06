@@ -11,6 +11,7 @@ Unreleased
 - [ Previews ] Loading many textures at once no longer fails the ones that were only waiting for a free decoder, and closing a texture view drops its decode if it has not started. Issue #674.
 
   Bugfixes:
+- [ Events Previewer ] Mean time to happen now adds days, months and years together instead of using only the first unit. Issue #724.
 - [ Previews ] Opening a file with long comments no longer freezes balance-of-power preview detection. Commented-out initial values no longer enable the preview. Issue #702.
 - [ World Map Preview ] Rivers no longer disappear when the map reloads. Issue #704.
 - [ Build ] Packaging the extension no longer includes local scratch files kept under `.tmp/`. Issue #680.
