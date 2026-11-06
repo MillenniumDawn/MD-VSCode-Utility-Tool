@@ -97,15 +97,20 @@ export class Sprite {
 
 export class CorneredTileSprite extends Sprite {
 	private cachedTiles: Record<number, Image[]> = {};
+	readonly borderSize: NumberPosition;
 
 	constructor(
 		id: string,
 		image: Image,
 		noOfFrames: number,
 		readonly size: NumberPosition,
-		readonly borderSize: NumberPosition,
+		borderSize: NumberPosition,
 	) {
 		super(id, image, noOfFrames);
+		this.borderSize = {
+			x: normalizeBorderSize(borderSize.x),
+			y: normalizeBorderSize(borderSize.y),
+		};
 	}
 
 	public override get retainedBytes(): number {
@@ -136,14 +141,8 @@ export class CorneredTileSprite extends Sprite {
 		const sizeY = frame.height;
 		const backPng = pngRead(frame.pngBuffer);
 
-		let borderX = this.borderSize.x;
-		let borderY = this.borderSize.y;
-		if (borderX * 2 >= sizeX) {
-			borderX = Math.max(0, Math.floor(sizeX / 2 - 1));
-		}
-		if (borderY * 2 >= sizeY) {
-			borderY = Math.max(0, Math.floor(sizeY / 2 - 1));
-		}
+		const borderX = sourceBorderSize(this.borderSize.x, sizeX);
+		const borderY = sourceBorderSize(this.borderSize.y, sizeY);
 
 		const path = this.image.path;
 		const xPos = [0, borderX, sizeX - borderX, sizeX];
@@ -167,6 +166,15 @@ export class CorneredTileSprite extends Sprite {
 		this.cachedTiles[frameId] = tiles;
 		return tiles;
 	}
+}
+
+function normalizeBorderSize(border: number): number {
+	return Number.isFinite(border) ? Math.max(0, Math.floor(border)) : 0;
+}
+
+function sourceBorderSize(border: number, dimension: number): number {
+	// The source must retain a center tile; the destination uses the declared border independently.
+	return border * 2 >= dimension ? Math.max(0, Math.floor(dimension / 2 - 1)) : border;
 }
 
 function toDataUrl(buffer: Buffer): string {

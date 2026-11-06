@@ -552,6 +552,29 @@ describe("webview/worldmap/topbar warningsText", function () {
 });
 
 describe("webview/worldmap/ViewPoint", function () {
+	it("culls adjacency lines in the shifted map copy", function () {
+		const canvas = document.createElement("canvas");
+		canvas.width = 100;
+		canvas.height = 100;
+		const view = new ViewPoint(canvas, { worldMap: undefined }, 0, { x: 100, y: 0, scale: 1 }, { interactive: false });
+		const start = { x: 5, y: 20 };
+		const end = { x: 15, y: 30 };
+		assert.strictEqual(view.lineInView(start, end, 100), true);
+		assert.strictEqual(view.lineInView(end, start, 100), true);
+		assert.strictEqual(view.lineInView(start, end, 0), false);
+		assert.strictEqual(view.lineInView(start, end, -100), false);
+		view.x = -100;
+		assert.strictEqual(view.lineInView(start, end, -100), true);
+		view.x = 0;
+		assert.strictEqual(view.lineInView(start, end, 0), true);
+		assert.strictEqual(view.lineInView({ x: 5, y: 200 }, { x: 15, y: 210 }, 0), false);
+		assert.strictEqual(view.lineInView({ x: 5, y: 20 }, { x: 5, y: 30 }, 0), true);
+		assert.strictEqual(view.lineInView({ x: 5, y: 30 }, { x: 5, y: 20 }, 0), true);
+		assert.strictEqual(view.lineInView({ x: 5, y: 200 }, { x: 5, y: 210 }, 0), false);
+		view.x = 100;
+		assert.strictEqual(view.lineInView({ x: 5, y: -10 }, { x: 5, y: 110 }, 100), true);
+		assert.strictEqual(view.lineInView({ x: 5, y: 200 }, { x: 5, y: 210 }, 100), false);
+	});
 	function bodyListenerCounter() {
 		const added: string[] = [];
 		const removed: string[] = [];
