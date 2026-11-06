@@ -1,5 +1,8 @@
 import { Node, NodeValue } from './hoiparser';
 
+// Escaped exactly as hoiparser.ts's stringEscapeRegex decodes; JSON.stringify's `\n` would read back as those two characters.
+const escapes = /[\\"]/g;
+
 export function nodeToString(node: Node): string {
     return [node.name, node.operator, node.valueAttachment?.name, nodeValueToString(node.value)].filter(v => !!v).join(' ');
 }
@@ -18,7 +21,7 @@ function nodeValueToString(nodeValue: NodeValue): string | null {
     }
 
     if (typeof nodeValue === 'string') {
-        return '"' + nodeValue + '"';
+        return '"' + nodeValue.replace(escapes, '\\$&') + '"';
     }
 
     return nodeValue.toString();
