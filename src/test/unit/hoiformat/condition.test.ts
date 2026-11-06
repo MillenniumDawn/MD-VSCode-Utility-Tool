@@ -59,7 +59,7 @@ describe("hoiformat/condition", () => {
 			[leaf("has_war = yes", "GER"), "[GER]has_war = yes"],
 			[and(a, or(b, c)), "and(a = 1, or(b = 1, c = 1))"],
 			[andnot(a, ornot(b)), "andnot(a = 1, ornot(b = 1))"],
-			[count(2, a, b, c), "count(a = 1, b = 1, c = 1) == 2"],
+			[count(2, a, b, c), "count(a = 1, b = 1, c = 1) >= 2"],
 		];
 
 		for (const [condition, expected] of strings) {
@@ -90,7 +90,7 @@ describe("hoiformat/condition", () => {
 			['always = "yes"', "true"],
 			["a = 1 always = no", "false"],
 			["OR = { a = 1 always = yes }", "true"],
-			["count_triggers = { amount = 2 a = 1 b = 1 c = 1 }", "count(a = 1, b = 1, c = 1) == 2"],
+			["count_triggers = { amount = 2 a = 1 b = 1 c = 1 }", "count(a = 1, b = 1, c = 1) >= 2"],
 			["count_triggers = { amount = 3 a = 1 b = 1 c = 1 }", "and(a = 1, b = 1, c = 1)"],
 			["count_triggers = { amount = 4 a = 1 b = 1 c = 1 }", "false"],
 			["count_triggers = { amount = 1 a = 1 always = yes }", "true"],
@@ -178,8 +178,8 @@ describe("hoiformat/condition", () => {
 			[ornot(ornot(a)), "a = 1"],
 			[and(and(a), or(b), and(true)), "and(a = 1, b = 1)"],
 			[or(and(a, false), and(b, c)), "and(b = 1, c = 1)"],
-			[count(2, a, b, c), "count(a = 1, b = 1, c = 1) == 2"],
-			[count(2, true, a, b), "count(a = 1, b = 1) == 1"],
+			[count(2, a, b, c), "count(a = 1, b = 1, c = 1) >= 2"],
+			[count(2, true, a, b), "count(a = 1, b = 1) >= 1"],
 			[count(2, false, a, b), "and(a = 1, b = 1)"],
 			[count(1, true, a), "true"],
 			[count(1, true), "true"],
@@ -199,6 +199,13 @@ describe("hoiformat/condition", () => {
 	});
 
 	describe("applyCondition", () => {
+		it("accepts more satisfied items than the count threshold", () => {
+			const condition = count(2, a, b, c);
+			assert.strictEqual(applyCondition(condition, [a, b, c]), true);
+			assert.strictEqual(applyCondition(condition, [a, b]), true);
+			assert.strictEqual(applyCondition(condition, [a]), false);
+		});
+
 		const folders: [string, ConditionComplexExpr, (a: boolean, b: boolean) => boolean][] = [
 			["and", and(a, b), (p, q) => p && q],
 			["or", or(a, b), (p, q) => p || q],

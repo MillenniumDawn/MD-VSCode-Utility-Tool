@@ -20,18 +20,13 @@ const foldLabels: Record<string, string> = {
 	or: "any of",
 	ornot: "none of",
 	andnot: "not all of",
-	count: "count",
+	count: "at least",
 };
 
-// The character and idea previews have always read a `count` folder as "at least".
-export const cardFoldLabels: Record<string, string> = { ...foldLabels, count: "at least" };
+export const cardFoldLabels = foldLabels;
 
 // conditionToString in hoiformat/condition.ts renders a single flat line, which is unreadable for
 // anything but a trivial trigger. This renders the same tree as nested lists instead.
-//
-// `labels` is a parameter because the character and idea previews have always named a `count` folder
-// differently from the two tree previews, and sharing this function is not a reason to retire either
-// wording.
 export function conditionToDom(
 	condition: ConditionComplexExpr,
 	labels: Record<string, string> = foldLabels,
@@ -59,7 +54,7 @@ export function conditionToDom(
 	head.className = "ev-fold";
 	head.textContent = labels[condition.type] ?? condition.type;
 	if (condition.type === "count") {
-		head.textContent += " == " + condition.amount;
+		head.textContent += " " + condition.amount;
 	}
 	item.appendChild(head);
 
@@ -127,7 +122,7 @@ export function conditionToLabel(condition: ConditionComplexExpr): string {
 
 	const label =
 		condition.type === "count"
-			? foldLabels.count + " == " + condition.amount
+			? foldLabels.count + " " + condition.amount
 			: (foldLabels[condition.type] ?? condition.type);
 	return label + " (" + parts.join(", ") + ")";
 }
