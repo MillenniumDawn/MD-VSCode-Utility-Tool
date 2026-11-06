@@ -3,6 +3,7 @@ Unreleased
 v1.1.44
 
   Bugfixes:
+- [ World Map Preview ] Duplicate province warnings now show the ID assigned to each displaced province. Issue #738.
 - [ Image Preview ] Translucent premultiplied TGA colors no longer appear too dark. Issue #733.
 - [ Image Preview ] Packed TGA colors and transparency now use their full range. Issue #732.
 - [ World Map Preview ] Adjacency lines stay visible when the map wraps across the edge. Issue #736.

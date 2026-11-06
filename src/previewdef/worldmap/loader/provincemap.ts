@@ -288,7 +288,7 @@ function sortProvinces(
 					"worldmap.warnings.provinceidconflict",
 					"There're more than one rows for province id {0}. Set id to {1}.",
 					newProvince.id,
-					badProvinceId,
+					badId,
 				),
 			}),
 		(startId, endId) =>
