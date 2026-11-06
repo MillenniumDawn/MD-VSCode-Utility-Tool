@@ -19,10 +19,13 @@ function readColour(source: Buffer, offset: number, depth: number, hasAlpha: boo
 			return;
 		case 16: {
 			const high = source[offset + 1] ?? 0;
-			target[at] = (high & 0x7c) << 1;
-			target[at + 1] = ((high & 0x03) << 6) | ((low & 0xe0) >> 2);
-			target[at + 2] = (low & 0x1f) << 3;
-			target[at + 3] = hasAlpha ? high & 0x80 : 255;
+			const r = (high >> 2) & 0x1f;
+			const g = ((high & 3) << 3) | (low >> 5);
+			const b = low & 0x1f;
+			target[at] = (r << 3) | (r >> 2);
+			target[at + 1] = (g << 3) | (g >> 2);
+			target[at + 2] = (b << 3) | (b >> 2);
+			target[at + 3] = hasAlpha ? (high & 0x80 ? 255 : 0) : 255;
 			return;
 		}
 		default:

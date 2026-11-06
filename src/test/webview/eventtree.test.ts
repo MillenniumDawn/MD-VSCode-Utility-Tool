@@ -1,4 +1,4 @@
-import { installWindowClock, loadEntrypoint, takePostedMessages, useEntrypoint } from './setup';
+import { installWindowClock, loadEntrypoint, nextFrame, takePostedMessages, useEntrypoint } from './setup';
 import * as assert from 'assert';
 import { hoverDelay } from '../../../webviewsrc/util/hovertooltip';
 import { ConditionComplexExpr } from '../../hoiformat/condition';
@@ -1415,9 +1415,19 @@ describe('webview/eventtree rendering', () => {
             assert.strictEqual(document.querySelectorAll('.ev-effects-tip').length, 0);
         });
 
-        it('does not dim the chain for a card the drag passes under', () => {
+        it('does not dim the chain for a card the drag passes under', async () => {
             press();
             hover('mouseenter');
+            await nextFrame();
+            assert.strictEqual(content().querySelectorAll('.ev-node.ev-dim').length, 0);
+        });
+
+        // The enter is only queued until the next frame, so a press that lands in between has to
+        // take it back, or the chain would light up under the canvas being dragged.
+        it('drops a dim that was queued when the drag starts', async () => {
+            hover('mouseenter');
+            press();
+            await nextFrame();
             assert.strictEqual(content().querySelectorAll('.ev-node.ev-dim').length, 0);
         });
 
@@ -1622,10 +1632,11 @@ describe('webview/eventtree rendering', () => {
         });
 
         // The two states live on different elements on purpose, so neither needs !important.
-        it('leaves the highlight on the card while hover isolation dims the wrapper', () => {
+        it('leaves the highlight on the card while hover isolation dims the wrapper', async () => {
             type('arab_spring.3');
             const wrapper = content().querySelector('.ev-card-option')!.parentElement!;
             wrapper.dispatchEvent(new (window as any).MouseEvent('mouseenter'));
+            await nextFrame();
             assert.ok(content().querySelectorAll('.ev-node.ev-dim').length > 0, 'something must be dimmed');
             assert.strictEqual(hits().length, 1, 'the highlight survives the dimming');
             wrapper.dispatchEvent(new (window as any).MouseEvent('mouseleave'));
