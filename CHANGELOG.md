@@ -19,6 +19,7 @@ v1.1.43
 - [ Testing ] Check world-map loader results with exact assertions. Issue #566.
 
   Bugfixes:
+- [ Previews ] Opening a file with long comments no longer freezes balance-of-power preview detection. Commented-out initial values no longer enable the preview. Issue #702.
 - [ World Map Preview ] Rivers no longer disappear when the map reloads. Issue #704.
 - [ Build ] Packaging the extension no longer includes local scratch files kept under `.tmp/`. Issue #680.
 - [ Previews ] Updating a focus tree or MIO organization now redraws the preview once instead of once more for every condition filter it refreshes. Issue #669.
