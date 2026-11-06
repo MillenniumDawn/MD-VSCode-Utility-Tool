@@ -133,6 +133,20 @@ describe("previewdef/previewmanager PreviewManager", function () {
 			contextContainer.current = previous;
 		});
 
+		it("disposes a new panel and reports a constructor failure", async function () {
+			let disposed = false;
+			let message = "";
+			const panel = panelStub({});
+			panel.dispose = () => { disposed = true; };
+			stubVscode({ textDocuments: [{ uri, getText: () => "" }], createWebviewPanel: () => panel, showErrorMessage: (text: string) => { message = text; return Promise.resolve(undefined); } });
+			const manager = new PreviewManager() as any;
+			manager._previewProviders = [{ type: "fake", canPreview: () => 0, previewConstructor: class { constructor() { throw new Error("File is not on disk"); } } }];
+			await silenceExpectedRenderErrors(() => manager.showPreview(uri));
+			assert.strictEqual(disposed, true);
+			assert.match(message, /File is not on disk/);
+			assert.strictEqual(manager._previews[uri.toString()], undefined);
+		});
+
 		it("keeps an ordinary preview open after its first render fails", async function () {
 			let disposed = false;
 			const panel = panelStub({});
