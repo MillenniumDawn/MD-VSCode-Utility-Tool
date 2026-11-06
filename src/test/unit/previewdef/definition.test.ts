@@ -1,6 +1,9 @@
 import * as assert from "assert";
 import type * as vscode from "vscode";
 import { PreviewFiles, definePreview, matchPreviewFiles, previewFiles } from "../../../previewdef/definition";
+import { PreviewManager } from "../../../previewdef/previewmanager";
+import { ContextName } from "../../../constants";
+import { contextContainer } from "../../../context";
 import { refreshFeatureFlags } from "../../../util/featureflags";
 import { handOver } from "../host";
 
@@ -140,6 +143,46 @@ describe("previewdef/definition", () => {
 
 		it("gives an events file to the event preview", () => {
 			assert.strictEqual(chosen(document("/mod/events/SOV.txt", "country_event = { id = sov.1 }")), "event");
+		});
+
+		it("takes a moved BoP with comments and blank lines at its original offset", () => {
+			for (const newline of ["\n", "\r\n", "\r"]) {
+				const prefix = `# moved${newline}`;
+				const text = `${prefix}SOV_power_balance = {${newline}\t# game comment${newline}${newline}\t# second comment${newline}\tinitial_value = 0${newline}}`;
+				assert.strictEqual(matchPreviewFiles(previewFiles.bop, document("/mod/scratch/SOV.txt", text)), prefix.length);
+				assert.strictEqual(chosen(document("/mod/scratch/SOV.txt", text)), "bop");
+			}
+		});
+
+		it("does not take a moved BoP whose initial value is commented out", () => {
+			const text = "SOV_power_balance = {\n\t# initial_value = 0\n}";
+			assert.strictEqual(chosen(document("/mod/scratch/SOV.txt", text)), undefined);
+		});
+
+		it("rejects long multiline and one-line BoP near misses", () => {
+			for (const newline of ["\n", "\r\n", "\r"]) {
+				const multiline = `SOV_power_balance = {${newline}${`# 0${newline}`.repeat(1000)}not_initial_value = 0${newline}}`;
+				assert.strictEqual(chosen(document("/mod/scratch/SOV.txt", multiline)), undefined);
+			}
+			const oneLine = `SOV_power_balance = { ${"# 0 ".repeat(1000)}not_initial_value = 0 }`;
+			assert.strictEqual(chosen(document("/mod/scratch/SOV.txt", oneLine)), undefined);
+		});
+
+		it("sets the active-editor preview context from the document", () => {
+			settings(everyPreviewOn);
+			handOver({ commands: { executeCommand: async () => undefined } });
+			const manager = new PreviewManager();
+			(manager as any).updateHoi4PreviewContextValue({
+				document: document("/mod/scratch/SOV.txt", "SOV_power_balance = {\n\tinitial_value = 0\n}"),
+			});
+			assert.strictEqual(contextContainer.contextValue[ContextName.ShouldShowHoi4Preview], true);
+			assert.strictEqual(contextContainer.contextValue[ContextName.Hoi4PreviewType], "bop");
+			(manager as any).updateHoi4PreviewContextValue({
+				document: document("/mod/scratch/SOV.txt", `SOV_power_balance = {\n${"# 0\n".repeat(1000)}not_initial_value = 0\n}`),
+			});
+			assert.strictEqual(contextContainer.contextValue[ContextName.ShouldShowHoi4Preview], false);
+			assert.strictEqual(contextContainer.contextValue[ContextName.ShouldHideHoi4Preview], true);
+			assert.strictEqual(contextContainer.contextValue[ContextName.Hoi4PreviewType], "");
 		});
 
 		it("gives a file no preview has the extension of to none, unread", () => {
