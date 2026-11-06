@@ -456,7 +456,6 @@ export function concatEdges(edges: [Point, Point][]): Point[][] {
 	return concatFlatEdges(flatEdges, maxY + 1);
 }
 
-type EdgeBucket = { idx: number[]; ptr: number };
 // Joins directed segments, four numbers x0, y0, x1, y1 each, into paths. A point is keyed as
 // x * stride + y, so stride has to be larger than every y: the map height plus one.
 function concatFlatEdges(edges: number[], stride: number): Point[][] {
@@ -464,47 +463,40 @@ function concatFlatEdges(edges: number[], stride: number): Point[][] {
 	const edgeCount = edges.length >> 2;
 	const accessedEdges = new Uint8Array(edgeCount);
 
-	// Index segments by endpoint coordinates so joining is O(1) amortized per join
-	// instead of a linear findIndex scan. byTail keys a point to the ascending list
-	// of edges whose tail (x1, y1) is that point; byHead keys by head (x0, y0). Each
-	// bucket keeps a pointer that only skips forward past already-consumed edges, so
-	// firstUnaccessed returns the same lowest-index unconsumed match findIndex did.
-	const byTail = new Map<number, EdgeBucket>();
-	const byHead = new Map<number, EdgeBucket>();
-	const pushInto = (
-		map: Map<number, EdgeBucket>,
-		key: number,
-		i: number,
-	): void => {
-		let bucket = map.get(key);
-		if (bucket === undefined) {
-			map.set(key, (bucket = { idx: [], ptr: 0 }));
-		}
-		bucket.idx.push(i);
-	};
-	for (let i = 0, j = 0; i < edgeCount; i++, j += 4) {
-		pushInto(byHead, (edges[j] ?? 0) * stride + (edges[j + 1] ?? 0), i);
-		pushInto(byTail, (edges[j + 2] ?? 0) * stride + (edges[j + 3] ?? 0), i);
+	// Index segments by endpoint so joining is O(1) amortized instead of a findIndex scan.
+	// byTail keys a point to the lowest-index edge whose tail (x1, y1) is that point and
+	// nextByTail chains it to the next one; byHead does the same for heads (x0, y0). Almost
+	// every point has one edge, so the map holds an index, not a list. Chains are ascending,
+	// and firstUnaccessed skips consumed edges to return the lowest-index unconsumed match.
+	const byTail = new Map<number, number>();
+	const byHead = new Map<number, number>();
+	const nextByTail = new Int32Array(edgeCount);
+	const nextByHead = new Int32Array(edgeCount);
+	for (let i = edgeCount - 1, j = i * 4; i >= 0; i--, j -= 4) {
+		const headKey = (edges[j] ?? 0) * stride + (edges[j + 1] ?? 0);
+		nextByHead[i] = byHead.get(headKey) ?? -1;
+		byHead.set(headKey, i);
+		const tailKey = (edges[j + 2] ?? 0) * stride + (edges[j + 3] ?? 0);
+		nextByTail[i] = byTail.get(tailKey) ?? -1;
+		byTail.set(tailKey, i);
 	}
 	const firstUnaccessed = (
-		map: Map<number, EdgeBucket>,
+		map: Map<number, number>,
+		next: Int32Array,
 		key: number,
 	): number => {
-		const bucket = map.get(key);
-		if (bucket === undefined) {
+		const first = map.get(key);
+		if (first === undefined) {
 			return -1;
 		}
-		while (bucket.ptr < bucket.idx.length) {
-			const edgeIndex = bucket.idx[bucket.ptr];
-			if (edgeIndex === undefined) {
-				break;
-			}
-			if (!accessedEdges[edgeIndex]) {
-				break;
-			}
-			bucket.ptr++;
+		let edgeIndex = first;
+		while (edgeIndex !== -1 && accessedEdges[edgeIndex]) {
+			edgeIndex = next[edgeIndex] ?? -1;
 		}
-		return bucket.ptr < bucket.idx.length ? (bucket.idx[bucket.ptr] ?? -1) : -1;
+		if (edgeIndex !== first) {
+			map.set(key, edgeIndex);
+		}
+		return edgeIndex;
 	};
 
 	for (let i = 0; i < edgeCount; i++) {
@@ -529,7 +521,11 @@ function concatFlatEdges(edges: number[], stride: number): Point[][] {
 		let foundNew = true;
 		while (foundNew) {
 			foundNew = false;
-			const headTail = firstUnaccessed(byTail, headX * stride + headY);
+			const headTail = firstUnaccessed(
+				byTail,
+				nextByTail,
+				headX * stride + headY,
+			);
 			if (headTail !== -1) {
 				accessedEdges[headTail] = 1;
 				foundNew = true;
@@ -538,7 +534,11 @@ function concatFlatEdges(edges: number[], stride: number): Point[][] {
 				headPoints.push(headX, headY);
 			}
 
-			const tailHead = firstUnaccessed(byHead, tailX * stride + tailY);
+			const tailHead = firstUnaccessed(
+				byHead,
+				nextByHead,
+				tailX * stride + tailY,
+			);
 			if (tailHead !== -1) {
 				accessedEdges[tailHead] = 1;
 				foundNew = true;
