@@ -211,6 +211,23 @@ describe("util/image/sprite frames", () => {
 		);
 	});
 
+	it("uses finite whole-pixel borders shared with the renderer", () => {
+		const image = makeColumnImage(8, 6);
+		for (const [input, expected, source] of [
+			[-1, 0, 0], [0, 0, 0], [0.9, 0, 0], [1.9, 1, 1], [2, 2, 2],
+			[3, 3, 2], [100, 100, 2], [NaN, 0, 0], [Infinity, 0, 0], [-Infinity, 0, 0],
+		] as const) {
+			const sprite = new CorneredTileSprite("s", image, 1, { x: 8, y: 6 }, { x: input, y: input });
+			assert.strictEqual(sprite.borderSize.y, expected, `border ${input}`);
+			const tiles = sprite.getTiles();
+			assert.strictEqual(tiles[0]!.height, source, `border ${input}`);
+			assert.ok(tiles.every(t => Number.isInteger(t.width) && t.width >= 0 && Number.isInteger(t.height) && t.height >= 0));
+		}
+		const framed = new CorneredTileSprite("s", image, 2, { x: 8, y: 6 }, { x: 4, y: 2 });
+		assert.deepStrictEqual(framed.borderSize, { x: 4, y: 2 });
+		assert.deepStrictEqual([framed.getTiles(1)[0]!.width, framed.getTiles(1)[0]!.height], [1, 2]);
+	});
+
 	it("cuts the tiles of the frame asked for, and of the first frame for one the sprite does not have", () => {
 		const sprite = tileSprite(makeColumnImage(8, 4), 2, 1);
 		const first = sprite.getTiles(0);
