@@ -781,6 +781,7 @@ describe("previewdef/worldmap/loader provincemap", () => {
 				{ id: 6, color: 0x0000ff, type: "land", coastal: false, terrain: "plains", continent: 1 },
 				{ id: 8, color: 0xabcdef, type: "land", coastal: false, terrain: "plains", continent: 1 },
 				{ id: 2, color: 0x00ffff, type: "land", coastal: false, terrain: "plains", continent: 1 },
+				{ id: 2, color: 0x777777, type: "land", coastal: false, terrain: "plains", continent: 1 },
 			];
 
 			const zone = (x: number, y: number) => ({ x, y, w: 1, h: 1 });
@@ -800,6 +801,7 @@ describe("previewdef/worldmap/loader provincemap", () => {
 				0x00ff00: { color: 0x00ff00, boundingBox: zone(2, 0), centerOfMass: { x: 2, y: 0 }, mass: 1, coverZones: [zone(2, 0)], edges: [] },
 				0xff0000: { color: 0xff0000, boundingBox: zone(0, 1), centerOfMass: { x: 0, y: 1 }, mass: 1, coverZones: [zone(0, 1)], edges: [] },
 				0x123456: { color: 0x123456, boundingBox: zone(5, 5), centerOfMass: { x: 5, y: 5 }, mass: 1, coverZones: [zone(5, 5)], edges: [] },
+				0x777777: { color: 0x777777, boundingBox: zone(7, 7), centerOfMass: { x: 7, y: 7 }, mass: 1, coverZones: [zone(7, 7)], edges: [] },
 				0x654321: { color: 0x654321, boundingBox: zone(6, 6), centerOfMass: { x: 6, y: 6 }, mass: 1, coverZones: [], edges: [] },
 			};
 
@@ -871,6 +873,12 @@ describe("previewdef/worldmap/loader provincemap", () => {
 			);
 
 			const texts = result.warnings.map((w: any) => w.text);
+			const conflicts = result.warnings.filter((w: any) => w.text.includes("more than one rows for province id"));
+			assert.strictEqual(conflicts.length, 2);
+			assert.notStrictEqual(conflicts[0].source[0].id, conflicts[1].source[0].id);
+			for (const warning of conflicts) {
+				assert.strictEqual(warning.text, `There're more than one rows for province id 2. Set id to ${warning.source[0].id}.`);
+			}
 			const has = (s: string) => texts.some((t: string) => t.includes(s));
 			assert.ok(has("has conflict color"), texts.join("\n"));
 			assert.ok(has("doesn't exist on map"), texts.join("\n"));
