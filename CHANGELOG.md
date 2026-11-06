@@ -11,6 +11,7 @@ Unreleased
 - [ Previews ] Loading many textures at once no longer fails the ones that were only waiting for a free decoder, and closing a texture view drops its decode if it has not started. Issue #674.
 
   Bugfixes:
+- [ Previews ] Condition and effect text now preserves quotation marks and backslashes inside strings. Issue #725.
 - [ Build ] Packaging the extension no longer includes local scratch files kept under `.tmp/`. Issue #680.
 - [ Previews ] Updating a focus tree or MIO organization now redraws the preview once instead of once more for every condition filter it refreshes. Issue #669.
 - [ World Map Preview ] Hiding the map while it is loading now releases the loaded data after pending responses finish, instead of keeping it until the panel changes again. Issue #662.
