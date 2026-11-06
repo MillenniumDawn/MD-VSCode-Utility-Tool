@@ -492,6 +492,31 @@ describe('previewdef/event/schema option effects', () => {
     });
 });
 
+describe('previewdef/event/schema event-call months', () => {
+    it('adds months to days and keeps hours, random delays and distinct calls', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                immediate = {
+                    country_event = { id = test.2 months = 1 }
+                    country_event = { id = test.2 months = 2 }
+                    country_event = { id = test.2 months = 1 days = 2 hours = 3 random_days = 4 random_hours = 5 }
+                }
+            }
+        `);
+        const children = byId(events, 'test.1').immediate.childEvents;
+        assert.deepStrictEqual(
+            children.map(({ days, hours, randomDays, randomHours }) => ({ days, hours, randomDays, randomHours })),
+            [
+                { days: 30, hours: 0, randomDays: 0, randomHours: 0 },
+                { days: 60, hours: 0, randomDays: 0, randomHours: 0 },
+                { days: 32, hours: 3, randomDays: 4, randomHours: 5 },
+            ],
+        );
+    });
+});
+
 describe('previewdef/event/schema mean time to happen', () => {
     function mtthBaseOf(mtthBlock: string | undefined): number {
         const mtth = mtthBlock === undefined ? '' : `mean_time_to_happen = { ${mtthBlock} }`;

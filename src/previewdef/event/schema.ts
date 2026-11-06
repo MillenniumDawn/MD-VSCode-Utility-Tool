@@ -113,6 +113,7 @@ interface EventOptionDef {
 
 interface EventEffectDef {
     id: string;
+    months: number;
     days: number;
     hours: number;
     random: number;
@@ -180,6 +181,7 @@ const eventFileSchema: SchemaDef<EventFile> = {
 
 const eventEffectDefSchema: SchemaDef<EventEffectDef> = {
     id: "string",
+    months: "number",
     days: "number",
     hours: "number",
     random: "number",
@@ -372,7 +374,7 @@ function effectItemToChildEvent(guarded: GuardedEffectItem): ChildEvent | undefi
     return {
         scopeName: item.scopeName,
         eventName: eventEffectDef.id,
-        days: eventEffectDef.days,
+        days: eventEffectDef.days + eventEffectDef.months * 30,
         hours: eventEffectDef.hours,
         randomDays: eventEffectDef.random_days,
         randomHours: eventEffectDef.random_hours === 0 ? eventEffectDef.random : eventEffectDef.random_hours,
@@ -383,16 +385,17 @@ function effectItemToChildEvent(guarded: GuardedEffectItem): ChildEvent | undefi
 
 function getEventEffectDef(node: Node): EventEffectDef | undefined {
     if (isSymbolNode(node.value)) {
-        return { id: node.value.name, days: 0, hours: 0, random: 0, random_days: 0, random_hours: 0 };
+        return { id: node.value.name, months: 0, days: 0, hours: 0, random: 0, random_days: 0, random_hours: 0 };
     }
 
     if (typeof node.value === 'string') {
-        return { id: node.value, days: 0, hours: 0, random: 0, random_days: 0, random_hours: 0 };
+        return { id: node.value, months: 0, days: 0, hours: 0, random: 0, random_days: 0, random_hours: 0 };
     }
 
     const callEventDef = convertNodeToJson<EventEffectDef>(node, eventEffectDefSchema);
     return callEventDef.id === undefined ? undefined : {
         id: callEventDef.id,
+        months: callEventDef.months ?? 0,
         days: callEventDef.days ?? 0,
         hours: callEventDef.hours ?? 0,
         random: callEventDef.random ?? 0,
