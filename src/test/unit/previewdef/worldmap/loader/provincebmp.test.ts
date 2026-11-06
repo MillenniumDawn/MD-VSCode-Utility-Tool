@@ -150,6 +150,23 @@ describe('worldmap/provincebmp edge joining', function () {
             assert.deepStrictEqual(concatEdges(edges), [[pt(0, 0), pt(2, 0)]]);
         });
 
+        it('joins at a shared corner through the lowest-index unused segment first', function () {
+            // Two squares touching at (1, 1), so two segments start there and two end there.
+            const edges: [Point, Point][] = [
+                seg(1, 0, 1, 1),
+                seg(1, 1, 2, 1),
+                seg(1, 1, 0, 1),
+                seg(0, 0, 1, 0),
+                seg(2, 1, 2, 2),
+                seg(0, 1, 0, 0),
+                seg(2, 2, 1, 2),
+                seg(1, 2, 1, 1),
+            ];
+            assert.deepStrictEqual(concatEdges(edges), [[
+                pt(1, 2), pt(1, 1), pt(0, 1), pt(0, 0), pt(1, 0), pt(1, 1), pt(2, 1), pt(2, 2), pt(1, 2),
+            ]]);
+        });
+
         it('keeps points apart whose x and y would collide under a too-small key stride', function () {
             // With a stride of 3, (0, 3) and (1, 0) would share a key and the two segments
             // would wrongly chain into one path.
@@ -324,6 +341,19 @@ describe('worldmap/provincebmp edge joining', function () {
                 assert.deepStrictEqual(provinces, fillEdgesReference(colors));
             });
         }
+
+        it('matches the reference where a province touches itself at a corner', function () {
+            // The two B pixels meet only diagonally, so A's border to B passes through (1, 2) twice.
+            const A = 1, B = 2;
+            const colors = [
+                [A, A, A],
+                [A, B, A],
+                [B, A, A],
+            ];
+            const grid = buildGrid(colors);
+            const provinces = fillEdges(grid.provinces, grid.colorByPosition, grid.width, grid.height);
+            assert.deepStrictEqual(provinces, fillEdgesReference(colors));
+        });
     });
 });
 
