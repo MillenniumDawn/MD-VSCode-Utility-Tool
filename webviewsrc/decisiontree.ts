@@ -172,7 +172,8 @@ function matchesFilter(
 				node.hasAvailable ||
 				node.hasVisible ||
 				node.hasActivation ||
-				node.hasCancelTrigger
+				node.hasCancelTrigger ||
+				node.hasTargetTrigger
 			);
 		case "scriptedgui":
 			// A decision is never itself a custom GUI; the filter is about the tab it sits in, and
@@ -638,6 +639,11 @@ function buildDecisionCard(node: DecisionGraphDecisionNode): HTMLDivElement {
 				node.hasCancelTrigger,
 				node.cancelTrigger,
 				feLocalize("decisiontree.canceltrigger", "Cancelled when"),
+			],
+			[
+				node.hasTargetTrigger,
+				node.targetTrigger,
+				feLocalize("decisiontree.targettrigger", "Target condition"),
 			],
 		];
 		for (const [has, condition, label] of blocks) {

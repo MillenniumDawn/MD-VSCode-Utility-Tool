@@ -1,5 +1,8 @@
 Unreleased
 
+  Bugfixes:
+- [ Decisions Previewer ] Targeted decisions now show their target_trigger restrictions and appear in the conditions filter. Issue #730.
+
 v1.1.44
 
   Bugfixes:
