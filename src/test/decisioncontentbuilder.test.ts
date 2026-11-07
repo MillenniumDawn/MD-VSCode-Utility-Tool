@@ -307,6 +307,38 @@ describe("previewdef/decision/contentbuilder graph", () => {
 			["complete_effect", "timeout_effect"],
 		);
 	});
+
+	it("carries the target trigger through to the node", async () => {
+		// GCC_expel in Millennium Dawn's common/decisions/Gulf.txt: the taker's own availability
+		// check sits at target_trigger's top level and the per-candidate check sits under FROM.
+		const payload = await payloadOf(`
+            cat = {
+                GCC_expel = {
+                    target_array = global.gcc_member_state
+                    target_trigger = {
+                        country_exists = FROM
+                        FROM = { NOT = { has_country_flag = gcc_membership_secure } }
+                    }
+                }
+                targetless = { cost = 1 }
+            }
+        `);
+
+		const targeted = decisionNode(payload, "GCC_expel");
+		assert.strictEqual(targeted.hasTargetTrigger, true);
+		const written = conditionToString(targeted.targetTrigger);
+		assert.ok(
+			written.includes("[FROM]has_country_flag = gcc_membership_secure"),
+			`the candidate's condition must keep its scope, got ${written}`,
+		);
+		assert.ok(
+			written.includes("country_exists = FROM"),
+			`the taker's check must stay ROOT-scoped, got ${written}`,
+		);
+
+		assert.strictEqual(decisionNode(payload, "targetless").hasTargetTrigger, false);
+		assert.strictEqual(payload.toolbarFlags.hasConditions, true);
+	});
 });
 
 describe("previewdef/decision/contentbuilder categories", () => {
@@ -402,6 +434,7 @@ describe("previewdef/decision/contentbuilder toolbar flags", () => {
 	it("counts a category's own triggers towards the conditions filter", async () => {
 		assert.strictEqual(flagsFor([decision()]).hasConditions, false);
 		assert.strictEqual(flagsFor([decision({ hasAvailable: true })]).hasConditions, true);
+		assert.strictEqual(flagsFor([decision({ hasTargetTrigger: true })]).hasConditions, true);
 		assert.strictEqual(
 			flagsFor([{ kind: "category", id: "c:a", hasAllowed: true, hasVisible: false }])
 				.hasConditions,
