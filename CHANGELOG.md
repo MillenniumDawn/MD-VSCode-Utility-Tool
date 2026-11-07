@@ -6,6 +6,7 @@ v1.1.45
 - [ MIO Previewer ] An override_trait can now clear inherited parameters such as relative_position_id or a bonus with delete_included_values. Issue #729.
 - [ World Map Preview ] Adjacency lines now attach to the right provinces when province IDs skip numbers or are listed out of order. Issue #735.
 - [ Decisions Previewer ] Targeted decisions now show their target_trigger restrictions and appear in the conditions filter. Issue #730.
+- [ Image Preview ] DDS textures with padded rows now display their colors correctly. Issue #734.
 
 v1.1.44
 

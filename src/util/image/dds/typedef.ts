@@ -3,6 +3,8 @@ export const DDS_MAGIC = 0x20534444;
 export const HEADER_LENGTH_INT = 32;
 export const HEADER_DXT10_LENGTH_INT = 5;
 
+export const DDSD_PITCH = 0x8;
+
 export const DDPF_ALPHA = 0x1;
 export const DDPF_ALPHA_CHANNEL = 0x2;
 export const DDPF_RGB = 0x40;
