@@ -9,5 +9,5 @@ export const bopPreviewDef = definePreview({
 	displayName: () => localize("preview.type.bop", "Balance of power (common/bop/*.txt)"),
 	// previewLocalisation changes the text in the payload; localisationIndex changes whether there
 	// is any text to show; gfxIndex changes which side icons resolve.
-	previewConstructor: loaderPreview(BopLoader, renderBopFile, ["previewLocalisation", "localisationIndex", "gfxIndex"]),
+	previewConstructor: loaderPreview(BopLoader, renderBopFile, ["previewLocalisation", "localisationIndex", "gfxIndex", "decisionGfxFiles"]),
 });
