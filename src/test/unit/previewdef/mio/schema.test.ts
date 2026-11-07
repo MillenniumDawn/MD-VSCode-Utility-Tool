@@ -271,6 +271,176 @@ describe('previewdef/mio/schema include', () => {
     });
 });
 
+describe('previewdef/mio/schema delete_included_values', () => {
+    const base = `
+        base_org = {
+            trait = {
+                token = root
+                position = { x = 1 y = 0 }
+            }
+            trait = {
+                token = anchored
+                name = anchored_name
+                icon = GFX_anchored
+                position = { x = 2 y = 1 }
+                relative_position_id = root
+                equipment_bonus = { equipment = { infantry_equipment = 2 } }
+                production_bonus = { industrial_complex = 1 }
+                organization_modifier = { org_gain = 5 }
+                all_parents = { root }
+                parent = { traits = { root } num_parents_needed = 1 }
+            }
+        }
+    `;
+
+    function load(rest: string): Record<string, Mio> {
+        const mios = getMiosFromFile(parseHoi4File(base + rest), [], 'test.txt');
+        return Object.fromEntries(mios.map(mio => [mio.id, mio]));
+    }
+
+    it('resets each deleted field to its fresh-trait default and keeps the rest', () => {
+        const derived = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = anchored
+                    delete_included_values = { relative_position_id all_parents parent name position }
+                }
+            }
+        `)['derived_org'];
+        const anchored = derived.traits['anchored'];
+        assert.strictEqual(anchored.relativePositionId, undefined);
+        assert.deepStrictEqual(anchored.allParents, []);
+        assert.strictEqual(anchored.parent, undefined);
+        assert.strictEqual(anchored.name, '');
+        assert.deepStrictEqual([anchored.x, anchored.y], [0, 0]);
+        assert.strictEqual(anchored.icon, 'GFX_anchored', 'a field not listed keeps the inherited value');
+    });
+
+    it('clears visibility, links and presentation without changing the included trait', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            base_org = { trait = {
+                token = example
+                icon = GFX_example
+                any_parent = { a }
+                mutually_exclusive = { b }
+                visible = { always = no }
+                special_trait_background = yes
+            } }
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = example
+                    delete_included_values = { icon any_parent mutually_exclusive visible special_trait_background unused }
+                }
+            }
+        `), [], 'test.txt');
+        const baseTrait = mios.find(mio => mio.id === 'base_org')!.traits['example'];
+        const trait = mios.find(mio => mio.id === 'derived_org')!.traits['example'];
+        assert.strictEqual(trait.icon, undefined);
+        assert.deepStrictEqual(trait.anyParent, []);
+        assert.deepStrictEqual(trait.exclusive, []);
+        assert.strictEqual(trait.visible, true);
+        assert.strictEqual(trait.hasVisible, false);
+        assert.strictEqual(trait.specialTraitBackground, false);
+        assert.strictEqual(baseTrait.icon, 'GFX_example');
+        assert.deepStrictEqual(baseTrait.anyParent, ['a']);
+        assert.deepStrictEqual(baseTrait.exclusive, ['b']);
+        assert.strictEqual(baseTrait.hasVisible, true);
+        assert.strictEqual(baseTrait.specialTraitBackground, true);
+    });
+
+    it('keeps explicit bonuses that replace deleted inherited bonuses', () => {
+        const derived = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = anchored
+                    delete_included_values = { equipment_bonus production_bonus organization_modifier }
+                    equipment_bonus = { soft_attack = 0.1 }
+                    production_bonus = { production_cost_factor = -0.1 }
+                    organization_modifier = { org_gain = 1 }
+                }
+            }
+        `)['derived_org'];
+        assert.deepStrictEqual(derived.traits['anchored'].effects, ['equiment', 'production', 'organization']);
+    });
+
+    it('clears a deleted bonus category only', () => {
+        const derived = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = anchored
+                    delete_included_values = { equipment_bonus }
+                }
+            }
+        `)['derived_org'];
+        assert.deepStrictEqual(derived.traits['anchored'].effects, ['production', 'organization']);
+    });
+
+    it('clears every deleted bonus category', () => {
+        const derived = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = anchored
+                    delete_included_values = { equipment_bonus production_bonus organization_modifier }
+                }
+            }
+        `)['derived_org'];
+        assert.deepStrictEqual(derived.traits['anchored'].effects, []);
+    });
+
+    it('keeps an explicitly overridden value after deleting the same field', () => {
+        const derived = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = anchored
+                    relative_position_id = root
+                    delete_included_values = { relative_position_id }
+                }
+            }
+        `)['derived_org'];
+        assert.strictEqual(derived.traits['anchored'].relativePositionId, 'root');
+    });
+
+    it('applies ordinary overrides beside a deletion', () => {
+        const derived = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = anchored
+                    name = renamed
+                    delete_included_values = { relative_position_id }
+                }
+            }
+        `)['derived_org'];
+        const anchored = derived.traits['anchored'];
+        assert.strictEqual(anchored.name, 'renamed');
+        assert.strictEqual(anchored.relativePositionId, undefined);
+    });
+
+    it('leaves the included MIO untouched by a deletion', () => {
+        const baseMio = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = anchored
+                    delete_included_values = { relative_position_id equipment_bonus all_parents position }
+                }
+            }
+        `)['base_org'];
+        const anchored = baseMio.traits['anchored'];
+        assert.strictEqual(anchored.relativePositionId, 'root');
+        assert.deepStrictEqual(anchored.effects, ['equiment', 'production', 'organization']);
+        assert.deepStrictEqual(anchored.allParents, ['root']);
+        assert.deepStrictEqual([anchored.x, anchored.y], [2, 1]);
+        assert.strictEqual(anchored.sourceMioId, 'base_org');
+    });
+});
+
 describe('previewdef/mio/schema link warnings', () => {
     function warningsOf(traits: string, extra = ''): { text: string, source: string, relatedSources?: string[] }[] {
         const mios = getMiosFromFile(parseHoi4File(`test_org = { ${traits} } ${extra}`), [], 'test.txt');
