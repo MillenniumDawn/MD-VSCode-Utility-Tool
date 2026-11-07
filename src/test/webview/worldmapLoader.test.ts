@@ -1,6 +1,6 @@
 import { recordedPosts, takePostedMessages } from "./setup";
 import * as assert from "assert";
-import { WorldMapData } from "../../previewdef/worldmap/definitions";
+import { WorldMapData, isWorldMapHostMessage } from "../../previewdef/worldmap/definitions";
 import { buildWorldMapChangeMessages } from "../../previewdef/worldmap/worldmapchanges";
 import { Loader, FEWorldMapClass } from "../../../webviewsrc/worldmap/loader";
 import { inBBox } from "../../../webviewsrc/worldmap/graphutils";
@@ -526,9 +526,9 @@ describe("webview/worldmap/Loader protocol", function () {
 			countriesCount: 1,
 			strategicRegionsCount: 0,
 			supplyAreasCount: 0,
-			railwaysCount: 0,
+			railwaysCount: 1,
 			supplyNodesCount: 0,
-			badProvincesCount: 0,
+			badProvincesCount: 1,
 			badStatesCount: 0,
 			badStrategicRegionsCount: 0,
 			badSupplyAreasCount: 0,
@@ -554,6 +554,14 @@ describe("webview/worldmap/Loader protocol", function () {
 				start: 0,
 				end: 1,
 			});
+			const request = recordedPosts().at(-1);
+			assert.deepStrictEqual(request, { command: "requestprovinces", start: -1, end: 0 });
+			assert.ok(isWorldMapHostMessage(request), "the host must accept the page's synthetic-entry request");
+			send({ command: "provinces", data: JSON.stringify([{ id: -1 }]), start: -1, end: 0 });
+			assert.deepStrictEqual(recordedPosts().at(-1), { command: "requestrailways", start: 0, end: 1 });
+			send({ command: "railways", data: JSON.stringify([{ provinces: [1], level: 2 }]), start: 0, end: 1 });
+			assert.strictEqual(loader.worldMap.getProvinceById(-1)?.id, -1);
+			assert.strictEqual(loader.worldMap.getRailwayLevelByProvinceId(1), 2);
 			assert.strictEqual(loader.worldMap.countries[0].tag, "AAA");
 			assert.strictEqual(loader.loading$.getValue(), false);
 			assert.strictEqual(loader.progress, 1);
