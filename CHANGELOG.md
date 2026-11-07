@@ -1,5 +1,8 @@
 Unreleased
 
+  Bugfixes:
+- [ World Map Preview ] Adjacency lines now attach to the right provinces when province IDs skip numbers or are listed out of order. Issue #735.
+
 v1.1.44
 
   Bugfixes:
