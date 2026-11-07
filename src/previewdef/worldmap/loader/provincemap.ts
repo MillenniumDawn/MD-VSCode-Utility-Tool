@@ -520,6 +520,14 @@ function fillAdjacencyEdges(
 	relatedFiles: string[],
 	warnings: WorldMapWarning[],
 ) {
+	// Definitions are still in file order, while adjacency references use province IDs.
+	const provinceById = new Map<number, Province>();
+	for (const province of provinces) {
+		if (province) {
+			provinceById.set(province.id, province);
+		}
+	}
+
 	for (const {
 		row,
 		from,
@@ -530,8 +538,8 @@ function fillAdjacencyEdges(
 		rule,
 		type,
 	} of adjacencies) {
-		const fromProvince = provinces[from];
-		const toProvince = provinces[to];
+		const fromProvince = provinceById.get(from);
+		const toProvince = provinceById.get(to);
 		if (!fromProvince || !toProvince) {
 			warnings.push({
 				source: [{ type: "province", id: from, color: -1 }],
@@ -550,7 +558,7 @@ function fillAdjacencyEdges(
 			through !== undefined && !Number.isNaN(through) && through !== -1
 				? through
 				: undefined;
-		if (resultThrough && !provinces[resultThrough]) {
+		if (resultThrough !== undefined && !provinceById.has(resultThrough)) {
 			warnings.push({
 				source: [{ type: "province", id: resultThrough, color: -1 }],
 				relatedFiles,
