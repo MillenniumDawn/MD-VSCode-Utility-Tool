@@ -6,6 +6,7 @@ Unreleased
 - [ World Map Preview ] Duplicate province warnings now show the ID assigned to each displaced province. Issue #738.
 - [ Events Previewer ] Event calls now include months in their delay, adding them to days and hours. Issue #723.
 - [ Image Preview ] Translucent premultiplied TGA colors no longer appear too dark. Issue #733.
+- [ Balance of Power Preview ] Changing the decision GFX settings now refreshes icons in open previews. Issue #731.
 - [ Image Preview ] Packed TGA colors and transparency now use their full range. Issue #732.
 - [ World Map Preview ] Adjacency lines stay visible when the map wraps across the edge. Issue #736.
 
