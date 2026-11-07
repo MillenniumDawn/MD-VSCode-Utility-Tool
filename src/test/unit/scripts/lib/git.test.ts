@@ -44,9 +44,9 @@ describe("scripts/lib/git", () => {
 
 	it("preserves git errors from ordinary commands", () => {
 		assert.throws(
-			() => git(["not-a-git-command"]),
+			() => git(["rev-parse", "--verify", "refs/heads/does-not-exist"]),
 			(error: NodeJS.ErrnoException & { status?: number; stderr?: Buffer }) => {
-				return error.status !== 0 && /not-a-git-command/.test(error.stderr?.toString() ?? "");
+				return error.status === 128 && /Needed a single revision/.test(error.stderr?.toString() ?? "");
 			},
 		);
 	});
