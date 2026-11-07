@@ -499,6 +499,28 @@ describe("previewdef/worldmap/WorldMap releaseMemory", () => {
 		assert.strictEqual((wm as any).cachedWorldMap, undefined);
 	});
 
+	it("sends a full summary with matching geometry and warnings after a river-only change", async () => {
+		const before = emptyMap(1);
+		const after = emptyMap(1);
+		before.rivers = [{ colors: { 0: 1 }, ends: [0], boundingBox: { x: 0, y: 0, w: 1, h: 1 } }];
+		after.rivers = [{ ...before.rivers[0]!, colors: { 0: 2 } }];
+		after.warnings = [{ text: "river changed", source: [{ type: "river", index: 0, name: "river" }], relatedFiles: [] }];
+		const posts: unknown[] = [];
+		const wm = new WorldMap(webviewPanel(posts) as any);
+		(wm as any).worldMapLoader = summaryLoader([before, after], []).loader;
+
+		await (wm as any).onMessage({ command: "loaded", force: false });
+		posts.length = 0;
+		await (wm as any).onMessage({ command: "loaded", force: false });
+
+		assert.deepStrictEqual(posts.map((post) => (post as { command: string }).command), ["progress", "provincemapsummary"]);
+		const summary = posts[1] as { command: string; data: WorldMapData };
+		assert.strictEqual(summary.command, "provincemapsummary");
+		assert.deepStrictEqual(summary.data.rivers, after.rivers);
+		assert.deepStrictEqual(summary.data.warnings, after.warnings);
+		wm.dispose();
+	});
+
 	it("answering every item command from its own field of the loaded map", async () => {
 		const map = emptyMap(1);
 		(map as any).provinces = ["province"];
