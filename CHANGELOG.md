@@ -1,5 +1,7 @@
 Unreleased
 
+v1.1.44
+
   Bugfixes:
 - [ Previews ] Count conditions now read as minimum thresholds rather than exact counts. Issue #726.
 - [ Previews ] A preview that cannot open now closes its empty tab and reports the error. Issue #740.
