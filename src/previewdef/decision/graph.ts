@@ -210,6 +210,8 @@ async function buildDecisionNode(
 		hasActivation: decision.hasActivation,
 		cancelTrigger: decision.cancelTrigger,
 		hasCancelTrigger: decision.hasCancelTrigger,
+		targetTrigger: decision.targetTrigger,
+		hasTargetTrigger: decision.hasTargetTrigger,
 		effects,
 		nav: navOf(decision.token, decision.file),
 	};
@@ -338,7 +340,13 @@ export function toolbarFlagsOf(
 		hasScriptedGui: categories.some((c) => c.scriptedGui?.html !== undefined),
 		hasConditions:
 			decisions.some(
-				(d) => d.hasAllowed || d.hasAvailable || d.hasVisible || d.hasActivation || d.hasCancelTrigger,
+				(d) =>
+					d.hasAllowed ||
+					d.hasAvailable ||
+					d.hasVisible ||
+					d.hasActivation ||
+					d.hasCancelTrigger ||
+					d.hasTargetTrigger,
 			) || categories.some((c) => c.hasAllowed || c.hasVisible),
 		hasIcons: nodes.some((n) => n.kind !== "unresolved" && n.icon !== undefined),
 		hasLocalisation: getFlags().localisationIndex,

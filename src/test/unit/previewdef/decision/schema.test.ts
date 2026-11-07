@@ -457,3 +457,93 @@ describe("previewdef/decision/schema facts", () => {
 		assert.ok(parsed.conditionExprs.some((e) => e.nodeContent.includes("has_war")));
 	});
 });
+
+describe("previewdef/decision/schema target trigger", () => {
+	// Country and state target examples from Millennium Dawn's Gulf.txt and Denmark.txt.
+
+	const countryTarget = `
+        cat = {
+            GCC_expel = {
+                target_array = global.gcc_member_state
+                target_trigger = {
+                    country_exists = FROM
+                    FROM = { NOT = { has_country_flag = gcc_membership_secure } }
+                }
+            }
+        }
+    `;
+
+	it("keeps the taker's check ROOT-scoped and the candidate's under FROM", () => {
+		const found = decision(countryTarget, "cat", "GCC_expel");
+
+		assert.strictEqual(found.hasTargetTrigger, true);
+		const written = conditionToString(found.targetTrigger);
+		assert.ok(
+			written.includes("[FROM]has_country_flag = gcc_membership_secure"),
+			`the condition under FROM carries the target scope, got ${written}`,
+		);
+		assert.ok(
+			!written.includes("[FROM]country_exists = FROM"),
+			`the taker's check must not read as the target's, got ${written}`,
+		);
+	});
+
+	it("collects the target's conditions under FROM, apart from ROOT ones", () => {
+		const parsed = getDecisionsFromFile(parseHoi4File(countryTarget), "test.txt");
+		const exprs = parsed.conditionExprs;
+
+		assert.ok(
+			exprs.some(
+				(e) =>
+					e.scopeName === "FROM" &&
+					e.nodeContent === "has_country_flag = gcc_membership_secure",
+			),
+		);
+		assert.ok(
+			exprs.some(
+				(e) => e.scopeName === "" && e.nodeContent === "country_exists = FROM",
+			),
+			"the taker's check must not be offered as a target condition",
+		);
+	});
+
+	it("keeps a state target's condition under FROM as a target condition", () => {
+		const found = decision(
+			`
+            cat = {
+                DEN_local_construction_initiatives = {
+                    state_target = yes
+                    target_array = DEN.core_states
+                    target_trigger = {
+                        FROM = { NOT = { has_state_flag = DEN_invested_in_renewables_flag } }
+                    }
+                }
+            }
+        `,
+			"cat",
+			"DEN_local_construction_initiatives",
+		);
+
+		assert.strictEqual(found.hasTargetTrigger, true);
+		assert.ok(
+			conditionToString(found.targetTrigger).includes(
+				"[FROM]has_state_flag = DEN_invested_in_renewables_flag",
+			),
+			conditionToString(found.targetTrigger),
+		);
+	});
+
+	it("reads a decision without target_trigger as offered to every target", () => {
+		const found = decision(`cat = { d = { available = { has_war = no } } }`, "cat", "d");
+
+		assert.strictEqual(found.hasTargetTrigger, false);
+		assert.strictEqual(found.targetTrigger, true);
+	});
+
+	it("reads an empty target_trigger as a restriction that always holds", () => {
+		const found = decision(`cat = { d = { target_trigger = { } } }`, "cat", "d");
+
+		assert.strictEqual(found.hasTargetTrigger, true);
+		assert.strictEqual(found.targetTrigger, true);
+	});
+});

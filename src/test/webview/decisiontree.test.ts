@@ -37,6 +37,8 @@ function decision(
 		hasActivation: false,
 		cancelTrigger: true,
 		hasCancelTrigger: false,
+		targetTrigger: true,
+		hasTargetTrigger: false,
 		effects: [],
 		...extra,
 	};
@@ -89,6 +91,13 @@ const integrationPayload: DecisionGraphPayload = {
 			effects: [{ name: "complete_effect", ref: 0 }],
 			hasAvailable: true,
 			available: { scopeName: "", nodeContent: "has_war = no" },
+			// Formable nation decisions in Millennium Dawn carry exactly this shape: a candidate
+			// restriction under FROM inside target_trigger.
+			hasTargetTrigger: true,
+			targetTrigger: {
+				scopeName: "FROM",
+				nodeContent: "has_state_flag = formable_purchase_offer_target@ROOT",
+			},
 			modifiers: [
 				{ key: "stability_weekly", name: "Weekly Stability", value: "-0.1%", tone: "bad" },
 			],
@@ -248,6 +257,25 @@ describe("webview/decisiontree filteredGraph", () => {
 		assert.ok(
 			graph.edges.some((e) => e.from === "d:POL_sre_main_countdown_mission" && e.to === "u:POL_elsewhere"),
 		);
+	});
+
+	it("keeps a decision that only a target restriction puts conditions on for the conditions filter", () => {
+		// A targeted decision the conditions filter must not drop just because none of the ordinary
+		// blocks were written: the target trigger is the one condition it carries.
+		const targetedOnly: DecisionGraphPayload = {
+			...integrationPayload,
+			nodes: [
+				...integrationPayload.nodes,
+				decision("POL_targeted_filter_probe", { hasTargetTrigger: true }),
+			],
+			edges: [
+				...integrationPayload.edges,
+				structural("c:POL_state_controlled_economy_category", "d:POL_targeted_filter_probe"),
+			],
+		};
+		const graph = decisiontree.filteredGraph(targetedOnly, ["conditions"]);
+
+		assert.ok(graph.nodes.some((n) => n.id === "d:POL_targeted_filter_probe"));
 	});
 
 	it("bridges a call that ran through a decision the filter removed", () => {
@@ -588,6 +616,27 @@ describe("webview/decisiontree rendering", () => {
 		const card = cardFor("d:POL_sre_main_countdown_mission");
 		assert.ok(card.textContent?.includes("365"));
 		assert.ok(card.querySelector(".dec-badge-threat"), "a bad mission's timer is a threat");
+	});
+
+	it("renders the target condition under its own panel with the target's FROM scope", () => {
+		const card = cardFor("d:POL_start_sre");
+
+		const heads = Array.from(card.querySelectorAll(".ev-cond-head")).map((h) => h.textContent);
+		assert.ok(heads.includes("Target condition"), `panel headers were ${heads.join(" | ")}`);
+
+		// The candidate restriction reads as a target condition; the taker's own check stays without
+		// a scope marker, which is what the game reads it as.
+		const scopes = Array.from(card.querySelectorAll(".ev-cond-scope")).map((s) => s.textContent);
+		assert.ok(scopes.includes("[FROM] "), `scope markers were ${scopes.join(" | ")}`);
+		assert.ok(card.textContent?.includes("has_state_flag = formable_purchase_offer_target@ROOT"));
+		assert.ok(card.textContent?.includes("has_war = no"));
+	});
+
+	it("leaves the target condition panel off a decision that restricts no target", () => {
+		const heads = Array.from(cardFor("d:POL_sre_main_countdown_mission").querySelectorAll(".ev-cond-head")).map(
+			(h) => h.textContent,
+		);
+		assert.ok(!heads.includes("Target condition"));
 	});
 
 	it("says the category is drawn by a custom GUI", () => {
