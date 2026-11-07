@@ -95,6 +95,9 @@ export interface DecisionGraphDecisionNode extends GraphNodeBase {
 	hasActivation: boolean;
 	cancelTrigger: ConditionComplexExpr;
 	hasCancelTrigger: boolean;
+	// The decision-taker is ROOT; the candidate target is FROM.
+	targetTrigger: ConditionComplexExpr;
+	hasTargetTrigger: boolean;
 	effects: DecisionEffectRef[];
 }
 

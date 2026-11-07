@@ -78,6 +78,7 @@ interface MioTraitDef {
         y: number;
     };
     relative_position_id: string;
+    delete_included_values: Enum;
     special_trait_background: boolean;
     visible: Raw;
     equipment_bonus: Raw;
@@ -104,6 +105,7 @@ const mioTraitSchema: SchemaDef<MioTraitDef> = {
         y: "number",
     },
     relative_position_id: "string",
+    delete_included_values: "enum",
     visible: "raw",
     special_trait_background: "boolean",
     equipment_bonus: "raw",
@@ -507,6 +509,64 @@ function overrideTrait(traitDef: HOIPartial<MioTraitDef>, traits: Record<string,
     // A copy: the map is a shallow copy of the included MIO's, so writing to the trait itself
     // would change it in that MIO as well.
     const trait: MioTrait = traits[id] = { ...existing };
+
+    // Clear inherited values before applying the override's explicit values.
+    for (const deleted of traitDef.delete_included_values._values) {
+        switch (deleted) {
+            case 'name':
+                trait.name = '';
+                break;
+            case 'icon':
+                trait.icon = undefined;
+                break;
+            case 'position':
+                trait.x = 0;
+                trait.y = 0;
+                break;
+            case 'relative_position_id':
+                trait.relativePositionId = undefined;
+                break;
+            case 'any_parent':
+                trait.anyParent = [];
+                break;
+            case 'all_parents':
+                trait.allParents = [];
+                break;
+            case 'parent':
+                trait.parent = undefined;
+                break;
+            case 'mutually_exclusive':
+                trait.exclusive = [];
+                break;
+            case 'visible':
+                trait.visible = true;
+                trait.hasVisible = false;
+                break;
+            case 'special_trait_background':
+                trait.specialTraitBackground = false;
+                break;
+            case 'equipment_bonus':
+                trait.effects = trait.effects.filter(e => e !== 'equiment');
+                if (traitDef.equipment_bonus?._raw.value) {
+                    trait.effects.push('equiment');
+                }
+                break;
+            case 'production_bonus':
+                trait.effects = trait.effects.filter(e => e !== 'production');
+                if (traitDef.production_bonus?._raw.value) {
+                    trait.effects.push('production');
+                }
+                break;
+            case 'organization_modifier':
+                trait.effects = trait.effects.filter(e => e !== 'organization');
+                if (traitDef.organization_modifier?._raw.value) {
+                    trait.effects.push('organization');
+                }
+                break;
+            default:
+                continue;
+        }
+    }
 
     trait.name = traitDef.name ?? trait.name;
     trait.icon = traitDef.icon ?? trait.icon;
