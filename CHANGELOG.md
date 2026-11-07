@@ -1,5 +1,8 @@
 Unreleased
 
+  Bugfixes:
+- [ MIO Previewer ] An override_trait can now clear inherited parameters such as relative_position_id or a bonus with delete_included_values. Issue #729.
+
 v1.1.44
 
   Bugfixes:
