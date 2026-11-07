@@ -1,6 +1,7 @@
 Unreleased
 
   Bugfixes:
+- [ World Map Preview ] River edits now refresh the drawn rivers along with their warnings. Issue #720.
 - [ Previews ] A preview that cannot open now closes its empty tab and reports the error. Issue #740.
 - [ World Map Preview ] Duplicate province warnings now show the ID assigned to each displaced province. Issue #738.
 - [ Image Preview ] Translucent premultiplied TGA colors no longer appear too dark. Issue #733.

@@ -12,6 +12,7 @@ type MapItemChange = {
 };
 
 const summaryKeys: (keyof WorldMapData)[] = [
+	"rivers",
 	"width",
 	"height",
 	"provincesCount",
