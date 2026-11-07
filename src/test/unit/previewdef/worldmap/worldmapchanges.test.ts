@@ -67,6 +67,13 @@ describe("previewdef/worldmap/worldmapchanges", () => {
 		});
 	}
 
+	it("requires a full summary when river geometry changes with the same counts", () => {
+		const river = { colors: { 0: 1 }, ends: [0], boundingBox: { x: 0, y: 0, w: 1, h: 1 } };
+		const cached = map({ rivers: [river] });
+		assert.deepStrictEqual(buildWorldMapChangeMessages(cached, map({ rivers: [{ ...river }] })), []);
+		assert.strictEqual(buildWorldMapChangeMessages(cached, map({ rivers: [{ ...river, colors: { 0: 2 } }] })), undefined);
+	});
+
 	it("keeps summary and item changes in protocol order", () => {
 		const changed = map({
 			warnings: [{ text: "warning", source: [], relatedFiles: [] }],
