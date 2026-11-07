@@ -10,6 +10,7 @@ v1.1.44
 - [ Image Preview ] Translucent premultiplied TGA colors no longer appear too dark. Issue #733.
 - [ Balance of Power Preview ] Changing the decision GFX settings now refreshes icons in open previews. Issue #731.
 - [ Image Preview ] Packed TGA colors and transparency now use their full range. Issue #732.
+- [ World Map Preview ] Unknown province colors and missing region IDs no longer leave map loading stuck. Issue #703.
 - [ World Map Preview ] Adjacency lines stay visible when the map wraps across the edge. Issue #736.
 
 v1.1.43
