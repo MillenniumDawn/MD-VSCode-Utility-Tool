@@ -20,6 +20,7 @@ export class Surface {
 		readonly width: number,
 		readonly height: number,
 		readonly pixelFormat: PixelFormat,
+		private readonly rowPitch?: number,
 	) {}
 
 	public getFullRgba(): Uint8Array {
@@ -52,11 +53,15 @@ export class Surface {
 		}
 
 		const length = this.length;
+		const bitsPerPixel = pixelFormat.bitsPerPixel;
+		const bitsPerRow = bitsPerPixel * this.width;
+		const rowPitch = this.rowPitch ?? Math.ceil(bitsPerRow / 8);
 		const { reader, readerState } = getChannelReader(
 			this.buffer,
 			this.offset,
 			length,
 			pixelFormat,
+			rowPitch,
 		);
 
 		const channelCount = pixelFormat.channelCount;
@@ -79,13 +84,8 @@ export class Surface {
 			(channel) => ((1 << channelLength[channel]!) - 1) << channelStart[channel]!,
 		);
 
-		const bitsPerPixel = pixelFormat.bitsPerPixel;
-		const bitsPerRow = bitsPerPixel * this.width;
-		const pitch = Math.ceil(bitsPerRow / 8);
-
 		let resultOffset = 0;
-
-		for (let i = 0; i < length; i += pitch) {
+		for (let i = 0; i < length; i += rowPitch) {
 			for (let pb = 0; pb < bitsPerRow; pb += bitsPerPixel, resultOffset += 4) {
 				reader(
 					readerState,
@@ -424,7 +424,8 @@ function clampPixelValue(value: number): number {
 	return Math.max(0, Math.min(1, value));
 }
 
-type ChannelBuffer = Uint8Array | Uint16Array | Uint32Array | Float32Array;
+type ChannelArray = Uint8Array | Uint16Array | Uint32Array | Float32Array;
+type ChannelBuffer = ChannelArray | DataView;
 
 // Don't use js clossure for better performance
 interface ChannelReader {
@@ -446,18 +447,26 @@ function getChannelReader(
 	inputBufferOffset: number,
 	length: number,
 	pixelFormat: RawPixelFormat,
+	rowPitch: number,
 ): ChannelReader {
+	const aligned32 = inputBufferOffset % 4 === 0 && rowPitch % 4 === 0;
+	const aligned16 = inputBufferOffset % 2 === 0 && rowPitch % 2 === 0;
 	// The caller has checked that a float format has 32-bit channels only.
 	if (pixelFormat.valueType === PixelValueType.float) {
-		return {
+		return aligned32 ? {
 			reader: wholeElementReader,
 			readerState: new Float32Array(inputBuffer, inputBufferOffset, length >> 2),
+		} : {
+			reader: float32Reader,
+			readerState: new DataView(inputBuffer, inputBufferOffset, length),
 		};
 	}
 
 	for (const View of [Uint32Array, Uint16Array, Uint8Array]) {
 		const bits = View.BYTES_PER_ELEMENT * 8;
 		if (
+			inputBufferOffset % View.BYTES_PER_ELEMENT === 0 &&
+			rowPitch % View.BYTES_PER_ELEMENT === 0 &&
 			pixelFormat.bitsPerPixel % bits === 0 &&
 			pixelFormat.channelLengthInPixel.every((p) => p === bits) &&
 			pixelFormat.channelStartInPixel.every((s) => s % bits === 0)
@@ -469,14 +478,14 @@ function getChannelReader(
 		}
 	}
 
-	if (pixelFormat.bitsPerPixel === 32) {
+	if (pixelFormat.bitsPerPixel === 32 && aligned32) {
 		return {
 			reader: masked32Reader,
 			readerState: new Uint32Array(inputBuffer, inputBufferOffset, length >> 2),
 		};
 	}
 
-	if (pixelFormat.bitsPerPixel === 16) {
+	if (pixelFormat.bitsPerPixel === 16 && aligned16) {
 		return {
 			reader: masked16Reader,
 			readerState: new Uint16Array(inputBuffer, inputBufferOffset, length >> 1),
@@ -519,7 +528,7 @@ function defaultUint8Reader(
 
 // Each channel fills one element of the buffer. An element of 1, 2 or 4 bytes shifts by 0, 1 or 2.
 function wholeElementReader(
-	buffer: ChannelBuffer,
+	buffer: ChannelArray,
 	offset: number,
 	_bitOffset: number,
 	channelStart: number[],
@@ -530,6 +539,20 @@ function wholeElementReader(
 	const shift = buffer.BYTES_PER_ELEMENT >> 1;
 	for (let i = 0; i < channelLength.length; i++) {
 		rawPixel[i] = buffer[(offset >> shift) + (channelStart[i]! >> (shift + 3))]!;
+	}
+}
+
+function float32Reader(
+	buffer: DataView,
+	offset: number,
+	_bitOffset: number,
+	channelStart: number[],
+	channelLength: number[],
+	_channelMask: number[],
+	rawPixel: Float64Array,
+): void {
+	for (let i = 0; i < channelLength.length; i++) {
+		rawPixel[i] = buffer.getFloat32(offset + (channelStart[i]! >> 3), true);
 	}
 }
 

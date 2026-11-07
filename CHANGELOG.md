@@ -1,5 +1,8 @@
 Unreleased
 
+  Bugfixes:
+- [ Image Preview ] DDS textures with padded rows now display their colors correctly. Issue #734.
+
 v1.1.44
 
   Bugfixes:

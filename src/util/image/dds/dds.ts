@@ -2,6 +2,7 @@ import {
 	DDSHeader,
 	HEADER_LENGTH_INT,
 	DDS_MAGIC,
+	DDSD_PITCH,
 	DDPF_FOURCC,
 	DDSCAPS2_CUBEMAP,
 	DDSCAPS2_VOLUME,
@@ -87,6 +88,7 @@ export class DDS {
 
 		const mipmapCount = getMipmapCount(header);
 		const offset = byteOffset + HEADER_LENGTH_INT * 4;
+		const mainRowPitch = getMainRowPitch(header, pixelFormat);
 
 		let images: Surface[];
 		if (cubeMap) {
@@ -126,6 +128,7 @@ export class DDS {
 				header.dwHeight,
 				cubeMaps,
 				mipmapCount,
+				mainRowPitch,
 			);
 		} else if (volume) {
 			validateSurfaceWork(
@@ -144,6 +147,7 @@ export class DDS {
 				header.dwHeight,
 				header.dwDepth,
 				mipmapCount,
+				mainRowPitch,
 			);
 		} else {
 			validateSurfaceWork(
@@ -161,6 +165,7 @@ export class DDS {
 				header.dwWidth,
 				header.dwHeight,
 				mipmapCount,
+				mainRowPitch,
 			);
 		}
 
@@ -187,6 +192,7 @@ export class DDS {
 		}
 
 		const mipmapCount = getMipmapCount(header);
+		const mainRowPitch = getMainRowPitch(header, pixelFormat);
 		const arraySize = dxt10Header.arraySize;
 		if (volume && arraySize !== 1) {
 			throw new UserError("DX10 volume textures must have one array item");
@@ -221,6 +227,7 @@ export class DDS {
 					height,
 					cubeMaps,
 					mipmapCount,
+					mainRowPitch,
 				);
 			} else if (volume) {
 				[images, offset] = parseVolumeTexture(
@@ -231,6 +238,7 @@ export class DDS {
 					height,
 					header.dwDepth,
 					mipmapCount,
+					mainRowPitch,
 				);
 			} else {
 				[images, offset] = parseTexture(
@@ -240,6 +248,7 @@ export class DDS {
 					header.dwWidth,
 					height,
 					mipmapCount,
+					mainRowPitch,
 				);
 			}
 
@@ -248,6 +257,26 @@ export class DDS {
 
 		return new DDS(allImages);
 	}
+}
+
+function getMainRowPitch(
+	header: DDSHeader,
+	pixelFormat: PixelFormat,
+): number | undefined {
+	if (!(header.dwFlags & DDSD_PITCH) || pixelFormat.compressed) {
+		return undefined;
+	}
+	const tightPitch = Math.ceil((pixelFormat.bitsPerPixel * header.dwWidth) / 8);
+	if (
+		!Number.isSafeInteger(header.dwPitchOrLinearSize) ||
+		header.dwPitchOrLinearSize < tightPitch
+	) {
+		throw new UserError(
+			`DDS row pitch ${header.dwPitchOrLinearSize} is smaller than the tight row pitch ${tightPitch}`,
+		);
+	}
+	// The declared pitch describes mip 0, not the smaller mipmap rows.
+	return header.dwPitchOrLinearSize;
 }
 
 function getMipmapCount(header: DDSHeader): number {
@@ -354,6 +383,7 @@ function parseTexture(
 	width: number,
 	height: number,
 	mipmapCount: number,
+	mainRowPitch?: number,
 ): [Surface[], number] {
 	const result: Surface[] = [];
 
@@ -365,6 +395,7 @@ function parseTexture(
 		height,
 		pixelFormat,
 		"Main image",
+		mainRowPitch,
 	);
 	for (let i = 0; i < mipmapCount; i++) {
 		width = Math.max(1, Math.floor(width / 2));
@@ -391,6 +422,7 @@ function parseCubeMap(
 	height: number,
 	cubeMaps: string[],
 	mipmapCount: number,
+	mainRowPitch?: number,
 ): [Surface[], number] {
 	const result: Surface[] = [];
 
@@ -405,6 +437,7 @@ function parseCubeMap(
 			mipHeight,
 			pixelFormat,
 			cubeMap,
+			mainRowPitch,
 		);
 		for (let i = 0; i < mipmapCount; i++) {
 			mipWidth = Math.max(1, Math.floor(mipWidth / 2));
@@ -432,6 +465,7 @@ function parseVolumeTexture(
 	height: number,
 	depth: number,
 	mipmapCount: number,
+	mainRowPitch?: number,
 ): [Surface[], number] {
 	const result: Surface[] = [];
 
@@ -444,6 +478,7 @@ function parseVolumeTexture(
 			height,
 			pixelFormat,
 			`Main image depth #${i + 1}`,
+			mainRowPitch,
 		);
 	}
 
@@ -475,8 +510,10 @@ function pushSurface(
 	height: number,
 	pixelFormat: PixelFormat,
 	name: string,
+	rowPitch?: number,
 ): number {
-	const length = getImageSizeInBytes(pixelFormat, width, height);
+	const tightLength = getImageSizeInBytes(pixelFormat, width, height);
+	const length = rowPitch === undefined ? tightLength : rowPitch * height;
 	const end = offset + length;
 	if (end > buffer.byteLength) {
 		throw new UserError(
@@ -485,7 +522,7 @@ function pushSurface(
 	}
 
 	surfaces.push(
-		new Surface(buffer, offset, length, name, width, height, pixelFormat),
+		new Surface(buffer, offset, length, name, width, height, pixelFormat, rowPitch),
 	);
 	return end;
 }
