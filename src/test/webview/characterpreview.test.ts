@@ -586,7 +586,7 @@ describe("webview/characterpreview rendering", () => {
 			const texts = (selector: string) =>
 				Array.from(content().querySelectorAll(selector)).map((e) => e.textContent);
 			assert.deepStrictEqual(texts(".ev-cond-head"), ["Allowed", "Available", "Visible"]);
-			assert.deepStrictEqual(texts(".ev-fold"), ["at least == 1", "at least == 1", "at least == 1"]);
+			assert.deepStrictEqual(texts(".ev-fold"), ["at least 1", "at least 1", "at least 1"]);
 			assert.deepStrictEqual(texts(".char-mod-name"), ["Stability", "Infantry weapons"]);
 			assert.deepStrictEqual(texts(".char-mods-head"), ["Research bonus"]);
 		} finally {

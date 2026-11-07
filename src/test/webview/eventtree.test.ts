@@ -228,8 +228,8 @@ describe('webview/eventtree conditionToDom', () => {
     });
 
     it('shows the threshold on a count folder', () => {
-        const list = conditionToDom({ type: 'count', amount: 2, items: [leaf('a'), leaf('b')] } as ConditionComplexExpr);
-        assert.strictEqual(list.querySelector('.ev-fold')!.textContent, 'count == 2');
+        const list = conditionToDom({ type: 'count', amount: 2, items: [leaf('a'), leaf('b'), leaf('c')] } as ConditionComplexExpr);
+        assert.strictEqual(list.querySelector('.ev-fold')!.textContent, 'at least 2');
     });
 
     it('renders a boolean condition rather than throwing', () => {
@@ -270,8 +270,8 @@ describe('webview/eventtree conditionToLabel', () => {
 
     it('keeps the threshold on a count folder', () => {
         assert.strictEqual(
-            conditionToLabel({ type: 'count', amount: 2, items: [leaf('a'), leaf('b')] }),
-            'count == 2 (a, b)',
+            conditionToLabel({ type: 'count', amount: 2, items: [leaf('a'), leaf('b'), leaf('c')] }),
+            'at least 2 (a, b, c)',
         );
     });
 

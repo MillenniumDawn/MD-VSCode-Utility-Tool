@@ -544,6 +544,6 @@ export function conditionToString(condition: ConditionComplexExpr): string {
 		"(" +
 		condition.items.map(conditionToString).join(", ") +
 		")" +
-		(condition.type === "count" ? " == " + condition.amount : "")
+		(condition.type === "count" ? " >= " + condition.amount : "")
 	);
 }
