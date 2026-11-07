@@ -1,7 +1,6 @@
 import { Token } from "../../hoiformat/hoiparser";
 import { Warning } from "../../util/common";
 import {
-	isOffset,
 	isOptionalOffset,
 	isOptionalBytes,
 	isRecord,
@@ -316,6 +315,13 @@ const requestMapItemCommands: ReadonlySet<string> = new Set<
 	"requestsupplynodes",
 ]);
 
+const syntheticMapItemCommands: ReadonlySet<string> = new Set([
+	"requestprovinces",
+	"requeststates",
+	"requeststrategicregions",
+	"requestsupplyareas",
+]);
+
 const openFileTypes: ReadonlySet<string> = new Set<OpenFileMessage["type"]>([
 	"state",
 	"strategicregion",
@@ -350,8 +356,10 @@ export function isWorldMapHostMessage(
 		default:
 			return (
 				requestMapItemCommands.has(msg.command) &&
-				isOffset(msg.start) &&
-				isOffset(msg.end)
+				typeof msg.start === "number" && Number.isSafeInteger(msg.start) &&
+				typeof msg.end === "number" && Number.isSafeInteger(msg.end) &&
+				msg.start < msg.end && msg.end - msg.start <= 5000 &&
+				(msg.start >= 0 || syntheticMapItemCommands.has(msg.command))
 			);
 	}
 }
