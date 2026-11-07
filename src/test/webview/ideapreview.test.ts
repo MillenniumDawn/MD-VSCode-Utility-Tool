@@ -250,8 +250,6 @@ describe("webview/ideapreview chainsForGroups", () => {
 	});
 });
 
-// The tree renderer itself is tested with the event tree. What the cards add is their own word for
-// `count`, on top of the tree previews' words for everything else.
 describe("webview/ideapreview card fold labels", () => {
 	it("read a count folder as at least and keep the other folder names", () => {
 		const label = (type: string) =>
@@ -268,7 +266,7 @@ describe("webview/ideapreview card fold labels", () => {
 			).querySelector(".ev-fold")?.textContent;
 		assert.deepStrictEqual(
 			["and", "or", "ornot", "andnot", "count"].map(label),
-			["all of", "any of", "none of", "not all of", "at least == 2"],
+			["all of", "any of", "none of", "not all of", "at least 2"],
 		);
 	});
 });
@@ -443,7 +441,7 @@ describe("webview/ideapreview rendering", () => {
 			const texts = (selector: string) =>
 				Array.from(content().querySelectorAll(selector)).map((e) => e.textContent);
 			assert.deepStrictEqual(texts(".ev-cond-head"), ["Allowed", "Available"]);
-			assert.deepStrictEqual(texts(".ev-fold"), ["at least == 1", "at least == 1"]);
+			assert.deepStrictEqual(texts(".ev-fold"), ["at least 1", "at least 1"]);
 			assert.deepStrictEqual(texts(".idea-mod-name"), ["Stability", "Fuel and Oil", "Attack", "Soft attack"]);
 			assert.deepStrictEqual(texts(".idea-mods-head"), ["Research bonus", "Against GER", "Infantry equipment"]);
 		} finally {
