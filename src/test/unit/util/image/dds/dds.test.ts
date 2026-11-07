@@ -7,6 +7,8 @@ import {
 	DDSCAPS2_CUBEMAP_POSITIVEX,
 	DDSCAPS2_VOLUME,
 	DDSCAPS_MIPMAP,
+	DDSD_PITCH,
+	DDPF_RGB,
 	DDS_RESOURCE_MISC_TEXTURECUBE,
 	DxgiFormat,
 	ResourceDimension,
@@ -28,6 +30,144 @@ function cut(buf: Buffer, length: number): Buffer {
 }
 
 describe("DDS.parse", () => {
+	it("uses declared RGB row pitch without shifting the next mipmap", () => {
+		const file = makeDds({
+			width: 1,
+			height: 2,
+			data: [0, 0, 255, 91, 0, 255, 0, 92, 255, 0, 0],
+			mipmapCount: 2,
+			caps: mipmapped,
+			flags: DDPF_RGB,
+			bitsPerPixel: 24,
+			masks: [0xff0000, 0x00ff00, 0x0000ff, 0],
+		});
+		file.writeUInt32LE(0x1007 | DDSD_PITCH, 8);
+		file.writeUInt32LE(4, 20);
+
+		const images = parseDds(file).images;
+		assert.deepStrictEqual(Array.from(images[0]!.getFullRgba()), [255, 0, 0, 255, 0, 255, 0, 255]);
+		assert.deepStrictEqual(Array.from(images[1]!.getFullRgba()), [0, 0, 255, 255]);
+	});
+
+	it("keeps declared tightly packed RGB rows unchanged", () => {
+		const file = makeDds({
+			width: 1,
+			height: 2,
+			data: [0, 0, 255, 0, 255, 0],
+			flags: DDPF_RGB,
+			bitsPerPixel: 24,
+			masks: [0xff0000, 0x00ff00, 0x0000ff, 0],
+		});
+		file.writeUInt32LE(0x1007 | DDSD_PITCH, 8);
+		file.writeUInt32LE(3, 20);
+		assert.deepStrictEqual(Array.from(parseDds(file).images[0]!.getFullRgba()), [255, 0, 0, 255, 0, 255, 0, 255]);
+	});
+
+	for (const [name, caps2] of [
+		["cubemap faces", DDSCAPS2_CUBEMAP | DDSCAPS2_CUBEMAP_POSITIVEX | DDSCAPS2_CUBEMAP_NEGATIVEX],
+		["volume slices", DDSCAPS2_VOLUME],
+	] as const) {
+		it(`advances past padded ${name}`, () => {
+			const file = makeDds({
+				width: 1,
+				height: 1,
+				depth: 2,
+				caps2,
+				data: [0, 0, 255, 91, 0, 255, 0, 92],
+				flags: DDPF_RGB,
+				bitsPerPixel: 24,
+				masks: [0xff0000, 0x00ff00, 0x0000ff, 0],
+			});
+			file.writeUInt32LE(0x1007 | DDSD_PITCH, 8);
+			file.writeUInt32LE(4, 20);
+			const images = parseDds(file).images;
+			assert.deepStrictEqual(Array.from(images[0]!.getFullRgba()), [255, 0, 0, 255]);
+			assert.deepStrictEqual(Array.from(images[1]!.getFullRgba()), [0, 255, 0, 255]);
+		});
+	}
+
+	it("applies the declared pitch to each texture-array item", () => {
+		const file = makeDds({
+			width: 1,
+			height: 2,
+			data: [255, 0, 0, 255, 91, 91, 91, 91, 0, 255, 0, 255, 92, 92, 92, 92, 1, 2, 3, 255, 93, 93, 93, 93, 4, 5, 6, 255, 94, 94, 94, 94],
+			dx10: { format: DxgiFormat.DXGI_FORMAT_R8G8B8A8_UNORM, arraySize: 2 },
+		});
+		file.writeUInt32LE(0x1007 | DDSD_PITCH, 8);
+		file.writeUInt32LE(8, 20);
+
+		const images = parseDds(file).images;
+		assert.deepStrictEqual(Array.from(images[1]!.getFullRgba()), [1, 2, 3, 255, 4, 5, 6, 255]);
+	});
+
+	it("decodes padded 16-bit rows and unaligned following array items", () => {
+		const file = makeDds({
+			width: 1,
+			height: 1,
+			data: [0, 248, 91, 224, 7, 92],
+			dx10: { format: DxgiFormat.DXGI_FORMAT_B5G6R5_UNORM, arraySize: 2 },
+		});
+		file.writeUInt32LE(0x1007 | DDSD_PITCH, 8);
+		file.writeUInt32LE(3, 20);
+		const images = parseDds(file).images;
+		assert.deepStrictEqual(Array.from(images[0]!.getFullRgba()), [255, 0, 0, 255]);
+		assert.deepStrictEqual(Array.from(images[1]!.getFullRgba()), [0, 255, 0, 255]);
+	});
+
+	it("decodes floating-point channels with an unaligned row pitch", () => {
+		const pixels = Buffer.alloc(10);
+		pixels.writeFloatLE(0.25, 0);
+		pixels.writeFloatLE(0.75, 5);
+		const file = makeDds({
+			width: 1,
+			height: 2,
+			data: Array.from(pixels),
+			dx10: { format: DxgiFormat.DXGI_FORMAT_R32_FLOAT },
+		});
+		file.writeUInt32LE(0x1007 | DDSD_PITCH, 8);
+		file.writeUInt32LE(5, 20);
+		assert.deepStrictEqual(Array.from(parseDds(file).images[0]!.getFullRgba()), [63, 0, 0, 255, 191, 0, 0, 255]);
+	});
+
+	it("ignores the pitch field when its flag is absent or the image is compressed", () => {
+		const tight = makeDds({ width: 1, height: 1, data: [3, 2, 1, 255] });
+		tight.writeUInt32LE(1, 20);
+		assert.deepStrictEqual(Array.from(parseDds(tight).images[0]!.getFullRgba()), [1, 2, 3, 255]);
+
+		const compressed = makeDds({ width: 4, height: 4, fourCC: "DXT1", data: 8 });
+		compressed.writeUInt32LE(0x1007 | DDSD_PITCH, 8);
+		compressed.writeUInt32LE(1, 20);
+		assert.strictEqual(parseDds(compressed).images[0]!.getFullRgba().length, 64);
+	});
+
+	it("rejects a declared pitch whose padded rows run past the file", () => {
+		const file = makeDds({
+			width: 1,
+			height: 2,
+			data: 7,
+			flags: DDPF_RGB,
+			bitsPerPixel: 24,
+			masks: [0xff0000, 0x00ff00, 0x0000ff, 0],
+		});
+		file.writeUInt32LE(0x1007 | DDSD_PITCH, 8);
+		file.writeUInt32LE(4, 20);
+		assert.throws(() => parseDds(file), isUserError(/Image Main image .* exceeds buffer size/));
+	});
+
+	it("rejects a declared row pitch smaller than the pixel row", () => {
+		const file = makeDds({
+			width: 1,
+			height: 2,
+			data: 8,
+			flags: DDPF_RGB,
+			bitsPerPixel: 24,
+			masks: [0xff0000, 0x00ff00, 0x0000ff, 0],
+		});
+		file.writeUInt32LE(0x1007 | DDSD_PITCH, 8);
+		file.writeUInt32LE(2, 20);
+		assert.throws(() => parseDds(file), isUserError(/row pitch 2 is smaller than the tight row pitch 3/));
+	});
+
 	// Pixels are four bytes each unless the fixture says otherwise.
 	const layouts: [name: string, fixture: DdsFixture, surfaces: string[]][] = [
 		["a plain texture", { width: 2, height: 2, data: 16 }, ["Main image 2x2"]],
