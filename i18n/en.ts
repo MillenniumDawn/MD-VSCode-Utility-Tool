@@ -118,6 +118,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"decisiontree.skipped": "{0} filtered out",
 	"decisiontree.skippedtitle": "Filtered out between this decision and the next: {0}",
 	"decisiontree.statetarget": "State target",
+	"decisiontree.targetroottrigger": "Root condition",
 	"decisiontree.targettrigger": "Target condition",
 	"decisiontree.targets": "Targets: {0}",
 	"decisiontree.timeouteffect": "When the timer runs out",

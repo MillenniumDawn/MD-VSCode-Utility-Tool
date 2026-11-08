@@ -142,6 +142,9 @@ function extractEffectByCondition(
 	const items: EffectItem[] = [];
 	let ifItem: ConditionFolder | undefined = undefined;
 
+	// Ordinary statements are held until the next thing that emits into the result -- a scope
+	// block, hidden_effect, random_list or if -- so that whatever sits between two statements in
+	// the source stays between them here. That is why every emitting branch flushes first.
 	for (const child of nodeValue) {
 		let keepIfItem = false;
 
@@ -152,6 +155,7 @@ function extractEffectByCondition(
 		}
 
 		if (childName === "hidden_effect") {
+			flushEffectItems(result, condition, items);
 			extractEffectByCondition(child.value, scopeStack, condition, result);
 		} else if (childName === "random_list") {
 			if (Array.isArray(child.value)) {
@@ -172,12 +176,14 @@ function extractEffectByCondition(
 						effect,
 					};
 				});
+				flushEffectItems(result, condition, items);
 				result.push({ items: randomListItems });
 			}
 		} else if (childName === "if") {
 			if (Array.isArray(child.value)) {
 				const limit = child.value.find((v) => v.name === "limit");
 				if (limit) {
+					flushEffectItems(result, condition, items);
 					ifItem = handleIf(child, limit, scopeStack, condition, result);
 					keepIfItem = true;
 
@@ -196,15 +202,18 @@ function extractEffectByCondition(
 			}
 		} else if (childName === "else_if") {
 			if (ifItem) {
+				flushEffectItems(result, condition, items);
 				handleElseIf(child, ifItem, scopeStack, result);
 				keepIfItem = true;
 			}
 		} else if (childName === "else") {
 			if (ifItem) {
+				flushEffectItems(result, condition, items);
 				handleElse(child, ifItem, scopeStack, result);
 				keepIfItem = false;
 			}
 		} else if (tryMoveScope(child, scopeStack, "effect")) {
+			flushEffectItems(result, condition, items);
 			extractEffectByCondition(child.value, scopeStack, condition, result);
 			scopeStack.pop();
 		} else {
@@ -220,54 +229,39 @@ function extractEffectByCondition(
 		}
 	}
 
-	if (items.length > 0) {
-		const existing = existingByCondition(result, condition);
-		if (existing) {
-			existing.items.push(...items);
-		} else {
-			result.push({
-				condition,
-				items,
-			});
-		}
-	}
+	flushEffectItems(result, condition, items);
 
 	return { condition: true, items: result };
 }
 
-interface ConditionIndex {
-	// How far into the result array the map reflects; whatever was appended since is indexed on
-	// the next lookup, so entries pushed by any branch of the walk are seen.
-	indexed: number;
-	byCondition: Map<ConditionComplexExpr, EffectByCondition>;
-}
-
-// The same shape as condition.ts's seenKeysFor: the walk merges into one result array from every
-// branch, and finding the group for a condition by filtering the array made each merge cost every
-// group before it. The first group for a condition wins, as `.find` did.
-const conditionIndexes = new WeakMap<EffectComplexExpr[], ConditionIndex>();
-
-function existingByCondition(
+// Appends the buffered statements to the result at their place in the source order. They continue
+// the group at the end of the result when it guards with the same condition, which keeps one group
+// per uninterrupted run of statements behind that condition. Reaching further back for an earlier
+// group with the same condition would drag the statements past whatever was emitted in between --
+// a scope block or hidden_effect between two statements must stay between them.
+function flushEffectItems(
 	result: EffectComplexExpr[],
 	condition: ConditionComplexExpr,
-): EffectByCondition | undefined {
-	let index = conditionIndexes.get(result);
-	if (index === undefined || index.indexed > result.length) {
-		index = { indexed: 0, byCondition: new Map() };
-		conditionIndexes.set(result, index);
+	items: EffectItem[],
+): void {
+	if (items.length === 0) {
+		return;
 	}
-	for (; index.indexed < result.length; index.indexed++) {
-		const entry = result[index.indexed];
-		if (
-			entry !== null &&
-			entry !== undefined &&
-			"condition" in entry &&
-			!index.byCondition.has(entry.condition)
-		) {
-			index.byCondition.set(entry.condition, entry);
-		}
+	const last = result[result.length - 1];
+	if (
+		last !== null &&
+		last !== undefined &&
+		"condition" in last &&
+		last.condition === condition
+	) {
+		last.items.push(...items);
+	} else {
+		result.push({
+			condition,
+			items: [...items],
+		});
 	}
-	return index.byCondition.get(condition);
+	items.length = 0;
 }
 
 function handleIf(
