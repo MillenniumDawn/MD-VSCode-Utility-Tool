@@ -1,6 +1,6 @@
 import type * as vscode from 'vscode';
 import { host } from '../../util/host';
-import { Commands, WebviewType } from '../../constants';
+import { Commands, ConfigurationKey, WebviewType } from '../../constants';
 import { WorldMap } from './worldmap';
 import { contextContainer } from '../../context';
 import { localize } from '../../util/i18n';
@@ -15,6 +15,14 @@ export class WorldMapContainer implements vscode.WebviewPanelSerializer {
         disposables.push(host().window.registerWebviewPanelSerializer(WebviewType.PreviewWorldMap, this));
         disposables.push(host().workspace.onDidCloseTextDocument(this.onCloseTextDocument, this));
         disposables.push(host().workspace.onDidChangeTextDocument(this.onChangeTextDocument, this));
+        // The supply-area flag is written into the open panel's page once at render, so a change
+        // of the setting updates the panel in place: the loader re-reads the setting and the page
+        // gets the new flag pushed.
+        disposables.push(host().workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration(`${ConfigurationKey}.enableSupplyArea`)) {
+                void this.worldMap?.onEnableSupplyAreaChanged();
+            }
+        }));
         return host().Disposable.from(...disposables);
     }
 

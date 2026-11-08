@@ -159,6 +159,11 @@ export class WorldMapLoader extends Loader<WorldMapData> {
 		this.shouldReloadValue = true;
 	}
 
+	/** True between a shallowForceReload and the load that consumes it. */
+	public isShallowReloadPending(): boolean {
+		return this.shouldReloadValue;
+	}
+
 	public override toString() {
 		return `[WorldMapLoader]`;
 	}

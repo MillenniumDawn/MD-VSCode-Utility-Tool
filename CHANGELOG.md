@@ -1,5 +1,8 @@
 Unreleased
 
+  Bugfixes:
+- [ World Map Preview ] Turning the supply-area setting on or off now updates an open world map in place, and Refresh keeps its controls and its data in the same mode. Issue #739.
+
 v1.1.45
 
   Bugfixes:
