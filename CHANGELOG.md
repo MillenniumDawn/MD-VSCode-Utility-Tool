@@ -1,5 +1,8 @@
 Unreleased
 
+  Bugfixes:
+- [ Loading ] Files and folders reached through a symbolic link are now included in folder listings, so a mod reached through a junction is indexed in full wherever the native walk cannot run. Issue #719.
+
 v1.1.45
 
   Bugfixes:
