@@ -1,6 +1,7 @@
 Unreleased
 
   Bugfixes:
+- [ Events Previewer ] Event calls inside scope blocks such as every_country now show their limit conditions instead of appearing unconditional. The limit itself is no longer shown as an effect. Issue #716.
 - [ World Map Preview ] Turning the supply-area setting on or off now updates an open world map in place, and Refresh keeps its controls and its data in the same mode. Issue #739.
 - [ Loading ] Files and folders reached through a symbolic link are now included in folder listings, so a mod reached through a junction is indexed in full wherever the native walk cannot run. Issue #719.
 - [ Decisions Previewer ] A targeted decision's target_root_trigger restrictions on the decision-taking country now show in the preview as their own condition panel and count in the conditions filter. Issue #758.

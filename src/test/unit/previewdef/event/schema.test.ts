@@ -206,6 +206,43 @@ describe('previewdef/event/schema child event conditions', () => {
         assert.strictEqual(children.length, 1);
     });
 
+    it('reads a scope limit as the guard on the calls inside the scope, not as an effect', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                option = {
+                    name = test.1.a
+                    every_country = {
+                        limit = { tag = GER }
+                        country_event = { id = test.2 }
+                    }
+                    country_event = { id = test.3 }
+                }
+            }
+        `);
+
+        const option = byId(events, 'test.1').options[0]!;
+        const two = option.childEvents.find(c => c.eventName === 'test.2');
+        const three = option.childEvents.find(c => c.eventName === 'test.3');
+        assert.ok(two && three, option.childEvents.map(c => c.eventName).join(' | '));
+
+        // The limit picks the countries the scope reaches, so the call inside is guarded by it.
+        assert.strictEqual(two!.scopeName, 'every_country');
+        assert.notStrictEqual(two!.condition, true);
+        assert.ok(conditionToString(two!.condition).includes('tag = GER'), conditionToString(two!.condition));
+
+        // The call outside the scope block does not inherit that guard.
+        assert.strictEqual(three!.condition, true);
+
+        // The limit is a guard, never a line of the effects the option is sent.
+        const effects = JSON.stringify(option.effects);
+        assert.ok(!effects.includes('limit'), effects);
+        assert.ok(effects.includes('tag = GER'), effects);
+    });
+
     it('carries the guard onto a call fired from immediate', () => {
         const events = eventsOf(`
             add_namespace = ENG_inner_circle_charles
