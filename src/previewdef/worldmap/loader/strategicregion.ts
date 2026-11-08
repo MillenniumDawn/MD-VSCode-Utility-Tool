@@ -60,6 +60,10 @@ const strategicRegionKind: RegionKind = {
 		"worldmap.warnings.strategicregionidconflict",
 		"There're more than one strategic regions using ID {0}.",
 	],
+	invalidId: [
+		"worldmap.warnings.strategicregionidinvalid",
+		"Strategic region has an invalid id: {0}.",
+	],
 	notExist: [
 		"worldmap.warnings.strategicregionnotexist",
 		"Strategic region with id {0} doesn't exist.",

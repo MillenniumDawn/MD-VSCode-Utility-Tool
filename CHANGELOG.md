@@ -1,6 +1,7 @@
 Unreleased
 
   Bugfixes:
+- [ World Map Preview ] Malformed province, state, strategic region and supply area IDs now produce warnings and keep their entries instead of crashing the preview or silently losing map data. Issue #721.
 - [ World Map Preview ] Turning the supply-area setting on or off now updates an open world map in place, and Refresh keeps its controls and its data in the same mode. Issue #739.
 - [ Loading ] Files and folders reached through a symbolic link are now included in folder listings, so a mod reached through a junction is indexed in full wherever the native walk cannot run. Issue #719.
 - [ Decisions Previewer ] A targeted decision's target_root_trigger restrictions on the decision-taking country now show in the preview as their own condition panel and count in the conditions filter. Issue #758.
