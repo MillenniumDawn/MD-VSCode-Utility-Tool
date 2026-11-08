@@ -58,6 +58,10 @@ const supplyAreaKind: RegionKind = {
 		"worldmap.warnings.supplyareaidconflict",
 		"There're more than one supply areas using ID {0}.",
 	],
+	invalidId: [
+		"worldmap.warnings.supplyareaidinvalid",
+		"Supply area has an invalid id: {0}.",
+	],
 	notExist: [
 		"worldmap.warnings.supplyareanotexist",
 		"Supply area with id {0} doesn't exist.",

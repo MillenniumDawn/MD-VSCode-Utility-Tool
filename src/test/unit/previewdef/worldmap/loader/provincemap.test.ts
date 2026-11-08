@@ -219,4 +219,48 @@ describe("previewdef/worldmap/loader provincemap adjacency endpoints", () => {
 		assert.strictEqual(edgeTo(result.provinces[2], 0), undefined);
 		assert.deepStrictEqual(result.provinces[1]?.edges, []);
 	});
+
+	it("retains a definition row with a malformed id on a bad slot and counts it", async () => {
+		const { result, warnings } = await loadMap([1, NaN, -5, 2] as number[], []);
+
+		const retained = warnings.filter((warning) =>
+			warning.text.includes("has an invalid id"),
+		);
+		assert.deepStrictEqual(
+			retained.map((warning) => warning.text),
+			[
+				"Province NaN has an invalid id. Set id to -1.",
+				"Province -5 has an invalid id. Set id to -2.",
+			],
+		);
+		assert.deepStrictEqual(retained[0]?.source, [
+			{ type: "province", id: -1, color: NaN },
+		]);
+		assert.deepStrictEqual(retained[0]?.relatedFiles, [
+			"map/provinces.txt",
+		]);
+
+		assert.strictEqual(result.badProvincesCount, 2);
+		assert.strictEqual(result.provinces[-1]?.id, -1);
+		assert.strictEqual(result.provinces[-2]?.id, -2);
+		assert.strictEqual(result.provinces[1]?.id, 1);
+		assert.strictEqual(result.provinces[2]?.id, 2);
+	});
+
+	it("counts a nan and a boundary-equal province id through the whole loader", async () => {
+		const { result, warnings } = await loadMap([NaN, -2] as number[], []);
+
+		assert.deepStrictEqual(
+			warnings
+				.filter((warning) => warning.text.includes("has an invalid id"))
+				.map((warning) => warning.text),
+			[
+				"Province NaN has an invalid id. Set id to -1.",
+				"Province -2 has an invalid id. Set id to -2.",
+			],
+		);
+		assert.strictEqual(result.badProvincesCount, 2);
+		assert.strictEqual(result.provinces[-1]?.id, -1);
+		assert.strictEqual(result.provinces[-2]?.id, -2);
+	});
 });
