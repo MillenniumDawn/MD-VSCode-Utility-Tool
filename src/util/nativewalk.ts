@@ -136,11 +136,8 @@ export async function walkFilesWithMtime(
 
 			if (dirent.isSymbolicLink()) {
 				// A Dirent describes the link, not what it points at, so a symlinked file answers false
-				// to both isFile() and isDirectory(). The vscode.workspace.fs walk drops those silently
-				// -- its FileType comes back as File|SymbolicLink, which matches neither of the two
-				// values it tests for -- which means a mod folder reached through a junction, the usual
-				// arrangement on Windows, is invisible to every index. Follow them instead; the cycle
-				// guard below is what makes that safe.
+				// to both isFile() and isDirectory(). Follow the target; the cycle guard below is what
+				// makes that safe. The workspace.fs fallback follows File|SymbolicLink the same way.
 				const target = await statOrUndefined(childFsPath);
 				if (target === undefined) {
 					continue; // broken link
@@ -189,10 +186,10 @@ export async function walkFilesWithMtime(
 		prefix: string,
 		depth: number,
 	): Promise<FoundFile[]> {
-		// The guard the vscode.workspace.fs walk has no equivalent of. A junction or symlink pointing
-		// at one of its own ancestors turns a walk into an endless one, and following symlinks at all
-		// is what makes that reachable. realpath is the mechanism available here: readdir's Dirent
-		// carries no inode, and on Windows Stats.ino is not dependable across filesystems. It costs one
+		// realpath is what this walk has and the workspace.fs fallback does not. A junction or symlink
+		// pointing at one of its own ancestors turns a walk into an endless one, and following symlinks
+		// at all is what makes that reachable. readdir's Dirent carries no inode, and on Windows
+		// Stats.ino is not dependable across filesystems. It costs one
 		// syscall per directory against one per file for the mtimes. Keeping the set for the whole walk
 		// rather than per branch also collapses two junctions that point at the same real folder.
 		// Siblings descend concurrently, so the has/add pair below must stay synchronous: with no

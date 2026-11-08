@@ -250,14 +250,12 @@ describe("previewdef/decision/schema effect blocks", () => {
 			"d",
 		);
 
-		// Nested constructs are emitted where the walk meets them and the flat statements are
-		// gathered onto the end, so a block's plain lines follow its `if` and `random_list` rather
-		// than sitting where they were written. That is how the event preview has always shown an
-		// effect block; the decision preview inherits it by using the same projection.
+		// The three shapes arrive in the order the block writes them: the plain line first, then
+		// the `if` behind its limit, then the `random_list` as a weighted choice.
 		const effects = found.effectBlocks[0]?.effects ?? [];
 		assert.deepStrictEqual(
 			effects.map((e) => e.kind),
-			["group", "choice", "line"],
+			["line", "group", "choice"],
 		);
 	});
 });
@@ -545,5 +543,65 @@ describe("previewdef/decision/schema target trigger", () => {
 
 		assert.strictEqual(found.hasTargetTrigger, true);
 		assert.strictEqual(found.targetTrigger, true);
+	});
+});
+
+describe("previewdef/decision/schema target root trigger", () => {
+	// The game checks target_root_trigger on the decision-taking country before it looks at any
+	// candidate target, so the taker's conditions are read in the same scope as allowed and
+	// available, and a FROM block written inside stays with the candidate.
+	const takerGate = `
+        cat = {
+            DEN_form_raid_groups = {
+                target_array = DEN.core_states
+                target_root_trigger = {
+                    has_dlc = "Arctic Heads"
+                    FROM = { has_country_flag = DEN_denmark_nordics_invested }
+                }
+            }
+        }
+    `;
+
+	it("reads target_root_trigger apart from target_trigger", () => {
+		const found = decision(takerGate, "cat", "DEN_form_raid_groups");
+
+		assert.strictEqual(found.hasTargetRootTrigger, true);
+		assert.strictEqual(found.hasTargetTrigger, false);
+		const written = conditionToString(found.targetRootTrigger);
+		assert.ok(
+			written.includes("has_dlc = \"Arctic Heads\""),
+			`the taker's condition must carry no scope marker, got ${written}`,
+		);
+		assert.ok(
+			written.includes("[FROM]has_country_flag = DEN_denmark_nordics_invested"),
+			`a FROM scope written inside must stay with the candidate, got ${written}`,
+		);
+	});
+
+	it("collects the block's taker and candidate conditions in their own scopes", () => {
+		const exprs = getDecisionsFromFile(parseHoi4File(takerGate), "test.txt").conditionExprs;
+
+		assert.ok(
+			exprs.some((e) => e.scopeName === "" && e.nodeContent.includes("has_dlc")),
+			"the taker's condition is checked on ROOT",
+		);
+		assert.ok(
+			exprs.some((e) => e.scopeName === "FROM" && e.nodeContent.includes("DEN_denmark_nordics_invested")),
+			"the candidate's condition keeps its FROM scope",
+		);
+	});
+
+	it("reads a decision without target_root_trigger as placing no taker gate", () => {
+		const without = decision(`cat = { d = { available = { has_war = no } } }`, "cat", "d");
+
+		assert.strictEqual(without.hasTargetRootTrigger, false);
+		assert.strictEqual(without.targetRootTrigger, true);
+	});
+
+	it("reads an empty target_root_trigger as a restriction that always holds", () => {
+		const found = decision(`cat = { d = { target_root_trigger = { } } }`, "cat", "d");
+
+		assert.strictEqual(found.hasTargetRootTrigger, true);
+		assert.strictEqual(found.targetRootTrigger, true);
 	});
 });

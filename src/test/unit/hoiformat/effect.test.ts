@@ -61,6 +61,8 @@ describe("hoiformat/effect", () => {
 			["a hidden_effect as part of the block around it", "hidden_effect = { set_country_flag = seen } add_stability = 0.1", "set_country_flag = seen; add_stability = 0.1"],
 			["the scope a statement is written in, and leaves it again", "GER = { add_stability = 0.1 } add_war_support = 0.05", "[GER]add_stability = 0.1; add_war_support = 0.05"],
 			["a scope entered from another one", "GER = { every_owned_state = { add_manpower = 100 } }", "[GER.every_owned_state]add_manpower = 100"],
+			["a scoped block between two statements stays between them", "x = 1 GER = { y = 1 } z = 1", "x = 1; [GER]y = 1; z = 1"],
+			["a hidden_effect between two statements stays between them", "x = 1 hidden_effect = { y = 1 } z = 1", "x = 1; y = 1; z = 1"],
 			// A scope only triggers can enter stays a plain statement.
 			["a trigger scope as a statement", "any_owned_state = { add_manpower = 100 }", "any_owned_state = { add_manpower = 100 }"],
 			["an if as a group behind its limit", "if = { limit = { a = 1 } x = 1 }", "when a = 1 { x = 1 }"],
@@ -68,7 +70,14 @@ describe("hoiformat/effect", () => {
 			["an else_if behind every limit before it negated", "if = { limit = { a = 1 } x = 1 else_if = { limit = { b = 1 } y = 1 } else = { z = 1 } }", chain],
 			["an else_if and an else written after the if the same way", "if = { limit = { a = 1 } x = 1 } else_if = { limit = { b = 1 } y = 1 } else = { z = 1 }", chain],
 			["an if inside an if behind both limits", "if = { limit = { a = 1 } if = { limit = { b = 1 } x = 1 } }", "when and(a = 1, b = 1) { x = 1 }"],
-			["one group for everything behind the same limit", "if = { limit = { a = 1 } x = 1 GER = { y = 1 } }", "when a = 1 { [GER]y = 1; x = 1 }"],
+			["one group for everything behind the same limit", "if = { limit = { a = 1 } x = 1 GER = { y = 1 } }", "when a = 1 { x = 1; [GER]y = 1 }"],
+			["a scoped block between two statements behind the same limit", "if = { limit = { a = 1 } x = 1 GER = { y = 1 } z = 1 }", "when a = 1 { x = 1; [GER]y = 1; z = 1 }"],
+			["an if between two statements stays between them", "x = 1 if = { limit = { a = 1 } y = 1 } z = 1", "x = 1; when a = 1 { y = 1 }; z = 1"],
+			[
+				"a random_list between two statements stays between them",
+				"x = 1 random_list = { 50 = { y = 1 } 50 = { w = 1 } } z = 1",
+				"x = 1; one of { 50: y = 1 | 50: w = 1 }; z = 1",
+			],
 			["nothing for an if without a limit or an else without an if", "if = { x = 1 } else = { z = 1 } y = 1", "y = 1"],
 			["nothing for an else_if or an else that is not a block", "if = { limit = { a = 1 } x = 1 } else_if = no else = no", "when a = 1 { x = 1 }"],
 			[
@@ -102,7 +111,7 @@ describe("hoiformat/effect", () => {
 
 		it("skips the excluded keys of the block itself, not of a block inside it", () => {
 			const effect = effectOf("ai_chance = { factor = 2 } x = 1 GER = { ai_chance = { factor = 1 } }", countryScope, ["ai_chance"]);
-			assert.strictEqual(write(projectEffects(effect)), "[GER]ai_chance = { factor = 1 }; x = 1");
+			assert.strictEqual(write(projectEffects(effect)), "x = 1; [GER]ai_chance = { factor = 1 }");
 		});
 
 		it("returns a lone statement bare, with the node it was parsed from", () => {
