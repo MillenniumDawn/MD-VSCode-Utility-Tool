@@ -55,7 +55,9 @@ export async function readDir(dir: vscode.Uri): Promise<string[]> {
 }
 
 export async function readDirFiles(dir: vscode.Uri): Promise<string[]> {
-    return (await host().workspace.fs.readDirectory(dir)).filter(f => f[1] === host().FileType.File).map(f => f[0]);
+    // FileType is a bitfield: a link to a file comes back File|SymbolicLink, so a file is anything
+    // carrying the File bit, not one whose type is exactly File.
+    return (await host().workspace.fs.readDirectory(dir)).filter(f => (f[1] & host().FileType.File) !== 0).map(f => f[0]);
 }
 
 /**
@@ -66,17 +68,50 @@ export async function readDirFiles(dir: vscode.Uri): Promise<string[]> {
  */
 const DIR_CONCURRENCY = 8;
 
+// The native walk stops at the same depth. A link whose target lists that link again grows a new
+// path on every descent, and workspace.fs has no realpath with which to see that it is the same folder.
+const MAX_WALK_DEPTH = 32;
+
 export async function readDirFilesRecursively(dir: vscode.Uri): Promise<string[]> {
-    return readDirFilesRecursivelyImpl(dir, '');
+    // A directory is walked when it is descended into, so the walk starts at the root before
+    // anything lists anything: a link back to the root is already seen by the time it is reached.
+    return readDirFilesRecursivelyImpl(dir, '', directoryIdentity(dir), new Set([directoryIdentity(dir)]), 0);
 }
 
-async function readDirFilesRecursivelyImpl(dir: vscode.Uri, prefix: string): Promise<string[]> {
+async function readDirFilesRecursivelyImpl(
+    dir: vscode.Uri,
+    prefix: string,
+    walkRoot: string,
+    visitedDirectories: Set<string>,
+    depth: number,
+): Promise<string[]> {
     const items = await host().workspace.fs.readDirectory(dir);
     const nested = await mapLimit(items, DIR_CONCURRENCY, async ([name, type]) => {
-        if (type === host().FileType.File) {
+        // FileType is a bitfield: a link comes back with the SymbolicLink bit on top of the type of
+        // what it points at, so a file carries the File bit and a directory the Directory bit. A
+        // bare SymbolicLink has neither and stays out, as before.
+        if ((type & host().FileType.File) !== 0) {
             return [prefix + name];
-        } else if (type === host().FileType.Directory) {
-            return readDirFilesRecursivelyImpl(host().Uri.joinPath(dir, name), prefix + name + '/');
+        } else if ((type & host().FileType.Directory) !== 0) {
+            const child = host().Uri.joinPath(dir, name);
+            const childIdentity = directoryIdentity(child);
+            // Only a link can point outside the walk root or back into the tree already walked; an
+            // entry of a plain listing is always inside its own directory. workspace.fs has no
+            // realpath to see a link's target through, so the identity of the path the walk
+            // descends through is what the visited set holds. The check and the mark both run
+            // before the listing below awaits, so concurrent siblings cannot both walk a path.
+            const linked = (type & host().FileType.SymbolicLink) !== 0;
+            const seenLinkName = linked && prefix.split('/').includes(name);
+            if (
+                depth >= MAX_WALK_DEPTH ||
+                seenLinkName ||
+                !childIdentity.startsWith(walkRoot + '/') ||
+                visitedDirectories.has(childIdentity)
+            ) {
+                return [];
+            }
+            visitedDirectories.add(childIdentity);
+            return readDirFilesRecursivelyImpl(child, prefix + name + '/', walkRoot, visitedDirectories, depth + 1);
         }
         return [];
     });
@@ -87,6 +122,26 @@ async function readDirFilesRecursivelyImpl(dir: vscode.Uri, prefix: string): Pro
         }
     }
     return result;
+}
+
+/**
+ * The string on which the walk tells directories apart: the URI path with any `.` and `..` segments
+ * collapsed to the folder they resolve to, under the scheme it was reached through. workspace.fs can
+ * hand the walk no realpath for a link's target, so the path it descends through is the only
+ * identity there is, and an entry that names its way back -- even `..`-by-`..` -- must meet the one
+ * the visited set already holds. Collapsing here, rather than trusting `Uri.joinPath` to have, keeps
+ * that true whatever the editor's own joining does.
+ */
+function directoryIdentity(uri: vscode.Uri): string {
+    const segments: string[] = [];
+    for (const segment of uri.path.split('/')) {
+        if (segment === '..') {
+            segments.pop();
+        } else if (segment !== '.' && segment !== '') {
+            segments.push(segment);
+        }
+    }
+    return uri.scheme + '://' + segments.join('/');
 }
 
 export async function readFile(path: vscode.Uri): Promise<Buffer> {

@@ -1007,9 +1007,9 @@ async function listDirectoryEntries(
 		? await readDirFilesRecursively(dir)
 		: await readDirFiles(dir);
 	// No mtimes: readDirectory reports names and types only, so dating these costs a stat each and is
-	// left to the caller, which knows whether it needs them at all. Symlinked entries are dropped here
-	// and kept by the native walk -- vscode.FileType reports them as File|SymbolicLink, which matches
-	// neither value readDirFilesRecursively tests for.
+	// left to the caller, which knows whether it needs them at all. Entries reached through a link
+	// list through their target like the native walk's do, with a visited directory set as its
+	// cycle guard where the native walk has realpath.
 	return names.map((relativePath) => ({
 		relativePath,
 		uri: host().Uri.joinPath(dir, relativePath),
