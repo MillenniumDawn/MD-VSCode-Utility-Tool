@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { fileOrUriStringToUri, readDirFilesRecursively } from '../util/vsccommon';
+import { fileOrUriStringToUri, readDirFiles, readDirFilesRecursively } from '../util/vsccommon';
 import { restoreVscodeStubs, stubVscode } from './_vscode_stub';
 
 describe('util/vsccommon', () => {
@@ -83,6 +83,99 @@ describe('util/vsccommon', () => {
             stubTree({ '/root/sub': 20, '/root/sub/deep': 10 });
             const result = await readDirFilesRecursively(vscode.Uri.file('/root'));
             assert.deepStrictEqual(result, ['a.txt', 'sub/c.txt', 'sub/deep/d.txt', 'b.txt', 'other/e.txt']);
+        });
+
+        it('lists a file that is a link, walks through a directory that is one, and omits a bare link', async () => {
+            // The provider stats what a link points at, so a linked file answers File|SymbolicLink and
+            // a linked directory Directory|SymbolicLink; a link to nothing answers SymbolicLink alone.
+            const linkedFile = vscode.FileType.File | vscode.FileType.SymbolicLink;
+            const linkedDirectory = vscode.FileType.Directory | vscode.FileType.SymbolicLink;
+            const tree: Record<string, [string, number][]> = {
+                '/root': [['a.txt', vscode.FileType.File], ['sub', vscode.FileType.Directory], ['l.txt', linkedFile], ['linked', linkedDirectory], ['dangling', vscode.FileType.SymbolicLink]],
+                '/root/sub': [['b.txt', vscode.FileType.File]],
+                '/root/linked': [['c.txt', linkedFile], ['d.txt', vscode.FileType.File]],
+            };
+            stubVscode({
+                readDirectory: async (uri: vscode.Uri) => {
+                    const key = uri.fsPath.replace(/\\/g, '/');
+                    return tree[key] ?? [];
+                },
+            });
+            const result = await readDirFilesRecursively(vscode.Uri.file('/root'));
+            assert.deepStrictEqual(result, ['a.txt', 'sub/b.txt', 'l.txt', 'linked/c.txt', 'linked/d.txt']);
+        });
+
+        it('stops where a linked directory leads back onto one already walked', async () => {
+            // `link` resolves onto a directory the walk already holds: readDirectory through it answers
+            // with the same listing again, and the entry that resolves back onto the path just
+            // descended does so folded short. workspace.fs offers no realpath for a link's target, so
+            // the visited set compares the identities the walk descends through, and meeting one it
+            // holds is where this finishes instead of turning.
+            const tree: Record<string, [string, number][]> = {
+                '/root': [['a.txt', vscode.FileType.File], ['link', vscode.FileType.Directory | vscode.FileType.SymbolicLink]],
+                '/root/link': [['.', vscode.FileType.Directory | vscode.FileType.SymbolicLink], ['b.txt', vscode.FileType.File]],
+            };
+            stubVscode({
+                readDirectory: async (uri: vscode.Uri) => {
+                    const key = uri.fsPath.replace(/\\/g, '/');
+                    return tree[key] ?? [];
+                },
+            });
+            const result = await readDirFilesRecursively(vscode.Uri.file('/root'));
+            assert.deepStrictEqual(result, ['a.txt', 'link/b.txt']);
+        });
+
+        it('finishes when a linked directory lists that same link again', async () => {
+            // A provider follows the link and returns the target's names under the link path, so the
+            // path never collapses back to the root. The listing naming the link again is the cycle.
+            const linkedDirectory = vscode.FileType.Directory | vscode.FileType.SymbolicLink;
+            const tree: Record<string, [string, number][]> = {
+                '/root': [['a.txt', vscode.FileType.File], ['link', linkedDirectory]],
+                '/root/link': [['a.txt', vscode.FileType.File], ['sub', vscode.FileType.Directory], ['link', linkedDirectory]],
+                '/root/link/sub': [['b.txt', vscode.FileType.File]],
+            };
+            stubVscode({
+                readDirectory: async (uri: vscode.Uri) => {
+                    const key = uri.fsPath.replace(/\\/g, '/');
+                    return tree[key] ?? tree['/root/link'];
+                },
+            });
+            const result = await readDirFilesRecursively(vscode.Uri.file('/root'));
+            assert.deepStrictEqual(result, ['a.txt', 'link/a.txt', 'link/sub/b.txt']);
+        });
+
+        it('does not follow a linked directory out of the tree it is walking', async () => {
+            // Walking /root/sub, the link resolves above it into the parent folder: the entry that
+            // reaches the walk root from inside the linked directory collapses out of it.
+            const tree: Record<string, [string, number][]> = {
+                '/root/sub': [['a.txt', vscode.FileType.File], ['out', vscode.FileType.Directory | vscode.FileType.SymbolicLink]],
+                '/root/sub/out': [['..', vscode.FileType.Directory | vscode.FileType.SymbolicLink], ['b.txt', vscode.FileType.File]],
+            };
+            stubVscode({
+                readDirectory: async (uri: vscode.Uri) => {
+                    const key = uri.fsPath.replace(/\\/g, '/');
+                    return tree[key] ?? [];
+                },
+            });
+            const result = await readDirFilesRecursively(vscode.Uri.file('/root/sub'));
+            assert.deepStrictEqual(result, ['a.txt', 'out/b.txt']);
+        });
+    });
+
+    describe('readDirFiles', () => {
+        afterEach(() => restoreVscodeStubs());
+
+        it('lists plain files and linked files, and neither directories nor bare links', async () => {
+            stubVscode({
+                readDirectory: async () => [
+                    ['a.txt', vscode.FileType.File],
+                    ['l.txt', vscode.FileType.File | vscode.FileType.SymbolicLink],
+                    ['sub', vscode.FileType.Directory],
+                    ['linked', vscode.FileType.Directory | vscode.FileType.SymbolicLink],
+                    ['dangling', vscode.FileType.SymbolicLink],
+                ],
+            });
+            assert.deepStrictEqual(await readDirFiles(vscode.Uri.file('/root')), ['a.txt', 'l.txt']);
         });
     });
 });
