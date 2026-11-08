@@ -441,6 +441,111 @@ describe('previewdef/mio/schema delete_included_values', () => {
     });
 });
 
+describe('previewdef/mio/schema bonus overrides', () => {
+    const base = `
+        base_org = {
+            trait = {
+                token = armed
+                icon = GFX_armed
+                position = { x = 0 y = 0 }
+                equipment_bonus = { soft_attack = 0.1 }
+            }
+            trait = {
+                token = full
+                position = { x = 1 y = 0 }
+                equipment_bonus = { soft_attack = 0.1 }
+                production_bonus = { production_speed_buildings_factor = 0.1 }
+                organization_modifier = { org_gain = 1 }
+            }
+        }
+    `;
+
+    function load(rest: string): Record<string, Mio> {
+        const mios = getMiosFromFile(parseHoi4File(base + rest), [], 'test.txt');
+        return Object.fromEntries(mios.map(mio => [mio.id, mio]));
+    }
+
+    it('adds the icons of bonus categories an override names that the included trait lacked', () => {
+        const derived = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = armed
+                    production_bonus = { production_speed_industry_factor = 0.1 }
+                    organization_modifier = { org_gain = 2 }
+                }
+            }
+        `)['derived_org'];
+        assert.deepStrictEqual(derived.traits['armed'].effects, ['equiment', 'production', 'organization']);
+    });
+
+    it('shows each named category once, whether or not the included trait had it', () => {
+        const derived = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = full
+                    production_bonus = { production_speed_buildings_factor = 0.2 }
+                }
+            }
+        `)['derived_org'];
+        assert.deepStrictEqual(derived.traits['full'].effects, ['equiment', 'production', 'organization']);
+    });
+
+    it('keeps the inherited bonuses an override does not name', () => {
+        const derived = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = full
+                    name = renamed
+                }
+            }
+        `)['derived_org'];
+        assert.deepStrictEqual(derived.traits['full'].effects, ['equiment', 'production', 'organization']);
+    });
+
+    it('applies repeated overrides to the same trait without duplicating icons', () => {
+        const derived = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = armed
+                    production_bonus = { production_speed_industry_factor = 0.1 }
+                }
+                override_trait = {
+                    token = armed
+                    organization_modifier = { org_gain = 2 }
+                }
+            }
+        `)['derived_org'];
+        assert.deepStrictEqual(derived.traits['armed'].effects, ['equiment', 'production', 'organization']);
+    });
+
+    it('leaves the inherited effects array untouched by the overrides', () => {
+        const mios = load(`
+            derived_org = {
+                include = base_org
+                override_trait = {
+                    token = armed
+                    production_bonus = { production_speed_industry_factor = 0.1 }
+                    organization_modifier = { org_gain = 2 }
+                }
+            }
+            second_org = {
+                include = base_org
+                override_trait = {
+                    token = armed
+                    production_bonus = { production_speed_buildings_factor = 0.1 }
+                }
+            }
+        `);
+        assert.deepStrictEqual(mios.base_org.traits['armed'].effects, ['equiment']);
+        assert.deepStrictEqual(mios.derived_org.traits['armed'].effects, ['equiment', 'production', 'organization']);
+        assert.deepStrictEqual(mios.second_org.traits['armed'].effects, ['equiment', 'production']);
+    });
+});
+
 describe('previewdef/mio/schema link warnings', () => {
     function warningsOf(traits: string, extra = ''): { text: string, source: string, relatedSources?: string[] }[] {
         const mios = getMiosFromFile(parseHoi4File(`test_org = { ${traits} } ${extra}`), [], 'test.txt');
