@@ -1,5 +1,8 @@
 Unreleased
 
+  Bugfixes:
+- [ Decisions Previewer ] A targeted decision's target_root_trigger restrictions on the decision-taking country now show in the preview as their own condition panel and count in the conditions filter. Issue #758.
+
 v1.1.45
 
   Bugfixes:

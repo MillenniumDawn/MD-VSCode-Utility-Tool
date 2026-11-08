@@ -98,6 +98,11 @@ export interface DecisionGraphDecisionNode extends GraphNodeBase {
 	// The decision-taker is ROOT; the candidate target is FROM.
 	targetTrigger: ConditionComplexExpr;
 	hasTargetTrigger: boolean;
+	// target_root_trigger is not written under target_trigger: the game checks it on the
+	// decision-taking country before any per-target check, so a bare condition reads as the
+	// taker's (ROOT) and a FROM block written inside keeps the candidate's scope.
+	targetRootTrigger: ConditionComplexExpr;
+	hasTargetRootTrigger: boolean;
 	effects: DecisionEffectRef[];
 }
 
