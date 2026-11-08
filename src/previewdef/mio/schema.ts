@@ -547,25 +547,27 @@ function overrideTrait(traitDef: HOIPartial<MioTraitDef>, traits: Record<string,
                 break;
             case 'equipment_bonus':
                 trait.effects = trait.effects.filter(e => e !== 'equiment');
-                if (traitDef.equipment_bonus?._raw.value) {
-                    trait.effects.push('equiment');
-                }
                 break;
             case 'production_bonus':
                 trait.effects = trait.effects.filter(e => e !== 'production');
-                if (traitDef.production_bonus?._raw.value) {
-                    trait.effects.push('production');
-                }
                 break;
             case 'organization_modifier':
                 trait.effects = trait.effects.filter(e => e !== 'organization');
-                if (traitDef.organization_modifier?._raw.value) {
-                    trait.effects.push('organization');
-                }
                 break;
             default:
                 continue;
         }
+    }
+
+    // Copy on addition because the included trait still owns the inherited effects array.
+    if (traitDef.equipment_bonus?._raw.value && !trait.effects.includes('equiment')) {
+        trait.effects = [...trait.effects, 'equiment'];
+    }
+    if (traitDef.production_bonus?._raw.value && !trait.effects.includes('production')) {
+        trait.effects = [...trait.effects, 'production'];
+    }
+    if (traitDef.organization_modifier?._raw.value && !trait.effects.includes('organization')) {
+        trait.effects = [...trait.effects, 'organization'];
     }
 
     trait.name = traitDef.name ?? trait.name;
