@@ -62,6 +62,19 @@ function withQuietScrolling<T>(fn: () => T): T {
 	}
 }
 
+function withImmediateAnimationFrames<T>(fn: () => T): T {
+	const originalRequestAnimationFrame = (globalThis as any).requestAnimationFrame;
+	(globalThis as any).requestAnimationFrame = (callback: (time: number) => void) => {
+		callback(0);
+		return 0;
+	};
+	try {
+		return fn();
+	} finally {
+		(globalThis as any).requestAnimationFrame = originalRequestAnimationFrame;
+	}
+}
+
 // The shared post log, emptied first and handed over live, so an assertion inside `fn` sees
 // everything posted up to that point.
 function withPosts<T>(fn: (posts: unknown[]) => T): T {
@@ -688,16 +701,8 @@ describe("webview entrypoints", () => {
 	it("starts the world-map loader and hides supply-area controls when disabled", () => {
 		installWorldMapShell();
 		(window as any).__enableSupplyArea = false;
-		const originalRequestAnimationFrame = (globalThis as any)
-			.requestAnimationFrame;
-		(globalThis as any).requestAnimationFrame = (
-			callback: (time: number) => void,
-		) => {
-			callback(0);
-			return 0;
-		};
 
-		try {
+		withImmediateAnimationFrames(() => {
 			withPosts((posts) => {
 				withoutWindowListeners(() =>
 					withQuietScrolling(() => run(worldmap, "load", new Event("load"))),
@@ -724,9 +729,110 @@ describe("webview entrypoints", () => {
 			assert.strictEqual(showWarnings.getAttribute("aria-pressed"), "true");
 			showWarnings.dispatchEvent(new Event("click"));
 			assert.strictEqual(showWarnings.getAttribute("aria-pressed"), "false");
-		} finally {
-			(globalThis as any).requestAnimationFrame = originalRequestAnimationFrame;
-		}
+		});
+	});
+
+	// Issue #739: the flag the page starts with lives only in its HTML, so an open panel's toolbar
+	// could not follow the setting. The host pushes enableSupplyArea messages both ways; the
+	// options are rebuilt to and from their original elements, never destroyed.
+	const supplyAreaOptionCounts = () => ({
+		required: document.querySelectorAll('[enablesupplyarea="true"]').length,
+		forbidden: document.querySelectorAll('[enablesupplyarea="false"]').length,
+		selectValues: ["viewmode", "colorset"].map((id) =>
+			Array.from(
+				(document.getElementById(id) as HTMLSelectElement).options,
+			).map((o) => o.value),
+		),
+	});
+
+	it("restores the supply-area options and hides them again as the host pushes the setting", () => {
+		installWorldMapShell();
+		(window as any).__enableSupplyArea = false;
+
+		withImmediateAnimationFrames(() => {
+			withoutWindowListeners(() =>
+				withQuietScrolling(() => run(worldmap, "load", new Event("load"))),
+			);
+
+			// Disabled at first: the supply-area options are hidden, and Show Supply, which is only
+			// for mods that predate supply areas, is listed.
+			assert.deepStrictEqual(supplyAreaOptionCounts(), {
+				required: 0,
+				forbidden: 1,
+				selectValues: [["province"], ["provinceid"]],
+			});
+
+			withPosts((posts) => {
+				runMessage(worldmap, { command: "enablesupplyarea", data: true });
+
+				assert.deepStrictEqual(posts, [], "applying the flag posts nothing");
+				assert.deepStrictEqual(supplyAreaOptionCounts(), {
+					required: 3,
+					forbidden: 0,
+					selectValues: [
+						["province", "supplyarea"],
+						["provinceid", "supplyareaid"],
+					],
+				});
+			});
+
+			// And back off, after the restore — the direction the page could not do at all.
+			withPosts((posts) => {
+				runMessage(worldmap, { command: "enablesupplyarea", data: false });
+
+				assert.deepStrictEqual(posts, []);
+				assert.deepStrictEqual(supplyAreaOptionCounts(), {
+					required: 0,
+					forbidden: 1,
+					selectValues: [["province"], ["provinceid"]],
+				});
+			});
+		});
+	});
+
+	it("moves the view mode and color set off a control the setting took away", () => {
+		installWorldMapShell();
+		(window as any).__enableSupplyArea = true;
+
+		withImmediateAnimationFrames(() => {
+			withoutWindowListeners(() =>
+				withQuietScrolling(() => run(worldmap, "load", new Event("load"))),
+			);
+
+			const viewmode = document.getElementById("viewmode") as HTMLSelectElement;
+			viewmode.value = "supplyarea";
+			viewmode.dispatchEvent(new Event("change"));
+			assert.strictEqual(vscode.getState().viewMode, "supplyarea");
+
+			runMessage(worldmap, { command: "enablesupplyarea", data: false });
+
+			// A render indexes its tables by the view mode, so a select left pointing at a removed
+			// option falls back to a usable one and the change reaches the page's own state.
+			assert.strictEqual(viewmode.value, "province");
+			assert.strictEqual(vscode.getState().viewMode, "province");
+		});
+	});
+
+	it("leaves the world-map controls alone for other messages", () => {
+		installWorldMapShell();
+		(window as any).__enableSupplyArea = false;
+
+		withImmediateAnimationFrames(() => {
+			withoutWindowListeners(() =>
+				withQuietScrolling(() => run(worldmap, "load", new Event("load"))),
+			);
+
+			withPosts((posts) => {
+				runMessage(worldmap, { command: "provincemapsummary", data: {} });
+
+				assert.deepStrictEqual(posts, []);
+				assert.deepStrictEqual(supplyAreaOptionCounts(), {
+					required: 0,
+					forbidden: 1,
+					selectValues: [["province"], ["provinceid"]],
+				});
+			});
+		});
 	});
 });
 
