@@ -132,7 +132,12 @@ function show(wm: WorldMap): void {
 }
 
 describe("previewdef/worldmap/WorldMap releaseMemory", () => {
+	let configuration: Record<string, unknown>;
+
 	beforeEach(() => {
+		// The summary path re-reads mdHoi4Utilities.enableSupplyArea on every load, to keep the
+		// page's supply-area controls in step.
+		configuration = { enableSupplyArea: false };
 		handOver({
 			Disposable: {
 				from: () => ({ dispose: () => undefined }),
@@ -142,6 +147,9 @@ describe("previewdef/worldmap/WorldMap releaseMemory", () => {
 					appendLine: () => undefined,
 					dispose: () => undefined,
 				}),
+			},
+			workspace: {
+				getConfiguration: () => configuration,
 			},
 		} as any);
 	});
@@ -553,5 +561,198 @@ describe("previewdef/worldmap/WorldMap releaseMemory", () => {
 			]);
 			assert.strictEqual((wm as any).worldMapLoader, loader, "nothing releases behind a visible panel");
 		}
+	});
+});
+
+// Issue #739: the supply-area flag reaches the page as one script value, so an open panel could
+// not follow a change of mdHoi4Utilities.enableSupplyArea.
+describe("previewdef/worldmap/WorldMap supply-area flag", () => {
+	// The loader re-reads the setting on every load, so a stub load reads the same mutable
+	// configuration the test flips.
+	let configuration: Record<string, unknown>;
+
+	beforeEach(() => {
+		configuration = { enableSupplyArea: false };
+		handOver({
+			Disposable: {
+				from: () => ({ dispose: () => undefined }),
+			},
+			window: {
+				createOutputChannel: () => ({
+					appendLine: () => undefined,
+					dispose: () => undefined,
+				}),
+			},
+			workspace: {
+				getConfiguration: () => configuration,
+			},
+		} as any);
+	});
+
+	// Counts high enough that only a flag the loader honored can have produced them.
+	function supplyAreaMap(count: number): WorldMapData {
+		const map = emptyMap(4);
+		map.supplyAreasCount = count;
+		if (count > 0) {
+			map.supplyAreas = ["supplyarea" as unknown as never];
+		}
+		return map;
+	}
+
+	// Emulates the real loader's reload queue: loadImpl consumes the queued reload at its start,
+	// while a call that joins an in-flight load shares its result without consuming anything.
+	function reloadLoader(maps: WorldMapData[], joinsInFlight: boolean, gate?: Deferred) {
+		const state = { loads: 0, shallowForceReloads: 0 };
+		let pending = false;
+		const loader = {
+			load: async () => {
+				const call = state.loads++;
+				if (gate && call === 0) {
+					await gate.promise;
+				}
+				if (joinsInFlight && call === 1) {
+					// Joining the load already in flight: its result, and the queue it queued
+					// untouched for the next run.
+					return {
+						result: maps[0],
+						dependencies: ["map/default.map"],
+						warnings: [],
+					};
+				}
+				pending = false;
+				return {
+					result: maps[Math.min(call, maps.length - 1)],
+					dependencies: ["map/default.map"],
+					warnings: [],
+				};
+			},
+			getWorldMap: async () => maps[maps.length - 1],
+			shallowForceReload: () => {
+				state.shallowForceReloads++;
+				pending = true;
+			},
+			isShallowReloadPending: () => pending,
+			onProgress: () => ({ dispose() {} }),
+		};
+		return { state, loader: loader as unknown as WorldMap["worldMapLoader"] };
+	}
+
+	it("a setting change on an open panel pushes the new flag and reloads the data in one pass", async () => {
+		const posts: unknown[] = [];
+		const wm = new WorldMap(webviewPanel(posts) as any);
+		const { state, loader } = reloadLoader([
+			supplyAreaMap(0),
+			supplyAreaMap(2),
+		], false);
+		(wm as any).worldMapLoader = loader;
+
+		await (wm as any).onMessage({ command: "loaded", force: false });
+		assert.deepStrictEqual(
+			posts.filter((p) => (p as { command: string }).command === "enablesupplyarea"),
+			[],
+			"the page opened with the flag already in its HTML",
+		);
+
+		posts.length = 0;
+		configuration.enableSupplyArea = true;
+		await (wm as any).onEnableSupplyAreaChanged();
+
+		assert.deepStrictEqual(
+			posts.map((p) => (p as { command: string }).command),
+			["enablesupplyarea", "progress", "provincemapsummary"],
+		);
+		const flag = posts[0] as { command: string; data: boolean };
+		assert.strictEqual(flag.data, true);
+		const summary = posts[2] as { command: string; data: WorldMapData };
+		assert.strictEqual(summary.data.supplyAreasCount, 2);
+		assert.strictEqual(state.loads, 2, "one reload picked the new mode up");
+		assert.strictEqual(state.shallowForceReloads, 2);
+	});
+
+	it("a setting change that lands on a load still reading the old value gets one more pass", async () => {
+		const posts: unknown[] = [];
+		const wm = new WorldMap(webviewPanel(posts) as any);
+		const gate = deferred();
+		const { state, loader } = reloadLoader([
+			supplyAreaMap(0),
+			supplyAreaMap(0),
+			supplyAreaMap(2),
+		], true, gate);
+		(wm as any).worldMapLoader = loader;
+
+		const initial = (wm as any).onMessage({ command: "loaded", force: false });
+		configuration.enableSupplyArea = true;
+		const changed = (wm as any).onEnableSupplyAreaChanged();
+
+		await changed;
+		gate.resolve();
+		await initial;
+
+		assert.deepStrictEqual(
+			posts.map((p) => (p as { command: string }).command),
+			["enablesupplyarea", "provincemapsummary", "progress", "provincemapsummary"],
+			"the joined send still published, and the queued mode followed it",
+		);
+		const finalSummary = posts[posts.length - 1] as {
+			command: string;
+			data: WorldMapData;
+		};
+		assert.strictEqual(finalSummary.data.supplyAreasCount, 2);
+		assert.strictEqual(state.loads, 3);
+	});
+
+	it("a manual refresh after the setting changed applies the new flag before the reload", async () => {
+		const posts: unknown[] = [];
+		const wm = new WorldMap(webviewPanel(posts) as any);
+		const { loader } = reloadLoader([
+			supplyAreaMap(0),
+			supplyAreaMap(2),
+		], false);
+		(wm as any).worldMapLoader = loader;
+		// The page rendered while the flag was off; a hidden-panel reload hands it the stale HTML.
+		await (wm as any).onMessage({ command: "loaded", force: false });
+		posts.length = 0;
+
+		configuration.enableSupplyArea = true;
+		await (wm as any).onMessage({ command: "loaded", force: true });
+
+		assert.deepStrictEqual(
+			posts.map((p) => (p as { command: string }).command),
+			["enablesupplyarea", "provincemapsummary"],
+			"controls and payload leave the refresh in the same mode",
+		);
+		const summary = posts[1] as { command: string; data: WorldMapData };
+		assert.strictEqual(summary.data.supplyAreasCount, 2);
+	});
+
+	it("a reload with the flag unchanged pushes nothing", async () => {
+		const posts: unknown[] = [];
+		const wm = new WorldMap(webviewPanel(posts) as any);
+		const { loader } = reloadLoader([supplyAreaMap(0), supplyAreaMap(0)], false);
+		(wm as any).worldMapLoader = loader;
+
+		await (wm as any).onMessage({ command: "loaded", force: false });
+		await (wm as any).onMessage({ command: "loaded", force: true });
+
+		assert.deepStrictEqual(
+			posts.filter((p) => (p as { command: string }).command === "enablesupplyarea"),
+			[],
+		);
+		assert.deepStrictEqual(
+			posts.filter((p) => (p as { command: string }).command === "provincemapsummary").length,
+			2,
+		);
+	});
+
+	it("a setting change with no open panel does nothing", async () => {
+		const wm = new WorldMap(webviewPanel([]) as any);
+		(wm as any).panel = undefined;
+
+		await (wm as any).onEnableSupplyAreaChanged();
+
+		assert.strictEqual((wm as any).supplyAreaFlagKnownToWebview, false);
+		configuration.enableSupplyArea = true;
+		await (wm as any).onEnableSupplyAreaChanged();
+		assert.strictEqual((wm as any).supplyAreaFlagKnownToWebview, false, "a panel-less push stays unapplied");
 	});
 });

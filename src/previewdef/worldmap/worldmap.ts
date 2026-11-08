@@ -50,6 +50,11 @@ const requestItemData: Record<
 export class WorldMap {
 	public panel: vscode.WebviewPanel | undefined;
 
+	// The supply-area flag the page currently carries its toolbar options by: the value written
+	// into the page HTML at render, kept in step by every enablesupplyarea message pushed below.
+	// Not set until the page is rendered, so a send before that cannot claim the page is in step.
+	private supplyAreaFlagKnownToWebview: boolean = false;
+
 	private worldMapLoader: WorldMapLoader;
 	private worldMapDependencies: string[] | undefined;
 	private cachedWorldMap: WorldMapData | undefined;
@@ -74,6 +79,7 @@ export class WorldMap {
 		}
 
 		const webview = this.panel.webview;
+		this.supplyAreaFlagKnownToWebview = this.enableSupplyAreaSetting();
 		webview.html = this.renderWorldMap(webview);
 		this.subscriptions.push(
 			webview.onDidReceiveMessage((msg) => this.onMessage(msg)),
@@ -146,7 +152,7 @@ export class WorldMap {
 					// absent value takes the setting's declared default.
 					content:
 						"window.__enableSupplyArea = " +
-						jsonForScript(getConfiguration().enableSupplyArea ?? false) +
+						jsonForScript(this.enableSupplyAreaSetting()) +
 						";",
 				},
 				"common.js",
@@ -154,6 +160,28 @@ export class WorldMap {
 			],
 			["common.css", "codicon.css", { content: worldmapviewstyles }],
 		);
+	}
+
+	private enableSupplyAreaSetting(): boolean {
+		return getConfiguration().enableSupplyArea ?? false;
+	}
+
+	/**
+	 * mdHoi4Utilities.enableSupplyArea changed with the panel open: reload the data through the
+	 * loader, which re-reads the setting, and push the new flag so the page's toolbar options
+	 * follow in the same pass.
+	 */
+	public async onEnableSupplyAreaChanged(): Promise<void> {
+		if (this.panel === undefined) {
+			return;
+		}
+
+		await this.sendProvinceMapSummaryToWebview(false);
+		// A summary send that joined a load already in flight returns data read before the setting
+		// changed, leaving the reload queued; one more pass then publishes the new mode.
+		if (this.worldMapLoader.isShallowReloadPending()) {
+			await this.sendProvinceMapSummaryToWebview(false);
+		}
 	}
 
 	private async onMessage(msg: unknown): Promise<void> {
@@ -238,6 +266,9 @@ export class WorldMap {
 		const requestSequence = ++this.requestSequence;
 		this.pendingRequests++;
 		try {
+			// The controls take their flag from the page HTML, so a Refresh that reloads the data
+			// with a flag it does not already carry must apply the current one to them too.
+			await this.sendSupplyAreaFlag();
 			this.worldMapLoader.shallowForceReload();
 			const loaderSession = new LoaderSession(
 				force,
@@ -366,6 +397,23 @@ export class WorldMap {
 		);
 		await this.progressReporter("");
 		return true;
+	}
+
+	/**
+	 * Brings the page's supply-area controls in step with the workspace setting. The page starts
+	 * with the flag written into its HTML, so a send only pushes a message when the setting has
+	 * moved since the page last saw it.
+	 */
+	private async sendSupplyAreaFlag(): Promise<void> {
+		const enableSupplyArea = this.enableSupplyAreaSetting();
+		if (enableSupplyArea === this.supplyAreaFlagKnownToWebview) {
+			return;
+		}
+		this.supplyAreaFlagKnownToWebview = enableSupplyArea;
+		await this.postMessageToWebview({
+			command: "enablesupplyarea",
+			data: enableSupplyArea,
+		} as WorldMapMessage);
 	}
 
 	private postMessageToWebview(message: WorldMapMessage): Thenable<boolean> {

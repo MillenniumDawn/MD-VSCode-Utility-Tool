@@ -5,9 +5,10 @@ import { getState, setState } from "../util/common";
 import { Renderer } from "./renderer";
 import { fromEvent } from "rxjs";
 import { auditTime } from "rxjs/operators";
+import { WorldMapMessage } from "../../src/previewdef/worldmap/definitions";
 
 fromEvent(window, "load").subscribe(function () {
-	hideBySupplyAreaFlag((window as any)["__enableSupplyArea"]);
+	applySupplyAreaFlag((window as any).__enableSupplyArea ?? false);
 
 	const state = getState();
 	const loader = new Loader();
@@ -55,44 +56,87 @@ function setStateForKey<T>(key: string): (newValue: T) => void {
 	};
 }
 
-function hideBySupplyAreaFlag(enableSupplyArea: boolean) {
-	const viewModes = document
-		.getElementById("viewmode")!
-		.getElementsByTagName("option");
-	for (const viewMode of Array.from(viewModes)) {
-		const attribute = viewMode.getAttribute("enablesupplyarea");
-		if (attribute && attribute !== enableSupplyArea.toString()) {
-			viewMode.remove();
-		}
+// The host pushes the flag when mdHoi4Utilities.enableSupplyArea changes with the panel open, or
+// when a refresh re-reads it; the page had it only as this one script value before, so the
+// toolbar could not follow an open panel.
+fromEvent<MessageEvent>(window, "message").subscribe((event) => {
+	const message = event.data as WorldMapMessage;
+	if (message.command === "enablesupplyarea") {
+		applySupplyAreaFlag(message.data);
+	}
+});
+
+// The toolbar options the page ships with, captured the first time a flag is applied, before
+// anything is hidden. The elements are hidden by detaching and kept alive, so turning the setting
+// back on puts the same elements back in their original order; removing them outright could not
+// be undone.
+interface SupplyAreaGatedOptions {
+	container: HTMLElement;
+	options: HTMLElement[];
+}
+
+let supplyAreaGatedOptions: SupplyAreaGatedOptions[] | undefined = undefined;
+
+function applySupplyAreaFlag(enableSupplyArea: boolean): void {
+	(window as any).__enableSupplyArea = enableSupplyArea;
+
+	// A page that loads again starts a new DOM, so the capture is taken again when the one held
+	// belongs to elements that document has thrown away.
+	if (
+		supplyAreaGatedOptions === undefined ||
+		supplyAreaGatedOptions.some(({ container }) => !container.isConnected)
+	) {
+		supplyAreaGatedOptions = ["viewmode", "colorset", "display", "warningfilter"].map(
+			(id) => {
+				const container = document.getElementById(id)!;
+				return {
+					container,
+					options: Array.from(
+						container.querySelectorAll("option, .option"),
+					) as HTMLElement[],
+				};
+			},
+		);
 	}
 
-	const colorSets = document
-		.getElementById("colorset")!
-		.getElementsByTagName("option");
-	for (const colorSet of Array.from(colorSets)) {
-		const attribute = colorSet.getAttribute("enablesupplyarea");
-		if (attribute && attribute !== enableSupplyArea.toString()) {
-			colorSet.remove();
+	for (const { container, options } of supplyAreaGatedOptions) {
+		const isSelect = container.tagName === "SELECT";
+		// Read before the rebuild: the browser may have already repaired a lost selection.
+		const previousValue = isSelect ? (container as HTMLSelectElement).value : undefined;
+		const keep = options.filter((option) => {
+			const attribute = option.getAttribute("enablesupplyarea");
+			return !attribute || attribute === enableSupplyArea.toString();
+		});
+		for (const option of options) {
+			if (!keep.includes(option)) {
+				option.remove();
+			}
+		}
+		// Re-appending also restores the original order after part of the list was hidden.
+		container.append(...keep);
+		if (isSelect && keep.length < options.length) {
+			restoreUsableSelection(container as HTMLSelectElement, keep, previousValue);
 		}
 	}
+}
 
-	const displayOptions = document
-		.getElementById("display")!
-		.getElementsByTagName("div");
-	for (const displayOption of Array.from(displayOptions)) {
-		const attribute = displayOption.getAttribute("enablesupplyarea");
-		if (attribute && attribute !== enableSupplyArea.toString()) {
-			displayOption.remove();
-		}
+// A view mode or color set the setting took away cannot stay selected: the renderers read those
+// values into tables keyed by the view mode, and a select left pointing at an option it lost
+// would render nothing instead. Fall back to the first kept option and let the change listeners
+// hear it — including the browser that quietly repaired the selection itself, which must not
+// leave the page's view mode stale.
+function restoreUsableSelection(
+	select: HTMLSelectElement,
+	keep: HTMLElement[],
+	previousValue: string | undefined,
+): void {
+	const values = new Set(keep.map((option) => (option as HTMLOptionElement).value));
+	if (values.size === 0 || (previousValue !== undefined && values.has(previousValue))) {
+		return;
 	}
-
-	const warningFilterOptions = document
-		.getElementById("warningfilter")!
-		.getElementsByTagName("div");
-	for (const warningFilterOption of Array.from(warningFilterOptions)) {
-		const attribute = warningFilterOption.getAttribute("enablesupplyarea");
-		if (attribute && attribute !== enableSupplyArea.toString()) {
-			warningFilterOption.remove();
-		}
+	const first = keep[0] as HTMLOptionElement;
+	if (values.has(select.value) === false) {
+		select.value = first.value;
 	}
+	select.dispatchEvent(new Event("change"));
 }

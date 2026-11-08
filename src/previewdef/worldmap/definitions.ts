@@ -235,7 +235,8 @@ export type WorldMapMessage =
 	| ProgressMessage
 	| ProvinceMapSummaryMessage
 	| OpenFileMessage
-	| ExportMapMessage;
+	| ExportMapMessage
+	| EnableSupplyAreaMessage;
 
 interface LoadedMessage {
 	command: "loaded";
@@ -301,6 +302,12 @@ interface ExportMapMessage {
 	// The PNG itself. It used to travel as a base64 data URI, which made three copies of a map that
 	// can run to tens of megabytes; structured-cloned bytes make one.
 	data?: Uint8Array | ArrayBuffer;
+}
+
+interface EnableSupplyAreaMessage {
+	// Host to webview, so an open panel's supply-area controls follow the workspace setting.
+	command: "enablesupplyarea";
+	data: boolean;
 }
 
 const requestMapItemCommands: ReadonlySet<string> = new Set<
