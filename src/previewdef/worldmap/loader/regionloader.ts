@@ -25,6 +25,8 @@ export interface RegionKind {
 	idTooLarge: LocalizedMessage;
 	// {0}: the id used more than once.
 	idConflict: LocalizedMessage;
+	// {0}: the id the item really had.
+	invalidId: LocalizedMessage;
 	// {0}: the missing id, or range of ids.
 	notExist: LocalizedMessage;
 	// {0}: the sub-region id, {1}: the region id.
@@ -62,6 +64,14 @@ export function sortRegionItems<T extends { id: number; file: string }>(
 					kind.notExist,
 					startId === endId ? startId : `${startId}-${endId}`,
 				),
+			}),
+		true,
+		-1,
+		(item, displacedId, invalidId) =>
+			warnings.push({
+				source: [{ type: kind.sourceType, id: displacedId }],
+				relatedFiles: [item.file],
+				text: text(kind.invalidId, invalidId),
 			}),
 	);
 }

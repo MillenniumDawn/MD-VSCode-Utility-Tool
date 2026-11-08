@@ -123,6 +123,10 @@ const stateKind: RegionKind = {
 		"worldmap.warnings.stateidconflict",
 		"There're more than one states using state id {0}.",
 	],
+	invalidId: [
+		"worldmap.warnings.stateidinvalid",
+		"State has an invalid id: {0}.",
+	],
 	notExist: [
 		"worldmap.warnings.statenotexist",
 		"State with id {0} doesn't exist.",

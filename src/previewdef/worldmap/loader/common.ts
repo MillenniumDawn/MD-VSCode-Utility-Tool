@@ -18,7 +18,6 @@ import {
 	LoadResultOD as CommonLoadResultOD,
 } from "../../../util/loader/loader";
 import { localize } from "../../../util/i18n";
-import maxBy from "lodash/maxBy";
 
 export abstract class Loader<T> extends CommonLoader<T, MapLoaderExtra> {}
 export abstract class FileLoader<T> extends CommonFileLoader<
@@ -130,6 +129,10 @@ export function convertColor(color: DetailValue<Enum> | undefined): number {
 	return 0;
 }
 
+function isPlaceableId(id: number, reassignMinusOneId: boolean, badId: number): boolean {
+	return Number.isInteger(id) && (reassignMinusOneId ? id >= -1 : id > badId);
+}
+
 export function sortItems<T extends { id: number }>(
 	items: T[],
 	validMaxId: number,
@@ -138,8 +141,15 @@ export function sortItems<T extends { id: number }>(
 	onNotExist: (startId: number, endId: number) => void,
 	reassignMinusOneId: boolean = true,
 	badId: number = -1,
+	onInvalidId?: (item: T, badId: number, invalidId: number) => void,
 ): { sorted: T[]; badId: number } {
-	const maxId = maxBy(items, "id")?.id ?? 0;
+	// Newly allocated slots must not widen the range of caller-issued negative IDs.
+	const initialBadId = badId;
+	const maxId = items.reduce(
+		(max, p) =>
+			isPlaceableId(p.id, reassignMinusOneId, initialBadId) ? Math.max(max, p.id) : max,
+		0,
+	);
 	if (maxId > validMaxId) {
 		onMaxIdTooLarge(maxId);
 	}
@@ -147,6 +157,9 @@ export function sortItems<T extends { id: number }>(
 	const result: T[] = new Array(maxId + 1);
 	items.forEach((p) => {
 		if (reassignMinusOneId && p.id === -1) {
+			p.id = badId--;
+		} else if (!isPlaceableId(p.id, reassignMinusOneId, initialBadId)) {
+			onInvalidId?.(p, badId, p.id);
 			p.id = badId--;
 		}
 		if (result[p.id]) {

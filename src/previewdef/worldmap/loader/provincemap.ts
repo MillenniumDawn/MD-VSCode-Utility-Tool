@@ -303,6 +303,19 @@ function sortProvinces(
 			}),
 		false,
 		badProvinceId,
+		(newProvince, displacedId, invalidId) =>
+			warnings.push({
+				source: [
+					{ type: "province", id: displacedId, color: newProvince.color },
+				],
+				relatedFiles,
+				text: localize(
+					"worldmap.warnings.provinceidinvalid",
+					"Province {0} has an invalid id. Set id to {1}.",
+					invalidId,
+					displacedId,
+				),
+			}),
 	);
 
 	return {

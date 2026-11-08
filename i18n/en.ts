@@ -533,6 +533,8 @@ const internalTable = /* SOT Do not remove this comment */ {
 		"Province {0} has conflict color with province {1}.",
 	"worldmap.warnings.provinceidconflict":
 		"There're more than one rows for province id {0}. Set id to {1}.",
+	"worldmap.warnings.provinceidinvalid":
+		"Province {0} has an invalid id. Set id to {1}.",
 	"worldmap.warnings.provinceinmultiplestrategicregions":
 		"Province {0} exists in multiple strategic regions: {1}, {2}.",
 	"worldmap.warnings.provinceinmultistates":
@@ -567,6 +569,7 @@ const internalTable = /* SOT Do not remove this comment */ {
 		"Sea province {0} shouldn't belong to a state.",
 	"worldmap.warnings.stateidconflict":
 		"There're more than one states using state id {0}.",
+	"worldmap.warnings.stateidinvalid": "State has an invalid id: {0}.",
 	"worldmap.warnings.stateidtoolarge": "Max state id is too large: {0}",
 	"worldmap.warnings.stateinmultiplestrategicregions":
 		"In state {0}, province {1} are not belong to same strategic region as other provinces.",
@@ -590,6 +593,8 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"worldmap.warnings.statetoolarge": "State {0} is too large: {1}x{2}.",
 	"worldmap.warnings.strategicregionidconflict":
 		"There're more than one strategic regions using ID {0}.",
+	"worldmap.warnings.strategicregionidinvalid":
+		"Strategic region has an invalid id: {0}.",
 	"worldmap.warnings.strategicregionidtoolarge":
 		"Max strategic region ID is too large: {0}.",
 	"worldmap.warnings.strategicregionnoid":
@@ -604,6 +609,8 @@ const internalTable = /* SOT Do not remove this comment */ {
 		"Strategic region {0} doesn't have valid provinces.",
 	"worldmap.warnings.supplyareaidconflict":
 		"There're more than one supply areas using ID {0}.",
+	"worldmap.warnings.supplyareaidinvalid":
+		"Supply area has an invalid id: {0}.",
 	"worldmap.warnings.supplyareaidtoolarge":
 		"Max supply area ID is too large: {0}.",
 	"worldmap.warnings.supplyareanoid":
