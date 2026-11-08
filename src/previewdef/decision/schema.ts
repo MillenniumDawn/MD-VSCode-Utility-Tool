@@ -132,6 +132,11 @@ export interface HOIDecision {
 	hasCancelTrigger: boolean;
 	targetTrigger: ConditionComplexExpr;
 	hasTargetTrigger: boolean;
+	// target_root_trigger is not written under target_trigger: the game checks it on the
+	// decision-taking country before any per-target check, so it is kept apart all the way to
+	// the card.
+	targetRootTrigger: ConditionComplexExpr;
+	hasTargetRootTrigger: boolean;
 	effectBlocks: DecisionEffectBlock[];
 	calls: DecisionCall[];
 	token: Token | undefined;
@@ -165,6 +170,7 @@ interface DecisionDef {
 	activation: Raw;
 	cancel_trigger: Raw;
 	target_trigger: Raw;
+	target_root_trigger: Raw;
 	complete_effect: Raw;
 	remove_effect: Raw;
 	timeout_effect: Raw;
@@ -206,6 +212,7 @@ const decisionSchema: SchemaDef<DecisionDef> = {
 	activation: "raw",
 	cancel_trigger: "raw",
 	target_trigger: "raw",
+	target_root_trigger: "raw",
 	complete_effect: "raw",
 	remove_effect: "raw",
 	timeout_effect: "raw",
@@ -341,6 +348,10 @@ function getDecision(
 		hasCancelTrigger: def.cancel_trigger !== undefined,
 		targetTrigger: condition(def.target_trigger),
 		hasTargetTrigger: def.target_trigger !== undefined,
+		// The same taker scope allowed and available use -- a bare condition reads as the
+		// decision-taker's, ROOT -- while a FROM block written inside keeps the candidate's scope.
+		targetRootTrigger: condition(def.target_root_trigger),
+		hasTargetRootTrigger: def.target_root_trigger !== undefined,
 		effectBlocks,
 		calls,
 		token: node.nameToken ?? undefined,
