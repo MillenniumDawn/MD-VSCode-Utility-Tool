@@ -214,7 +214,21 @@ function extractEffectByCondition(
 			}
 		} else if (tryMoveScope(child, scopeStack, "effect")) {
 			flushEffectItems(result, condition, items);
-			extractEffectByCondition(child.value, scopeStack, condition, result);
+			// A scope's limit applies to its selected target, not the scope that entered it.
+			const scopeLimit = Array.isArray(child.value)
+				? child.value.find((v) => v.name?.toLowerCase().trim() === "limit")
+				: undefined;
+			const scopedCondition =
+				scopeLimit !== undefined
+					? simplifyCondition({
+							type: "and",
+							items: [
+								condition,
+								extractConditionFolder(scopeLimit.value, scopeStack, "and"),
+							],
+						})
+					: condition;
+			extractEffectByCondition(child.value, scopeStack, scopedCondition, result, ["limit"]);
 			scopeStack.pop();
 		} else {
 			items.push({
