@@ -158,7 +158,7 @@ export async function mkdirs(path: vscode.Uri): Promise<void> {
 
 export async function isFile(path: vscode.Uri): Promise<boolean> {
     try {
-        return (await host().workspace.fs.stat(path)).type === host().FileType.File;
+        return ((await host().workspace.fs.stat(path)).type & host().FileType.File) !== 0;
     } catch (e) {
         return false;
     }
@@ -166,7 +166,7 @@ export async function isFile(path: vscode.Uri): Promise<boolean> {
 
 export async function isDirectory(path: vscode.Uri): Promise<boolean> {
     try {
-        return (await host().workspace.fs.stat(path)).type === host().FileType.Directory;
+        return ((await host().workspace.fs.stat(path)).type & host().FileType.Directory) !== 0;
     } catch (e) {
         return false;
     }
