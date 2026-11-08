@@ -39,6 +39,8 @@ function decision(
 		hasCancelTrigger: false,
 		targetTrigger: true,
 		hasTargetTrigger: false,
+		targetRootTrigger: true,
+		hasTargetRootTrigger: false,
 		effects: [],
 		...extra,
 	};
@@ -873,5 +875,53 @@ describe("webview/decisiontree rendering", () => {
 		assert.deepStrictEqual(takePostedMessages().filter((m) => m.command === "navigate"), [
 			{ command: "navigate", start: 20, end: 30, file: "common/decisions/Poland.txt" },
 		]);
+	});
+
+	it("keeps a decision gated only by target_root_trigger inside the conditions filter, with its own panel", () => {
+		// A formable-nation decision that restricts only the decision-taking country. That sole
+		// condition must keep it on the canvas under the conditions filter, and the gate must draw
+		// as its own panel, beside but not inside the per-candidate one its neighbour here carries.
+		const category = "c:POL_state_controlled_economy_category";
+		const onlyTakerGate: DecisionGraphPayload = {
+			...integrationPayload,
+			nodes: [
+				...integrationPayload.nodes.filter((n) => n.kind === "category"),
+				decision("POL_taker_gate_probe", {
+					hasTargetRootTrigger: true,
+					targetRootTrigger: { scopeName: "", nodeContent: "original_tag = POL" },
+				}),
+			],
+			edges: [structural(category, "d:POL_taker_gate_probe")],
+		};
+
+		// The filter comes back out of the persisted state, the way a stored selection does.
+		(global as any).acquireVsCodeApi().setState({ decisionFilters: ["conditions"] });
+		try {
+			window.dispatchEvent(
+				new (window as any).MessageEvent("message", {
+					data: { type: "updateBody", styleCss: "", data: { decisionGraph: onlyTakerGate } },
+				}),
+			);
+
+			// The plain decisions dropped proves the selection is actually in force, so the probe
+			// surviving the same canvas is the filter counting the taker's gate as a condition.
+			assert.strictEqual(
+				document.querySelector('#decisiontreecontent .ev-node[data-id="d:POL_start_sre"]'),
+				null,
+				"the conditions filter must be in force",
+			);
+			const probeCard = cardFor("d:POL_taker_gate_probe");
+			const heads = Array.from(probeCard.querySelectorAll(".ev-cond-head")).map((h) => h.textContent);
+			assert.ok(heads.includes("Root condition"), `panel headers were ${heads.join(" | ")}`);
+			assert.ok(!heads.includes("Target condition"), `panel headers were ${heads.join(" | ")}`);
+			assert.ok(probeCard.textContent?.includes("original_tag = POL"));
+		} finally {
+			(global as any).acquireVsCodeApi().setState({});
+			window.dispatchEvent(
+				new (window as any).MessageEvent("message", {
+					data: { type: "updateBody", styleCss: "", data: { decisionGraph: integrationPayload } },
+				}),
+			);
+		}
 	});
 });

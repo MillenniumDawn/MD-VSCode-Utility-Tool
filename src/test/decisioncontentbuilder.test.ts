@@ -435,6 +435,9 @@ describe("previewdef/decision/contentbuilder toolbar flags", () => {
 		assert.strictEqual(flagsFor([decision()]).hasConditions, false);
 		assert.strictEqual(flagsFor([decision({ hasAvailable: true })]).hasConditions, true);
 		assert.strictEqual(flagsFor([decision({ hasTargetTrigger: true })]).hasConditions, true);
+		// The taker country's gate counts as a condition too, so a decision restricted only by it
+		// stays within reach of the filter.
+		assert.strictEqual(flagsFor([decision({ hasTargetRootTrigger: true })]).hasConditions, true);
 		assert.strictEqual(
 			flagsFor([{ kind: "category", id: "c:a", hasAllowed: true, hasVisible: false }])
 				.hasConditions,
