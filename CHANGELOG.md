@@ -1,5 +1,7 @@
 Unreleased
 
+v1.1.46
+
   Bugfixes:
 - [ Previews ] Statements inside a scope block or a hidden_effect no longer jump ahead of the statements written before them, so effect lists follow the order of the file. Issue #722.
 
