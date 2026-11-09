@@ -299,6 +299,7 @@ const table: Partial<typeof __table> = {
     "miopreview.warnings": "Toggle warnings",
     "miopreview.warnings.exclusivenotexist": "Mutually exclusive trait {0} of trait {1} does not exist.",
     "miopreview.warnings.exclusivenotsamey": "Mutually exclusive traits {0} and {1} are not on the same row.",
+    "miopreview.warnings.includecircularref": "Circular includes between military industrial organizations: {0}.",
     "miopreview.warnings.numparentsneeded": "Trait {0} needs {1} parents but lists only {2}, so it can never be unlocked.",
     "miopreview.warnings.overridetraitidnotexist": "An override_trait referenced a trait that doesn't exist: {0}.",
     "miopreview.warnings.overridetraitnoid": "An override_trait defined in this file don't have token property: {0}.",
