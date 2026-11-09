@@ -328,6 +328,22 @@ describe("util/fileloader DLC zip directory listings", function () {
 		assert.strictEqual(resolved.toString(), deep.uri.toString());
 	});
 
+	it("reads listed entries using archive casing rather than the requested directory casing", async function () {
+		for (const recursively of [false, true]) {
+			const entries = await fileloader.listFileEntriesFromModOrHOI4("INTERFACE", { recursively });
+			assert.strictEqual(entries.length, recursively ? 3 : 2);
+			for (const entry of entries) {
+				assert.strictEqual(entry.uri.fragment, `interface/${entry.relativePath}`);
+				const [buffer] = await fileloader.readFileFromModOrHOI4(
+					`INTERFACE/${entry.relativePath}`, undefined, entry.uri,
+				);
+				assert.strictEqual(buffer.toString(), {
+					"shared.txt": "zip copy", "zip_only.gfx": "zip only", "nested/deep.gfx": "deep",
+				}[entry.relativePath]);
+			}
+		}
+	});
+
 	it("dates and resolves every archive file through the index listing path", async function () {
 		const listing = await listIndexFiles({
 			roots: ["interface", "events"],
