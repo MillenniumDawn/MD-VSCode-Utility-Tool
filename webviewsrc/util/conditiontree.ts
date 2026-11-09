@@ -259,6 +259,15 @@ function appendEffects(list: HTMLUListElement, nodes: EffectTreeNode[], budget: 
 			list.appendChild(leafItem(node.content, node.scopeName));
 		} else if (node.kind === "group") {
 			list.appendChild(foldItem("if " + conditionToLabel(node.condition), node.items, budget));
+		} else if (node.kind === "chance") {
+			// Shown as written, like a weight: a variable means what the game makes of it.
+			list.appendChild(
+				foldItem(feLocalize("eventtree.chance", "chance {0}", node.chance), node.items, budget),
+			);
+		} else if (node.kind === "while") {
+			// The fold says when the loop runs, never how often: the limit is the head.
+			const limit = conditionToLabel(node.limit);
+			list.appendChild(foldItem(limit === "" ? "while" : "while " + limit, node.items, budget));
 		} else {
 			for (const branch of node.items) {
 				// The weight is shown as written, for the reason chipTextFor gives: a random_list key
@@ -289,7 +298,7 @@ export function countEffectLines(nodes: EffectTreeNode[]): number {
 	for (const node of nodes) {
 		if (node.kind === "line") {
 			total++;
-		} else if (node.kind === "group") {
+		} else if (node.kind === "group" || node.kind === "chance" || node.kind === "while") {
 			total += countEffectLines(node.items);
 		} else {
 			for (const branch of node.items) {

@@ -42,7 +42,7 @@ export interface NavTarget {
 }
 
 // What one effect block does -- an event option, an event's `immediate`, a decision's
-// `complete_effect` -- projected out of EffectComplexExpr. The shapes are the same three, minus
+// `complete_effect` -- projected out of EffectComplexExpr. The shapes are the same five, minus
 // EffectItem.node: that field is the raw parse tree of the whole statement, which is both large and
 // full of cycles, and must never travel to a webview.
 //
@@ -70,7 +70,23 @@ interface EffectChoice {
 	items: { possibility: number | string; effect: EffectTreeNode[] }[];
 }
 
-export type EffectTreeNode = EffectLine | EffectGroup | EffectChoice;
+// One `random = { chance = N ... }` block: the statements inside run once with that chance, not
+// always. The chance is kept as written -- a variable resolves in the game, not here.
+interface EffectChance {
+	kind: "chance";
+	chance: number | string;
+	items: EffectTreeNode[];
+}
+
+// One `while = { limit = { ... } ... }` block: the statements inside repeat for as long as the
+// limit holds. The loop is never evaluated, so the fold says when it runs, never how often.
+interface EffectWhile {
+	kind: "while";
+	limit: ConditionComplexExpr;
+	items: EffectTreeNode[];
+}
+
+export type EffectTreeNode = EffectLine | EffectGroup | EffectChoice | EffectChance | EffectWhile;
 
 // One `key = value` out of a `modifier`, `research_bonus` or equipment stat block. The value is
 // kept raw here and formatted in util/modifiers.ts, which is the only place that knows how a given
