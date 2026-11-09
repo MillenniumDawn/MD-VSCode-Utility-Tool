@@ -68,9 +68,9 @@ function fakeFileLoader(file: string, result: unknown) {
 	};
 }
 
-function graphFor(id: number): ProvinceGraph {
+function graphFor(color: number): ProvinceGraph {
 	return {
-		color: id + 1,
+		color,
 		coverZones: [{ x: 0, y: 0, w: 1, h: 1 }],
 		edges: [],
 		boundingBox: { x: 0, y: 0, w: 1, h: 1 },
@@ -103,17 +103,48 @@ async function loadMap(
 	definitionIds: number[],
 	adjacencyRows: ProvinceEdgeAdjacency[],
 ): Promise<{ result: ProvinceMap; warnings: WorldMapWarning[] }> {
+	return await loadMapWith(
+		definitionIds.map((id) => ({ id, color: id + 1 })),
+		definitionIds.map((id) => id + 1),
+		[],
+		adjacencyRows,
+	);
+}
+
+// bmpColors lists every color in the provinces bitmap so a color without a definition row stays
+// reachable, and boundaries are [fromColor, toColor] pairs of bitmap neighbours.
+async function loadMapWith(
+	definitions: { id: number; color: number }[],
+	bmpColors: number[],
+	boundaries: [number, number][],
+	adjacencyRows: ProvinceEdgeAdjacency[],
+): Promise<{ result: ProvinceMap; warnings: WorldMapWarning[] }> {
 	handOverDefaultMapHost();
 
-	const definitions: ProvinceDefinition[] = definitionIds.map((id) => ({
-		id,
-		color: id + 1,
-		type: "sea",
-		coastal: false,
-		terrain: "",
-		continent: 0,
+	const provinceDefinitions: ProvinceDefinition[] = definitions.map(
+		({ id, color }) => ({
+			id,
+			color,
+			type: "sea",
+			coastal: false,
+			terrain: "",
+			continent: 0,
+		}),
+	);
+	const graphs: ProvinceGraph[] = bmpColors.map((color) => ({
+		...graphFor(color),
+		edges: boundaries
+			.filter(([fromColor]) => fromColor === color)
+			.map(([, toColor]) => ({
+				toColor,
+				path: [
+					[
+						{ x: 0, y: 0 },
+						{ x: 1, y: 1 },
+					],
+				],
+			})),
 	}));
-	const graphs = definitionIds.map(graphFor);
 	const provinceBmp = {
 		width: 2,
 		height: 2,
@@ -124,7 +155,10 @@ async function loadMap(
 
 	const loader = new DefaultMapLoader();
 	const instance = loader as any;
-	instance.definitionsLoader = fakeFileLoader("map/provinces.txt", definitions);
+	instance.definitionsLoader = fakeFileLoader(
+		"map/provinces.txt",
+		provinceDefinitions,
+	);
 	instance.provinceBmpLoader = fakeFileLoader("map/provinces.bmp", provinceBmp);
 	instance.adjacenciesLoader = fakeFileLoader(
 		"map/adjacencies.txt",
@@ -262,5 +296,136 @@ describe("previewdef/worldmap/loader provincemap adjacency endpoints", () => {
 		assert.strictEqual(result.badProvincesCount, 2);
 		assert.strictEqual(result.provinces[-1]?.id, -1);
 		assert.strictEqual(result.provinces[-2]?.id, -2);
+	});
+});
+
+describe("previewdef/worldmap/loader provincemap bitmap boundary targets", () => {
+	it("points a bitmap boundary at the bad slot a duplicate id displaces its first row to", async () => {
+		const { result, warnings } = await loadMapWith(
+			[
+				{ id: 1, color: 11 },
+				{ id: 2, color: 22 },
+				{ id: 2, color: 33 },
+			],
+			[11, 22, 33],
+			[
+				[22, 33],
+				[33, 22],
+			],
+			[],
+		);
+
+		assert.deepStrictEqual(result.provinces[2]?.edges.map((e) => e.to), [-1]);
+		assert.deepStrictEqual(result.provinces[-1]?.edges.map((e) => e.to), [2]);
+		assert.strictEqual(result.badProvincesCount, 1);
+		assert.deepStrictEqual(warnings.map((w) => w.text), [
+			"There're more than one rows for province id 2. Set id to -1.",
+		]);
+	});
+
+	it("points a bitmap boundary at the bad slot a malformed id is reassigned to", async () => {
+		const { result, warnings } = await loadMapWith(
+			[
+				{ id: 1, color: 11 },
+				{ id: NaN, color: 22 },
+			],
+			[11, 22],
+			[
+				[11, 22],
+				[22, 11],
+			],
+			[],
+		);
+
+		assert.deepStrictEqual(result.provinces[1]?.edges.map((e) => e.to), [-1]);
+		assert.deepStrictEqual(result.provinces[-1]?.edges.map((e) => e.to), [1]);
+		assert.strictEqual(result.badProvincesCount, 1);
+		assert.deepStrictEqual(warnings.map((w) => w.text), [
+			"Province NaN has an invalid id. Set id to -1.",
+		]);
+	});
+
+	it("keeps an explicit adjacency on its own ids when the bitmap neighbour is reassigned", async () => {
+		const { result, warnings } = await loadMapWith(
+			[
+				{ id: 1, color: 11 },
+				{ id: 2, color: 22 },
+				{ id: 2, color: 33 },
+			],
+			[11, 22, 33],
+			[
+				[22, 33],
+				[33, 22],
+			],
+			[row(2, 1)],
+		);
+
+		assert.deepStrictEqual(result.provinces[2]?.edges.map((e) => e.to), [
+			-1, 1,
+		]);
+		assert.deepStrictEqual(result.provinces[-1]?.edges.map((e) => e.to), [2]);
+		assert.deepStrictEqual(result.provinces[1]?.edges.map((e) => e.to), [2]);
+		assert.deepStrictEqual(adjacencyWarnings(warnings), []);
+		assert.strictEqual(result.badProvincesCount, 1);
+	});
+
+	it("keeps adjacency rows, warnings and counts on ids nothing reassigns", async () => {
+		const { result, warnings } = await loadMapWith(
+			[
+				{ id: 1, color: 11 },
+				{ id: 2, color: 22 },
+				{ id: 3, color: 33 },
+			],
+			[11, 22, 33],
+			[
+				[11, 22],
+				[22, 11],
+			],
+			[row(1, 2, 3), row(7, 1)],
+		);
+
+		const merged = edgeTo(result.provinces[1], 2);
+		assert.strictEqual(merged?.through, 3);
+		assert.deepStrictEqual(merged?.path, [
+			[
+				{ x: 0, y: 0 },
+				{ x: 1, y: 1 },
+			],
+		]);
+		assert.deepStrictEqual(result.provinces[1]?.edges.map((e) => e.to), [2]);
+		assert.deepStrictEqual(result.provinces[2]?.edges.map((e) => e.to), [1]);
+		assert.strictEqual(edgeTo(result.provinces[2], 1)?.through, 3);
+		assert.deepStrictEqual(adjacencyWarnings(warnings), [
+			"Adjacency not from or to an existing province: 7, 1",
+		]);
+		assert.strictEqual(result.badProvincesCount, 0);
+	});
+
+	it("keeps bitmap boundaries onto synthetic provinces and the bad counts", async () => {
+		const { result, warnings } = await loadMapWith(
+			[
+				{ id: 1, color: 11 },
+				{ id: NaN, color: 22 },
+			],
+			[11, 22, 44],
+			[
+				[11, 22],
+				[11, 44],
+				[22, 11],
+				[44, 11],
+			],
+			[],
+		);
+
+		assert.deepStrictEqual(result.provinces[1]?.edges.map((e) => e.to), [
+			-2, -1,
+		]);
+		assert.deepStrictEqual(result.provinces[-1]?.edges.map((e) => e.to), [1]);
+		assert.deepStrictEqual(result.provinces[-2]?.edges.map((e) => e.to), [1]);
+		assert.strictEqual(result.badProvincesCount, 2);
+		assert.deepStrictEqual(warnings.map((w) => w.text), [
+			"Province with color (0, 0, 44) in provinces bmp (0, 0) doesn't exist in definitions.",
+			"Province NaN has an invalid id. Set id to -2.",
+		]);
 	});
 });
