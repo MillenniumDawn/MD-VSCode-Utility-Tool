@@ -11,6 +11,7 @@ import {
 	readFile,
 	readDir,
 	isSameUri,
+	filePathIdentity,
 	ensureFileScheme,
 	readDirFilesRecursively,
 	getConfiguration,
@@ -704,14 +705,14 @@ function openedDocumentUriFor(uri: vscode.Uri): vscode.Uri | undefined {
 		const byPath = new Map<string, vscode.Uri>();
 		for (const document of host().workspace.textDocuments) {
 			if (isFileScheme(document.uri)) {
-				byPath.set(document.uri.fsPath.toLowerCase(), document.uri);
+				byPath.set(filePathIdentity(document.uri.fsPath), document.uri);
 			}
 		}
 		openedDocuments = { at: now, byPath };
 	}
 
 	return openedDocuments.byPath
-		.get(uri.fsPath.toLowerCase())
+		.get(filePathIdentity(uri.fsPath))
 		?.with({ fragment: ":opened" });
 }
 

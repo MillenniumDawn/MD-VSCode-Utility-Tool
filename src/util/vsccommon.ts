@@ -41,7 +41,7 @@ export function isSameUri(uriA: vscode.Uri, uriB: vscode.Uri) {
 }
 
 // Off Windows a backslash is part of a file name, so only Windows paths fold slashes and case.
-function filePathIdentity(fsPath: string): string {
+export function filePathIdentity(fsPath: string): string {
     const resolved = path.resolve(fsPath);
     return process.platform === 'win32' ? pathIdentity(resolved) : resolved;
 }
