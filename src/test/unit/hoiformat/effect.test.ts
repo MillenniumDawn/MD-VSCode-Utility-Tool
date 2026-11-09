@@ -32,6 +32,10 @@ function write(nodes: EffectTreeNode[]): string {
 					return `when ${conditionToString(node.condition)} { ${write(node.items)} }`;
 				case "choice":
 					return `one of { ${node.items.map((item) => `${item.possibility}: ${write(item.effect)}`).join(" | ")} }`;
+				case "chance":
+					return `chance ${node.chance} { ${write(node.items)} }`;
+				case "while":
+					return `while ${conditionToString(node.limit)} { ${write(node.items)} }`;
 			}
 		})
 		.join("; ");
@@ -46,7 +50,9 @@ function found(items: GuardedEffectItem[]): string[] {
 		(guarded) =>
 			(guarded.item.scopeName ? `[${guarded.item.scopeName}]` : "") +
 			`${guarded.item.nodeContent} when ${conditionToString(guarded.condition)}` +
-			(guarded.possibility === undefined ? "" : ` at ${guarded.possibility}`),
+			(guarded.possibility === undefined ? "" : ` at ${guarded.possibility}`) +
+			(guarded.chances ?? []).map((chance) => ` chance ${chance}`).join("") +
+			(guarded.repeated ? " repeating" : ""),
 	);
 }
 
@@ -130,6 +136,48 @@ describe("hoiformat/effect", () => {
 				"the if around a random_list on every branch of it",
 				"if = { limit = { a = 1 } random_list = { 50 = { x = 1 } 50 = { y = 1 } } }",
 				"one of { 50: when a = 1 { x = 1 } | 50: when a = 1 { y = 1 } }",
+			],
+			[
+				"a random as a fold behind its chance, with the chance kept out of the lines",
+				"x = 1 random = { chance = 50 y = 1 } z = 1",
+				"x = 1; chance 50 { y = 1 }; z = 1",
+			],
+			[
+				"a chance written as a variable, kept as written",
+				"random = { chance = my_chance x = 1 }",
+				"chance my_chance { x = 1 }",
+			],
+			[
+				"the if around a random on the statements inside it",
+				"if = { limit = { a = 1 } random = { chance = 50 x = 1 } }",
+				"chance 50 { when a = 1 { x = 1 } }",
+			],
+			["a random without a block stays a statement", "random = 50", "random = 50"],
+			["no fold for a random without a chance", "random = { x = 1 }", "random = { x = 1 }"],
+			[
+				"a quoted decimal chance kept whole",
+				"random = { chance = \"0.5\" x = 1 }",
+				"chance 0.5 { x = 1 }",
+			],
+			[
+				"a digit-leading string chance kept whole",
+				"random = { chance = \"5x\" x = 1 }",
+				"chance 5x { x = 1 }",
+			],
+			[
+				"a while behind its limit as its fold, with the limit kept out of the lines",
+				"while = { limit = { has_war = yes } x = 1 }",
+				"while has_war = yes { x = 1 }",
+			],
+			[
+				"the if around a while folded onto the loop's head",
+				"if = { limit = { a = 1 } while = { limit = { has_war = yes } x = 1 } }",
+				"while and(a = 1, has_war = yes) { x = 1 }",
+			],
+			[
+				"a while in the scope it was written in guards by that scope",
+				"GER = { while = { limit = { has_war = yes } x = 1 } }",
+				"while [GER]has_war = yes { [GER]x = 1 }",
 			],
 		];
 
@@ -229,6 +277,41 @@ describe("hoiformat/effect", () => {
 				"a lone variable-weight call behind its enclosing scope and guard",
 				"GER = { if = { limit = { a = 1 } random_list = { my_var = { country_event = a.1 } } } }",
 				["[GER]country_event = a.1 when [GER]a = 1 at my_var"],
+			],
+			[
+				"a statement in a random, with the chance carried on the call",
+				"random = { chance = 50 country_event = a.1 }",
+				["country_event = a.1 when true chance 50"],
+			],
+			[
+				"a statement in a random behind an if, with the enclosing guard on it",
+				"if = { limit = { a = 1 } random = { chance = 50 country_event = a.1 } }",
+				["country_event = a.1 when a = 1 chance 50"],
+			],
+			[
+				"a statement in a random in another scope",
+				"GER = { random = { chance = 50 country_event = a.1 } }",
+				["[GER]country_event = a.1 when true chance 50"],
+			],
+			[
+				"every enclosing chance kept when one random sits inside another",
+				"random = { chance = 50 random = { chance = 80 country_event = a.1 } }",
+				["country_event = a.1 when true chance 50 chance 80"],
+			],
+			[
+				"a statement in a while, with the limit guarding it and the run shown repeating",
+				"while = { limit = { has_war = yes } country_event = a.1 }",
+				["country_event = a.1 when has_war = yes repeating"],
+			],
+			[
+				"a statement in a random inside a while, with both parts carried",
+				"while = { limit = { has_war = yes } random = { chance = 50 country_event = a.1 } }",
+				["country_event = a.1 when has_war = yes chance 50 repeating"],
+			],
+			[
+				"a statement in a while behind an if and a scope, behind every guard on it",
+				"GER = { if = { limit = { a = 1 } while = { limit = { has_war = yes } country_event = a.1 } } }",
+				["[GER]country_event = a.1 when and([GER]a = 1, [GER]has_war = yes) repeating"],
 			],
 		];
 

@@ -14,6 +14,8 @@ export type EffectComplexExpr =
 	| EffectItem
 	| EffectByCondition
 	| RandomListEffect
+	| ChanceEffect
+	| WhileEffect
 	| null;
 
 export interface EffectItem {
@@ -34,6 +36,20 @@ interface RandomListEffectItem {
 interface EffectByCondition {
 	condition: ConditionComplexExpr;
 	items: EffectComplexExpr[];
+}
+
+// A `random = { chance = N ... }` block: the statements inside run once with that chance, not
+// always. The chance is kept as written -- a variable resolves in the game, not here.
+interface ChanceEffect {
+	chance: number | string;
+	effect: EffectComplexExpr;
+}
+
+// A `while = { limit = { ... } ... }` block: its statements repeat for as long as the limit holds.
+// The loop is never evaluated, so the fold says when it runs, never how often.
+interface WhileEffect {
+	limit: ConditionComplexExpr;
+	effect: EffectComplexExpr;
 }
 
 export interface EffectValue {
@@ -69,6 +85,16 @@ export function projectEffects(effect: EffectComplexExpr): EffectTreeNode[] {
 		return [{ kind: "line", scopeName: effect.scopeName, content: effect.nodeContent }];
 	}
 
+	if ("chance" in effect) {
+		const items = projectEffects(effect.effect);
+		return items.length === 0 ? [] : [{ kind: "chance", chance: effect.chance, items }];
+	}
+
+	if ("limit" in effect) {
+		const items = projectEffects(effect.effect);
+		return items.length === 0 ? [] : [{ kind: "while", limit: effect.limit, items }];
+	}
+
 	if ("condition" in effect) {
 		const items = effect.items.flatMap(projectEffects);
 		if (items.length === 0) {
@@ -91,6 +117,11 @@ export interface GuardedEffectItem {
 	condition: ConditionComplexExpr;
 	// The enclosing random_list branch's numeric or unresolved runtime weight.
 	possibility: number | string | undefined;
+	// Keep enclosing chances as written rather than guessing a combined probability.
+	chances?: (number | string)[];
+	// Set when a `while` stands between the call and the enclosing guards, so the caller can show
+	// the call as repeating rather than one guaranteed run.
+	repeated?: boolean;
 }
 
 // Finds every statement in an effect tree whose key is one of `names`, with its guard. This is how
@@ -102,6 +133,8 @@ export function findGuardedEffectItems(
 	condition: ConditionComplexExpr = true,
 	possibility: number | string | undefined = undefined,
 	result: GuardedEffectItem[] = [],
+	chances: (number | string)[] | undefined = undefined,
+	repeated: boolean | undefined = undefined,
 ): GuardedEffectItem[] {
 	if (effect === null) {
 		return result;
@@ -110,17 +143,40 @@ export function findGuardedEffectItems(
 	if ("nodeContent" in effect) {
 		const name = effect.node.name?.toLowerCase();
 		if (name && names.includes(name)) {
-			result.push({ item: effect, condition, possibility });
+			result.push({ item: effect, condition, possibility, chances, repeated });
 		}
+	} else if ("chance" in effect) {
+		findGuardedEffectItems(
+			effect.effect,
+			names,
+			condition,
+			possibility,
+			result,
+			[...(chances ?? []), effect.chance],
+			repeated,
+		);
+	} else if ("limit" in effect) {
+		// The limit keeps the loop running as much as any `if` above it guards the call.
+		findGuardedEffectItems(
+			effect.effect,
+			names,
+			andCondition(condition, effect.limit),
+			possibility,
+			result,
+			chances,
+			true,
+		);
 	} else if ("condition" in effect) {
 		// `extractEffectByCondition` has already folded any enclosing `if` into this node's own
 		// condition, so the two usually overlap; `andCondition` drops the duplicate rather than
 		// stating the same guard twice.
 		const inner = andCondition(condition, effect.condition);
-		effect.items.forEach((item) => findGuardedEffectItems(item, names, inner, possibility, result));
-	} else {
 		effect.items.forEach((item) =>
-			findGuardedEffectItems(item.effect, names, condition, item.possibility, result),
+			findGuardedEffectItems(item, names, inner, possibility, result, chances, repeated),
+		);
+	} else {
+		effect.items.forEach(
+			(item) => findGuardedEffectItems(item.effect, names, condition, item.possibility, result, chances, repeated),
 		);
 	}
 
@@ -143,8 +199,9 @@ function extractEffectByCondition(
 	let ifItem: ConditionFolder | undefined = undefined;
 
 	// Ordinary statements are held until the next thing that emits into the result -- a scope
-	// block, hidden_effect, random_list or if -- so that whatever sits between two statements in
-	// the source stays between them here. That is why every emitting branch flushes first.
+	// block, hidden_effect, random_list, random, while or if -- so that whatever sits between
+	// two statements in the source stays between them here. That is why every emitting branch
+	// flushes first.
 	for (const child of nodeValue) {
 		let keepIfItem = false;
 
@@ -154,9 +211,32 @@ function extractEffectByCondition(
 			continue;
 		}
 
+		// Only the readable guarded-block form of a `random` or a `while` is intercepted below.
+		const randomChance = childName === "random" ? randomChanceOf(child) : undefined;
+		const whileLimit = childName === "while" ? whileLimitOf(child) : undefined;
+
 		if (childName === "hidden_effect") {
 			flushEffectItems(result, condition, items);
 			extractEffectByCondition(child.value, scopeStack, condition, result);
+		} else if (childName === "random" && randomChance !== undefined) {
+			// The chance is metadata, held out of the body like a scope's limit; the guards above
+			// this block still hold on the statements inside it.
+			flushEffectItems(result, condition, items);
+			result.push({
+				chance: randomChance,
+				effect: extractEffectByCondition(child.value, scopeStack, condition, [], ["chance"]),
+			});
+		} else if (childName === "while" && whileLimit !== undefined) {
+			// The limit heads the fold in the same way a scope's limit guards its block; the body
+			// is read once and never evaluated.
+			flushEffectItems(result, condition, items);
+			result.push({
+				limit: simplifyCondition({
+					type: "and",
+					items: [condition, extractConditionFolder(whileLimit.value, scopeStack, "and")],
+				}),
+				effect: extractEffectByCondition(child.value, scopeStack, true, [], ["limit"]),
+			});
 		} else if (childName === "random_list") {
 			if (Array.isArray(child.value)) {
 				const randomListItems = child.value.map((n) => {
@@ -247,6 +327,33 @@ function extractEffectByCondition(
 	flushEffectItems(result, condition, items);
 
 	return { condition: true, items: result };
+}
+
+// As written: a numeric literal is read as a number, and a string -- a quoted decimal, a variable
+// or any other value -- stands for what only the game resolves, so it is kept whole.
+function chanceAsWritten(value: NodeValue): number | string | undefined {
+	if (typeof value === "number" || typeof value === "string") {
+		return value;
+	}
+	if (value !== null && !Array.isArray(value)) {
+		return value.name;
+	}
+	return undefined;
+}
+
+// The chance of a `random` block, or undefined when the block has none.
+function randomChanceOf(child: Node): number | string | undefined {
+	const chanceChild = Array.isArray(child.value)
+		? child.value.find((n) => n.name?.toLowerCase().trim() === "chance")
+		: undefined;
+	return chanceChild === undefined ? undefined : chanceAsWritten(chanceChild.value);
+}
+
+// The limit node of a `while` block. Undefined when the block has none.
+function whileLimitOf(child: Node): Node | undefined {
+	return Array.isArray(child.value)
+		? child.value.find((n) => n.name?.toLowerCase().trim() === "limit")
+		: undefined;
 }
 
 // Appends the buffered statements to the result at their place in the source order. They continue
@@ -368,6 +475,20 @@ function simplifyEffect(effect: EffectComplexExpr): EffectComplexExpr {
 		return null;
 	}
 
+	if ("nodeContent" in effect) {
+		return effect;
+	}
+
+	if ("chance" in effect) {
+		const inner = simplifyEffect(effect.effect);
+		return inner === null ? null : { chance: effect.chance, effect: inner };
+	}
+
+	if ("limit" in effect) {
+		const inner = simplifyEffect(effect.effect);
+		return inner === null ? null : { limit: effect.limit, effect: inner };
+	}
+
 	if ("condition" in effect) {
 		const items = effect.items
 			.map((i) => simplifyEffect(i))
@@ -387,7 +508,7 @@ function simplifyEffect(effect: EffectComplexExpr): EffectComplexExpr {
 			...effect,
 			items,
 		};
-	} else if (!("nodeContent" in effect)) {
+	} else {
 		let items = effect.items.filter(
 			(i) => typeof i.possibility !== "number" || i.possibility > 0,
 		);
@@ -405,7 +526,5 @@ function simplifyEffect(effect: EffectComplexExpr): EffectComplexExpr {
 			...effect,
 			items,
 		};
-	} else {
-		return effect;
 	}
 }

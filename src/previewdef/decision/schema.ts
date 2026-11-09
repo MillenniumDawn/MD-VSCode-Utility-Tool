@@ -79,6 +79,8 @@ interface DecisionCall {
 	// Set when the call sits in a `random_list` branch, carrying that branch's weight --
 	// as a number when it was written as one, otherwise as written.
 	possibility?: number | string;
+	chances?: (number | string)[];
+	repeated?: boolean;
 	from: DecisionEffectBlockName;
 }
 
@@ -305,6 +307,8 @@ function getDecision(
 				target,
 				condition: guarded.condition,
 				possibility: guarded.possibility,
+				chances: guarded.chances,
+				repeated: guarded.repeated,
 				from: blockName,
 			});
 		}

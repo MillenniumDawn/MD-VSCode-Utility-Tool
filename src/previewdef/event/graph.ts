@@ -52,6 +52,9 @@ interface EventEdge {
 	// Weight of the `random_list` branch the call sits in -- as a number when it was
 	// written as one, otherwise as written.
 	possibility: number | string | undefined;
+	chances: (number | string)[] | undefined;
+	// Set when a `while` stands above the call: it repeats, and the preview never counts the runs.
+	repeated: boolean | undefined;
 	source: EventCallSource;
 }
 
@@ -208,6 +211,8 @@ function eventToNode(
 				randomHours: childEvent.randomHours,
 				condition: childEvent.condition,
 				possibility: childEvent.possibility,
+				chances: childEvent.chances,
+				repeated: childEvent.repeated,
 				source: callSource,
 			};
 
@@ -451,6 +456,8 @@ async function visitNode(
 				randomHours: child.randomHours,
 				condition: child.condition,
 				possibility: child.possibility,
+				chances: child.chances,
+				repeated: child.repeated,
 			});
 		} else {
 			const childId = await visitNode(child, scopeContext, context);

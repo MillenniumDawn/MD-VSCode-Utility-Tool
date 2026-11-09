@@ -25,6 +25,121 @@ function childrenOf(event: HOIEvent, optionName: string): ChildEvent[] {
     return option!.childEvents;
 }
 
+describe('previewdef/event/schema random and while calls', () => {
+    it('finds the event call inside a random with its chance, without a chance effect line', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                option = {
+                    name = test.1.a
+                    random = {
+                        chance = 50
+                        country_event = { id = test.2 }
+                    }
+                }
+            }
+        `);
+
+        const option = byId(events, 'test.1').options[0]!;
+        const children = option.childEvents;
+        assert.strictEqual(children.length, 1, 'expected the call inside the random to be discovered');
+        assert.deepStrictEqual(
+            { eventName: children[0]!.eventName, condition: children[0]!.condition, chances: children[0]!.chances, repeated: children[0]!.repeated },
+            { eventName: 'test.2', condition: true, chances: [50], repeated: undefined },
+        );
+
+        // The chance is the block's metadata: it is not one of the effects, and the call is not
+        // listed as something that always runs once.
+        const folded = option.effects.find(e => e.kind === 'chance');
+        assert.ok(folded, 'expected the random to survive as a chance fold');
+        assert.deepStrictEqual(option.effects, [
+            {
+                kind: 'chance',
+                chance: 50,
+                items: [
+                    { kind: 'line', scopeName: '{event_target}', content: 'country_event = { id = test.2 }' },
+                ],
+            },
+        ]);
+    });
+
+    it('finds the event call inside a while and guards it with the limits around it', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                option = {
+                    name = test.1.a
+                    if = {
+                        limit = { is_subject = yes }
+                        while = {
+                            limit = { has_war = yes }
+                            country_event = { id = test.2 }
+                        }
+                    }
+                }
+            }
+        `);
+
+        const option = byId(events, 'test.1').options[0]!;
+        const children = option.childEvents;
+        assert.strictEqual(children.length, 1, 'expected the call inside the while to be discovered');
+        assert.deepStrictEqual(
+            { eventName: children[0]!.eventName, chances: children[0]!.chances, repeated: children[0]!.repeated },
+            { eventName: 'test.2', chances: undefined, repeated: true },
+        );
+        assert.strictEqual(children[0]!.possibility, undefined, 'a while is not a random_list branch');
+        const condition = conditionToString(children[0]!.condition);
+        assert.ok(
+            condition.includes('is_subject = yes') && condition.includes('has_war = yes'),
+            `expected both guards on the call, got ${condition}`,
+        );
+
+        const looped = option.effects.find(e => e.kind === 'while');
+        assert.ok(looped, 'expected the while to survive as a loop fold');
+        const loopCondition = conditionToString((looped as { limit: ConditionComplexExpr }).limit);
+        assert.ok(
+            loopCondition.includes('is_subject = yes') && loopCondition.includes('has_war = yes'),
+            `expected the loop head to carry the guard, got ${loopCondition}`,
+        );
+        const contents = option.effects.map(e => JSON.stringify(e));
+        for (const content of contents) {
+            assert.ok(!content.includes('"kind":"line"') || !content.includes('limit ='), `${content} states the limit as an effect`);
+        }
+    });
+
+    it('keeps every enclosing chance as written when one random sits inside another', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                option = {
+                    name = test.1.a
+                    random = {
+                        chance = "0.5"
+                        random = {
+                            chance = 80
+                            country_event = { id = test.2 }
+                        }
+                    }
+                }
+            }
+        `);
+
+        const children = childrenOf(byId(events, 'test.1'), 'test.1.a');
+        assert.strictEqual(children.length, 1);
+        assert.deepStrictEqual(children[0]!.chances, ['0.5', 80]);
+        assert.strictEqual(children[0]!.repeated, undefined);
+    });
+});
+
 describe('previewdef/event/schema option triggers', () => {
     it('keeps the option trigger instead of discarding it', () => {
         const events = eventsOf(`
