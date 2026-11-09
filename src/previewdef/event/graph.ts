@@ -49,7 +49,9 @@ interface EventEdge {
 	randomDays: number;
 	randomHours: number;
 	condition: ConditionComplexExpr;
-	possibility: number | undefined;
+	// Weight of the `random_list` branch the call sits in -- as a number when it was
+	// written as one, otherwise as written.
+	possibility: number | string | undefined;
 	source: EventCallSource;
 }
 

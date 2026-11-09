@@ -334,6 +334,33 @@ describe("previewdef/decision/schema calls", () => {
 		);
 	});
 
+	it("carries a variable weight of a random_list branch as written", () => {
+		const found = decision(
+			`
+            cat = {
+                d = {
+                    complete_effect = {
+                        random_list = {
+                            my_var = { activate_mission = good_mission }
+                            70 = { activate_mission = bad_mission }
+                        }
+                    }
+                }
+            }
+        `,
+			"cat",
+			"d",
+		);
+
+		assert.deepStrictEqual(
+			found.calls.map((c) => [c.target, c.possibility]),
+			[
+				["good_mission", "my_var"],
+				["bad_mission", 70],
+			],
+		);
+	});
+
 	it("finds a call inside a hidden_effect, which the game still runs", () => {
 		const found = decision(
 			`

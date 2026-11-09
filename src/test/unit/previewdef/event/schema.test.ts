@@ -369,6 +369,55 @@ describe('previewdef/event/schema child event conditions', () => {
         assert.strictEqual(three!.possibility, 30);
     });
 
+    it('keeps a call inside a variable-weight random_list branch, with the weight as written', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                title = test.1.t
+                is_triggered_only = yes
+                option = {
+                    name = test.1.a
+                    random_list = {
+                        my_var = { country_event = { id = test.2 } }
+                        70 = { country_event = { id = test.3 } }
+                    }
+                }
+            }
+        `);
+
+        const children = childrenOf(byId(events, 'test.1'), 'test.1.a');
+        assert.deepStrictEqual(children.map(c => [c.eventName, c.possibility]), [
+            ['test.2', 'my_var'],
+            ['test.3', 70],
+        ]);
+    });
+
+    it('keeps a lone runtime weight and its guard on an event call', () => {
+        const events = eventsOf(`
+            add_namespace = test
+            country_event = {
+                id = test.1
+                immediate = {
+                    GER = {
+                        if = {
+                            limit = { has_war = yes }
+                            random_list = { my_var = { country_event = { id = test.2 } } }
+                        }
+                    }
+                }
+            }
+        `);
+        const event = byId(events, 'test.1');
+        assert.strictEqual(event.immediate.childEvents.length, 1);
+        const child = event.immediate.childEvents[0];
+        assert.strictEqual(child.eventName, 'test.2');
+        assert.strictEqual(child.scopeName, 'GER');
+        assert.strictEqual(child.possibility, 'my_var');
+        assert.strictEqual(conditionToString(child.condition), '[GER]has_war = yes');
+        assert.ok(JSON.stringify(event.immediate.effects).includes('"possibility":"my_var"'));
+    });
+
     it('keeps the guard on a call inside a random_list nested in an if', () => {
         const events = eventsOf(`
             add_namespace = test
