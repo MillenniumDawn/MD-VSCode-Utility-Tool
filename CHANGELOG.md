@@ -2,6 +2,7 @@ Unreleased
 
   Bugfixes:
 - [ Loading ] Linked mod descriptors and install folders are now accepted as files and folders instead of being treated as missing. Dangling links are still rejected. Issue #769.
+- [ Loading ] On Linux, reading a file no longer substitutes the open buffer of another file whose name differs only in case. Windows aliases still use the open buffer. Issue #718.
 - [ World Map Preview ] Turning the supply-area setting on or off now updates an open world map in place, and Refresh keeps its controls and its data in the same mode. Issue #739.
 - [ Events Previewer ] Event calls inside scope blocks such as every_country now show their limit conditions instead of appearing unconditional. The limit itself is no longer shown as an effect. Issue #716.
 - [ Previews ] Variable-weight random_list branches now keep their effects and event links. Their weights are shown as written rather than guessed or discarded. Issue #715.
