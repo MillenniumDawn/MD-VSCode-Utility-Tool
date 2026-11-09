@@ -166,7 +166,7 @@ async function spriteCacheExpiryToken(
 	const gfxToken = await hoiFileExpiryToken(gfxFilePath);
 	const sprite = await spritePromise;
 	if (sprite) {
-		return `${gfxToken}:${expiryToken(sprite.image.path)}`;
+		return `${gfxToken}:${await expiryToken(sprite.image.path)}`;
 	}
 	return gfxToken;
 }

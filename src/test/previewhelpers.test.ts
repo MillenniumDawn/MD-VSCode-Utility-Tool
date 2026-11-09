@@ -64,10 +64,10 @@ describe("shared preview helpers", () => {
 	});
 
 	describe("named world-map definitions", () => {
-		for (const [loader, keep, text, source] of [
-			[new TerrainDefinitionLoader(), "first", "Terrain plain is defined in two files: b, a.", []],
-			[new ResourceDefinitionLoader(), "first", "Resource plain is defined in two files: b, a.", []],
-			[(new StatesLoader({} as any, new ResourceDefinitionLoader()) as any).categoriesLoader, "last", 'There\'re multiple state categories have name "plain".', [{ type: "statecategory", name: "plain" }]],
+		for (const [loader, keep, text, source, dependencies] of [
+			[new TerrainDefinitionLoader(), "first", "Terrain plain is defined in two files: b, a.", [], undefined],
+			[new ResourceDefinitionLoader(), "first", "Resource plain is defined in two files: b, a.", [], ["common/resources/*", "a", "b"]],
+			[(new StatesLoader({} as any, new ResourceDefinitionLoader()) as any).categoriesLoader, "last", 'There\'re multiple state categories have name "plain".', [{ type: "statecategory", name: "plain" }], undefined],
 		] as const) {
 			it(`${loader} preserves ${keep}-wins, warning order and dependencies`, async () => {
 				const a = { name: "plain", file: "a" };
@@ -79,7 +79,9 @@ describe("shared preview helpers", () => {
 				], new LoaderSession(false));
 				assert.deepStrictEqual(Object.values(loaded.result), [keep === "first" ? a : b]);
 				assert.deepStrictEqual(loaded.warnings, [existingWarning, { source: [...source], relatedFiles: ["b", "a"], text }]);
-				assert.deepStrictEqual(loaded.dependencies, [loader.folder + "/*"]);
+				// The resource loader propagates the sprite-source files every file resolved behind;
+				// the other two keep the folder wildcard alone.
+				assert.deepStrictEqual(loaded.dependencies, dependencies ?? [loader.folder + "/*"]);
 			});
 		}
 	});
