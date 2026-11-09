@@ -72,6 +72,7 @@ const swapIndex = createThreeHalfIndex<SwapIndex, SwapCacheRecord>({
 	extension: ".txt",
 	cacheVersion: SWAP_CACHE_VERSION,
 	newHalf: () => ({}),
+	recordFilePath: ([file]) => file,
 	hydrate: (half, [file, swaps], skipFiles) => {
 		if (skipFiles.has(file)) {
 			return;

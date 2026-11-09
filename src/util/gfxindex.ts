@@ -88,6 +88,7 @@ const gfxIndex = createThreeHalfIndex<GfxHalf, GfxCacheRecord>({
 	extension: ".gfx",
 	cacheVersion: GFX_CACHE_VERSION,
 	newHalf: (source) => ({ index: {}, fileToKeys: source === "workspace" ? new Map() : null }),
+	recordFilePath: (record) => record.file,
 	hydrate: ({ index, fileToKeys }, record, skipFiles) => {
 		if (skipFiles.has(record.file)) {
 			return;

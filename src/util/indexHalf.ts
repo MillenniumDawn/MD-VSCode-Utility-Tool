@@ -124,6 +124,8 @@ export interface IndexHalfSpec<TRecord> {
 	 * as a record that fails to parse is, and the build falls back to parsing everything.
 	 */
 	hydrate: (record: TRecord, skipFiles: Set<string>) => void;
+	/** When supplied, only records in the current listing may be restored. */
+	recordFilePath?: (record: TRecord) => string;
 	/** Parses one file into the live index. Reports its own failures and does not throw. */
 	parseFile: (file: IndexFile) => Promise<void>;
 	/**
@@ -215,10 +217,14 @@ async function buildIndexHalfWithTimer<TRecord>(
 			try {
 				const records = await loadCacheRecords(cacheName, cacheScope);
 				if (records) {
-					const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
+					const skipFiles = new Set([...staleness.stale, ...staleness.removed, ...staleness.added]);
 					const slice = createTimeSlicer();
+					const currentFiles = new Set(filePaths);
 					for (const record of records) {
-						spec.hydrate(record as TRecord, skipFiles);
+						// Older failed/retried builds could save entries absent from their manifest.
+						if (!spec.recordFilePath || currentFiles.has(spec.recordFilePath(record as TRecord))) {
+							spec.hydrate(record as TRecord, skipFiles);
+						}
 						await slice();
 					}
 					filesToParse = [...staleness.stale, ...staleness.added];
