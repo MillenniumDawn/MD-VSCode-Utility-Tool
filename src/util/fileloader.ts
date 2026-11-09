@@ -81,26 +81,86 @@ const dlcPathsCache = new PromiseCache({
 	life: 10 * 60 * 1000,
 });
 
-// Cached DLC zip that retains only a lightweight index (entryName -> isDirectory and directory ->
-// file basenames), never the zip buffer or an open handle. Reads go straight to the entry's bytes
-// through the ZipIndex, which seeks to them rather than re-reading the archive.
+interface DlcZipFile {
+	relativePath: string;
+	entryName: string;
+}
+
+// Cached DLC zip that retains only a lightweight index (entryName -> isDirectory, directory ->
+// its file basenames, directory -> the files in its subtree), never the zip buffer or an open
+// handle. Reads go straight to the entry's bytes through the ZipIndex, which seeks to them rather
+// than re-reading the archive.
 export class DlcZip {
 	private readonly nameIndex = new Map<string, { isDirectory: boolean }>();
-	private readonly dirIndex = new Map<string, string[]>();
+	private readonly dirIndex = new Map<string, DlcZipFile[]>();
+	/**
+	 * Every directory the archive holds -- an explicit trailing-slash entry or a folder implied by
+	 * the files beneath it -- keyed the way dirIndex keys, mapping to each file in its subtree as
+	 * its path relative to that directory. hasDirectory answers from the keys; a recursive listDir
+	 * from the values.
+	 */
+	private readonly subtreeIndex = new Map<string, DlcZipFile[]>();
 
 	constructor(private readonly zipIndex: ZipIndex) {
+		const archiveRoot = path.resolve(".");
 		for (const entry of zipIndex.entries) {
 			this.nameIndex.set(entry.name, { isDirectory: entry.isDirectory });
-			if (!entry.isDirectory) {
-				const name = entry.name.replace(/^[\\/]/, "");
-				const dir = path.resolve(path.dirname(name)).toLowerCase();
-				const basenames = this.dirIndex.get(dir);
-				if (basenames) {
-					basenames.push(path.basename(name));
-				} else {
-					this.dirIndex.set(dir, [path.basename(name)]);
-				}
+			const name = entry.name.replace(/^[\\/]/, "");
+			if (entry.isDirectory) {
+				this.markDirectoryTree(path.resolve(name), archiveRoot);
+				continue;
 			}
+			const dir = path.resolve(path.dirname(name)).toLowerCase();
+			const file = { relativePath: path.basename(name), entryName: entry.name };
+			const files = this.dirIndex.get(dir);
+			if (files) {
+				files.push(file);
+			} else {
+				this.dirIndex.set(dir, [file]);
+			}
+			this.recordFileTree(path.resolve(name), archiveRoot, entry.name);
+		}
+	}
+
+	/** Marks `dir` and every folder above it, up to the archive root, as held by this archive. */
+	private markDirectoryTree(dir: string, archiveRoot: string): void {
+		for (;;) {
+			const key = dir.toLowerCase();
+			if (!this.subtreeIndex.has(key)) {
+				this.subtreeIndex.set(key, []);
+			}
+			if (dir === archiveRoot) {
+				return;
+			}
+			const parent = path.dirname(dir);
+			if (parent === dir) {
+				return;
+			}
+			dir = parent;
+		}
+	}
+
+	/** Records `file` in its own directory and every folder above it, each as its path relative to that folder. */
+	private recordFileTree(file: string, archiveRoot: string, entryName: string): void {
+		let dir = path.dirname(file);
+		for (;;) {
+			const key = dir.toLowerCase();
+			const relative = path.relative(dir, file).split(path.sep).join("/");
+			const files = this.subtreeIndex.get(key);
+			const entry = { relativePath: relative, entryName };
+			if (files) {
+				files.push(entry);
+			} else {
+				this.subtreeIndex.set(key, [entry]);
+			}
+			if (dir === archiveRoot) {
+				return;
+			}
+			const parent = path.dirname(dir);
+			if (parent === dir) {
+				return;
+			}
+			dir = parent;
 		}
 	}
 
@@ -108,10 +168,25 @@ export class DlcZip {
 		return this.nameIndex.get(name) ?? null;
 	}
 
-	// Basenames of the non-directory entries directly under relativePath, matched the same way the
-	// old getEntries loop did: leading slash/backslash stripped, path.resolve + lowercase compare.
-	listDir(relativePath: string): string[] {
-		return this.dirIndex.get(path.resolve(relativePath).toLowerCase()) ?? [];
+	// Files directly under relativePath as basenames, or -- when `recursively` -- every file beneath
+	// it as its path relative to relativePath, the depth the directory sources list. Matched the
+	// same way the old getEntries loop did: leading slash/backslash stripped, path.resolve +
+	// lowercase compare.
+	listDir(relativePath: string, recursively: boolean = false): string[] {
+		return this.listEntries(relativePath, recursively).map((entry) => entry.relativePath);
+	}
+
+	listEntries(relativePath: string, recursively: boolean = false): DlcZipFile[] {
+		const key = path.resolve(relativePath).toLowerCase();
+		return (
+			(recursively ? this.subtreeIndex.get(key) : this.dirIndex.get(key)) ??
+			[]
+		);
+	}
+
+	/** Whether the archive holds this folder: an explicit entry for it, or files beneath it. */
+	hasDirectory(relativePath: string): boolean {
+		return this.subtreeIndex.has(path.resolve(relativePath).toLowerCase());
 	}
 
 	// One entry's data, read out of the archive without touching the rest of it. Null when the
@@ -878,7 +953,9 @@ async function listFilesFromModOrHOI4Impl(
 				(message: string) => error(message),
 			),
 		dlcZip: async (zip, _zipUri, normalizedPath) => {
-			result.push(...zip.listDir(normalizedPath));
+			result.push(
+				...zip.listDir(normalizedPath, options?.recursively ?? false),
+			);
 		},
 	});
 
@@ -943,10 +1020,10 @@ export async function listFileEntriesFromModOrHOI4(
 			// Leaving them undated would have the vanilla half call every DLC file deleted on every
 			// build and re-read it forever.
 			const mtime = await lastModifiedOrUndefined(zipUri);
-			for (const name of zip.listDir(normalizedPath)) {
+			for (const entry of zip.listEntries(normalizedPath, recursively)) {
 				result.push({
-					relativePath: name,
-					uri: zipUri.with({ fragment: `${normalizedPath}/${name}` }),
+					relativePath: entry.relativePath,
+					uri: zipUri.with({ fragment: entry.entryName }),
 					mtime,
 				});
 			}
@@ -1059,9 +1136,10 @@ interface FileSourceVisitor {
 	/** A directory of this source that exists and could hold the requested folder. */
 	directory(dir: vscode.Uri, listFailureMessage: string): Promise<void>;
 	/**
-	 * A DLC archive whose `normalizedPath` entry exists and is a directory. Always a flat listing:
-	 * `DlcZip.listDir` returns the basenames directly under that entry and nothing below them, even
-	 * when the caller asked for a recursive listing.
+	 * A DLC archive that holds `normalizedPath` as a directory: an explicit entry for it, or a
+	 * folder implied by the files beneath it. What it hands back follows the caller's listing
+	 * depth: the basenames directly under that entry, or every file beneath it relative to that
+	 * entry when the caller asked for a recursive listing.
 	 */
 	dlcZip(
 		zip: DlcZip,
@@ -1159,8 +1237,7 @@ async function visitFileSources(
 			const dlcZips = await openDlcZips(dlcs);
 			for (let i = 0; i < dlcs.length; i++) {
 				const dlcZip = dlcZips[i]!;
-				const folderEntry = dlcZip.getEntry(relativePath);
-				if (folderEntry && folderEntry.isDirectory) {
+				if (dlcZip.hasDirectory(relativePath)) {
 					await visitor.dlcZip(dlcZip, dlcs[i]!, relativePath);
 				}
 			}
