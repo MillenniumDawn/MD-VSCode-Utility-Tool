@@ -138,13 +138,12 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 			),
 		);
 
-		const { provinces, badProvinceId: badProvinceIdForMerge } =
-			mergeProvinceDefinitions(
-				provinceDefinitions.result,
-				provinceBmp.result,
-				["map/" + defaultMap.definitions, "map/" + defaultMap.provinces],
-				warnings,
-			);
+		const { provinces, badProvinceId: badProvinceIdForMerge } = mergeProvinceDefinitions(
+			provinceDefinitions.result,
+			provinceBmp.result,
+			["map/" + defaultMap.definitions, "map/" + defaultMap.provinces],
+			warnings,
+		);
 
 		validateProvinceContinents(
 			provinces,
@@ -159,18 +158,20 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 			warnings,
 		);
 
+		const { sortedProvinces, badProvinceId } = sortProvinces(
+			provinces,
+			badProvinceIdForMerge,
+			["map/" + defaultMap.definitions],
+			warnings,
+		);
+
+		fillBitmapEdges(provinces, provinceBmp.result);
+
 		fillAdjacencyEdges(
 			provinces,
 			adjacencies.result,
 			provinceBmp.result.height,
 			["map/" + defaultMap.provinces, "map/" + defaultMap.definitions],
-			warnings,
-		);
-
-		const { sortedProvinces, badProvinceId } = sortProvinces(
-			provinces,
-			badProvinceIdForMerge,
-			["map/" + defaultMap.definitions],
 			warnings,
 		);
 
@@ -324,6 +325,23 @@ function sortProvinces(
 	};
 }
 
+function fillBitmapEdges(
+	provinces: Province[],
+	{ colorToProvince }: ProvinceBmp,
+): void {
+	const finalIdByColor = new Map(provinces.map((province) => [province.color, province.id]));
+	for (const province of provinces) {
+		const provinceInMap = colorToProvince[province.color];
+		if (provinceInMap) {
+			province.edges = provinceInMap.edges.map((edge) => ({
+				...edge,
+				to: finalIdByColor.get(edge.toColor) ?? -1,
+				type: "",
+			}));
+		}
+	}
+}
+
 function mergeProvinceDefinitions(
 	provinceDefinitions: ProvinceDefinition[],
 	{ provinces, colorToProvince }: ProvinceBmp,
@@ -420,17 +438,6 @@ function mergeProvinceDefinitions(
 			coastal: false,
 			terrain: "",
 		});
-	}
-
-	for (const province of result) {
-		const provinceInMap = colorToProvince[province.color];
-		if (provinceInMap) {
-			province.edges = provinceInMap.edges.map((e) => ({
-				...e,
-				to: colorToProvinceId[e.toColor] ?? -1,
-				type: "",
-			}));
-		}
 	}
 
 	for (const warning of warnings) {
