@@ -62,10 +62,12 @@ interface EffectGroup {
 	items: EffectTreeNode[];
 }
 
-// One `random_list`: exactly one of the branches runs, with the weight it was written with.
+// One `random_list`: exactly one of the branches runs, with the weight it was written with -- a
+// number when the file wrote one, otherwise the variable or script value as written, whose weight
+// is known at runtime.
 interface EffectChoice {
 	kind: "choice";
-	items: { possibility: number; effect: EffectTreeNode[] }[];
+	items: { possibility: number | string; effect: EffectTreeNode[] }[];
 }
 
 export type EffectTreeNode = EffectLine | EffectGroup | EffectChoice;
