@@ -435,6 +435,11 @@ describe("webview/decisiontree chipTextFor", () => {
 		);
 	});
 
+	it("shows every enclosing chance and marks a repeating call", () => {
+		const edge = { ...call("d:a", "d:b", "activate"), chances: [50, "runtime_chance"], repeated: true };
+		assert.strictEqual(decisiontree.chipTextFor(edge, false), "activates · chance 50 · chance runtime_chance · repeats");
+	});
+
 	it("adds the random_list weight and the count of what a filter took out", () => {
 		const weighted = { ...call("d:a", "d:b", "activate"), possibility: 70 };
 		assert.ok(decisiontree.chipTextFor(weighted, false).includes("70"));

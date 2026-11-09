@@ -307,6 +307,22 @@ describe("previewdef/decision/schema calls", () => {
 		assert.strictEqual(conditionToString(found.calls[0]!.condition), "has_war = yes");
 	});
 
+	it("keeps nested chances and repetition on decision calls", () => {
+		const found = decision(`
+			cat = { d = { complete_effect = {
+				random = { chance = 50 random = { chance = "runtime_chance"
+					while = { limit = { has_war = yes } activate_mission = war_mission }
+				} }
+			} } }
+		`, "cat", "d");
+
+		assert.strictEqual(found.calls.length, 1);
+		assert.strictEqual(found.calls[0]!.target, "war_mission");
+		assert.deepStrictEqual(found.calls[0]!.chances, [50, "runtime_chance"]);
+		assert.strictEqual(found.calls[0]!.repeated, true);
+		assert.strictEqual(conditionToString(found.calls[0]!.condition), "has_war = yes");
+	});
+
 	it("carries the weight of a random_list branch", () => {
 		const found = decision(
 			`

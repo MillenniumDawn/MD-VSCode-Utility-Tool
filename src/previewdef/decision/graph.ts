@@ -103,6 +103,8 @@ export async function buildDecisionGraphPayload(
 				fromBlock: call.from,
 				condition: call.condition,
 				possibility: call.possibility,
+				chances: call.chances,
+				repeated: call.repeated,
 			});
 		}
 	}

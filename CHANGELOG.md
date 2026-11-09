@@ -1,7 +1,7 @@
 Unreleased
 
   Bugfixes:
-- [ Events Previewer ] Event calls inside a random = { chance = ... } or a while = { limit = { ... } } effect are discovered again and listed with their guard. The chance is shown as written, and a while reads as a repeating block instead of one guaranteed call. Issue #714.
+- [ Previews ] Event and decision calls inside a random = { chance = ... } or a while = { limit = { ... } } effect are discovered again and listed with their guard. The chance is shown as written, and a while reads as a repeating block instead of one guaranteed call. Issue #714.
 - [ Loading ] Linked mod descriptors and install folders are now accepted as files and folders instead of being treated as missing. Dangling links are still rejected. Issue #769.
 - [ Loading ] On Linux, reading a file no longer substitutes the open buffer of another file whose name differs only in case. Windows aliases still use the open buffer. Issue #718.
 - [ World Map Preview ] Turning the supply-area setting on or off now updates an open world map in place, and Refresh keeps its controls and its data in the same mode. Issue #739.
