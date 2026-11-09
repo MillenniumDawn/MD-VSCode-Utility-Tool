@@ -13,6 +13,7 @@ Unreleased
 - [ World Map Preview ] Malformed province, state, strategic region and supply area IDs now produce warnings and keep their entries instead of crashing the preview or silently losing map data. Issue #721.
 - [ World Map Preview ] Resource icons now update after their GFX definitions or textures change, without requiring a forced Refresh. Issue #737.
 - [ Previews ] Statements inside a scope block or a hidden_effect no longer jump ahead of the statements written before them, so effect lists follow the order of the file. Issue #722.
+- [ World Map Preview ] Province borders and adjacency lines now attach to the right provinces after duplicate or malformed province IDs are reassigned, instead of pointing at the old IDs. Issue #775.
 
 v1.1.45
 
