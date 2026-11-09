@@ -6,6 +6,7 @@ Unreleased
 - [ Events Previewer ] Event calls inside scope blocks such as every_country now show their limit conditions instead of appearing unconditional. The limit itself is no longer shown as an effect. Issue #716.
 - [ Loading ] Files and folders reached through a symbolic link are now included in folder listings, so a mod reached through a junction is indexed in full wherever the native walk cannot run. Issue #719.
 - [ MIO Previewer ] Trait bonus overrides now show icons for newly added bonus categories while keeping the inherited categories that still apply. Issue #728.
+- [ MIO Previewer ] Include chains now keep inherited traits regardless of declaration order. Circular includes produce a warning instead of silently showing an incomplete tree. Issue #713.
 - [ Decisions Previewer ] A targeted decision's target_root_trigger restrictions on the decision-taking country now show in the preview as their own condition panel and count in the conditions filter. Issue #758.
 - [ World Map Preview ] Malformed province, state, strategic region and supply area IDs now produce warnings and keep their entries instead of crashing the preview or silently losing map data. Issue #721.
 - [ Previews ] Statements inside a scope block or a hidden_effect no longer jump ahead of the statements written before them, so effect lists follow the order of the file. Issue #722.
