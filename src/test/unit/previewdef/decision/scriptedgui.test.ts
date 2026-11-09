@@ -28,9 +28,11 @@ describe("previewdef/decision/scriptedgui", () => {
 	});
 
 	it("reads every named gui, skips a file that does not parse, and keeps the first of a repeated name", async () => {
-		mock.method(fileloader, "listFilesFromModOrHOI4", async () => ["good.txt", "bad.txt", "empty.txt"]);
+		mock.method(fileloader, "listFilesFromModOrHOI4", async () => ["good.txt", "README.md", "bad.txt", "empty.txt", "good.txt.bak"]);
+		const parsed: string[] = [];
 		mock.method(fileloader, "hoiFileExpiryToken", async () => "v1");
 		mock.method(fileloader, "parseHoi4FileCached", async (path: string) => {
+			parsed.push(nodePath.basename(path));
 			if (path.endsWith("bad.txt")) {
 				throw new Error("half typed");
 			}
@@ -49,6 +51,7 @@ describe("previewdef/decision/scriptedgui", () => {
 			["plain", undefined, undefined],
 			["knesset", "LATER", undefined],
 		]);
+		assert.deepStrictEqual(parsed, ["good.txt", "bad.txt", "empty.txt"]);
 		assert.strictEqual(scriptedGuisByName(result.result).knesset?.windowName, "KNESSET");
 		assert.deepStrictEqual(result.dependencies, ["common/scripted_guis/*"]);
 		assert.strictEqual(loader.toString(), "[ScriptedGuisLoader]");
