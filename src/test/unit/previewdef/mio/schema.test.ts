@@ -712,3 +712,115 @@ describe('previewdef/mio/schema link warnings', () => {
         assert.deepStrictEqual(byId['derived_org'], ['Parent a of trait c is not positioned above it.']);
     });
 });
+
+describe('previewdef/mio/schema include chains', () => {
+    // The organization an include names is resolved wherever the file puts it. A chain written
+    // head first must carry every trait in it, the same as the reversed order.
+    it('resolves a forward include chain of depth three', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            a_org = { include = b_org add_trait = { token = a_trait position = { x = 0 y = 0 } } }
+            b_org = { include = c_org add_trait = { token = b_trait position = { x = 1 y = 0 } } }
+            c_org = { trait = { token = c_trait position = { x = 2 y = 0 } } }
+        `), [], 'test.txt');
+        const byId = Object.fromEntries(mios.map(m => [m.id, m]));
+        assert.deepStrictEqual(Object.keys(byId['a_org'].traits).sort(), ['a_trait', 'b_trait', 'c_trait']);
+        assert.deepStrictEqual(Object.keys(byId['b_org'].traits).sort(), ['b_trait', 'c_trait']);
+        for (const mio of mios) {
+            assert.deepStrictEqual(mio.warnings, []);
+        }
+    });
+
+    it('resolves a forward include chain of depth four', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            w_org = { include = x_org add_trait = { token = w_trait position = { x = 0 y = 0 } } }
+            x_org = { include = y_org add_trait = { token = x_trait position = { x = 1 y = 0 } } }
+            y_org = { include = z_org add_trait = { token = y_trait position = { x = 2 y = 0 } } }
+            z_org = { trait = { token = z_trait position = { x = 3 y = 0 } } }
+        `), [], 'test.txt');
+        const w = mios.find(m => m.id === 'w_org')!;
+        assert.deepStrictEqual(Object.keys(w.traits).sort(), ['w_trait', 'x_trait', 'y_trait', 'z_trait']);
+    });
+
+    it('resolves the same chain written tail first', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            c_org = { trait = { token = c_trait position = { x = 2 y = 0 } } }
+            b_org = { include = c_org add_trait = { token = b_trait position = { x = 1 y = 0 } } }
+            a_org = { include = b_org add_trait = { token = a_trait position = { x = 0 y = 0 } } }
+        `), [], 'test.txt');
+        const a = mios.find(m => m.id === 'a_org')!;
+        assert.deepStrictEqual(Object.keys(a.traits).sort(), ['a_trait', 'b_trait', 'c_trait']);
+    });
+
+    it('keeps the defining organization and overrides of traits a chain passes on', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            a_org = {
+                include = b_org
+                add_trait = { token = a_trait position = { x = 0 y = 0 } }
+                override_trait = { token = c_trait name = a_name }
+            }
+            b_org = {
+                include = c_org
+                add_trait = { token = b_trait position = { x = 1 y = 0 } }
+                override_trait = { token = c_trait name = b_name }
+            }
+            c_org = { trait = { token = c_trait name = c_name position = { x = 2 y = 0 } } }
+        `), [], 'test.txt');
+        const byId = Object.fromEntries(mios.map(m => [m.id, m]));
+        const seenFromA = byId['a_org'].traits['c_trait'];
+        assert.strictEqual(seenFromA.name, 'a_name');
+        assert.strictEqual(seenFromA.sourceMioId, 'a_org');
+        assert.strictEqual(seenFromA.file, 'test.txt');
+        assert.ok(seenFromA.token, 'the overriding definition is what the preview navigates to');
+        assert.strictEqual(byId['a_org'].traits['a_trait'].sourceMioId, 'a_org');
+        assert.strictEqual(byId['a_org'].traits['b_trait'].sourceMioId, 'b_org');
+        // The organizations above stay as each of them wrote it: overriding on the way out is a
+        // copy, not a write into the included ones.
+        assert.strictEqual(byId['b_org'].traits['c_trait'].name, 'b_name');
+        assert.strictEqual(byId['b_org'].traits['c_trait'].sourceMioId, 'b_org');
+        assert.strictEqual(byId['c_org'].traits['c_trait'].name, 'c_name');
+        assert.strictEqual(byId['c_org'].traits['c_trait'].sourceMioId, 'c_org');
+    });
+});
+
+describe('previewdef/mio/schema include cycles', () => {
+    const cycleWarning = 'Circular includes between military industrial organizations: ';
+
+    it('terminates a two-organization include cycle and warns both organizations', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            a_org = { include = b_org add_trait = { token = a_trait position = { x = 0 y = 0 } } }
+            b_org = { include = a_org add_trait = { token = b_trait position = { x = 1 y = 0 } } }
+        `), [], 'test.txt');
+        assert.strictEqual(mios.length, 2);
+        const byId = Object.fromEntries(mios.map(m => [m.id, m]));
+        for (const mio of mios) {
+            assert.deepStrictEqual(mio.warnings.map(w => w.text), [`${cycleWarning}a_org -> b_org -> a_org.`]);
+            assert.strictEqual(mio.warnings[0].source, mio.id);
+        }
+        // The cycle has no complete tree to close on, but what each organization wrote is kept.
+        assert.ok(byId['a_org'].traits['a_trait']);
+        assert.ok(byId['b_org'].traits['b_trait']);
+    });
+
+    it('warns an organization that includes itself', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            a_org = { include = a_org add_trait = { token = a_trait position = { x = 0 y = 0 } } }
+        `), [], 'test.txt');
+        assert.strictEqual(mios.length, 1);
+        assert.deepStrictEqual(mios[0].warnings.map(w => w.text), [`${cycleWarning}a_org -> a_org.`]);
+        assert.ok(mios[0].traits['a_trait']);
+    });
+
+    it('warns an organization that includes into the cycle from outside', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            a_org = { include = b_org add_trait = { token = a_trait position = { x = 0 y = 0 } } }
+            b_org = { include = a_org add_trait = { token = b_trait position = { x = 1 y = 0 } } }
+            w_org = { include = a_org add_trait = { token = w_trait position = { x = 2 y = 0 } } }
+        `), [], 'test.txt');
+        assert.strictEqual(mios.length, 3);
+        const byId = Object.fromEntries(mios.map(m => [m.id, m]));
+        for (const mio of mios) {
+            assert.deepStrictEqual(mio.warnings.map(w => w.text), [`${cycleWarning}a_org -> b_org -> a_org.`]);
+        }
+        assert.ok(byId['w_org'].traits['w_trait']);
+    });
+});

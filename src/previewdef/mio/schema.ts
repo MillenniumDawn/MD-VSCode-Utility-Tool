@@ -146,37 +146,72 @@ const mioFileSchema: SchemaDef<MioFile> = {
 
 export function getMiosFromFile(node: Node, dependentMios: Mio[], filePath: string): Mio[] {
     const file = convertNodeToJson<MioFile>(node, mioFileSchema);
-    const dependencies: Mio[] = [...dependentMios];
-    const result: Mio[] = [];
+    const resolved = new Map<string, Mio>();
+    const resolving: string[] = [];
+    const circularIncludes = new Map<Mio, string>();
 
+    function resolveMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }): Mio {
+        const already = resolved.get(mioDefItem._key);
+        if (already) {
+            return already;
+        }
+
+        const mioDef = mioDefItem._value;
+        let baseMio: Mio | undefined;
+        let cutChain: string | undefined;
+        resolving.push(mioDefItem._key);
+        if (mioDef.include) {
+            baseMio = dependentMios.find(m => m.id === mioDef.include);
+            if (baseMio === undefined) {
+                if (resolving.includes(mioDef.include)) {
+                    cutChain = [...resolving.slice(resolving.indexOf(mioDef.include)), mioDef.include].join(' -> ');
+                } else {
+                    const includeItem = file._map[mioDef.include];
+                    if (includeItem) {
+                        baseMio = resolveMio(includeItem);
+                    }
+                }
+            }
+        }
+
+        const mio = getMio(mioDefItem, baseMio, filePath);
+        resolving.pop();
+
+        const chain = cutChain ?? (baseMio === undefined ? undefined : circularIncludes.get(baseMio));
+        if (chain !== undefined) {
+            circularIncludes.set(mio, chain);
+            mio.warnings.push({
+                source: mio.id,
+                text: localize('miopreview.warnings.includecircularref', 'Circular includes between military industrial organizations: {0}.', chain),
+            });
+        }
+
+        resolved.set(mioDefItem._key, mio);
+        return mio;
+    }
+
+    const result: Mio[] = [];
     for (const key in file._map) {
         const mioDefItem = file._map[key];
-        if (!mioDefItem) {
-            continue;
-        }
-        const mio = getMio(mioDefItem, dependencies, filePath);
-        dependencies.push(mio);
-        if (!mioDefItem._value.include) {
-            result.push(mio);
+        if (mioDefItem && !mioDefItem._value.include) {
+            result.push(resolveMio(mioDefItem));
         }
     }
 
-    // Run twice in case dependent mio is in current file.
+    // Keep the existing preview order: definitions without include first.
     for (const key in file._map) {
         const mioDefItem = file._map[key];
         if (mioDefItem?._value.include) {
-            const mio = getMio(mioDefItem, dependencies, filePath);
-            result.push(mio);
+            result.push(resolveMio(mioDefItem));
         }
     }
 
     return result;
 }
 
-function getMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }, dependentMios: Mio[], filePath: string): Mio {
+function getMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }, baseMio: Mio | undefined, filePath: string): Mio {
     const id = mioDefItem._key;
     const mioDef = mioDefItem._value;
-    const baseMio = mioDef.include ? dependentMios.find(m => m.id === mioDef.include) : undefined;
     // Keyed by the trait token the file wrote, so the map has no prototype for a token like
     // __proto__ or constructor to land on.
     const traits: Record<string, MioTrait> = Object.assign(emptyMap<MioTrait>(), baseMio?.traits);
