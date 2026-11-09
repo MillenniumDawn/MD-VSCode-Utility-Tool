@@ -246,8 +246,13 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 		super();
 	}
 
+	private async listFiles(): Promise<string[]> {
+		return (await listFilesFromModOrHOI4(this.folder))
+			.filter(file => file.toLowerCase().endsWith(".txt"));
+	}
+
 	public override async shouldReloadImpl(session: LoaderSession): Promise<boolean> {
-		const files = await listFilesFromModOrHOI4(this.folder);
+		const files = await this.listFiles();
 		if (
 			this.fileCount !== files.length ||
 			files.some((f) => !(f in this.subLoaders))
@@ -265,7 +270,7 @@ export abstract class FolderLoader<T, TFile, E = {}, EFile = {}> extends Loader<
 	}
 
 	protected async loadImpl(session: LoaderSession): Promise<LoadResult<T, E>> {
-		const files = await listFilesFromModOrHOI4(this.folder);
+		const files = await this.listFiles();
 		this.fileCount = files.length;
 
 		const subLoaders = this.subLoaders;

@@ -212,7 +212,8 @@ export async function scanReferencesForEvents(
 	editor: vscode.TextEditor,
 	progress: ProgressReport = noProgress,
 ): Promise<"done" | "cancelled"> {
-	const eventFiles = await listFilesFromModOrHOI4("events");
+	const eventFiles = (await listFilesFromModOrHOI4("events"))
+		.filter(file => file.toLowerCase().endsWith(".txt"));
 	const document = editor.document;
 	// One counter across both passes: two bars for one action reads as two actions.
 	let total = eventFiles.length;
@@ -275,6 +276,7 @@ export async function scanReferencesForEvents(
 	const wantedKeys = localisationKeysOf(searchedEvents);
 	const language = getLanguageIdInYml();
 	const localizationFiles = (await listFilesFromModOrHOI4("localisation"))
+		.filter(file => file.toLowerCase().endsWith(".yml"))
 		.map((file) => "localisation/" + file)
 		.filter((filePath) => !existingLocalizationDependency.has(filePath));
 	total += localizationFiles.length;

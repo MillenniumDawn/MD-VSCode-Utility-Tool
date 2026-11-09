@@ -2,7 +2,11 @@ import * as assert from "assert";
 import { execFile } from "child_process";
 import * as path from "path";
 import { promisify } from "util";
-import { getDependenciesFromText } from "../../../util/dependency";
+import { mock } from "node:test";
+import type * as vscode from "vscode";
+import { getDependenciesFromText, scanReferencesForEvents } from "../../../util/dependency";
+import * as fileloader from "../../../util/fileloader";
+import { handOver } from "../host";
 
 // Scans `head + fill.repeat(count) + tail` in a child that is killed after 2 s, so a scan that
 // goes quadratic fails the test instead of hanging the run. The text is built in the child
@@ -22,6 +26,47 @@ async function scanInChild(head: string, fill: string, count: number, tail: stri
 	], { env, timeout: 2000, killSignal: "SIGKILL" });
 	return JSON.parse(stdout);
 }
+
+describe("util/dependency reference scan files", () => {
+	afterEach(() => mock.restoreAll());
+
+	it("reads scripts and localisation only, not documentation or backup files with matching content", async () => {
+		handOver({
+			workspace: { getConfiguration: () => ({}), getWorkspaceFolder: () => undefined },
+			Position: class { constructor(public line: number, public character: number) {} },
+		});
+		const source = "add_namespace = main country_event = { id = main.1 title = main.title immediate = { country_event = { id = linked.1 } } }";
+		const linked = "add_namespace = linked country_event = { id = linked.1 }";
+		const text = "l_english:\n main.title: Title\n";
+		const files: Record<string, string> = {
+			"events/linked.txt": linked, "events/README.md": linked, "events/backup.txt.bak": linked,
+			"localisation/english.yml": text, "localisation/README.md": text, "localisation/english.yml~": text,
+		};
+		const reads: string[] = [];
+		const inserted: string[] = [];
+		const uri = (file: string): vscode.Uri => ({
+			scheme: "file", fsPath: file, path: file,
+			toString: () => file, with: () => uri(file),
+		}) as unknown as vscode.Uri;
+		mock.method(fileloader, "listFilesFromModOrHOI4", async (folder: string) =>
+			Object.keys(files).filter(file => file.startsWith(folder + "/")).map(file => file.slice(folder.length + 1)));
+		mock.method(fileloader, "readFileFromModOrHOI4", async (file: string) => {
+			reads.push(file);
+			return [Buffer.from(files[file]!), uri(file)];
+		});
+		const editor = {
+			document: { uri: uri("events/main.txt"), isClosed: false, getText: () => source },
+			edit: async (apply: (edit: vscode.TextEditorEdit) => void) => {
+				apply({ insert: (_position: vscode.Position, text: string) => inserted.push(text) } as unknown as vscode.TextEditorEdit);
+				return true;
+			},
+		} as unknown as vscode.TextEditor;
+
+		assert.strictEqual(await scanReferencesForEvents(editor), "done");
+		assert.deepStrictEqual(reads, ["events/linked.txt", "localisation/english.yml"]);
+		assert.deepStrictEqual(inserted, ["#!event:events/linked.txt\n#!localisation:localisation/english.yml\n"]);
+	});
+});
 
 describe("util/dependency marker parsing", () => {
 	const cases: [string, string[], { type: string; path: string }[]][] = [
