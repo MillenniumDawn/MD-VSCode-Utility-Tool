@@ -94,9 +94,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 						tolerateRootErrors: spec.tolerateRootErrors,
 					}),
 				hydrate: (record, skipFiles) => spec.hydrate(half, record, skipFiles),
-				parseFile: async (file) => {
-					await spec.parseFile(half, file, options);
-				},
+				parseFile: (file) => spec.parseFile(half, file, options),
 				serialize: () => spec.serialize(half),
 			},
 			progress,

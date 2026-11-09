@@ -43,7 +43,8 @@ interface SwapIndex {
 	[file: string]: SwapRecord[];
 }
 
-const SWAP_CACHE_VERSION = 2;
+// Older manifests marked failed reads fresh, so their missing records cannot be reused safely.
+const SWAP_CACHE_VERSION = 3;
 
 /** One file's swaps, as one line of the cache. */
 type SwapCacheRecord = [file: string, swaps: SwapRecord[]];

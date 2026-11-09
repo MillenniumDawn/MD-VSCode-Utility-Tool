@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import { mock } from "node:test";
 import type * as vscode from "vscode";
+import { CancelledError } from "../../../util/common";
 import { refreshFeatureFlags } from "../../../util/featureflags";
 import * as fileloader from "../../../util/fileloader";
 import { createThreeHalfIndex, ThreeHalfIndex, ThreeHalfIndexSpec } from "../../../util/indexFactory";
@@ -234,6 +235,60 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 		function parsedCalls(): string[] {
 			return calls.filter((call) => call.startsWith("parse")).sort();
 		}
+
+		for (const warm of [false, true]) {
+			it(`retries an unreadable ${warm ? "changed" : "new"} file without touching its mtime`, async () => {
+				mock.method(Logger, "error", () => undefined);
+				const good = `${ROOT}/good.txt`;
+				const failed = `${ROOT}/failed.txt`;
+				let mtime = 1;
+				world.list = (_root, half) => half === "workspace"
+					? [...listed(["good.txt"]), ...listed(["failed.txt"], mtime)] : [];
+				if (warm) {
+					await create().ensureBuilt();
+					await world.drainCacheWrites();
+					mtime = 2;
+				}
+				world.read = (path) => {
+					if (path === failed) {
+						throw new Error("temporarily unreadable");
+					}
+					return Buffer.from("successful record");
+				};
+				await create().ensureBuilt();
+				await world.drainCacheWrites();
+				const manifest = JSON.parse(Buffer.from(world.disk.get(
+					world.cacheFile("fakeIndex.workspace.manifest.json"),
+				)!).toString()) as { entries: { filePath: string }[] };
+				assert.deepStrictEqual(manifest.entries.map((entry) => entry.filePath), [good]);
+
+				world.read = (path) => {
+					assert.strictEqual(path, failed, "successful cached file must not be read again");
+					return Buffer.from("restored access");
+				};
+				const retry = create();
+				await retry.ensureBuilt();
+				await world.drainCacheWrites();
+				assert.deepStrictEqual(parsedCalls(), [`parse ${failed}`]);
+				assert.deepStrictEqual(files(retry.halves().workspace).sort(), [failed, good]);
+				assert.strictEqual(retry.halves().workspace.files.get(failed), "restored access");
+				await create().ensureBuilt();
+				await world.drainCacheWrites();
+				assert.deepStrictEqual(parsedCalls(), []);
+			});
+		}
+
+		it("leaves the successful cache intact when parsing is cancelled", async () => {
+			world.list = (_root, half) => half === "workspace" ? listed(["workspace.txt"]) : [];
+			await create().ensureBuilt();
+			await world.drainCacheWrites();
+			const before = new Map([...world.disk].map(([path, data]) => [path, Buffer.from(data)]));
+			world.list = (_root, half) => half === "workspace" ? listed(["workspace.txt"], 2) : [];
+			const cancelled = create({ parseFile: async () => { throw new CancelledError(); } });
+			await assert.rejects(cancelled.ensureBuilt(), CancelledError);
+			await world.drainCacheWrites();
+			assert.deepStrictEqual(new Map([...world.disk].map(([path, data]) => [path, Buffer.from(data)])), before);
+		});
 
 		it("parses everything and writes the cache when there is none yet", async () => {
 			const built = countedSerialize();
