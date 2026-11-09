@@ -1,6 +1,7 @@
 Unreleased
 
   Bugfixes:
+- [ MIO Previewer ] Trait availability requirements now appear separately from visibility and can be checked with the condition controls. Locked traits stay visible, including inherited and overridden traits. Issue #727.
 - [ Previews ] Documentation and backup files in script folders no longer cause parsing errors in decision and world map previews.
 - [ Events Previewer ] Scan References now ignores documentation and backup files instead of reading them as events or localisation.
 - [ Previews ] Event and decision calls inside a random = { chance = ... } or a while = { limit = { ... } } effect are discovered again and listed with their guard. The chance is shown as written, and a while reads as a repeating block instead of one guaranteed call. Issue #714.
