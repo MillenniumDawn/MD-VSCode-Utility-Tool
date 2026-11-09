@@ -87,7 +87,9 @@ export interface EventGraphEdge {
 	randomDays: number;
 	randomHours: number;
 	condition: ConditionComplexExpr;
-	possibility?: number;
+	// Weight of the `random_list` branch the call sits in -- as a number when it was
+	// written as one, otherwise as written.
+	possibility?: number | string;
 	// The events a filter removed from between `from` and `to`. Synthesized by the webview when it
 	// contracts the graph around a filtered-out event, so the chain keeps its arrow rather than
 	// falling into two halves -- the host never sets this.

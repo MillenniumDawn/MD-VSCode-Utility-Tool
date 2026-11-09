@@ -27,7 +27,7 @@ interface RandomListEffect {
 }
 
 interface RandomListEffectItem {
-	possibility: number;
+	possibility: number | string;
 	effect: EffectComplexExpr;
 }
 
@@ -89,8 +89,8 @@ export function projectEffects(effect: EffectComplexExpr): EffectTreeNode[] {
 export interface GuardedEffectItem {
 	item: EffectItem;
 	condition: ConditionComplexExpr;
-	// Set when the statement sits in a `random_list` branch, carrying that branch's weight.
-	possibility: number | undefined;
+	// The enclosing random_list branch's numeric or unresolved runtime weight.
+	possibility: number | string | undefined;
 }
 
 // Finds every statement in an effect tree whose key is one of `names`, with its guard. This is how
@@ -100,7 +100,7 @@ export function findGuardedEffectItems(
 	effect: EffectComplexExpr,
 	names: readonly string[],
 	condition: ConditionComplexExpr = true,
-	possibility: number | undefined = undefined,
+	possibility: number | string | undefined = undefined,
 	result: GuardedEffectItem[] = [],
 ): GuardedEffectItem[] {
 	if (effect === null) {
@@ -160,7 +160,8 @@ function extractEffectByCondition(
 		} else if (childName === "random_list") {
 			if (Array.isArray(child.value)) {
 				const randomListItems = child.value.map((n) => {
-					const possibility = parseInt(n.name ?? "0");
+					const numeric = parseInt(n.name ?? "0");
+					const possibility: number | string = Number.isNaN(numeric) ? (n.name ?? "0") : numeric;
 					// A `random_list` picks one of its branches; it does not lift whatever guards the
 					// list itself. Carrying `condition` into each branch keeps an enclosing `if` on
 					// the effects inside, which would otherwise read as unconditional.
@@ -387,13 +388,15 @@ function simplifyEffect(effect: EffectComplexExpr): EffectComplexExpr {
 			items,
 		};
 	} else if (!("nodeContent" in effect)) {
-		let items = effect.items.filter((i) => i.possibility > 0);
+		let items = effect.items.filter(
+			(i) => typeof i.possibility !== "number" || i.possibility > 0,
+		);
 		if (items.length === 0) {
 			return null;
 		}
 
 		const onlyItem = items[0];
-		if (onlyItem !== undefined && items.length === 1) {
+		if (onlyItem !== undefined && items.length === 1 && typeof onlyItem.possibility === "number") {
 			return simplifyEffect(onlyItem.effect);
 		}
 

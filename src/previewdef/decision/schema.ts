@@ -76,8 +76,9 @@ interface DecisionCall {
 	// The condition guarding this particular call, folded from every `if` / `else_if` / `else`
 	// enclosing it. `true` for an unconditional call.
 	condition: ConditionComplexExpr;
-	// Set when the call sits in a `random_list` branch, carrying that branch's weight.
-	possibility?: number;
+	// Set when the call sits in a `random_list` branch, carrying that branch's weight --
+	// as a number when it was written as one, otherwise as written.
+	possibility?: number | string;
 	from: DecisionEffectBlockName;
 }
 

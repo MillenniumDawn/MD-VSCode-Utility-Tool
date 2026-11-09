@@ -99,6 +99,31 @@ describe("hoiformat/effect", () => {
 				"random_list = { 70 = { modifier = { factor = 2 } x = 1 } 30 = { y = 1 } }",
 				"one of { 70: x = 1 | 30: y = 1 }",
 			],
+			[
+				"a branch weighted by a variable behind the weight as written",
+				"random_list = { my_var = { y = 1 } other_var = { w = 1 } }",
+				"one of { my_var: y = 1 | other_var: w = 1 }",
+			],
+			[
+				"a variable-weight branch beside a numbered one",
+				"random_list = { 70 = { y = 1 } my_var = { w = 1 } }",
+				"one of { 70: y = 1 | my_var: w = 1 }",
+			],
+			[
+				"a variable-weight pair with a weighted-out branch in it",
+				"random_list = { 0 = { z = 1 } my_var = { y = 1 } other_var = { w = 1 } }",
+				"one of { my_var: y = 1 | other_var: w = 1 }",
+			],
+			[
+				"a lone variable-weight branch without making its runtime weight unconditional",
+				"random_list = { my_var = { y = 1 } }",
+				"one of { my_var: y = 1 }",
+			],
+			[
+				"a variable-weight branch left beside a known zero weight",
+				"random_list = { 0 = { x = 1 } my_var = { y = 1 } }",
+				"one of { my_var: y = 1 }",
+			],
 			["the one branch left when the others have no weight", "random_list = { 0 = { x = 1 } 100 = { y = 1 } }", "y = 1"],
 			["nothing for a random_list no branch of which has a weight", "random_list = { 0 = { x = 1 } }", ""],
 			[
@@ -194,6 +219,16 @@ describe("hoiformat/effect", () => {
 				"a statement in a random_list with its weight, and the guard around the list once",
 				"if = { limit = { a = 1 } random_list = { 30 = { country_event = a.1 } 70 = { country_event = a.2 } } }",
 				["country_event = a.1 when a = 1 at 30", "country_event = a.2 when a = 1 at 70"],
+			],
+			[
+				"a statement in a random_list weighted by a variable, kept with the weight as written",
+				"random_list = { my_var = { country_event = a.1 } 70 = { country_event = a.2 } }",
+				["country_event = a.1 when true at my_var", "country_event = a.2 when true at 70"],
+			],
+			[
+				"a lone variable-weight call behind its enclosing scope and guard",
+				"GER = { if = { limit = { a = 1 } random_list = { my_var = { country_event = a.1 } } } }",
+				["[GER]country_event = a.1 when [GER]a = 1 at my_var"],
 			],
 		];
 
