@@ -1,6 +1,8 @@
 Unreleased
 
   Bugfixes:
+- [ Previews ] Documentation and backup files in script folders no longer cause parsing errors in decision and world map previews.
+- [ Events Previewer ] Scan References now ignores documentation and backup files instead of reading them as events or localisation.
 - [ Previews ] Event and decision calls inside a random = { chance = ... } or a while = { limit = { ... } } effect are discovered again and listed with their guard. The chance is shown as written, and a while reads as a repeating block instead of one guaranteed call. Issue #714.
 - [ Loading ] Linked mod descriptors and install folders are now accepted as files and folders instead of being treated as missing. Dangling links are still rejected. Issue #769.
 - [ Loading ] On Linux, reading a file no longer substitutes the open buffer of another file whose name differs only in case. Windows aliases still use the open buffer. Issue #718.
