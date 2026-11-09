@@ -324,6 +324,26 @@ describe('webview/eventtree effectsToDom', () => {
         assert.ok(list.textContent!.includes('add_war_support = 0.05'));
     });
 
+    it('names a chance as what the statements under it actually get, not a guaranteed run', () => {
+        const list = effectsToDom([
+            { kind: 'chance', chance: 5, items: [line('country_event = { id = test.2 }')] },
+        ]);
+
+        const fold = list.querySelector('.ev-fold')!;
+        assert.strictEqual(fold.textContent, 'chance 5');
+        assert.ok(list.textContent!.includes('country_event = { id = test.2 }'));
+    });
+
+    it('names a while by its limit, so the loop is not read as a single run', () => {
+        const list = effectsToDom([
+            { kind: 'while', limit: leaf('has_war = yes'), items: [line('country_event = { id = test.2 }')] },
+        ]);
+
+        const fold = list.querySelector('.ev-fold')!;
+        assert.strictEqual(fold.textContent, 'while has_war = yes');
+        assert.ok(list.textContent!.includes('country_event = { id = test.2 }'));
+    });
+
     it('renders nothing for an empty block', () => {
         assert.strictEqual(effectsToDom([]).children.length, 0);
     });
@@ -703,6 +723,19 @@ describe('webview/eventtree chipTextFor', () => {
             true,
         );
         assert.strictEqual(text, '3 day(s) · after · weight 70 · 1 filtered out · is_subject = yes');
+    });
+
+    it('names the chance behind a call and a while as repeating, never as one guaranteed call', () => {
+        assert.strictEqual(
+            chipTextFor(edge('a:0', 'b:1', { days: 3, chances: [5], repeated: true }), false),
+            '3 day(s) · chance 5 · repeats',
+        );
+    });
+
+    it('keeps the random_list weight wording and the chance wording apart', () => {
+        assert.strictEqual(chipTextFor(edge('a:0', 'b:1', { possibility: 70 }), false), 'weight 70');
+        assert.strictEqual(chipTextFor(edge('a:0', 'b:1', { chances: ['0.5'] }), false), 'chance 0.5');
+        assert.strictEqual(chipTextFor(edge('a:0', 'b:1', { chances: [50, 80] }), false), 'chance 50 · chance 80');
     });
 });
 

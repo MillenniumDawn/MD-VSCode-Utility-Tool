@@ -131,6 +131,8 @@ export interface DecisionGraphEdge {
 	// Weight of the `random_list` branch the call sits in -- as a number when it was
 	// written as one, otherwise as written.
 	possibility?: number | string;
+	chances?: (number | string)[];
+	repeated?: boolean;
 	// The decisions a filter removed from between `from` and `to`. Synthesized by the webview when
 	// it contracts the graph around a filtered-out decision, so a chain keeps its arrow rather than
 	// falling into two halves -- the host never sets this.

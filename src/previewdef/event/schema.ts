@@ -69,6 +69,10 @@ export interface ChildEvent {
     // Set when the call sits in a `random_list` branch, carrying that branch's weight --
     // as a number when it was written as one, otherwise as written.
     possibility?: number | string;
+    chances?: (number | string)[];
+    // Set when a `while` stands between the call and the enclosing guards, so an arrow off it is
+    // never read as one guaranteed call.
+    repeated?: boolean;
 }
 
 interface EventFile {
@@ -345,6 +349,8 @@ function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs:
             e.randomDays,
             e.randomHours,
             e.possibility ?? '',
+            JSON.stringify(e.chances ?? []),
+            e.repeated ?? false,
         ].join('@'),
     );
 
@@ -366,7 +372,7 @@ const optionOwnKeys = ['name', 'trigger', 'ai_chance', 'original_recipient_only'
 const eventTypes = ['country_event', 'news_event', 'state_event', 'unit_leader_event', 'operative_leader_event'];
 
 function effectItemToChildEvent(guarded: GuardedEffectItem): ChildEvent | undefined {
-    const { item, condition, possibility } = guarded;
+    const { item, condition, possibility, chances, repeated } = guarded;
     const eventEffectDef = getEventEffectDef(item.node);
     if (!eventEffectDef) {
         return undefined;
@@ -381,6 +387,8 @@ function effectItemToChildEvent(guarded: GuardedEffectItem): ChildEvent | undefi
         randomHours: eventEffectDef.random_hours === 0 ? eventEffectDef.random : eventEffectDef.random_hours,
         condition,
         possibility,
+        chances,
+        repeated,
     };
 }
 
