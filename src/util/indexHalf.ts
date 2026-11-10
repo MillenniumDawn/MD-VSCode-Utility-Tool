@@ -62,6 +62,7 @@ function queueCacheWrite(
 	version: number,
 	scope: CacheScope,
 	generation: number | undefined,
+	isCurrent?: () => boolean,
 ): void {
 	if (key === undefined) {
 		return;
@@ -69,6 +70,7 @@ function queueCacheWrite(
 
 	const previous = pendingCacheWrites.get(key) ?? Promise.resolve();
 	const write = previous.then(async () => {
+		if (isCurrent && !isCurrent()) { return; }
 		if (
 			generation !== undefined &&
 			!isModDependencyGenerationCurrent(generation)
@@ -137,6 +139,10 @@ export interface IndexHalfSpec<TRecord> {
 	/** Dependency generation and scope captured before the build listed any files. */
 	dependencyGeneration?: number;
 	cacheScope?: CacheScope;
+	/** An obsolete workspace generation must not save its records. */
+	isCurrent?: () => boolean;
+	/** Directory refreshes must include surviving dirty editor buffers, regardless of mtimes. */
+	forceReparse?: boolean;
 }
 
 export async function buildIndexHalf<TRecord>(
@@ -186,7 +192,7 @@ async function buildIndexHalfWithTimer<TRecord>(
 	const { filePaths, uris, mtimes } = await spec.listFiles(progress.token);
 
 	timer.begin("cache");
-	const manifest = dependencyChanged
+	const manifest = dependencyChanged || spec.forceReparse
 		? null
 		: await loadCacheManifest(cacheName, version, cacheScope);
 	let filesToParse = filePaths;
@@ -255,6 +261,7 @@ async function buildIndexHalfWithTimer<TRecord>(
 	// already is the whole listing. Every other arrival still writes.
 	const skipCacheWrite =
 		writeKey === undefined ||
+		(spec.isCurrent !== undefined && !spec.isCurrent()) ||
 		(cacheRestored && !hasChanges && !dependencyChanged && filesToParse.length === 0);
 	if (!skipCacheWrite) {
 		queueCacheWrite(
@@ -266,6 +273,7 @@ async function buildIndexHalfWithTimer<TRecord>(
 			version,
 			cacheScope,
 			spec.dependencyGeneration,
+			spec.isCurrent,
 		);
 	}
 }

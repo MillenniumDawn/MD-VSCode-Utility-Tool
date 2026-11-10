@@ -134,6 +134,7 @@ function editorFor(world: IndexWorld) {
 			onDidDeleteFiles: disposable,
 			onDidRenameFiles: disposable,
 			fs: {
+				stat: async () => ({ type: 1, ctime: 0, mtime: 1, size: 0 }),
 				readDirectory: async () => [],
 				createDirectory: async () => undefined,
 				readFile: async (uri: FakeUri) => {

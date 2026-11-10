@@ -48,6 +48,8 @@ export interface IndexWatcherSpec {
 	gate: BuildGate;
 	/** Re-reads one workspace file into the index. */
 	reindexFile: (file: vscode.Uri) => void;
+	/** Handles ambiguous file/folder operations without statting paths which may be gone. */
+	workspaceOperation?: (kind: "create" | "delete" | "rename", files: readonly vscode.Uri[]) => boolean;
 	/** Drops one workspace file from the index. */
 	removeFile: (file: vscode.Uri) => void;
 	/** Everything needed to rebuild the workspace half after the folders changed. */
@@ -73,6 +75,8 @@ export interface IndexWatcherSpec {
 export interface IndexWatchers {
 	/** Subscribes to the workspace events, or to nothing when the flag is off. */
 	register(): vscode.Disposable;
+	/** Invalidates queued incremental callbacks before a rebuild or reset. */
+	cancelPending(): void;
 	/**
 	 * The same handlers, for tests to drive directly rather than through VS Code. Each index used
 	 * to export its own trio of these under the same name and comment.
@@ -98,6 +102,17 @@ export interface IndexWatchers {
  */
 export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	const { extension, hasStarted, gate } = spec;
+	let mutationGeneration = 0;
+	const fileOperations = new Map<string, number>();
+	function advanceFiles(files: readonly vscode.Uri[]): void {
+		for (const file of files) {
+			const key = file.toString();
+			fileOperations.set(key, (fileOperations.get(key) ?? 0) + 1);
+		}
+	}
+	function handlesOperation(kind: "create" | "delete" | "rename", files: readonly vscode.Uri[]): boolean {
+		return hasStarted() && spec.workspaceOperation?.(kind, files) === true;
+	}
 
 	function rebuild(
 		halves: readonly {
@@ -143,8 +158,9 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	// Debounced per file: an edit fires one of these per keystroke, and re-reading the file for
 	// each would spend the whole typing pause parsing.
 	const reindexAfterEdit = debounceByInput(
-		(file: vscode.Uri) => {
+		(file: vscode.Uri, generation: number, operation: number) => {
 			gate.runAfterBuild(() => {
+				if (generation !== mutationGeneration || operation !== (fileOperations.get(file.toString()) ?? 0)) { return; }
 				spec.reindexFile(file);
 			});
 		},
@@ -160,7 +176,7 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 
 		const file = e.document.uri;
 		if (file.path.endsWith(extension)) {
-			reindexAfterEdit(file);
+			reindexAfterEdit(file, mutationGeneration, fileOperations.get(file.toString()) ?? 0);
 		}
 	}
 
@@ -173,19 +189,28 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 		// to go back to matching it.
 		const file = document.uri;
 		if (file.path.endsWith(extension) && document.isDirty) {
+			const generation = mutationGeneration;
+			const operation = fileOperations.get(file.toString()) ?? 0;
 			gate.runAfterBuild(() => {
+				if (generation !== mutationGeneration || operation !== (fileOperations.get(file.toString()) ?? 0)) { return; }
 				spec.reindexFile(file);
 			});
 		}
 	}
 
 	function onCreateFiles(e: vscode.FileCreateEvent) {
+		advanceFiles(e.files);
+		if (handlesOperation("create", e.files)) { return; }
 		if (!hasStarted()) {
 			return;
 		}
 
+		const generation = mutationGeneration;
+		const operations = new Map(e.files.map((file) => [file.toString(), fileOperations.get(file.toString())]));
 		gate.runAfterBuild(() => {
+			if (generation !== mutationGeneration) { return; }
 			for (const file of e.files) {
+				if (operations.get(file.toString()) !== fileOperations.get(file.toString())) { continue; }
 				if (file.path.endsWith(extension)) {
 					spec.reindexFile(file);
 				}
@@ -194,12 +219,18 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	}
 
 	function onDeleteFiles(e: vscode.FileDeleteEvent) {
+		advanceFiles(e.files);
+		if (handlesOperation("delete", e.files)) { return; }
 		if (!hasStarted()) {
 			return;
 		}
 
+		const generation = mutationGeneration;
+		const operations = new Map(e.files.map((file) => [file.toString(), fileOperations.get(file.toString())]));
 		gate.runAfterBuild(() => {
+			if (generation !== mutationGeneration) { return; }
 			for (const file of e.files) {
+				if (operations.get(file.toString()) !== fileOperations.get(file.toString())) { continue; }
 				if (file.path.endsWith(extension)) {
 					spec.removeFile(file);
 				}
@@ -208,6 +239,8 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	}
 
 	function onRenameFiles(e: vscode.FileRenameEvent) {
+		advanceFiles(e.files.flatMap((file) => [file.oldUri, file.newUri]));
+		if (handlesOperation("rename", e.files.flatMap((file) => [file.oldUri, file.newUri]))) { return; }
 		onDeleteFiles({ files: e.files.map((f) => f.oldUri) });
 		onCreateFiles({ files: e.files.map((f) => f.newUri) });
 	}
@@ -229,6 +262,7 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 			}
 
 			return host().Disposable.from(
+				{ dispose: () => { mutationGeneration++; fileOperations.clear(); } },
 				host().workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
 				// The published list, not the raw setting: it changes once, after the `.mod`
 				// dependencies have been resolved against the new setting.
@@ -241,5 +275,6 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 			);
 		},
 		handlers,
+		cancelPending: () => { mutationGeneration++; fileOperations.clear(); },
 	};
 }

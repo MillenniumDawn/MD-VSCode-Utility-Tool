@@ -5,10 +5,11 @@ import { refreshFeatureFlags } from "../../../util/featureflags";
 import * as fileloader from "../../../util/fileloader";
 import { createThreeHalfIndex, ThreeHalfIndex, ThreeHalfIndexSpec } from "../../../util/indexFactory";
 import { reportIndexParseFailure } from "../../../util/indexHalf";
+import { host } from "../../../util/host";
 import { Logger } from "../../../util/logger";
 import { refreshModDependencies } from "../../../util/moddependencies";
 import { clearParentModCache } from "../../../util/parentmods";
-import { settle } from "../async";
+import { deferred, settle } from "../async";
 import { listed, useIndexWorld, workspaceFile } from "../indexes";
 
 // The skeleton the four indexes share, driven through a spec that records what it is asked to do.
@@ -107,6 +108,205 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 			[`${ROOT}/parent.txt`],
 			[`${ROOT}/global.txt`],
 		]);
+	});
+
+	describe("directory operations", () => {
+		const oldFile = `${ROOT}/old/nested/child.txt`;
+		const newFile = `${ROOT}/new/nested/child.txt`;
+
+		beforeEach(() => {
+			world.list = (_root, half) => half === "workspace" ? listed(["old/nested/child.txt"]) : listed([`${half}.txt`]);
+		});
+
+		it("removes descendants after directory deletion without statting a deleted path", async () => {
+			world.useDisk();
+			useParents("/mods/first");
+			const built = create();
+			await built.ensureBuilt();
+			await world.drainCacheWrites();
+			const previous = built.halves();
+			let stats = 0;
+			mock.method(host().workspace.fs, "stat", async () => { stats++; throw new Error("gone"); });
+			world.list = (_root, half) => half === "workspace" ? [] : listed([`${half}.txt`]);
+			built.handlers.onDeleteFiles({ files: [workspaceFile(`${ROOT}/old`)] });
+			await built.ensureBuilt();
+			assert.deepStrictEqual(files(built.halves().workspace), []);
+			assert.strictEqual(stats, 0);
+			assert.strictEqual(built.halves().global, previous.global);
+			assert.strictEqual(built.halves().parents[0], previous.parents[0]);
+			await world.drainCacheWrites();
+			built.resetForTests();
+			await built.ensureBuilt();
+			assert.deepStrictEqual(files(built.halves().workspace), []);
+		});
+
+		it("reindexes nested descendants after one folder rename event without old-path stat", async () => {
+			const built = create();
+			await built.ensureBuilt();
+			mock.method(host().workspace.fs, "stat", async () => { throw new Error("old path gone"); });
+			world.list = (_root, half) => half === "workspace" ? listed(["new/nested/child.txt"]) : [];
+			built.handlers.onRenameFiles({ files: [{ oldUri: workspaceFile(`${ROOT}/old`), newUri: workspaceFile(`${ROOT}/new`) }] });
+			await built.ensureBuilt();
+			assert.deepStrictEqual(files(built.halves().workspace), [newFile]);
+			assert.ok(!built.halves().workspace.files.has(oldFile));
+		});
+
+		it("finds descendants created in a folder whose name ends in the indexed extension", async () => {
+			const built = create();
+			await built.ensureBuilt();
+			mock.method(host().workspace.fs, "stat", async () => ({ type: 2, ctime: 0, mtime: 1, size: 0 }));
+			world.list = (_root, half) => half === "workspace" ? listed(["folder.txt/child.txt"]) : [];
+			built.handlers.onCreateFiles({ files: [workspaceFile(`${ROOT}/folder.txt`)] });
+			await built.ensureBuilt();
+			assert.deepStrictEqual(files(built.halves().workspace), [`${ROOT}/folder.txt/child.txt`]);
+		});
+
+		for (const directory of [ROOT, "common"]) {
+			it(`refreshes after deleting the root or its ancestor: ${directory}`, async () => {
+				const built = create();
+				await built.ensureBuilt();
+				world.list = () => [];
+				built.handlers.onDeleteFiles({ files: [workspaceFile(directory)] });
+				await built.ensureBuilt();
+				assert.deepStrictEqual(files(built.halves().workspace), []);
+			});
+		}
+
+		it("coalesces a batch of folder changes into one workspace listing and ignores sibling prefixes", async () => {
+			const built = create();
+			await built.ensureBuilt();
+			world.listings = 0;
+			world.list = (_root, half) => half === "workspace" ? listed(["new/nested/child.txt"]) : [];
+			built.handlers.onDeleteFiles({ files: [workspaceFile(`${ROOT}/old`)] });
+			built.handlers.onCreateFiles({ files: [workspaceFile(`${ROOT}/new`)] });
+			built.handlers.onDeleteFiles({ files: [workspaceFile(`${ROOT}-other/old`)] });
+			await built.ensureBuilt();
+			assert.strictEqual(world.listings, 1);
+			assert.deepStrictEqual(files(built.halves().workspace), [newFile]);
+		});
+
+		it("does not let a delayed child re-read restore entries after its folder was deleted", async () => {
+			const built = create();
+			await built.ensureBuilt();
+			const oldRead = deferred<Buffer>();
+			world.read = () => oldRead.promise;
+			built.handlers.onCloseTextDocument({ uri: workspaceFile(oldFile), isDirty: true } as vscode.TextDocument);
+			await settle();
+			world.list = () => [];
+			built.handlers.onDeleteFiles({ files: [workspaceFile(`${ROOT}/old`)] });
+			await built.ensureBuilt();
+			oldRead.resolve(Buffer.from("stale"));
+			await settle();
+			assert.deepStrictEqual(files(built.halves().workspace), []);
+		});
+
+		it("does not dispatch a created-file read after disposal while its stat was pending", async () => {
+			const built = create();
+			const registration = built.register();
+			await built.ensureBuilt();
+			const stat = deferred<vscode.FileStat>();
+			const entered = deferred();
+			mock.method(host().workspace.fs, "stat", async () => {
+				entered.resolve();
+				return stat.promise;
+			});
+			const reads = world.reads;
+			built.handlers.onCreateFiles({ files: [workspaceFile(`${ROOT}/created.txt`)] });
+			await entered.promise;
+			registration.dispose();
+			stat.resolve({ type: 1, ctime: 0, mtime: 1, size: 0 });
+			await built.ensureBuilt();
+			await settle();
+			assert.strictEqual(world.reads, reads);
+			assert.ok(!built.halves().workspace.files.has(`${ROOT}/created.txt`));
+		});
+
+		it("reparses surviving dirty edits during a warm directory refresh even when disk mtimes are unchanged", async () => {
+			mock.timers.enable({ apis: ["setTimeout", "Date"] });
+			try {
+				world.useDisk();
+				const a = `${ROOT}/a.txt`;
+				world.list = (_root, half) => half === "workspace" ? listed(["a.txt", "folder/b.txt"]) : [];
+				world.read = () => Buffer.from("OLD_A");
+				const built = create();
+				await built.ensureBuilt();
+				await world.drainCacheWrites();
+				world.read = () => Buffer.from("NEW_A");
+				built.handlers.onChangeTextDocument({ document: { uri: workspaceFile(a) } } as vscode.TextDocumentChangeEvent);
+				world.list = (_root, half) => half === "workspace" ? listed(["a.txt"]) : [];
+				built.handlers.onDeleteFiles({ files: [workspaceFile(`${ROOT}/folder`)] });
+				await built.ensureBuilt();
+				mock.timers.tick(1000);
+				await settle();
+				assert.strictEqual(built.halves().workspace.files.get(a), "NEW_A");
+				assert.deepStrictEqual(files(built.halves().workspace), [a]);
+			} finally {
+				mock.timers.reset();
+			}
+		});
+
+		it("keeps known single-file renames incremental", async () => {
+			const built = create();
+			await built.ensureBuilt();
+			world.listings = 0;
+			built.handlers.onRenameFiles({ files: [{ oldUri: workspaceFile(oldFile), newUri: workspaceFile(newFile) }] });
+			await built.ensureBuilt();
+			assert.strictEqual(world.listings, 0);
+			assert.deepStrictEqual(files(built.halves().workspace), [newFile]);
+		});
+
+		it("preserves an unrelated queued edit when an ordinary file is created", async () => {
+			mock.timers.enable({ apis: ["setTimeout", "Date"] });
+			try {
+				world.list = (_root, half) => half === "workspace" ? listed(["a.txt"]) : [];
+				world.read = () => Buffer.from("OLD_A");
+				const built = create();
+				await built.ensureBuilt();
+				const a = `${ROOT}/a.txt`;
+				const b = `${ROOT}/b.txt`;
+				world.read = (file) => Buffer.from(file === a ? "NEW_A" : "B");
+				built.handlers.onChangeTextDocument({ document: { uri: workspaceFile(a) } } as vscode.TextDocumentChangeEvent);
+				built.handlers.onCreateFiles({ files: [workspaceFile(b)] });
+				await built.ensureBuilt();
+				mock.timers.tick(1000);
+				await settle();
+				assert.strictEqual(built.halves().workspace.files.get(a), "NEW_A");
+				assert.strictEqual(built.halves().workspace.files.get(b), "B");
+			} finally {
+				mock.timers.reset();
+			}
+		});
+
+		it("invalidates an old debounced child edit before it can read cached deleted content", async () => {
+			mock.timers.enable({ apis: ["setTimeout", "Date"] });
+			try {
+				const built = create();
+				await built.ensureBuilt();
+				built.handlers.onChangeTextDocument({ document: { uri: workspaceFile(oldFile) } } as vscode.TextDocumentChangeEvent);
+				world.list = () => [];
+				built.handlers.onDeleteFiles({ files: [workspaceFile(`${ROOT}/old`)] });
+				await built.ensureBuilt();
+				const reads = world.reads;
+				mock.timers.tick(1000);
+				await settle();
+				assert.strictEqual(world.reads, reads);
+				assert.deepStrictEqual(files(built.halves().workspace), []);
+			} finally {
+				mock.timers.reset();
+			}
+		});
+
+		it("retries a failed directory refresh instead of accepting the previous half", async () => {
+			const built = create();
+			await built.ensureBuilt();
+			mock.method(Logger, "error", () => undefined);
+			world.list = () => { throw new Error("unavailable"); };
+			built.handlers.onDeleteFiles({ files: [workspaceFile(`${ROOT}/old`)] });
+			await assert.rejects(built.ensureBuilt(), /unavailable/);
+			world.list = () => [];
+			await built.ensureBuilt();
+			assert.deepStrictEqual(files(built.halves().workspace), []);
+		});
 	});
 
 	it("names the half a file came from when it fails to parse", async () => {
