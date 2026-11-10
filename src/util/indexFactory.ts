@@ -2,8 +2,10 @@ import type * as vscode from "vscode";
 import { createIndexBuilder, IndexProgress } from "./indexBuild";
 import { buildIndexHalf, captureIndexBuildContext, IndexBuildContext } from "./indexHalf";
 import { IndexFile, listIndexFiles } from "./indexListing";
-import { FileSourceOptions, ListFilesOptions } from "./fileloader";
+import { FileSourceOptions, getFilePathFromModOrHOI4, ListFilesOptions } from "./fileloader";
 import { createIndexWatchers, IndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
+import { Logger } from "./logger";
+import { attachTaskWithErrorLogging } from "./promiseUtils";
 
 /*
  * The skeleton every index shares: three halves -- vanilla, each parent mod, the workspace -- built
@@ -70,6 +72,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 	let global = spec.newHalf("global");
 	let parents: H[] = [];
 	let workspace = spec.newHalf("workspace");
+	const pendingParses = new Map<string, object>();
 	const rootPrefixes = spec.roots.map((root) => `${root}/`);
 
 	function buildHalf(
@@ -143,6 +146,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		name: spec.name,
 		message: spec.message,
 		build: async (progress) => {
+			pendingParses.clear();
 			const context = await captureIndexBuildContext();
 			return Promise.all([
 				buildGlobal(progress, context),
@@ -166,37 +170,53 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 			return;
 		}
 
-		// No URI: a re-index reaches one file, so resolving it the usual way costs nothing. Workspace
-		// only: a re-index that fires after the file was deleted must not read the parent's copy into
-		// this half, which is the one half the parent's files are never in.
-		const parsed = spec.newHalf("workspace");
-		if (!(await spec.parseFile(parsed, { path: relative }, { parent: false, hoi4: false }))) {
-			return;
-		}
+		// Resolve through workspace precedence, then bypass the content cache: a filesystem event
+		// says this file changed even when another preview has kept its cached buffer hot.
+		const generation = {};
+		pendingParses.set(relative, generation);
+		const options = { parent: false, hoi4: false };
+		try {
+			const uri = await getFilePathFromModOrHOI4(relative, options);
+			if (pendingParses.get(relative) !== generation) {
+				return;
+			}
+			const parsed = spec.newHalf("workspace");
+			if (!(await spec.parseFile(parsed, { path: relative, uri }, options)) ||
+				pendingParses.get(relative) !== generation) {
+				return;
+			}
 
-		// Read after the parse: a rebuild may have replaced the half in the meantime.
-		spec.removeFile(workspace, relative);
-		spec.mergeFile(workspace, parsed, relative);
-		spec.changed?.();
+			// Read after the parse: a rebuild may have replaced the half in the meantime.
+			spec.removeFile(workspace, relative);
+			spec.mergeFile(workspace, parsed, relative);
+			spec.changed?.();
+		} finally {
+			if (pendingParses.get(relative) === generation) {
+				pendingParses.delete(relative);
+			}
+		}
 	}
 
 	const watchers = createIndexWatchers({
 		enabled: spec.enabled,
 		extension: spec.extension,
+		acceptsFile: (file) => toWorkspaceRelativePath(file, rootPrefixes) !== undefined,
 		hasStarted: () => builder.hasStarted(),
 		gate: builder.gate,
 		reindexFile: (file) => {
-			void reindexFile(file);
+			attachTaskWithErrorLogging(reindexFile(file), `Re-indexing ${file.toString()} failed`, Logger.error);
 		},
 		removeFile: (file) => {
 			const relative = toWorkspaceRelativePath(file, rootPrefixes);
 			if (relative) {
+				pendingParses.delete(relative);
 				spec.removeFile(workspace, relative);
 				spec.changed?.();
 			}
 		},
 		rebuildWorkspace: {
 			reset: () => {
+				pendingParses.clear();
 				workspace = spec.newHalf("workspace");
 				spec.changed?.();
 			},
@@ -217,9 +237,14 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		ensureBuilt: () => builder.ensureBuilt(),
 		halves: () => ({ global, parents, workspace }),
 		inPrecedence: () => [workspace, ...parents, global],
-		register: () => watchers.register(),
+		register: () => {
+			const registration = watchers.register();
+			return { dispose: () => { registration.dispose(); pendingParses.clear(); } };
+		},
 		handlers: watchers.handlers,
 		resetForTests: () => {
+			watchers.cancelPending();
+			pendingParses.clear();
 			builder.reset();
 			global = spec.newHalf("global");
 			parents = [];

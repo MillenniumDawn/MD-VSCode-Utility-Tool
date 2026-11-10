@@ -8,7 +8,7 @@ import { reportIndexParseFailure } from "../../../util/indexHalf";
 import { Logger } from "../../../util/logger";
 import { refreshModDependencies } from "../../../util/moddependencies";
 import { clearParentModCache } from "../../../util/parentmods";
-import { settle } from "../async";
+import { deferred, settle } from "../async";
 import { listed, useIndexWorld, workspaceFile } from "../indexes";
 
 // The skeleton the four indexes share, driven through a spec that records what it is asked to do.
@@ -161,6 +161,8 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 	});
 
 	describe("an edited workspace file", () => {
+		beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"] }));
+		afterEach(() => mock.timers.reset());
 		const edited = `${ROOT}/workspace.txt`;
 		let built: ThreeHalfIndex<FakeHalf>;
 
@@ -172,6 +174,7 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 
 		function closeDirty(): void {
 			built.handlers.onCloseTextDocument({ uri: workspaceFile(edited), isDirty: true } as unknown as vscode.TextDocument);
+			mock.timers.tick(1000);
 		}
 
 		it("is parsed first and swapped in afterwards, and the change reported after the swap", async () => {
@@ -181,6 +184,70 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 
 			assert.deepStrictEqual(calls, [`parse ${edited}`, `remove ${edited}`, `merge ${edited}`, "changed"]);
 			assert.strictEqual(built.halves().workspace.files.get(edited), "edited");
+		});
+
+		it("discards a re-read from a failed build when the initial build retries", async () => {
+			let fail = true;
+			let eventReadStarted = false;
+			const staleRead = deferred();
+			world.list = (_root, half) => {
+				if (half === "global" && fail) {
+					throw new Error("initial listing failed");
+				}
+				return half === "workspace" ? listed(["workspace.txt"]) : [];
+			};
+			built = create({
+				parseFile: async (half, file) => {
+					if (file.uri) {
+						eventReadStarted = true;
+						await staleRead.promise;
+						half.files.set(file.path, "stale event");
+					} else {
+						half.files.set(file.path, "retry contents");
+					}
+					return true;
+				},
+			});
+			const first = assert.rejects(built.ensureBuilt(), /initial listing failed/);
+			built.handlers.onCreateFiles({ files: [workspaceFile(edited)] });
+			mock.timers.tick(1000);
+			await first;
+			await settle();
+			assert.strictEqual(eventReadStarted, true);
+			fail = false;
+			await built.ensureBuilt();
+			staleRead.resolve();
+			await settle();
+			assert.strictEqual(built.halves().workspace.files.get(edited), "retry contents");
+		});
+
+		it("resolves the workspace winner before parsing so a re-read bypasses cached content", async () => {
+			const resolved: string[] = [];
+			built = create({
+				parseFile: async (half, file) => {
+					if (file.uri) {
+						resolved.push(file.uri.path);
+					}
+					half.files.set(file.path, "fresh");
+					return true;
+				},
+			});
+			await built.ensureBuilt();
+			assert.deepStrictEqual(resolved, []);
+			closeDirty();
+			await settle();
+			assert.deepStrictEqual(resolved, [workspaceFile(edited).path]);
+		});
+
+		it("reports a failed resolution without discarding the existing index", async () => {
+			const errors: string[] = [];
+			mock.method(Logger, "error", (message: string) => errors.push(message));
+			mock.method(fileloader, "getFilePathFromModOrHOI4", async () => { throw new Error("unavailable filesystem"); });
+			closeDirty();
+			await settle();
+			assert.strictEqual(built.halves().workspace.files.get(edited), edited);
+			assert.strictEqual(errors.length, 1);
+			assert.ok(errors[0].includes("unavailable filesystem"));
 		});
 
 		it("keeps what it was last indexed with when the re-read fails", async () => {

@@ -19,6 +19,7 @@ const sharedFocus = Buffer.from("shared_focus = { id = my_shared_focus }");
 
 function closeDirty(): void {
 	__testHandlers.onCloseTextDocument({ uri: workspaceFile(SHARED_FOCUS_FILE), isDirty: true } as unknown as vscode.TextDocument);
+	mock.timers.tick(1000);
 }
 
 function logsInto(logs: string[], ...levels: ("error" | "warn")[]): void {
@@ -30,6 +31,8 @@ function logsInto(logs: string[], ...levels: ("error" | "warn")[]): void {
 }
 
 describe("util/sharedFocusIndex", () => {
+	beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"] }));
+	afterEach(() => mock.timers.reset());
 	const world = useIndexWorld(__resetSharedFocusIndexForTests, { sharedFocusIndex: true });
 
 	it("answers undefined for a focus nothing defines", async () => {
@@ -81,7 +84,9 @@ describe("util/sharedFocusIndex", () => {
 			// rename; if order were lost, the create could be clobbered by the earlier delete.
 			it("preserves event ordering for events queued during a pending build", async () => {
 				__testHandlers.onDeleteFiles({ files: [workspaceFile(SHARED_FOCUS_FILE)] });
+				mock.timers.tick(1000);
 				__testHandlers.onCreateFiles({ files: [workspaceFile(SHARED_FOCUS_FILE)] });
+				mock.timers.tick(1000);
 				await settleBuild();
 
 				assert.strictEqual(await findFileByFocusKey("renamed_shared_focus"), SHARED_FOCUS_FILE);

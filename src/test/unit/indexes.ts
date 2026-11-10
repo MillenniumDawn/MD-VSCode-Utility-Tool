@@ -133,6 +133,7 @@ function editorFor(world: IndexWorld) {
 			onDidCreateFiles: disposable,
 			onDidDeleteFiles: disposable,
 			onDidRenameFiles: disposable,
+			createFileSystemWatcher: () => ({ onDidChange: disposable, onDidCreate: disposable, onDidDelete: disposable, dispose: () => undefined }),
 			fs: {
 				readDirectory: async () => [],
 				createDirectory: async () => undefined,
@@ -220,6 +221,7 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 			world.listings++;
 			return world.list(root, halfOf(options));
 		});
+		mock.method(fileloader, "getFilePathFromModOrHOI4", async (relativePath: string) => workspaceFile(relativePath));
 		mock.method(fileloader, "readFileFromModOrHOI4", async (relativePath: string, options?: fileloader.FileSourceOptions) => {
 			world.reads++;
 			return [await world.read(relativePath, halfOf(options)), new FakeUri(relativePath)];
