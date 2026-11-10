@@ -233,6 +233,7 @@ describe("util/sharedFocusIndex", () => {
 
 		const MANIFEST = JSON.stringify({
 			version: 3,
+			successfulReadsOnly: true,
 			entries: [FRESH, STALE, ...REMOVED].map((filePath) => ({ filePath, mtime: 1 })),
 		});
 

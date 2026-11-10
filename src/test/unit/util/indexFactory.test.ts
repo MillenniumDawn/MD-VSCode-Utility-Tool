@@ -236,6 +236,34 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 			return calls.filter((call) => call.startsWith("parse")).sort();
 		}
 
+		for (const intermediate of [
+			{ name: "gfxIndex", cacheVersion: 6, root: "interface", file: "failed.gfx" },
+			{ name: "localisationIndex", cacheVersion: 4, root: "localisation", file: "failed_l_english.yml" },
+		]) {
+			it(`retries a failed read from a #708-only ${intermediate.name} cache at the same format version`, async () => {
+				const path = `${intermediate.root}/${intermediate.file}`;
+				const cache = `${intermediate.name}.workspace`;
+				world.list = (_root, half) => half === "workspace" ? listed([intermediate.file]) : [];
+				world.read = () => Buffer.from("restored access");
+				world.disk.set(world.cacheFile(`${cache}.manifest.json`), Buffer.from(JSON.stringify({
+					version: intermediate.cacheVersion, entries: [{ filePath: path, mtime: 1 }],
+				})));
+				// Empty records are valid for both real #708 formats; the failed file has no record.
+				world.disk.set(world.cacheFile(`${cache}.data.jsonl`), Buffer.from("0\n"));
+				const options = { name: intermediate.name, cacheVersion: intermediate.cacheVersion, roots: [intermediate.root] };
+				const recovered = create(options);
+				await recovered.ensureBuilt();
+				await world.drainCacheWrites();
+				assert.deepStrictEqual(parsedCalls(), [`parse ${path}`]);
+				assert.strictEqual(recovered.halves().workspace.files.get(path), "restored access");
+				const warm = create(options);
+				await warm.ensureBuilt();
+				await world.drainCacheWrites();
+				assert.deepStrictEqual(parsedCalls(), []);
+				assert.strictEqual(warm.halves().workspace.files.get(path), "restored access");
+			});
+		}
+
 		for (const warm of [false, true]) {
 			it(`retries an unreadable ${warm ? "changed" : "new"} file without touching its mtime`, async () => {
 				mock.method(Logger, "error", () => undefined);

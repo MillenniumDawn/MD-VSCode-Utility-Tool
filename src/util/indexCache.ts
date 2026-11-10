@@ -10,6 +10,8 @@ import { pathIdentity } from './nodecommon';
 
 interface CacheManifest {
     version: number;
+    /** Independent of the index's record format: only successful reads may be marked fresh. */
+    successfulReadsOnly?: true;
     entries: CacheFileEntry[];
 }
 
@@ -202,6 +204,7 @@ export async function saveCacheManifest(indexName: string, filePaths: string[], 
     try {
         const manifest: CacheManifest = {
             version,
+            successfulReadsOnly: true,
             entries: filePaths.map(fp => ({ filePath: fp, mtime: mtimes.get(fp) ?? 0 })),
         };
         const uri = host().Uri.joinPath(dir, `${indexName}.manifest.json`);
@@ -219,7 +222,9 @@ export async function loadCacheManifest(indexName: string, expectedVersion: numb
         const uri = host().Uri.joinPath(dir, `${indexName}.manifest.json`);
         const data = (await readFile(uri)).toString();
         const manifest: CacheManifest = JSON.parse(data);
-        if (manifest.version !== expectedVersion) { return null; }
+        // A newer record format can still have been written before failed reads were excluded.
+        // Keep this migration independent of each index's record-format version.
+        if (manifest.version !== expectedVersion || manifest.successfulReadsOnly !== true) { return null; }
         return manifest;
     } catch {
         return null;
