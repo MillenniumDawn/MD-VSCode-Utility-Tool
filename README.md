@@ -137,6 +137,11 @@ The Settings editor lists them under the extension in these sections.
 See [performance and troubleshooting](docs/performance-troubleshooting.md) for index and image
 worker tradeoffs, browser behavior, and diagnostics.
 
+GFX and localisation lookups prefer the working mod, then its parent mods in configured order,
+then vanilla. Within each source, duplicate keys use the greatest relative file path in ordinal,
+case-sensitive order (for example, `z.gfx` overrides `a.gfx`). Read timing, cache restoration and
+editing a file do not change that order.
+
 | Setting | What it does |
 |---|---|
 | `mdHoi4Utilities.sharedFocusIndex` | Index shared focuses so other trees can pull them in. |

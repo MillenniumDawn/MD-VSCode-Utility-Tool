@@ -6,6 +6,7 @@ import { localize } from "./i18n";
 import { FileSourceOptions } from "./fileloader";
 import { readIndexFileContent, reportIndexParseFailure } from "./indexHalf";
 import { createThreeHalfIndex } from "./indexFactory";
+import { FilePrecedenceIndex } from "./filePrecedenceIndex";
 import {
 	defaultYmlSuffix,
 	isoBySettingName,
@@ -15,19 +16,13 @@ import {
 
 type LocalisationData = Record<string, Record<string, string>>;
 
-// A half of its own for the parent mods, for the same reason the gfx index has one: within a half
-// the last file parsed wins, so a key the workspace overrides in a differently named .yml would
-// otherwise show the parent's text on some builds.
 interface LocalisationHalf {
-	index: LocalisationData;
-	// Which localisation keys came from which file, per language:
-	// langKey -> filePath -> Set<localisationKey>. A cache is only worth hydrating from if it
-	// carries this: without it a warm build restored no keys and parsed no fresh files, leaving the
-	// half empty.
-	fileMap: Record<string, Record<string, Set<string>>>;
+	languages: Record<string, FilePrecedenceIndex<string>>;
 }
 
-const LOC_CACHE_VERSION = 2;
+// 4: records retain each file's own text, including definitions shadowed by another file.
+// Version 3 also contains winner-only records (the failed-read retry migration).
+const LOC_CACHE_VERSION = 4;
 const langSuffixPattern = ymlSuffixes.join("|");
 const localisationFileFilter = new RegExp(
 	`.*_(${langSuffixPattern})\\.yml$`,
@@ -58,62 +53,25 @@ const localisationIndex = createThreeHalfIndex<LocalisationHalf, LocCacheRecord>
 	extension: ".yml",
 	cacheVersion: LOC_CACHE_VERSION,
 	fullRebuildOnAnyChange: true,
-	newHalf: () => ({ index: {}, fileMap: {} }),
-	hydrate: ({ index, fileMap }, [langKey, filePath, entries], skipFiles) => {
-		if (skipFiles.has(filePath)) {
-			return;
+	newHalf: () => ({ languages: {} }),
+	hydrate: ({ languages }, [langKey, filePath, entries], skipFiles) => {
+		if (!skipFiles.has(filePath)) {
+			(languages[langKey] ?? (languages[langKey] = new FilePrecedenceIndex())).setFile(filePath, entries);
 		}
-		Object.assign(index[langKey] ?? (index[langKey] = {}), entries);
-		const fileMapForLang = fileMap[langKey] ?? (fileMap[langKey] = {});
-		fileMapForLang[filePath] = new Set(Object.keys(entries));
 	},
 	parseFile: fillLocalisationItems,
-	// Each value is copied from the index rather than from the file, so a key two files define
-	// is cached with the text that won, as it always was.
-	serialize: ({ index, fileMap }) => {
-		const records: LocCacheRecord[] = [];
-		for (const langKey in fileMap) {
-			const languageIndex = index[langKey] ?? {};
-			const filesForLang = fileMap[langKey] ?? {};
-			for (const filePath in filesForLang) {
-				const entries: Record<string, string> = {};
-				for (const key of filesForLang[filePath] ?? []) {
-					const value = languageIndex[key];
-					if (value !== undefined) {
-						entries[key] = value;
-					}
-				}
-				records.push([langKey, filePath, entries]);
-			}
-		}
-		return records;
-	},
-	removeFile: ({ index, fileMap }, relative) => {
-		for (const langKey of Object.keys(fileMap)) {
-			const fileKeys = fileMap[langKey]?.[relative];
-			if (!fileKeys) {
-				continue;
-			}
-
-			const languageIndex = index[langKey];
-			if (languageIndex) {
-				for (const key of fileKeys) {
-					delete languageIndex[key];
-				}
-			}
-			delete fileMap[langKey]?.[relative];
+	serialize: ({ languages }) => Object.entries(languages).flatMap(([langKey, language]) =>
+		language.records().map(({ file, entries }): LocCacheRecord => [langKey, file, entries])),
+	removeFile: ({ languages }, relative) => {
+		for (const language of Object.values(languages)) {
+			language.removeFile(relative);
 		}
 	},
-	mergeFile: (workspace, parsed, relative) => {
-		for (const langKey in parsed.index) {
-			Object.assign(
-				workspace.index[langKey] ?? (workspace.index[langKey] = {}),
-				parsed.index[langKey],
-			);
-
-			const keys = parsed.fileMap[langKey]?.[relative];
-			if (keys) {
-				(workspace.fileMap[langKey] ?? (workspace.fileMap[langKey] = {}))[relative] = keys;
+	mergeFile: ({ languages }, parsed, relative) => {
+		for (const [langKey, language] of Object.entries(parsed.languages)) {
+			const record = language.records().find(record => record.file === relative);
+			if (record) {
+				(languages[langKey] ?? (languages[langKey] = new FilePrecedenceIndex())).setFile(relative, record.entries);
 			}
 		}
 	},
@@ -162,13 +120,13 @@ function lookupLocalisation(
 ): string | undefined {
 	return localisationIndex
 		.inPrecedence()
-		.map((half) => half.index[langKey]?.[localisationKey])
+		.map((half) => half.languages[langKey]?.index[localisationKey])
 		.find((value) => value !== undefined);
 }
 
 /** Returns whether the file was read and parsed, so a re-index knows not to discard what it has. */
 async function fillLocalisationItems(
-	{ index, fileMap }: LocalisationHalf,
+	{ languages }: LocalisationHalf,
 	localisationFile: IndexFile,
 	options: FileSourceOptions,
 ): Promise<boolean> {
@@ -186,11 +144,8 @@ async function fillLocalisationItems(
 	try {
 		const localisations = parseLocalisation(content);
 		for (const langKey in localisations) {
-			const languageLocalisations = localisations[langKey] ?? {};
-			Object.assign(index[langKey] ?? (index[langKey] = {}), languageLocalisations);
-			(fileMap[langKey] ?? (fileMap[langKey] = {}))[filePath] = new Set(
-				Object.keys(languageLocalisations),
-			);
+			const entries = localisations[langKey] ?? {};
+			(languages[langKey] ?? (languages[langKey] = new FilePrecedenceIndex())).setFile(filePath, entries);
 		}
 		return true;
 	} catch (e) {

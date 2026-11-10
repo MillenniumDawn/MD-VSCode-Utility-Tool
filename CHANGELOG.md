@@ -1,6 +1,8 @@
 Unreleased
 
   Bugfixes:
+- [ Indexes ] Duplicate sprite names and localisation keys now use a consistent file order, including after reloading or editing files. Issue #708.
+- [ Indexes ] Removing a duplicate definition restores the remaining sprite or localisation entry. Issue #707.
 - [ Previews ] Documentation and backup files in script folders no longer cause parsing errors in decision and world map previews.
 - [ Events Previewer ] Scan References now ignores documentation and backup files instead of reading them as events or localisation.
 - [ Previews ] Event and decision calls inside a random = { chance = ... } or a while = { limit = { ... } } effect are discovered again and listed with their guard. The chance is shown as written, and a while reads as a repeating block instead of one guaranteed call. Issue #714.
