@@ -1,9 +1,13 @@
 import type * as vscode from "vscode";
-import { createIndexBuilder, IndexProgress } from "./indexBuild";
+import { createIndexBuilder, IndexProgress, withIndexProgress } from "./indexBuild";
 import { buildIndexHalf, captureIndexBuildContext, IndexBuildContext } from "./indexHalf";
 import { IndexFile, listIndexFiles } from "./indexListing";
-import { FileSourceOptions, ListFilesOptions } from "./fileloader";
+import { clearDlcZipCache, FileSourceOptions, ListFilesOptions } from "./fileloader";
 import { createIndexWatchers, IndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
+
+import { indexSourceIdentity } from "./indexCache";
+import { attachTaskWithErrorLogging } from "./promiseUtils";
+import { Logger } from "./logger";
 
 /*
  * The skeleton every index shares: three halves -- vanilla, each parent mod, the workspace -- built
@@ -70,6 +74,10 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 	let global = spec.newHalf("global");
 	let parents: H[] = [];
 	let workspace = spec.newHalf("workspace");
+	let sourceGeneration = 0;
+	let buildAttempt = 0;
+	let builtSource: string | undefined;
+	let globalTask: Promise<unknown> | undefined;
 	const rootPrefixes = spec.roots.map((root) => `${root}/`);
 
 	function buildHalf(
@@ -78,10 +86,12 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		options: ListFilesOptions,
 		progress: IndexProgress,
 		context: IndexBuildContext,
+		isCurrent?: () => boolean,
 	): Promise<void> {
 		return buildIndexHalf<R>(
 			{
 				cacheName: `${spec.name}.${suffix}`,
+				isCurrent,
 				version: spec.cacheVersion,
 				cacheScope: context.cacheScope,
 				dependencyGeneration: context.dependencyGeneration,
@@ -103,8 +113,33 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		);
 	}
 
-	function buildGlobal(progress: IndexProgress, context: IndexBuildContext): Promise<void> {
-		return buildHalf("global", global, { mod: false, hoi4: true, recursively: true }, progress, context);
+	async function buildGlobal(progress: IndexProgress, initialContext?: IndexBuildContext): Promise<void> {
+		const attempt = buildAttempt;
+		let context = initialContext;
+		for (;;) {
+			const generation = sourceGeneration;
+			const buildContext = context ?? await captureIndexBuildContext();
+			context = undefined;
+			const isCurrent = () => attempt === buildAttempt && generation === sourceGeneration &&
+				buildContext.sourceIdentity === indexSourceIdentity();
+			const candidate = spec.newHalf("global");
+			try {
+				await buildHalf("global", candidate, { mod: false, hoi4: true, recursively: true }, progress, buildContext, isCurrent);
+			} catch (cause) {
+				if (isCurrent()) { throw cause; }
+			}
+			// An initial sibling can fail while this half is still running. A later initial
+			// attempt owns publication now; the old one must neither publish nor rebuild again.
+			if (attempt !== buildAttempt) { return; }
+			if (!isCurrent()) {
+				// Listing and parsing may straddle a setting change. Never publish or cache that mix.
+				continue;
+			}
+			global = candidate;
+			if (globalTask) { spec.changed?.(); }
+			builtSource = buildContext.sourceIdentity;
+			return;
+		}
 	}
 
 	async function buildParents(progress: IndexProgress, context?: IndexBuildContext): Promise<void> {
@@ -143,6 +178,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		name: spec.name,
 		message: spec.message,
 		build: async (progress) => {
+			buildAttempt++;
 			const context = await captureIndexBuildContext();
 			return Promise.all([
 				buildGlobal(progress, context),
@@ -151,6 +187,34 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 			]);
 		},
 	});
+
+	function globalSourceChanged(): void {
+		void clearDlcZipCache();
+		if (!builder.hasStarted()) { return; }
+		sourceGeneration++;
+		global = spec.newHalf("global");
+		builtSource = undefined;
+		spec.changed?.();
+		const task = builder.gate.followOn(() => {
+			if (builtSource === indexSourceIdentity()) { return Promise.resolve(); }
+			return withIndexProgress(spec.rebuildMessage, (progress) => buildGlobal(progress));
+		});
+		globalTask = task;
+		const clearTask = () => { if (globalTask === task) { globalTask = undefined; } };
+		void task.then(clearTask, clearTask);
+		attachTaskWithErrorLogging(task, spec.rebuildFailureMessage, Logger.error);
+	}
+
+	async function ensureBuilt(): Promise<void> {
+		await builder.ensureBuilt();
+		// Configuration events rebuild eagerly; this also covers a lookup before registration.
+		if (!globalTask && builtSource !== indexSourceIdentity()) { globalSourceChanged(); }
+		while (globalTask) {
+			const pending = globalTask;
+			await pending;
+			if (pending === globalTask) { break; }
+		}
+	}
 
 	/**
 	 * Re-indexes an edited workspace file: parse first, swap the entry in afterwards.
@@ -182,6 +246,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 
 	const watchers = createIndexWatchers({
 		enabled: spec.enabled,
+		globalSourceChanged,
 		extension: spec.extension,
 		hasStarted: () => builder.hasStarted(),
 		gate: builder.gate,
@@ -214,13 +279,17 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 	});
 
 	return {
-		ensureBuilt: () => builder.ensureBuilt(),
+		ensureBuilt,
 		halves: () => ({ global, parents, workspace }),
 		inPrecedence: () => [workspace, ...parents, global],
 		register: () => watchers.register(),
 		handlers: watchers.handlers,
 		resetForTests: () => {
 			builder.reset();
+			buildAttempt++;
+			sourceGeneration++;
+			builtSource = undefined;
+			globalTask = undefined;
 			global = spec.newHalf("global");
 			parents = [];
 			workspace = spec.newHalf("workspace");

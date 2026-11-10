@@ -1,6 +1,7 @@
 Unreleased
 
   Bugfixes:
+- [ Indexing ] Changing the game installation or DLC loading setting now refreshes vanilla definitions without reloading the editor. Issue #709.
 - [ Previews ] Documentation and backup files in script folders no longer cause parsing errors in decision and world map previews.
 - [ Events Previewer ] Scan References now ignores documentation and backup files instead of reading them as events or localisation.
 - [ Previews ] Event and decision calls inside a random = { chance = ... } or a while = { limit = { ... } } effect are discovered again and listed with their guard. The chance is shown as written, and a while reads as a repeating block instead of one guaranteed call. Issue #714.
