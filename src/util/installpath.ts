@@ -11,6 +11,27 @@ const installPathContainer: { current: vscode.Uri | null } = {
     current: null,
 };
 
+// A web or remote folder picker can override the setting without writing configuration.
+let selectedPath: { uri: vscode.Uri; configuration: string | undefined } | undefined;
+const installPathListeners = new Set<() => void>();
+
+export function onDidSelectInstallPath(listener: () => void): vscode.Disposable {
+    installPathListeners.add(listener);
+    return { dispose: () => { installPathListeners.delete(listener); } };
+}
+
+/** The picker override, while its setting is unchanged, or the current configured path. */
+export function getEffectiveInstallPathUri(): vscode.Uri | undefined {
+    const configuration = getConfiguration().installPath;
+    if (selectedPath && selectedPath.configuration !== configuration) {
+        selectedPath = undefined;
+    }
+    const uri = selectedPath?.uri ?? fileOrUriStringToUri(configuration ?? '');
+    // A new index generation must read through the same source its identity describes.
+    installPathContainer.current = uri ?? null;
+    return uri;
+}
+
 // The setting is a plain string typed by hand as often as it is written by the folder picker, so
 // it goes through the same normalization as modFile: whitespace trimmed and a matched pair of
 // surrounding quotes stripped (Windows Explorer's "Copy as path" wraps the path in double
@@ -38,10 +59,16 @@ export function getInstallPathUri(): vscode.Uri {
 }
 
 export function setInstallPathUri(uri: vscode.Uri): void {
+    const previous = getEffectiveInstallPathUri()?.toString();
+    selectedPath = { uri, configuration: getConfiguration().installPath };
     installPathContainer.current = uri;
+    if (previous !== uri.toString()) {
+        for (const listener of [...installPathListeners]) { listener(); }
+    }
 }
 
 export function clearInstallPathCache(): void {
+    selectedPath = undefined;
     installPathContainer.current = null;
 }
 

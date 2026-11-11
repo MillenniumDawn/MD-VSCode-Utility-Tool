@@ -121,6 +121,19 @@ for (const index of cases) {
 			}
 		});
 
+		for (const key of ["installPath", "loadDlcContents"]) {
+			it(`refreshes global definitions when ${key} changes`, async () => {
+				world.list = (root, half) => half === "global" && root === index.root ? listed([index.file]) : [];
+				assert.deepStrictEqual(await index.lookup(), index.found);
+				world.settings = { ...world.settings, [key]: key === "installPath" ? "/new/game" : true };
+				world.list = () => [];
+				index.handlers.onChangeConfiguration({
+					affectsConfiguration: (setting: string) => setting === `mdHoi4Utilities.${key}`,
+				});
+				assert.deepStrictEqual(await index.lookup(), index.missing);
+			});
+		}
+
 		it("does no build work when the feature flag is off", async () => {
 			world.settings = { [index.flag]: false };
 			refreshFeatureFlags();

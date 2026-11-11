@@ -5,6 +5,10 @@ import { refreshFeatureFlags } from "../../../util/featureflags";
 import * as fileloader from "../../../util/fileloader";
 import { createThreeHalfIndex, ThreeHalfIndex, ThreeHalfIndexSpec } from "../../../util/indexFactory";
 import { reportIndexParseFailure } from "../../../util/indexHalf";
+import * as indexCache from "../../../util/indexCache";
+import { captureCacheScope, indexSourceIdentity } from "../../../util/indexCache";
+import { getEffectiveInstallPathUri, setInstallPathUri } from "../../../util/installpath";
+import { host } from "../../../util/host";
 import { Logger } from "../../../util/logger";
 import { refreshModDependencies } from "../../../util/moddependencies";
 import { clearParentModCache } from "../../../util/parentmods";
@@ -107,6 +111,254 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 			[`${ROOT}/parent.txt`],
 			[`${ROOT}/global.txt`],
 		]);
+	});
+
+	describe("game source settings", () => {
+		function change(built: ThreeHalfIndex<FakeHalf>, key: string, value: unknown): void {
+			world.settings = { ...world.settings, [key]: value };
+			built.handlers.onChangeConfiguration({
+				affectsConfiguration: (setting: string) => setting === `mdHoi4Utilities.${key}`,
+			} as vscode.ConfigurationChangeEvent);
+		}
+
+		beforeEach(() => {
+			world.settings = { installPath: "/games/A", loadDlcContents: true };
+			world.read = () => Buffer.from(`${world.settings.installPath}:${world.settings.loadDlcContents}`);
+		});
+
+		for (const [key, value] of [["installPath", "/games/B"], ["loadDlcContents", false]] as const) {
+			it(`rebuilds only vanilla and separates warm caches after ${key} changes with identical mtimes`, async () => {
+				world.useDisk();
+				useParents("/mods/first");
+				world.settings = { ...world.settings, installPath: "/games/A", loadDlcContents: true };
+				const built = create();
+				await built.ensureBuilt();
+				await world.drainCacheWrites();
+				const previous = built.halves();
+				const oldCache = world.cacheFile("fakeIndex.global.manifest.json");
+				world.listings = 0;
+				change(built, key, value);
+				await built.ensureBuilt();
+				await world.drainCacheWrites();
+				assert.strictEqual(world.listings, 1);
+				assert.strictEqual(built.halves().workspace, previous.workspace);
+				assert.strictEqual(built.halves().parents[0], previous.parents[0]);
+				const expected = `${world.settings.installPath}:${world.settings.loadDlcContents}`;
+				assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), expected);
+				assert.notStrictEqual(world.cacheFile("fakeIndex.global.manifest.json"), oldCache);
+				built.resetForTests();
+				calls.length = 0;
+				await built.ensureBuilt();
+				assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), expected);
+				// Vanilla restores the new setting's cache, even though the path and mtime match A's.
+				assert.ok(!calls.includes(`parse ${ROOT}/global.txt`));
+			});
+		}
+
+		it("normalizes quoted installation paths before choosing the source and cache identity", () => {
+			world.useDisk();
+			const identity = indexSourceIdentity();
+			const scope = captureCacheScope()!.toString();
+			world.settings = { ...world.settings, installPath: '  "/games/A"  ' };
+			assert.strictEqual(indexSourceIdentity(), identity);
+			assert.strictEqual(captureCacheScope()!.toString(), scope);
+		});
+
+		it("ignores unrelated configuration changes", async () => {
+			const built = create();
+			await built.ensureBuilt();
+			const previous = built.halves().global;
+			const listings = world.listings;
+			change(built, "previewWheel", "zoom");
+			await built.ensureBuilt();
+			assert.strictEqual(built.halves().global, previous);
+			assert.strictEqual(world.listings, listings);
+		});
+
+		it("wires source changes through the registered configuration event", async () => {
+			let listener: ((event: vscode.ConfigurationChangeEvent) => unknown) | undefined;
+			mock.method(host().workspace, "onDidChangeConfiguration", (handler: typeof listener) => {
+				listener = handler;
+				return { dispose: () => { listener = undefined; } };
+			});
+			const built = create();
+			const registration = built.register();
+			await built.ensureBuilt();
+			assert.ok(listener);
+			world.settings = { ...world.settings, installPath: "/games/B" };
+			listener({ affectsConfiguration: (key) => key === "mdHoi4Utilities.installPath" });
+			await built.ensureBuilt();
+			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "/games/B:true");
+			registration.dispose();
+			assert.strictEqual(listener, undefined);
+		});
+
+		it("rebuilds and separates caches for a remote folder-picker override without a configuration event", async () => {
+			world.useDisk();
+			world.read = () => Buffer.from(getEffectiveInstallPathUri()!.toString());
+			const built = create();
+			const registration = built.register();
+			try {
+				await built.ensureBuilt();
+				await world.drainCacheWrites();
+				const previous = built.halves();
+				const oldScope = captureCacheScope()!.toString();
+				const picked = {
+					scheme: "vscode-vfs", path: "/game/B", fsPath: "/game/B",
+					toString: () => "vscode-vfs://remote/game/B",
+				} as vscode.Uri;
+				setInstallPathUri(picked);
+				await built.ensureBuilt();
+				assert.strictEqual(world.settings.installPath, "/games/A");
+				assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), picked.toString());
+				assert.notStrictEqual(captureCacheScope()!.toString(), oldScope);
+				assert.strictEqual(built.halves().workspace, previous.workspace);
+				assert.deepStrictEqual(built.halves().parents, previous.parents);
+				change(built, "loadDlcContents", false);
+				await built.ensureBuilt();
+				assert.strictEqual(getEffectiveInstallPathUri(), picked, "DLC changes must retain the picker override");
+				assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), picked.toString());
+			} finally {
+				registration.dispose();
+			}
+		});
+
+		it("does no indexing for a source change before the first lookup", async () => {
+			const built = create();
+			change(built, "installPath", "/games/B");
+			await settle();
+			assert.strictEqual(world.listings, 0);
+			await built.ensureBuilt();
+			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "/games/B:true");
+		});
+
+		it("discards an obsolete in-flight initial half and does not cache its mixed source", async () => {
+			world.useDisk();
+			const oldData = deferred<Buffer>();
+			const entered = deferred();
+			world.read = (_path, half) => {
+				if (half === "global" && world.settings.installPath === "/games/A") {
+					entered.resolve();
+					return oldData.promise;
+				}
+				return Buffer.from("NEW");
+			};
+			const built = create();
+			const oldCache = world.cacheFile("fakeIndex.global.data.jsonl");
+			const lookup = built.ensureBuilt();
+			await entered.promise;
+			change(built, "installPath", "/games/B");
+			oldData.resolve(Buffer.from("OLD"));
+			await lookup;
+			await world.drainCacheWrites();
+			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "NEW");
+			assert.strictEqual(world.disk.has(oldCache), false);
+		});
+
+		it("prevents an old global half from overwriting or caching after a failed initial build is retried", async () => {
+			world.useDisk();
+			mock.method(Logger, "error", () => undefined);
+			const entered = deferred();
+			const release = deferred();
+			let globals = 0;
+			let workspaces = 0;
+			const built = create({
+				parseFile: async (half, file) => {
+					if (half.source === "global") {
+						if (++globals === 1) {
+							entered.resolve();
+							await release.promise;
+							half.files.set(file.path, "OLD");
+						} else {
+							half.files.set(file.path, "NEW");
+						}
+					} else if (++workspaces === 1) {
+						await entered.promise;
+						throw new Error("workspace failed");
+					}
+					return true;
+				},
+			});
+			await assert.rejects(built.ensureBuilt(), /workspace failed/);
+			await built.ensureBuilt();
+			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "NEW");
+			release.resolve();
+			for (let i = 0; i < 4; i++) { await settle(); }
+			await world.drainCacheWrites();
+			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "NEW");
+			const cached = Buffer.from(world.disk.get(world.cacheFile("fakeIndex.global.data.jsonl"))!).toString();
+			assert.ok(cached.includes("NEW"));
+			assert.ok(!cached.includes("OLD"));
+			assert.strictEqual(globals, 2, "the superseded attempt must stop instead of starting another build");
+		});
+
+		it("finishes an already-started cache pair in its original namespace after a source change", async () => {
+			world.useDisk();
+			const oldManifest = world.cacheFile("fakeIndex.global.manifest.json");
+			const oldScope = captureCacheScope()!.toString();
+			const entered = deferred();
+			const release = deferred();
+			const saveRecords = indexCache.saveCacheRecords;
+			mock.method(indexCache, "saveCacheRecords", async (...args: Parameters<typeof saveRecords>) => {
+				await saveRecords(...args);
+				if (args[0] === "fakeIndex.global" && args[2]?.toString() === oldScope) {
+					entered.resolve();
+					await release.promise;
+				}
+			});
+			const built = create();
+			await built.ensureBuilt();
+			await entered.promise;
+			change(built, "installPath", "/games/B");
+			await built.ensureBuilt();
+			release.resolve();
+			await settle();
+			await world.drainCacheWrites();
+			assert.ok(world.disk.has(oldManifest), "captured records must retain their matching manifest");
+			change(built, "installPath", "/games/A");
+			await built.ensureBuilt();
+			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "/games/A:true");
+		});
+
+		it("waits for the newest source when settings change again during a rebuild", async () => {
+			const built = create();
+			await built.ensureBuilt();
+			const oldData = deferred<Buffer>();
+			const entered = deferred();
+			world.read = (_path, half) => {
+				if (half === "global" && world.settings.installPath === "/games/B") {
+					entered.resolve();
+					return oldData.promise;
+				}
+				return Buffer.from("LATEST");
+			};
+			change(built, "installPath", "/games/B");
+			await entered.promise;
+			const lookup = built.ensureBuilt();
+			change(built, "installPath", "/games/A");
+			oldData.resolve(Buffer.from("OBSOLETE"));
+			await lookup;
+			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "LATEST");
+		});
+
+		it("retries a failed corrective build on the next lookup", async () => {
+			mock.method(Logger, "error", () => undefined);
+			let reject = false;
+			const built = create({
+				parseFile: async (half, file) => {
+					if (half.source === "global" && reject) { throw new Error("transient"); }
+					half.files.set(file.path, String(world.settings.installPath));
+					return true;
+				},
+			});
+			await built.ensureBuilt();
+			reject = true;
+			change(built, "installPath", "/games/B");
+			await assert.rejects(built.ensureBuilt(), /transient/);
+			reject = false;
+			await built.ensureBuilt();
+			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "/games/B");
+		});
 	});
 
 	it("names the half a file came from when it fails to parse", async () => {

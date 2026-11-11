@@ -7,6 +7,7 @@ import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration, ur
 import { getParentModUris } from './parentmods';
 import { createTimeSlicer, mapLimit } from './common';
 import { pathIdentity } from './nodecommon';
+import { getEffectiveInstallPathUri } from './installpath';
 
 interface CacheManifest {
     version: number;
@@ -28,11 +29,19 @@ const MTIME_CONCURRENCY = 32;
 
 const CACHE_ROOT = 'indexCache';
 
+/** The effective vanilla inputs, including a web or remote folder-picker override. */
+export function indexSourceIdentity(): string {
+    const conf = getConfiguration();
+    const install = getEffectiveInstallPathUri();
+    return JSON.stringify([install ? pathIdentity(uriToFilePathWhenPossible(install)) : '', !!conf.loadDlcContents]);
+}
+
 /**
  * A short, stable name for "the thing being indexed", so two mods opened in the same VS Code
  * profile get two caches instead of overwriting each other's.
  *
- * The identity is the selected `modFile` plus the workspace folders, sorted, so reordering the
+ * The identity includes the installation and DLC setting, the selected `modFile`, and the
+ * workspace folders, sorted, so reordering the
  * folders does not invalidate anything, plus the parent mod paths in setting order, because there
  * the order is the precedence. A plain FNV-1a hash rather than `node:crypto`, because this module
  * is loaded in the web build too (where it never reaches disk at all) and because a collision
@@ -46,8 +55,10 @@ export function cacheNamespaceFor(
     modFile: string | undefined,
     workspaceFolderUris: readonly string[],
     parentModPaths: readonly string[] = [],
+    sourceIdentity?: string,
 ): string {
     const parts: string[] = [];
+    if (sourceIdentity !== undefined) { parts.push('source:' + sourceIdentity); }
 
     const mod = modFile?.trim();
     if (mod) {
@@ -71,7 +82,7 @@ export function cacheNamespaceFor(
 
 
 /** The inputs to `cacheNamespaceFor`, each read defensively -- none is worth failing over. */
-function cacheNamespace(parentModUris?: readonly vscode.Uri[]): string {
+function cacheNamespace(parentModUris?: readonly vscode.Uri[], sourceIdentity = indexSourceIdentity()): string {
     let modFile: string | undefined;
     let parentModPaths: string[] = [];
     try {
@@ -94,19 +105,20 @@ function cacheNamespace(parentModUris?: readonly vscode.Uri[]): string {
         folders = [];
     }
 
-    return cacheNamespaceFor(modFile, folders, parentModPaths);
+    return cacheNamespaceFor(modFile, folders, parentModPaths, sourceIdentity);
 }
 
 export type CacheScope = vscode.Uri | null;
 
 export function captureCacheScope(
     parentModUris?: readonly vscode.Uri[],
+    sourceIdentity?: string,
 ): CacheScope {
     const ctx = contextContainer.current;
     if (!ctx || IS_WEB_EXT) {
         return null;
     }
-    return host().Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT, cacheNamespace(parentModUris));
+    return host().Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT, cacheNamespace(parentModUris, sourceIdentity));
 }
 
 // Keyed on the directory rather than memoized once, because the namespace can change inside a
