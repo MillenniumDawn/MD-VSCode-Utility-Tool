@@ -308,6 +308,8 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"localisationIndex.building": "Building localisation index...",
 	"localisationIndex.workspace.building":
 		"Building workspace localisation index...",
+	"miopreview.availability": "Availability: {0}",
+	"miopreview.available": "Available",
 	"miopreview.conditions": "Conditions: ",
 	"miopreview.copywarnings.none": "This organization has no warnings.",
 	"miopreview.mio": "Military Industrial Organization: ",
@@ -317,6 +319,8 @@ const internalTable = /* SOT Do not remove this comment */ {
 	"miopreview.showOverlaps": "Show overlapping traits",
 	"miopreview.tracing": "Tracing: {0}",
 	"miopreview.warnings": "Toggle warnings",
+	"miopreview.unavailable": "Unavailable",
+	"miopreview.visibility": "Visibility: {0}",
 	"miopreview.warnings.exclusivenotexist": "Mutually exclusive trait {0} of trait {1} does not exist.",
 	"miopreview.warnings.exclusivenotsamey": "Mutually exclusive traits {0} and {1} are not on the same row.",
 	"miopreview.warnings.includecircularref":

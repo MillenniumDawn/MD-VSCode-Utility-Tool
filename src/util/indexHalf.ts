@@ -8,6 +8,7 @@ import {
 	saveCacheManifest,
 	captureCacheScope,
 	CacheScope,
+	indexSourceIdentity,
 } from "./indexCache";
 import { indexParseQueue, IndexProgress } from "./indexBuild";
 import { IndexFile, IndexListing, toIndexFiles } from "./indexListing";
@@ -23,6 +24,7 @@ import {
 
 export interface IndexBuildContext {
 	readonly cacheScope: CacheScope;
+	readonly sourceIdentity: string;
 	readonly dependencyGeneration: number;
 	readonly parentModUris: readonly vscode.Uri[];
 }
@@ -30,8 +32,10 @@ export interface IndexBuildContext {
 /** Captures all dependency-sensitive inputs once for the complete index build. */
 export async function captureIndexBuildContext(): Promise<IndexBuildContext> {
 	const snapshot = await captureModDependencySnapshot();
+	const sourceIdentity = indexSourceIdentity();
 	return {
-		cacheScope: captureCacheScope(snapshot.parentModUris),
+		cacheScope: captureCacheScope(snapshot.parentModUris, sourceIdentity),
+		sourceIdentity,
 		dependencyGeneration: snapshot.generation,
 		parentModUris: snapshot.parentModUris,
 	};
@@ -77,6 +81,8 @@ function queueCacheWrite(
 		) {
 			return;
 		}
+		// Once writing starts, finish the captured pair in its captured source namespace.
+		// A setting change during I/O must not leave new records behind an older manifest.
 		await saveCacheRecords(cacheName, records, scope);
 		if (
 			generation !== undefined &&
@@ -126,8 +132,10 @@ export interface IndexHalfSpec<TRecord> {
 	 * as a record that fails to parse is, and the build falls back to parsing everything.
 	 */
 	hydrate: (record: TRecord, skipFiles: Set<string>) => void;
-	/** Parses one file into the live index. Reports its own failures and does not throw. */
-	parseFile: (file: IndexFile) => Promise<void>;
+	/** When supplied, only records in the current listing may be restored. */
+	recordFilePath?: (record: TRecord) => string;
+	/** Parses one file into the live index. Returns false on a reported read or parse failure. */
+	parseFile: (file: IndexFile) => Promise<boolean>;
 	/**
 	 * The live index as the records it should be cached as. Captured synchronously, but written over
 	 * later ticks, so anything an edit or a rebuild mutates in place has to be copied here rather
@@ -139,7 +147,7 @@ export interface IndexHalfSpec<TRecord> {
 	/** Dependency generation and scope captured before the build listed any files. */
 	dependencyGeneration?: number;
 	cacheScope?: CacheScope;
-	/** An obsolete workspace generation must not save its records. */
+	/** Reject obsolete source generations before they can persist their records. */
 	isCurrent?: () => boolean;
 	/** Directory refreshes must include surviving dirty editor buffers, regardless of mtimes. */
 	forceReparse?: boolean;
@@ -221,10 +229,14 @@ async function buildIndexHalfWithTimer<TRecord>(
 			try {
 				const records = await loadCacheRecords(cacheName, cacheScope);
 				if (records) {
-					const skipFiles = new Set([...staleness.stale, ...staleness.removed]);
+					const skipFiles = new Set([...staleness.stale, ...staleness.removed, ...staleness.added]);
 					const slice = createTimeSlicer();
+					const currentFiles = new Set(filePaths);
 					for (const record of records) {
-						spec.hydrate(record as TRecord, skipFiles);
+						// Older failed/retried builds could save entries absent from their manifest.
+						if (!spec.recordFilePath || currentFiles.has(spec.recordFilePath(record as TRecord))) {
+							spec.hydrate(record as TRecord, skipFiles);
+						}
 						await slice();
 					}
 					filesToParse = [...staleness.stale, ...staleness.added];
@@ -241,12 +253,15 @@ async function buildIndexHalfWithTimer<TRecord>(
 
 	timer.begin("parse");
 	let parsed = 0;
+	const failedFiles = new Set<string>();
 	const toParse = toIndexFiles(filesToParse, uris);
 	progress.report(0, toParse.length);
 	await indexParseQueue.map(
 		toParse,
 		async (file) => {
-			await spec.parseFile(file);
+			if (!(await spec.parseFile(file))) {
+				failedFiles.add(file.path);
+			}
 			timer.progress(++parsed, toParse.length);
 			progress.report(parsed, toParse.length);
 		},
@@ -268,7 +283,7 @@ async function buildIndexHalfWithTimer<TRecord>(
 			writeKey,
 			cacheName,
 			spec.serialize(),
-			filePaths,
+			filePaths.filter((path) => !failedFiles.has(path)),
 			mtimes,
 			version,
 			cacheScope,

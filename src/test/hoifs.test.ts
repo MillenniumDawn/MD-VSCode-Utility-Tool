@@ -6,6 +6,7 @@ import { workspaceModFilesCache } from "../util/modfile";
 import { getParentModUris, resetParentModsForTest } from "../util/parentmods";
 import { clearInstallPathCache, getInstallPathUri } from "../util/installpath";
 import { fireConfigurationChange, stubVscode, restoreVscodeStubs } from "./_vscode_stub";
+import { getFilePathFromMod } from "../util/fileloader";
 
 // With `modFile` unset the selected `.mod` is the first one in the workspace folders, so the
 // folders changing can change which file the dependencies come from. That change reaches the
@@ -197,6 +198,8 @@ describe("util/hoifs workspace folder and configuration change", function () {
 	it("re-resolves the dependencies when a folder with a .mod is added", async function () {
 		assert.deepStrictEqual(getParentModUris(), []);
 		assert.ok(folderChangeHandler, "registerHoiFs subscribes to the workspace folders");
+		await write(nodePath.join(root, "empty", "interface", "shared.gfx"), "first");
+		await write(nodePath.join(root, "sub", "interface", "shared.gfx"), "second");
 
 		const added = { uri: vscode.Uri.file(nodePath.join(root, "sub")) } as vscode.WorkspaceFolder;
 		stubVscode({
@@ -209,6 +212,12 @@ describe("util/hoifs workspace folder and configuration change", function () {
 			getParentModUris().map((uri) => nodePath.resolve(realPathOf(uri))),
 			[nodePath.resolve(root, "parent")],
 		);
+		assert.strictEqual(nodePath.resolve(realPathOf(await getFilePathFromMod("interface/shared.gfx"))), nodePath.resolve(root, "empty", "interface", "shared.gfx"));
+		const first = { uri: vscode.Uri.file(nodePath.join(root, "empty")) } as vscode.WorkspaceFolder;
+		stubVscode({ workspaceFolders: [added, first] });
+		folderChangeHandler({ added: [], removed: [] });
+		assert.strictEqual(nodePath.resolve(realPathOf(await getFilePathFromMod("interface/shared.gfx"))), nodePath.resolve(root, "sub", "interface", "shared.gfx"));
+		await whenModDependenciesSettled();
 	});
 
 	it("re-reads the parent list when parentModPaths changes", async function () {
