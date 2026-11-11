@@ -1,6 +1,7 @@
 Unreleased
 
   Bugfixes:
+- [ World Map Preview ] Province warnings stay attached to the right province after duplicate or malformed IDs are reassigned. Issue #781.
 - [ MIO Previewer ] Trait availability requirements now appear separately from visibility and can be checked with the condition controls. Locked traits stay visible, including inherited and overridden traits. Issue #727.
 - [ Previews ] Indexes now use the same file as previews when workspace folders contain matching paths. Issue #712.
 - [ Build ] VSIX packages can now be built from worktrees whose folder names contain a UUID. Issue #759.
