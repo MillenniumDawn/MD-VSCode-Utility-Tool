@@ -110,7 +110,7 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
             y: 0,
             relativePositionId: undefined,
             visible: true,
-            hasVisible: false,
+            hasVisible: false, available: true, hasAvailable: false,
             specialTraitBackground: false,
             effects: [],
             token: undefined,
@@ -167,6 +167,19 @@ describe('previewdef/mio renderMioFile shell class stability', () => {
 // localisation index copies verbatim out of the .yml).
 describe('previewdef/mio renderMioFile escaping', () => {
     afterEach(() => restoreLocalisation());
+
+    it('labels and escapes availability separately from visibility in the trait tooltip', async () => {
+        const rendered = await renderMioFile(loaderForFile(`
+            test_org = { trait = { token = locked visible = { always = yes }
+                available = { TUR = { has_country_flag = "<locked>" } }
+            } }
+        `), uri, webview) as LoaderRenderResult;
+        const html = traitHtmlOf(rendered);
+        assert.ok(html.includes('Visibility: true'), html);
+        assert.ok(html.includes('Availability: [TUR]has_country_flag'), html);
+        assert.ok(html.includes('&lt;locked&gt;'), html);
+        assert.ok(!html.includes('<locked>'), html);
+    });
 
     it('escapes a quoted trait token in the card body and its tooltip', async () => {
         const hostileToken = 'trait" onmouseover="alert(1)" x="<b>';
