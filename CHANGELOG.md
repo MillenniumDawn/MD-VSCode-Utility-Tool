@@ -1,6 +1,7 @@
 Unreleased
 
   Bugfixes:
+- [ Indexing ] Retrying failed or cancelled indexing no longer keeps entries for files deleted between attempts. Issue #711.
 - [ Indexing ] Files that temporarily cannot be read are retried on the next index build, while successfully cached files remain available. Issue #710.
 - [ MIO Previewer ] Organization files now load without false circular dependency errors. Includes across files retain inherited traits and warn about real circular includes. Issue #780.
 - [ World Map Preview ] Province warnings stay attached to the right province after duplicate or malformed IDs are reassigned. Issue #781.

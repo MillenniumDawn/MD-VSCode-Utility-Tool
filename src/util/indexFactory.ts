@@ -41,6 +41,8 @@ export interface ThreeHalfIndexSpec<H, R> {
 	fullRebuildOnAnyChange?: boolean;
 	newHalf: (source: IndexSource) => H;
 	hydrate: (half: H, record: R, skipFiles: Set<string>) => void;
+	/** Identifies the file whose entries a cached record restores. */
+	recordFilePath: (record: R) => string;
 	/** Parses one file into `half`. Returns whether it was read and parsed. */
 	parseFile: (half: H, file: IndexFile, options: FileSourceOptions) => Promise<boolean>;
 	serialize: (half: H) => R[];
@@ -64,6 +66,16 @@ export interface ThreeHalfIndex<H> {
 	handlers: IndexWatchers["handlers"];
 	/** Test-only: drops the build and empties every half. */
 	resetForTests(): void;
+}
+
+/** Keep the build gate closed until every sibling has stopped mutating its half. */
+async function finishHalves(tasks: Promise<void>[]): Promise<void> {
+	const results = await Promise.allSettled(tasks);
+	for (const result of results) {
+		if (result.status === "rejected") {
+			throw result.reason;
+		}
+	}
 }
 
 export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): ThreeHalfIndex<H> {
@@ -93,6 +105,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 						options: { ...options, token },
 						tolerateRootErrors: spec.tolerateRootErrors,
 					}),
+				recordFilePath: spec.recordFilePath,
 				hydrate: (record, skipFiles) => spec.hydrate(half, record, skipFiles),
 				parseFile: (file) => spec.parseFile(half, file, options),
 				serialize: () => spec.serialize(half),
@@ -113,7 +126,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		if (parentUris.length === 0) {
 			return;
 		}
-		await Promise.all(
+		await finishHalves(
 			parentUris.map((parent, index) =>
 				buildHalf(
 					`parent.${index}`,
@@ -137,12 +150,22 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		);
 	}
 
+	let attempted = false;
 	const builder = createIndexBuilder({
 		name: spec.name,
 		message: spec.message,
 		build: async (progress) => {
+			// A rejected or cancelled attempt can have populated any subset of the files.
+			// Reusing those halves would retain entries absent from the retry's listing.
+			global = spec.newHalf("global");
+			parents = [];
+			workspace = spec.newHalf("workspace");
+			if (attempted) {
+				spec.changed?.();
+			}
+			attempted = true;
 			const context = await captureIndexBuildContext();
-			return Promise.all([
+			return finishHalves([
 				buildGlobal(progress, context),
 				buildParents(progress, context),
 				buildWorkspace(progress, context),
