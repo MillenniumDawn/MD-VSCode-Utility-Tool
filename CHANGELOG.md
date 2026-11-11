@@ -3,6 +3,7 @@ Unreleased
 v1.1.46
 
   Bugfixes:
+- [ Build ] VSIX packages can now be built from worktrees whose folder names contain a UUID. Issue #759.
 - [ Previews ] Documentation and backup files in script folders no longer cause parsing errors in decision and world map previews.
 - [ Events Previewer ] Scan References now ignores documentation and backup files instead of reading them as events or localisation.
 - [ Previews ] Event and decision calls inside a random = { chance = ... } or a while = { limit = { ... } } effect are discovered again and listed with their guard. The chance is shown as written, and a while reads as a repeating block instead of one guaranteed call. Issue #714.
