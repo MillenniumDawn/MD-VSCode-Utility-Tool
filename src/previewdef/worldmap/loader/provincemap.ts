@@ -145,6 +145,15 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 			warnings,
 		);
 
+		const { sortedProvinces, badProvinceId } = sortProvinces(
+			provinces,
+			badProvinceIdForMerge,
+			["map/" + defaultMap.definitions],
+			warnings,
+		);
+
+		resolveProvinceWarningSources(provinces, warnings);
+
 		validateProvinceContinents(
 			provinces,
 			continents.result,
@@ -154,13 +163,6 @@ export class DefaultMapLoader extends FileLoader<ProvinceMap> {
 		validateProvinceTerrains(
 			provinces,
 			terrains.result,
-			["map/" + defaultMap.definitions],
-			warnings,
-		);
-
-		const { sortedProvinces, badProvinceId } = sortProvinces(
-			provinces,
-			badProvinceIdForMerge,
 			["map/" + defaultMap.definitions],
 			warnings,
 		);
@@ -440,18 +442,28 @@ function mergeProvinceDefinitions(
 		});
 	}
 
+	return { provinces: result, badProvinceId: badId };
+}
+
+function resolveProvinceWarningSources(
+	provinces: Province[],
+	warnings: WorldMapWarning[],
+): void {
+	const finalIdByColor = new Map(provinces.map((province) => [province.color, province.id]));
+	const finalProvinceById = new Map(provinces.map((province) => [province.id, province]));
 	for (const warning of warnings) {
 		for (const source of warning.source) {
-			if (source.type === "province" && source.id === -1) {
-				const provinceId = colorToProvinceId[source.color];
-				if (provinceId !== undefined) {
-					source.id = provinceId;
+			if (source.type === "province" && source.color !== -1) {
+				if (source.id !== null && finalProvinceById.get(source.id)?.color === source.color) {
+					continue;
+				}
+				const finalId = finalIdByColor.get(source.color);
+				if (finalId !== undefined) {
+					source.id = finalId;
 				}
 			}
 		}
 	}
-
-	return { provinces: result, badProvinceId: badId };
 }
 
 function validateProvinceContinents(

@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { cacheNamespaceFor, computeStaleFiles, getFileMtimes } from '../util/indexCache';
+import { fnv1a64Hex } from '../util/hash';
 import { restoreVscodeStubs, stubVscode } from './_vscode_stub';
 
 describe('util/indexCache', () => {
@@ -19,11 +20,16 @@ describe('util/indexCache', () => {
             );
         });
 
-        it('is unchanged when the same folders arrive in a different order', () => {
-            assert.strictEqual(
+        it('changes when workspace precedence changes', () => {
+            assert.notStrictEqual(
                 cacheNamespaceFor(undefined, ['file:///a', 'file:///b']),
                 cacheNamespaceFor(undefined, ['file:///b', 'file:///a']),
             );
+        });
+
+        it('does not reuse a pre-fix cache even if folders were already sorted', () => {
+            const oldNamespace = fnv1a64Hex('ws:file:///a\nws:file:///b');
+            assert.notStrictEqual(cacheNamespaceFor(undefined, ['file:///a', 'file:///b']), oldNamespace);
         });
 
         it('normalizes mod path identity for the host platform', () => {

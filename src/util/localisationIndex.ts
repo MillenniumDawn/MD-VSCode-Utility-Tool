@@ -27,7 +27,8 @@ interface LocalisationHalf {
 	fileMap: Record<string, Record<string, Set<string>>>;
 }
 
-const LOC_CACHE_VERSION = 2;
+// Older manifests marked failed reads fresh, so their missing records cannot be reused safely.
+const LOC_CACHE_VERSION = 3;
 const langSuffixPattern = ymlSuffixes.join("|");
 const localisationFileFilter = new RegExp(
 	`.*_(${langSuffixPattern})\\.yml$`,
