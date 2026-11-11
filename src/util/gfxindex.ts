@@ -41,7 +41,8 @@ export function getGfxIndexVersion(): number {
 
 // 4: progressBarType sprites are indexed, and a .gfx left open at its end is read as the game reads
 // it (vanilla powerbalanceview.gfx), so a cache written before either is missing sprites.
-const GFX_CACHE_VERSION = 4;
+// Older manifests marked failed reads fresh, so their missing records cannot be reused safely.
+const GFX_CACHE_VERSION = 5;
 
 /**
  * One .gfx file, as one line of the cache: the sprites the index resolves to it, and -- in the

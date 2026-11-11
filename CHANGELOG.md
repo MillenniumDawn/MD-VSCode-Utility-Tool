@@ -3,6 +3,7 @@ Unreleased
 v1.1.46
 
   Bugfixes:
+- [ Indexing ] Files that temporarily cannot be read are retried on the next index build, while successfully cached files remain available. Issue #710.
 - [ MIO Previewer ] Organization files now load without false circular dependency errors. Includes across files retain inherited traits and warn about real circular includes. Issue #780.
 - [ World Map Preview ] Province warnings stay attached to the right province after duplicate or malformed IDs are reassigned. Issue #781.
 - [ MIO Previewer ] Trait availability requirements now appear separately from visibility and can be checked with the condition controls. Locked traits stay visible, including inherited and overridden traits. Issue #727.
