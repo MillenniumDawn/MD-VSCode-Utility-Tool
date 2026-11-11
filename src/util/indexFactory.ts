@@ -4,12 +4,14 @@ import { host } from "./host";
 import { createIndexBuilder, IndexProgress, withIndexProgress } from "./indexBuild";
 import { buildIndexHalf, captureIndexBuildContext, IndexBuildContext } from "./indexHalf";
 import { IndexFile, listIndexFiles } from "./indexListing";
-import { clearDlcZipCache, FileSourceOptions, ListFilesOptions } from "./fileloader";
+import { clearDlcZipCache, FileSourceOptions, getFilePathFromModOrHOI4, ListFilesOptions } from "./fileloader";
 import { createIndexWatchers, IndexWatchers, toWorkspaceRelativePath } from "./indexWatchers";
+import { Logger } from "./logger";
+import { attachTaskWithErrorLogging } from "./promiseUtils";
 
 import { indexSourceIdentity } from "./indexCache";
-import { attachTaskWithErrorLogging } from "./promiseUtils";
-import { Logger } from "./logger";
+import { getEffectiveInstallPathUri } from "./installpath";
+import { getParentModUris } from "./parentmods";
 
 /*
  * The skeleton every index shares: three halves -- vanilla, each parent mod, the workspace -- built
@@ -88,6 +90,12 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 	let global = spec.newHalf("global");
 	let parents: H[] = [];
 	let workspace = spec.newHalf("workspace");
+	const pendingParses = new Map<string, object>();
+	let sourceGeneration = 0;
+	let buildAttempt = 0;
+	let builtSource: string | undefined;
+	let globalTask: Promise<unknown> | undefined;
+	let forceGlobalReparse = false;
 	let workspaceGeneration = 0;
 	let operationGeneration = 0;
 	let workspaceLifecycle = 0;
@@ -96,10 +104,6 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 	const createdFiles = new Map<string, vscode.Uri>();
 	let forceWorkspaceRebuild = false;
 	let workspaceTask: Promise<unknown> | undefined;
-	let sourceGeneration = 0;
-	let buildAttempt = 0;
-	let builtSource: string | undefined;
-	let globalTask: Promise<unknown> | undefined;
 	let lookupTask: Promise<void> | undefined;
 	const rootPrefixes = spec.roots.map((root) => `${root}/`);
 
@@ -153,7 +157,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 				buildContext.sourceIdentity === indexSourceIdentity();
 			const candidate = spec.newHalf("global");
 			try {
-				await buildHalf("global", candidate, { mod: false, hoi4: true, recursively: true }, progress, buildContext, isCurrent);
+				await buildHalf("global", candidate, { mod: false, hoi4: true, recursively: true }, progress, buildContext, isCurrent, forceGlobalReparse);
 			} catch (cause) {
 				if (isCurrent()) { throw cause; }
 			}
@@ -165,13 +169,14 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 				continue;
 			}
 			global = candidate;
+			forceGlobalReparse = false;
 			if (globalTask) { spec.changed?.(); }
 			builtSource = buildContext.sourceIdentity;
 			return;
 		}
 	}
 
-	async function buildParents(progress: IndexProgress, context?: IndexBuildContext): Promise<void> {
+	async function buildParents(progress: IndexProgress, context?: IndexBuildContext, forceReparse = false): Promise<void> {
 		const buildContext = context ?? (await captureIndexBuildContext());
 		const parentUris = buildContext.parentModUris;
 		parents = parentUris.map(() => spec.newHalf("parent"));
@@ -187,6 +192,8 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 					{ workspace: false, hoi4: false, recursively: true, parentModUris: [parent] },
 					progress,
 					buildContext,
+					undefined,
+					forceReparse,
 				),
 			),
 		);
@@ -210,6 +217,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		name: spec.name,
 		message: spec.message,
 		build: async (progress) => {
+			pendingParses.clear();
 			buildAttempt++;
 			// A rejected or cancelled attempt can have populated any subset of the files.
 			// Reusing those halves would retain entries absent from the retry's listing.
@@ -228,6 +236,24 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 			]);
 		},
 	});
+
+	function globalSourceChanged(forceReparse = false): void {
+		forceGlobalReparse ||= forceReparse;
+		void clearDlcZipCache();
+		if (!builder.hasStarted()) { return; }
+		sourceGeneration++;
+		global = spec.newHalf("global");
+		builtSource = undefined;
+		spec.changed?.();
+		const task = builder.gate.followOn(() => {
+			if (builtSource === indexSourceIdentity()) { return Promise.resolve(); }
+			return withIndexProgress(spec.rebuildMessage, (progress) => buildGlobal(progress));
+		});
+		globalTask = task;
+		const clearTask = () => { if (globalTask === task) { globalTask = undefined; } };
+		void task.then(clearTask, clearTask);
+		attachTaskWithErrorLogging(task, spec.rebuildFailureMessage, Logger.error);
+	}
 
 	function overlapsWorkspaceRoot(file: vscode.Uri): boolean {
 		const folder = host().workspace.getWorkspaceFolder(file);
@@ -267,13 +293,14 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 				if (!rebuild) {
 					for (const file of creates) {
 						if (!workspaceDirty || lifecycle !== workspaceLifecycle) { return; }
-						await reindexFile(file);
+						attachTaskWithErrorLogging(reindexFile(file), `Re-indexing ${file.toString()} failed`, Logger.error);
 					}
 					if (operation === operationGeneration) { workspaceDirty = false; }
 					continue;
 				}
 				// Only a confirmed full refresh supersedes unrelated queued or in-flight edits.
 				watchers.cancelPending();
+				pendingParses.clear();
 				const generation = ++workspaceGeneration;
 				const context = await captureIndexBuildContext();
 				const candidate = spec.newHalf("workspace");
@@ -318,23 +345,6 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		return true;
 	}
 
-	function globalSourceChanged(): void {
-		void clearDlcZipCache();
-		if (!builder.hasStarted()) { return; }
-		sourceGeneration++;
-		global = spec.newHalf("global");
-		builtSource = undefined;
-		spec.changed?.();
-		const task = builder.gate.followOn(() => {
-			if (builtSource === indexSourceIdentity()) { return Promise.resolve(); }
-			return withIndexProgress(spec.rebuildMessage, (progress) => buildGlobal(progress));
-		});
-		globalTask = task;
-		const clearTask = () => { if (globalTask === task) { globalTask = undefined; } };
-		void task.then(clearTask, clearTask);
-		attachTaskWithErrorLogging(task, spec.rebuildFailureMessage, Logger.error);
-	}
-
 	function ensureBuilt(): Promise<void> {
 		if (lookupTask) { return lookupTask; }
 		const task = (async () => {
@@ -368,42 +378,64 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 			return;
 		}
 
-		// No URI: a re-index reaches one file, so resolving it the usual way costs nothing. Workspace
-		// only: a re-index that fires after the file was deleted must not read the parent's copy into
-		// this half, which is the one half the parent's files are never in.
-		const generation = workspaceGeneration;
-		const parsed = spec.newHalf("workspace");
-		if (!(await spec.parseFile(parsed, { path: relative }, { parent: false, hoi4: false }))) {
-			return;
-		}
+		// Resolve through workspace precedence, then bypass the content cache: a filesystem event
+		// says this file changed even when another preview has kept its cached buffer hot.
+		const generation = {};
+		pendingParses.set(relative, generation);
+		const options = { parent: false, hoi4: false };
+		try {
+			const uri = await getFilePathFromModOrHOI4(relative, options);
+			if (pendingParses.get(relative) !== generation) {
+				return;
+			}
+			const parsed = spec.newHalf("workspace");
+			if (!(await spec.parseFile(parsed, { path: relative, uri }, options)) ||
+				pendingParses.get(relative) !== generation) {
+				return;
+			}
 
-		if (generation !== workspaceGeneration) { return; }
-		// Read after the parse: a rebuild may have replaced the half in the meantime.
-		spec.removeFile(workspace, relative);
-		spec.mergeFile(workspace, parsed, relative);
-		workspaceFiles.add(relative);
-		spec.changed?.();
+			// Read after the parse: a rebuild may have replaced the half in the meantime.
+			spec.removeFile(workspace, relative);
+			spec.mergeFile(workspace, parsed, relative);
+			workspaceFiles.add(relative);
+			spec.changed?.();
+		} finally {
+			if (pendingParses.get(relative) === generation) {
+				pendingParses.delete(relative);
+			}
+		}
 	}
 
 	const watchers = createIndexWatchers({
 		enabled: spec.enabled,
-		workspaceOperation,
 		globalSourceChanged,
+		workspaceOperation,
+		externalRoots: () => {
+			const roots: { uri: vscode.Uri; kind: "parent" | "global" }[] = getParentModUris().map((uri) => ({ uri, kind: "parent" }));
+			const game = getEffectiveInstallPathUri();
+			if (game) { roots.push({ uri: game, kind: "global" }); }
+			return roots;
+		},
+		rootPrefixes,
 		extension: spec.extension,
+		acceptsFile: (file) => toWorkspaceRelativePath(file, rootPrefixes) !== undefined,
 		hasStarted: () => builder.hasStarted(),
 		gate: builder.gate,
 		reindexFile: (file) => {
-			void reindexFile(file);
+			attachTaskWithErrorLogging(reindexFile(file), `Re-indexing ${file.toString()} failed`, Logger.error);
 		},
 		removeFile: (file) => {
 			const relative = toWorkspaceRelativePath(file, rootPrefixes);
 			if (relative) {
+				pendingParses.delete(relative);
+				workspaceFiles.delete(relative);
 				spec.removeFile(workspace, relative);
 				spec.changed?.();
 			}
 		},
 		rebuildWorkspace: {
 			reset: () => {
+				pendingParses.clear();
 				workspaceGeneration++;
 				workspace = spec.newHalf("workspace");
 				spec.changed?.();
@@ -417,7 +449,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 				parents = [];
 				spec.changed?.();
 			},
-			build: buildParents,
+			build: (progress, forceReparse) => buildParents(progress, undefined, forceReparse),
 		},
 	});
 
@@ -429,6 +461,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 			const registration = watchers.register();
 			return { dispose: () => {
 				registration.dispose();
+				pendingParses.clear();
 				workspaceGeneration++;
 				operationGeneration++;
 				workspaceLifecycle++;
@@ -440,7 +473,9 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		handlers: watchers.handlers,
 		resetForTests: () => {
 			watchers.cancelPending();
+			pendingParses.clear();
 			builder.reset();
+			forceGlobalReparse = false;
 			workspaceGeneration++;
 			operationGeneration++;
 			workspaceLifecycle++;

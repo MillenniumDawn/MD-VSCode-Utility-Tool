@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import { mock } from "node:test";
 import { refreshFeatureFlags } from "../../../util/featureflags";
 import {
 	getGfxContainerFile,
@@ -18,6 +19,8 @@ function sprites(...names: string[]): Buffer {
 }
 
 describe("util/gfxindex", () => {
+	beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"] }));
+	afterEach(() => mock.timers.reset());
 	const world = useIndexWorld(__resetGfxIndexForTests, { gfxIndex: true });
 
 	describe("with one file in both the game and the workspace", () => {
@@ -72,6 +75,7 @@ describe("util/gfxindex", () => {
 				const afterBuild = getGfxIndexVersion();
 
 				__testHandlers.onDeleteFiles({ files: [workspaceFile("interface/sprite.gfx")] });
+				mock.timers.tick(1000);
 				await settle();
 				assert.ok(getGfxIndexVersion() > afterBuild, "expected a delete to move the version");
 			});
@@ -82,6 +86,7 @@ describe("util/gfxindex", () => {
 
 				world.read = () => sprites("GFX_my_other_sprite");
 				__testHandlers.onCreateFiles({ files: [workspaceFile("interface/sprite.gfx")] });
+				mock.timers.tick(1000);
 				await settle();
 				await settle();
 
@@ -98,10 +103,12 @@ describe("util/gfxindex", () => {
 
 			assert.strictEqual(await getGfxContainerFile("GFX_dup"), "interface/b.gfx");
 			__testHandlers.onDeleteFiles({ files: [workspaceFile("interface/a.gfx")] });
+			mock.timers.tick(1000);
 			await settle();
 			assert.strictEqual(await getGfxContainerFile("GFX_dup"), "interface/b.gfx");
 
 			__testHandlers.onDeleteFiles({ files: [workspaceFile("interface/b.gfx")] });
+			mock.timers.tick(1000);
 			await settle();
 			assert.strictEqual(await getGfxContainerFile("GFX_dup"), undefined);
 		});
@@ -168,11 +175,13 @@ describe("util/gfxindex", () => {
 			assert.strictEqual(await getGfxContainerFile("GFX_override"), "interface/override.gfx");
 
 			__testHandlers.onDeleteFiles({ files: [workspaceFile("interface/override.gfx")] });
+			mock.timers.tick(1000);
 			await settle();
 			assert.strictEqual(await getGfxContainerFile("GFX_override"), "interface/override.gfx");
 
 			// And a workspace-only file's sprites do go when it does.
 			__testHandlers.onDeleteFiles({ files: [workspaceFile("interface/sub.gfx")] });
+			mock.timers.tick(1000);
 			await settle();
 			assert.strictEqual(await getGfxContainerFile("GFX_sub_only"), undefined);
 			assert.strictEqual(await getGfxContainerFile("GFX_shared"), "interface/parent.gfx");
@@ -184,6 +193,7 @@ describe("util/gfxindex", () => {
 			listedHalves = [];
 
 			__testHandlers.onChangeParentMods({ folders: true, unresolved: false });
+			mock.timers.tick(1000);
 			await settle();
 			await settle();
 			assert.deepStrictEqual(listedHalves, ["parent"]);
@@ -195,6 +205,7 @@ describe("util/gfxindex", () => {
 			listedHalves = [];
 
 			__testHandlers.onChangeParentMods({ folders: false, unresolved: true });
+			mock.timers.tick(1000);
 			await settle();
 			await settle();
 			assert.deepStrictEqual(listedHalves, []);

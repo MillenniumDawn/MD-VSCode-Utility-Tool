@@ -2,20 +2,15 @@ import type * as vscode from "vscode";
 import { ConfigurationKey } from "../constants";
 import { onDidSelectInstallPath } from "./installpath";
 import { host } from "./host";
+import { pathIdentity } from "./nodecommon";
+import { getConfiguration } from "./vsccommon";
 import * as path from "path";
-import { debounceByInput } from "./common";
 import { IndexProgress, withIndexProgress } from "./indexBuild";
 import { attachTaskWithErrorLogging, BuildGate } from "./promiseUtils";
 import { Logger } from "./logger";
 import { onDidChangeParentMods, ParentModsChangeEvent } from "./parentmods";
 
-/**
- * The path a workspace file is indexed under, or undefined when it is outside the workspace or
- * outside every root the index cares about.
- *
- * The four indexes each inlined this, twice over in two of them -- six copies of the same
- * `path.relative(...).replace(...)` and prefix test.
- */
+/** The indexed path of a workspace file, or undefined outside the index's roots. */
 export function toWorkspaceRelativePath(
 	file: vscode.Uri,
 	rootPrefixes: string | readonly string[],
@@ -24,71 +19,45 @@ export function toWorkspaceRelativePath(
 	if (!wsFolder) {
 		return undefined;
 	}
-
-	const relative = path
-		.relative(wsFolder.uri.path, file.path)
-		.replace(/\\+/g, "/");
+	const relative = path.relative(wsFolder.uri.path, file.path).replace(/\\+/g, "/");
 	if (!relative) {
 		return undefined;
 	}
-
-	const prefixes =
-		typeof rootPrefixes === "string" ? [rootPrefixes] : rootPrefixes;
-	return prefixes.some((prefix) => relative.startsWith(prefix))
-		? relative
-		: undefined;
+	const prefixes = typeof rootPrefixes === "string" ? [rootPrefixes] : rootPrefixes;
+	return prefixes.some((prefix) => relative.startsWith(prefix)) ? relative : undefined;
 }
 
 export interface IndexWatcherSpec {
-	/** The index's feature flag, read on registration. When false nothing is subscribed at all. */
 	enabled: () => boolean;
-	/** Files this index cares about, e.g. `".gfx"`. */
 	extension: string;
-	/** Incremental events stay inert until something has actually asked for the index. */
+	acceptsFile?: (file: vscode.Uri) => boolean;
 	hasStarted: () => boolean;
-	/** Defers every mutation below until an in-flight build has settled. */
 	gate: BuildGate;
-	/** Re-reads one workspace file into the index. */
 	reindexFile: (file: vscode.Uri) => void;
+	globalSourceChanged?: (forceReparse?: boolean) => void;
+	externalRoots?: () => { uri: vscode.Uri; kind: "parent" | "global" }[];
+	rootPrefixes?: readonly string[];
 	/** Handles ambiguous file/folder operations without statting paths which may be gone. */
 	workspaceOperation?: (kind: "create" | "delete" | "rename", files: readonly vscode.Uri[]) => boolean;
-	/** Rebuild the vanilla half after installation or DLC settings change. */
-	globalSourceChanged?: () => void;
-	/** Drops one workspace file from the index. */
 	removeFile: (file: vscode.Uri) => void;
-	/** Everything needed to rebuild the workspace half after the folders changed. */
 	rebuildWorkspace: {
-		/** Empties the workspace half before the rebuild starts. */
 		reset: () => void;
 		build: (progress: IndexProgress) => Promise<void>;
-		/** Localised, shown in the progress notification. */
 		message: string;
-		/** Logged if the rebuild fails. */
 		failureMessage: string;
 	};
-	/**
-	 * The parent-mod half, rebuilt when the parent list changes. It shares the workspace rebuild's
-	 * progress message: to the user it is the same kind of rebuild.
-	 */
 	rebuildParent?: {
 		reset: () => void;
-		build: (progress: IndexProgress) => Promise<void>;
+		build: (progress: IndexProgress, forceReparse?: boolean) => Promise<void>;
 	};
 }
 
 export interface IndexWatchers {
-	/** Subscribes to the workspace events, or to nothing when the flag is off. */
 	register(): vscode.Disposable;
-	/** Invalidates queued incremental callbacks before a rebuild or reset. */
 	cancelPending(): void;
-	/**
-	 * The same handlers, for tests to drive directly rather than through VS Code. Each index used
-	 * to export its own trio of these under the same name and comment.
-	 */
 	handlers: {
 		onChangeConfiguration(e: vscode.ConfigurationChangeEvent): void;
 		onChangeWorkspaceFolders(e: vscode.WorkspaceFoldersChangeEvent): void;
-		/** What a change to the parent list runs: a rebuild of the parent half. */
 		onChangeParentMods(e: ParentModsChangeEvent): void;
 		onChangeTextDocument(e: vscode.TextDocumentChangeEvent): void;
 		onCloseTextDocument(document: vscode.TextDocument): void;
@@ -98,53 +67,25 @@ export interface IndexWatchers {
 	};
 }
 
-/*
- * Keeping an index in step with the editor.
- *
- * All four indexes wired up the same six events in the same order and handled them the same way,
- * down to `onRenameFiles` being byte-identical in every one of them. What differed was the file
- * extension and which functions to call, which is what the spec above carries.
- */
 export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	const { extension, hasStarted, gate } = spec;
-	let mutationGeneration = 0;
-	const fileOperations = new Map<string, number>();
-	function advanceFiles(files: readonly vscode.Uri[]): void {
-		for (const file of files) {
-			const key = file.toString();
-			fileOperations.set(key, (fileOperations.get(key) ?? 0) + 1);
-		}
-	}
-	function handlesOperation(kind: "create" | "delete" | "rename", files: readonly vscode.Uri[]): boolean {
-		return hasStarted() && spec.workspaceOperation?.(kind, files) === true;
-	}
+	const normalizedExtension = extension.toLowerCase();
 
-	function rebuild(
-		halves: readonly {
-			reset: () => void;
-			build: (progress: IndexProgress) => Promise<void>;
-		}[],
-	) {
+	function rebuild(halves: readonly {
+		reset: () => void;
+		build: (progress: IndexProgress, forceReparse?: boolean) => Promise<void>;
+	}[], forceReparse = false): void {
 		if (!hasStarted()) {
 			return;
 		}
-
-		// Reset only after the current build; occupy the gate now so events wait.
 		const task = gate.followOn(() => {
 			for (const half of halves) {
 				half.reset();
 			}
 			return withIndexProgress(spec.rebuildWorkspace.message, (progress) =>
-				Promise.all(
-					halves.map((half) => half.build(progress)),
-				).then(() => undefined),
-			);
+				Promise.all(halves.map((half) => forceReparse ? half.build(progress, true) : half.build(progress))).then(() => undefined));
 		});
-		attachTaskWithErrorLogging(
-			task,
-			spec.rebuildWorkspace.failureMessage,
-			Logger.error,
-		);
+		attachTaskWithErrorLogging(task, spec.rebuildWorkspace.failureMessage, Logger.error);
 	}
 
 	function onChangeConfiguration(e: vscode.ConfigurationChangeEvent): void {
@@ -154,107 +95,103 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 		}
 	}
 
-	function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
+	function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent): void {
 		rebuild([spec.rebuildWorkspace]);
 	}
 
-	// Only the parent half: the workspace half lists the workspace folders alone, so the parents
-	// changing leaves it as it was. An index without a parent half has nothing to do, and neither
-	// does a change to the unresolved names alone: those name no folder the half reads.
-	function onChangeParentMods(e: ParentModsChangeEvent) {
+	function onChangeParentMods(e: ParentModsChangeEvent): void {
 		if (spec.rebuildParent && e.folders) {
 			rebuild([spec.rebuildParent]);
 		}
 	}
 
-	// Debounced per file: an edit fires one of these per keystroke, and re-reading the file for
-	// each would spend the whole typing pause parsing.
-	const reindexAfterEdit = debounceByInput(
-		(file: vscode.Uri, generation: number, operation: number) => {
-			gate.runAfterBuild(() => {
-				if (generation !== mutationGeneration || operation !== (fileOperations.get(file.toString()) ?? 0)) { return; }
-				spec.reindexFile(file);
-			});
-		},
-		(file) => file.toString(),
-		1000,
-		{ trailing: true },
-	);
+	interface PendingFile {
+		file: vscode.Uri;
+		remove: boolean;
+		checkCreate: boolean;
+		firstEvent: number;
+		timer: ReturnType<typeof setTimeout>;
+	}
+	const pending = new Map<string, PendingFile>();
 
-	function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
-		if (!hasStarted()) {
+	function cancelPending(): void {
+		for (const entry of pending.values()) {
+			clearTimeout(entry.timer);
+		}
+		pending.clear();
+	}
+
+	// Editor and filesystem notifications share one queue; the last operation wins.
+	function queueFile(file: vscode.Uri, remove: boolean, checkCreate = false): void {
+		if (!hasStarted() || !file.path.toLowerCase().endsWith(normalizedExtension) || spec.acceptsFile?.(file) === false) {
 			return;
 		}
+		const key = file.toString();
+		const previous = pending.get(key);
+		if (previous) {
+			clearTimeout(previous.timer);
+		}
+		const firstEvent = previous?.firstEvent ?? Date.now();
+		const entry: PendingFile = {
+			file,
+			remove,
+			checkCreate: checkCreate || previous?.checkCreate === true,
+			firstEvent,
+			timer: setTimeout(() => {
+				gate.runAfterBuild(() => {
+					if (pending.get(key) !== entry) {
+						return;
+					}
+					pending.delete(key);
+					if (entry.remove) {
+						spec.removeFile(entry.file);
+					} else if (!entry.checkCreate || !handlesOperation("create", [entry.file])) {
+						spec.reindexFile(entry.file);
+					}
+				});
+			}, Math.max(0, Math.min(1000, 3000 - (Date.now() - firstEvent)))),
+		};
+		pending.set(key, entry);
+	}
 
-		const file = e.document.uri;
-		if (file.path.endsWith(extension)) {
-			reindexAfterEdit(file, mutationGeneration, fileOperations.get(file.toString()) ?? 0);
+	function handlesOperation(kind: "create" | "delete" | "rename", files: readonly vscode.Uri[]): boolean {
+		return hasStarted() && spec.workspaceOperation?.(kind, files) === true;
+	}
+
+	function onChangeTextDocument(e: vscode.TextDocumentChangeEvent): void {
+		queueFile(e.document.uri, false);
+	}
+
+	function onCloseTextDocument(document: vscode.TextDocument): void {
+		if (document.isDirty) {
+			queueFile(document.uri, false);
 		}
 	}
 
-	function onCloseTextDocument(document: vscode.TextDocument) {
-		if (!hasStarted()) {
-			return;
-		}
-
-		// Only when dirty: closing without saving reverts the file on disk, so what is indexed has
-		// to go back to matching it.
-		const file = document.uri;
-		if (file.path.endsWith(extension) && document.isDirty) {
-			const generation = mutationGeneration;
-			const operation = fileOperations.get(file.toString()) ?? 0;
-			gate.runAfterBuild(() => {
-				if (generation !== mutationGeneration || operation !== (fileOperations.get(file.toString()) ?? 0)) { return; }
-				spec.reindexFile(file);
-			});
-		}
-	}
-
-	function onCreateFiles(e: vscode.FileCreateEvent) {
-		advanceFiles(e.files);
-		if (handlesOperation("create", e.files)) { return; }
-		if (!hasStarted()) {
-			return;
-		}
-
-		const generation = mutationGeneration;
-		const operations = new Map(e.files.map((file) => [file.toString(), fileOperations.get(file.toString())]));
-		gate.runAfterBuild(() => {
-			if (generation !== mutationGeneration) { return; }
-			for (const file of e.files) {
-				if (operations.get(file.toString()) !== fileOperations.get(file.toString())) { continue; }
-				if (file.path.endsWith(extension)) {
-					spec.reindexFile(file);
-				}
+	function onCreateFiles(e: vscode.FileCreateEvent): void {
+		for (const file of e.files) {
+			if (file.path.toLowerCase().endsWith(normalizedExtension)) {
+				queueFile(file, false, true);
+			} else {
+				handlesOperation("create", [file]);
 			}
-		});
+		}
 	}
 
-	function onDeleteFiles(e: vscode.FileDeleteEvent) {
-		advanceFiles(e.files);
+	function onDeleteFiles(e: vscode.FileDeleteEvent): void {
 		if (handlesOperation("delete", e.files)) { return; }
-		if (!hasStarted()) {
-			return;
+		for (const file of e.files) {
+			queueFile(file, true);
 		}
-
-		const generation = mutationGeneration;
-		const operations = new Map(e.files.map((file) => [file.toString(), fileOperations.get(file.toString())]));
-		gate.runAfterBuild(() => {
-			if (generation !== mutationGeneration) { return; }
-			for (const file of e.files) {
-				if (operations.get(file.toString()) !== fileOperations.get(file.toString())) { continue; }
-				if (file.path.endsWith(extension)) {
-					spec.removeFile(file);
-				}
-			}
-		});
 	}
 
-	function onRenameFiles(e: vscode.FileRenameEvent) {
-		advanceFiles(e.files.flatMap((file) => [file.oldUri, file.newUri]));
-		if (handlesOperation("rename", e.files.flatMap((file) => [file.oldUri, file.newUri]))) { return; }
-		onDeleteFiles({ files: e.files.map((f) => f.oldUri) });
-		onCreateFiles({ files: e.files.map((f) => f.newUri) });
+	function onRenameFiles(e: vscode.FileRenameEvent): void {
+		const moved = e.files.filter((file) => file.oldUri.toString() !== file.newUri.toString());
+		if (moved.length > 0 && handlesOperation("rename", moved.flatMap((file) => [file.oldUri, file.newUri]))) { return; }
+		for (const file of e.files) {
+			queueFile(file.oldUri, true);
+			queueFile(file.newUri, false);
+		}
 	}
 
 	const handlers = {
@@ -273,25 +210,75 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 			if (!spec.enabled()) {
 				return host().Disposable.from();
 			}
-
+			let active = true;
+			let externalVersion = 0;
+			let externalWatchers: vscode.Disposable[] = [];
+			const externalPending = new Map<string, { firstEvent: number; timer: ReturnType<typeof setTimeout> }>();
+			function disposeExternal(): void {
+				externalVersion++;
+				for (const watcher of externalWatchers) { watcher.dispose(); }
+				externalWatchers = [];
+				for (const entry of externalPending.values()) { clearTimeout(entry.timer); }
+				externalPending.clear();
+			}
+			function refreshExternal(): void {
+				disposeExternal();
+				const version = externalVersion;
+				for (const { uri, kind } of spec.externalRoots?.() ?? []) {
+					const glob = kind === "global" ? `**/*{${extensionGlob},.[zZ][iI][pP]}` : `**/*${extensionGlob}`;
+					const watcher = host().workspace.createFileSystemWatcher(new (host().RelativePattern)(uri, glob));
+					function changed(file: vscode.Uri): void {
+						if (!active || version !== externalVersion || !hasStarted()) { return; }
+						if (file.scheme !== uri.scheme || file.authority !== uri.authority) { return; }
+						const relative = path.posix.relative(pathIdentity(uri.path), pathIdentity(file.path));
+						if (relative === ".." || relative.startsWith("../") || path.posix.isAbsolute(relative)) { return; }
+						const dlc = kind === "global" && getConfiguration().loadDlcContents && /^(dlc|integrated_dlc)\//.test(relative);
+						const indexed = file.path.toLowerCase().endsWith(normalizedExtension);
+						if (!(dlc && (indexed || file.path.toLowerCase().endsWith(".zip"))) &&
+							!(indexed && spec.rootPrefixes?.some((prefix) => relative.startsWith(prefix)))) { return; }
+						const previous = externalPending.get(kind);
+						if (previous) { clearTimeout(previous.timer); }
+						const firstEvent = previous?.firstEvent ?? Date.now();
+						const timer = setTimeout(() => {
+							externalPending.delete(kind);
+							if (!active || version !== externalVersion) { return; }
+							if (kind === "global") { spec.globalSourceChanged?.(true); }
+							else if (spec.rebuildParent) { rebuild([spec.rebuildParent], true); }
+						}, Math.max(0, Math.min(1000, 3000 - (Date.now() - firstEvent))));
+						externalPending.set(kind, { firstEvent, timer });
+					}
+					externalWatchers.push(watcher, watcher.onDidChange(changed), watcher.onDidCreate(changed), watcher.onDidDelete(changed));
+				}
+			}
+			function whileRegistered<T>(handler: (event: T) => void): (event: T) => void {
+				return (event) => { if (active) { handler(event); } };
+			}
+			const extensionGlob = normalizedExtension.replace(/[a-z]/g, (letter) => `[${letter}${letter.toUpperCase()}]`);
+			const files = host().workspace.createFileSystemWatcher(`**/*${extensionGlob}`);
+			refreshExternal();
 			return host().Disposable.from(
-				{ dispose: () => { mutationGeneration++; fileOperations.clear(); } },
+				files,
+				files.onDidChange(whileRegistered((file) => queueFile(file, false))),
+				files.onDidCreate(whileRegistered((file) => queueFile(file, false))),
+				files.onDidDelete(whileRegistered((file) => queueFile(file, true))),
+				{ dispose: () => { active = false; cancelPending(); disposeExternal(); } },
 				...(spec.globalSourceChanged ? [
-					host().workspace.onDidChangeConfiguration(onChangeConfiguration),
-					onDidSelectInstallPath(spec.globalSourceChanged),
+					host().workspace.onDidChangeConfiguration(whileRegistered((event: vscode.ConfigurationChangeEvent) => {
+						onChangeConfiguration(event);
+						if (event.affectsConfiguration(`${ConfigurationKey}.installPath`) || event.affectsConfiguration(`${ConfigurationKey}.loadDlcContents`)) { refreshExternal(); }
+					})),
+					onDidSelectInstallPath(() => { if (active) { spec.globalSourceChanged?.(); refreshExternal(); } }),
 				] : []),
-				host().workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
-				// The published list, not the raw setting: it changes once, after the `.mod`
-				// dependencies have been resolved against the new setting.
-				onDidChangeParentMods(onChangeParentMods),
-				host().workspace.onDidChangeTextDocument(onChangeTextDocument),
-				host().workspace.onDidCloseTextDocument(onCloseTextDocument),
-				host().workspace.onDidCreateFiles(onCreateFiles),
-				host().workspace.onDidDeleteFiles(onDeleteFiles),
-				host().workspace.onDidRenameFiles(onRenameFiles),
+				host().workspace.onDidChangeWorkspaceFolders(whileRegistered((event: vscode.WorkspaceFoldersChangeEvent) => { onChangeWorkspaceFolders(event); refreshExternal(); })),
+				onDidChangeParentMods(whileRegistered((event: ParentModsChangeEvent) => { onChangeParentMods(event); if (event.folders) { refreshExternal(); } })),
+				host().workspace.onDidChangeTextDocument(whileRegistered(onChangeTextDocument)),
+				host().workspace.onDidCloseTextDocument(whileRegistered(onCloseTextDocument)),
+				host().workspace.onDidCreateFiles(whileRegistered(onCreateFiles)),
+				host().workspace.onDidDeleteFiles(whileRegistered(onDeleteFiles)),
+				host().workspace.onDidRenameFiles(whileRegistered(onRenameFiles)),
 			);
 		},
 		handlers,
-		cancelPending: () => { mutationGeneration++; fileOperations.clear(); },
+		cancelPending,
 	};
 }

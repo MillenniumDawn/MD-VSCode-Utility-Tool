@@ -33,12 +33,17 @@ async function main(): Promise<void> {
 	const extensionTestsPath = path.resolve(__dirname, "./suite/index");
 	const activationTestsPath = path.resolve(__dirname, "./suite/activation");
 	try {
-		await runTests({
-			version,
-			extensionDevelopmentPath,
-			extensionTestsPath,
-			launchArgs,
-		});
+		const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), "md-utilities-index-"));
+		try {
+			await runTests({
+				version,
+				extensionDevelopmentPath,
+				extensionTestsPath,
+				launchArgs: [workspacePath, ...launchArgs],
+			});
+		} finally {
+			fs.rmdirSync(workspacePath);
+		}
 
 		for (const fixture of fixtures) {
 			const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), "md-utilities-activation-"));
