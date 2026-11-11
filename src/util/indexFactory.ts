@@ -10,6 +10,8 @@ import { Logger } from "./logger";
 import { attachTaskWithErrorLogging } from "./promiseUtils";
 
 import { indexSourceIdentity } from "./indexCache";
+import { getEffectiveInstallPathUri } from "./installpath";
+import { getParentModUris } from "./parentmods";
 
 /*
  * The skeleton every index shares: three halves -- vanilla, each parent mod, the workspace -- built
@@ -81,6 +83,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 	let buildAttempt = 0;
 	let builtSource: string | undefined;
 	let globalTask: Promise<unknown> | undefined;
+	let forceGlobalReparse = false;
 	let workspaceGeneration = 0;
 	let operationGeneration = 0;
 	let workspaceLifecycle = 0;
@@ -142,7 +145,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 				buildContext.sourceIdentity === indexSourceIdentity();
 			const candidate = spec.newHalf("global");
 			try {
-				await buildHalf("global", candidate, { mod: false, hoi4: true, recursively: true }, progress, buildContext, isCurrent);
+				await buildHalf("global", candidate, { mod: false, hoi4: true, recursively: true }, progress, buildContext, isCurrent, forceGlobalReparse);
 			} catch (cause) {
 				if (isCurrent()) { throw cause; }
 			}
@@ -154,13 +157,14 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 				continue;
 			}
 			global = candidate;
+			forceGlobalReparse = false;
 			if (globalTask) { spec.changed?.(); }
 			builtSource = buildContext.sourceIdentity;
 			return;
 		}
 	}
 
-	async function buildParents(progress: IndexProgress, context?: IndexBuildContext): Promise<void> {
+	async function buildParents(progress: IndexProgress, context?: IndexBuildContext, forceReparse = false): Promise<void> {
 		const buildContext = context ?? (await captureIndexBuildContext());
 		const parentUris = buildContext.parentModUris;
 		parents = parentUris.map(() => spec.newHalf("parent"));
@@ -176,6 +180,8 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 					{ workspace: false, hoi4: false, recursively: true, parentModUris: [parent] },
 					progress,
 					buildContext,
+					undefined,
+					forceReparse,
 				),
 			),
 		);
@@ -209,7 +215,8 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		},
 	});
 
-	function globalSourceChanged(): void {
+	function globalSourceChanged(forceReparse = false): void {
+		forceGlobalReparse ||= forceReparse;
 		void clearDlcZipCache();
 		if (!builder.hasStarted()) { return; }
 		sourceGeneration++;
@@ -373,6 +380,13 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		enabled: spec.enabled,
 		globalSourceChanged,
 		workspaceOperation,
+		externalRoots: () => {
+			const roots: { uri: vscode.Uri; kind: "parent" | "global" }[] = getParentModUris().map((uri) => ({ uri, kind: "parent" }));
+			const game = getEffectiveInstallPathUri();
+			if (game) { roots.push({ uri: game, kind: "global" }); }
+			return roots;
+		},
+		rootPrefixes,
 		extension: spec.extension,
 		acceptsFile: (file) => toWorkspaceRelativePath(file, rootPrefixes) !== undefined,
 		hasStarted: () => builder.hasStarted(),
@@ -405,7 +419,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 				parents = [];
 				spec.changed?.();
 			},
-			build: buildParents,
+			build: (progress, forceReparse) => buildParents(progress, undefined, forceReparse),
 		},
 	});
 
@@ -435,6 +449,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 			sourceGeneration++;
 			builtSource = undefined;
 			globalTask = undefined;
+			forceGlobalReparse = false;
 			workspaceGeneration++;
 			operationGeneration++;
 			workspaceLifecycle++;

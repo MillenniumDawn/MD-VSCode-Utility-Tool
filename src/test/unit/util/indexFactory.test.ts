@@ -11,7 +11,7 @@ import { getEffectiveInstallPathUri, setInstallPathUri } from "../../../util/ins
 import { host } from "../../../util/host";
 import { Logger } from "../../../util/logger";
 import { refreshModDependencies } from "../../../util/moddependencies";
-import { clearParentModCache } from "../../../util/parentmods";
+import { clearParentModCache, publishParentMods } from "../../../util/parentmods";
 import { deferred, settle } from "../async";
 import { listed, useIndexWorld, workspaceFile } from "../indexes";
 
@@ -358,6 +358,137 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 			reject = false;
 			await built.ensureBuilt();
 			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "/games/B");
+		});
+	});
+
+	describe("external source notifications", () => {
+		type Watch = { base: string; change: (file: vscode.Uri) => void; create: (file: vscode.Uri) => void; remove: (file: vscode.Uri) => void; disposed: boolean };
+		let watches: Watch[];
+		let registration: vscode.Disposable;
+		let configuration: (event: vscode.ConfigurationChangeEvent) => void;
+		let contents: string;
+
+		beforeEach(() => {
+			mock.timers.enable({ apis: ["setTimeout", "Date"] });
+			useParents("/mods/parent");
+			world.settings = { ...world.settings, installPath: "/games/A", loadDlcContents: true };
+			contents = "OLD";
+			world.read = () => Buffer.from(contents);
+			watches = [];
+			mock.method(host().workspace, "onDidChangeConfiguration", (listener: typeof configuration) => {
+				configuration = listener;
+				return { dispose() {} };
+			});
+			mock.method(host().workspace, "createFileSystemWatcher", (pattern: vscode.GlobPattern) => {
+				const watch: Watch = { base: typeof pattern === "string" ? "workspace" : pattern.baseUri.path,
+					change() {}, create() {}, remove() {}, disposed: false };
+				watches.push(watch);
+				return {
+					onDidChange: (listener: Watch["change"]) => { watch.change = listener; return { dispose() {} }; },
+					onDidCreate: (listener: Watch["create"]) => { watch.create = listener; return { dispose() {} }; },
+					onDidDelete: (listener: Watch["remove"]) => { watch.remove = listener; return { dispose() {} }; },
+					dispose: () => { watch.disposed = true; },
+				} as unknown as vscode.FileSystemWatcher;
+			});
+		});
+		afterEach(() => { registration?.dispose(); mock.timers.reset(); });
+
+		for (const [source, base, relative] of [
+			["parent", "/mods/parent", `${ROOT}/parent.txt`],
+			["global", "/games/A", `${ROOT}/global.txt`],
+			["global", "/games/A", "dlc/dlc001/content.zip"],
+			["global", "/games/A", `integrated_dlc/dlc001/${ROOT}/global.txt`],
+		] as const) {
+			it(`refreshes only ${source} for unopened ${relative} changes, additions and removals`, async () => {
+				world.useDisk();
+				const built = create();
+				registration = built.register();
+				await built.ensureBuilt();
+				await world.drainCacheWrites();
+				const previous = built.halves();
+				const watch = watches.find((entry) => entry.base === base)!;
+				const file = host().Uri.file(`${base}/${relative}`);
+				const half = () => source === "parent" ? built.halves().parents[0]! : built.halves().global;
+				world.listings = 0;
+				contents = "NEW";
+				watch.change(file);
+				watch.create(file);
+				mock.timers.tick(999);
+				await settle();
+				assert.strictEqual(world.listings, 0);
+				mock.timers.tick(1);
+				await settle();
+				await built.ensureBuilt();
+				assert.strictEqual(world.listings, 1);
+				assert.strictEqual(half().files.get(`${ROOT}/${source}.txt`), "NEW");
+				assert.strictEqual(built.halves().workspace, previous.workspace);
+				if (source === "parent") { assert.strictEqual(built.halves().global, previous.global); }
+				else { assert.strictEqual(built.halves().parents[0], previous.parents[0]); }
+				world.list = (_root, kind) => kind === source ? [] : listed([`${kind}.txt`]);
+				watch.remove(file);
+				mock.timers.tick(1000);
+				await settle();
+				await built.ensureBuilt();
+				assert.deepStrictEqual(files(half()), []);
+			});
+		}
+
+		it("ignores unrelated roots, outside paths, and disabled DLC changes", async () => {
+			world.settings = { ...world.settings, loadDlcContents: false };
+			const built = create();
+			registration = built.register();
+			await built.ensureBuilt();
+			world.listings = 0;
+			const game = watches.find((entry) => entry.base === "/games/A")!;
+			for (const relative of ["unrelated/other.txt", `../AB/${ROOT}/global.txt`, "dlc/dlc001/content.zip"]) {
+				game.change(host().Uri.file(`/games/A/${relative}`));
+			}
+			mock.timers.tick(3000);
+			await settle();
+			assert.strictEqual(world.listings, 0);
+		});
+
+		it("replaces watchers after installation and resolved parent changes and rejects old callbacks", async () => {
+			const built = create();
+			registration = built.register();
+			await built.ensureBuilt();
+			const oldGame = watches.find((entry) => entry.base === "/games/A")!;
+			world.settings = { ...world.settings, installPath: "/games/B" };
+			configuration({ affectsConfiguration: (key) => key === "mdHoi4Utilities.installPath" });
+			await built.ensureBuilt();
+			assert.ok(oldGame.disposed);
+			assert.ok(watches.some((entry) => entry.base === "/games/B" && !entry.disposed));
+			const oldParent = watches.find((entry) => entry.base === "/mods/parent" && !entry.disposed)!;
+			world.settings = { ...world.settings, parentModPaths: ["/mods/new"] };
+			clearParentModCache();
+			publishParentMods();
+			await settle();
+			assert.ok(oldParent.disposed);
+			assert.ok(watches.some((entry) => entry.base === "/mods/new" && !entry.disposed));
+			world.listings = 0;
+			oldGame.change(host().Uri.file(`/games/A/${ROOT}/global.txt`));
+			oldParent.change(host().Uri.file(`/mods/parent/${ROOT}/parent.txt`));
+			mock.timers.tick(1000);
+			await settle();
+			assert.strictEqual(world.listings, 0);
+		});
+
+		it("bounds continuous external writes and cancels pending work on disposal", async () => {
+			const built = create();
+			registration = built.register();
+			await built.ensureBuilt();
+			const parent = watches.find((entry) => entry.base === "/mods/parent")!;
+			const file = host().Uri.file(`/mods/parent/${ROOT}/parent.txt`);
+			world.listings = 0;
+			for (let index = 0; index < 4; index++) { parent.change(file); mock.timers.tick(750); }
+			await settle();
+			assert.strictEqual(world.listings, 1);
+			parent.change(file);
+			registration.dispose();
+			mock.timers.tick(1000);
+			await settle();
+			assert.strictEqual(world.listings, 1);
+			assert.ok(watches.every((watch) => watch.disposed));
 		});
 	});
 

@@ -123,6 +123,9 @@ function editorFor(world: IndexWorld) {
 			joinPath: (base: FakeUri, ...parts: string[]) => new FakeUri(posix.join(base.path, ...parts)),
 		},
 		Disposable: FakeDisposable,
+		RelativePattern: class {
+			constructor(readonly baseUri: FakeUri, readonly pattern: string) {}
+		},
 		workspace: {
 			getConfiguration: () => world.settings,
 			workspaceFolders: [{ uri: new FakeUri("/ws") }],

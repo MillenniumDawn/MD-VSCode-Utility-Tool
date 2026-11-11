@@ -2,6 +2,8 @@ import type * as vscode from "vscode";
 import { ConfigurationKey } from "../constants";
 import { onDidSelectInstallPath } from "./installpath";
 import { host } from "./host";
+import { pathIdentity } from "./nodecommon";
+import { getConfiguration } from "./vsccommon";
 import * as path from "path";
 import { IndexProgress, withIndexProgress } from "./indexBuild";
 import { attachTaskWithErrorLogging, BuildGate } from "./promiseUtils";
@@ -32,7 +34,9 @@ export interface IndexWatcherSpec {
 	hasStarted: () => boolean;
 	gate: BuildGate;
 	reindexFile: (file: vscode.Uri) => void;
-	globalSourceChanged?: () => void;
+	globalSourceChanged?: (forceReparse?: boolean) => void;
+	externalRoots?: () => { uri: vscode.Uri; kind: "parent" | "global" }[];
+	rootPrefixes?: readonly string[];
 	/** Handles ambiguous file/folder operations without statting paths which may be gone. */
 	workspaceOperation?: (kind: "create" | "delete" | "rename", files: readonly vscode.Uri[]) => boolean;
 	removeFile: (file: vscode.Uri) => void;
@@ -44,7 +48,7 @@ export interface IndexWatcherSpec {
 	};
 	rebuildParent?: {
 		reset: () => void;
-		build: (progress: IndexProgress) => Promise<void>;
+		build: (progress: IndexProgress, forceReparse?: boolean) => Promise<void>;
 	};
 }
 
@@ -69,8 +73,8 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 
 	function rebuild(halves: readonly {
 		reset: () => void;
-		build: (progress: IndexProgress) => Promise<void>;
-	}[]): void {
+		build: (progress: IndexProgress, forceReparse?: boolean) => Promise<void>;
+	}[], forceReparse = false): void {
 		if (!hasStarted()) {
 			return;
 		}
@@ -79,7 +83,7 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 				half.reset();
 			}
 			return withIndexProgress(spec.rebuildWorkspace.message, (progress) =>
-				Promise.all(halves.map((half) => half.build(progress))).then(() => undefined));
+				Promise.all(halves.map((half) => forceReparse ? half.build(progress, true) : half.build(progress))).then(() => undefined));
 		});
 		attachTaskWithErrorLogging(task, spec.rebuildWorkspace.failureMessage, Logger.error);
 	}
@@ -207,23 +211,66 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 				return host().Disposable.from();
 			}
 			let active = true;
+			let externalVersion = 0;
+			let externalWatchers: vscode.Disposable[] = [];
+			const externalPending = new Map<string, { firstEvent: number; timer: ReturnType<typeof setTimeout> }>();
+			function disposeExternal(): void {
+				externalVersion++;
+				for (const watcher of externalWatchers) { watcher.dispose(); }
+				externalWatchers = [];
+				for (const entry of externalPending.values()) { clearTimeout(entry.timer); }
+				externalPending.clear();
+			}
+			function refreshExternal(): void {
+				disposeExternal();
+				const version = externalVersion;
+				for (const { uri, kind } of spec.externalRoots?.() ?? []) {
+					const glob = kind === "global" ? `**/*{${extensionGlob},.[zZ][iI][pP]}` : `**/*${extensionGlob}`;
+					const watcher = host().workspace.createFileSystemWatcher(new (host().RelativePattern)(uri, glob));
+					function changed(file: vscode.Uri): void {
+						if (!active || version !== externalVersion || !hasStarted()) { return; }
+						if (file.scheme !== uri.scheme || file.authority !== uri.authority) { return; }
+						const relative = path.posix.relative(pathIdentity(uri.path), pathIdentity(file.path));
+						if (relative === ".." || relative.startsWith("../") || path.posix.isAbsolute(relative)) { return; }
+						const dlc = kind === "global" && getConfiguration().loadDlcContents && /^(dlc|integrated_dlc)\//.test(relative);
+						const indexed = file.path.toLowerCase().endsWith(normalizedExtension);
+						if (!(dlc && (indexed || file.path.toLowerCase().endsWith(".zip"))) &&
+							!(indexed && spec.rootPrefixes?.some((prefix) => relative.startsWith(prefix)))) { return; }
+						const previous = externalPending.get(kind);
+						if (previous) { clearTimeout(previous.timer); }
+						const firstEvent = previous?.firstEvent ?? Date.now();
+						const timer = setTimeout(() => {
+							externalPending.delete(kind);
+							if (!active || version !== externalVersion) { return; }
+							if (kind === "global") { spec.globalSourceChanged?.(true); }
+							else if (spec.rebuildParent) { rebuild([spec.rebuildParent], true); }
+						}, Math.max(0, Math.min(1000, 3000 - (Date.now() - firstEvent))));
+						externalPending.set(kind, { firstEvent, timer });
+					}
+					externalWatchers.push(watcher, watcher.onDidChange(changed), watcher.onDidCreate(changed), watcher.onDidDelete(changed));
+				}
+			}
 			function whileRegistered<T>(handler: (event: T) => void): (event: T) => void {
 				return (event) => { if (active) { handler(event); } };
 			}
 			const extensionGlob = normalizedExtension.replace(/[a-z]/g, (letter) => `[${letter}${letter.toUpperCase()}]`);
 			const files = host().workspace.createFileSystemWatcher(`**/*${extensionGlob}`);
+			refreshExternal();
 			return host().Disposable.from(
 				files,
 				files.onDidChange(whileRegistered((file) => queueFile(file, false))),
 				files.onDidCreate(whileRegistered((file) => queueFile(file, false))),
 				files.onDidDelete(whileRegistered((file) => queueFile(file, true))),
-				{ dispose: () => { active = false; cancelPending(); } },
+				{ dispose: () => { active = false; cancelPending(); disposeExternal(); } },
 				...(spec.globalSourceChanged ? [
-					host().workspace.onDidChangeConfiguration(whileRegistered(onChangeConfiguration)),
-					onDidSelectInstallPath(() => { if (active) { spec.globalSourceChanged?.(); } }),
+					host().workspace.onDidChangeConfiguration(whileRegistered((event: vscode.ConfigurationChangeEvent) => {
+						onChangeConfiguration(event);
+						if (event.affectsConfiguration(`${ConfigurationKey}.installPath`) || event.affectsConfiguration(`${ConfigurationKey}.loadDlcContents`)) { refreshExternal(); }
+					})),
+					onDidSelectInstallPath(() => { if (active) { spec.globalSourceChanged?.(); refreshExternal(); } }),
 				] : []),
-				host().workspace.onDidChangeWorkspaceFolders(whileRegistered(onChangeWorkspaceFolders)),
-				onDidChangeParentMods(whileRegistered(onChangeParentMods)),
+				host().workspace.onDidChangeWorkspaceFolders(whileRegistered((event: vscode.WorkspaceFoldersChangeEvent) => { onChangeWorkspaceFolders(event); refreshExternal(); })),
+				onDidChangeParentMods(whileRegistered((event: ParentModsChangeEvent) => { onChangeParentMods(event); if (event.folders) { refreshExternal(); } })),
 				host().workspace.onDidChangeTextDocument(whileRegistered(onChangeTextDocument)),
 				host().workspace.onDidCloseTextDocument(whileRegistered(onCloseTextDocument)),
 				host().workspace.onDidCreateFiles(whileRegistered(onCreateFiles)),

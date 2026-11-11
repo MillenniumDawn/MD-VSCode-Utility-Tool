@@ -74,6 +74,75 @@ suite("Integration smoke", () => {
 		}
 	});
 
+	test("observes closed workspace, parent, game and DLC files through real filesystem watchers", async () => {
+		(globalThis as any).IS_WEB_EXT = false;
+		const { handOverHost } = require("../../../util/host") as typeof import("../../../util/host");
+		handOverHost(vscode);
+		const { createIndexWatchers } = require("../../../util/indexWatchers") as typeof import("../../../util/indexWatchers");
+		const { createBuildGate } = require("../../../util/promiseUtils") as typeof import("../../../util/promiseUtils");
+		const workspace = vscode.workspace.workspaceFolders![0]!.uri.fsPath;
+		const parents = path.join(scratch, "parent");
+		const game = path.join(scratch, "game");
+		const workspaceRoot = path.join(workspace, "interface");
+		const parentRoot = path.join(parents, "interface");
+		const gameRoot = path.join(game, "interface");
+		const dlcRoot = path.join(game, "dlc", "dlc001");
+		for (const root of [workspaceRoot, parentRoot, gameRoot, dlcRoot]) { fs.mkdirSync(root, { recursive: true }); }
+		const workspaceFile = path.join(workspaceRoot, "closed.gfx");
+		const parentFile = path.join(parentRoot, "closed.gfx");
+		const gameFile = path.join(gameRoot, "closed.gfx");
+		const zipFile = path.join(dlcRoot, "content.zip");
+		for (const file of [parentFile, gameFile, zipFile]) { fs.writeFileSync(file, "OLD"); }
+		const settings = vscode.workspace.getConfiguration("mdHoi4Utilities");
+		const previousDlc = settings.inspect<boolean>("loadDlcContents")?.globalValue;
+		await settings.update("loadDlcContents", true, vscode.ConfigurationTarget.Global);
+		let pending: { kind: string; resolve: () => void; reject: (error: Error) => void } | undefined;
+		const contents = new Map<string, string>();
+		const notify = (kind: string) => { if (pending?.kind === kind) { pending.resolve(); } };
+		const gate = createBuildGate();
+		gate.start(Promise.resolve());
+		const watchers = createIndexWatchers({
+			enabled: () => true, extension: ".gfx", hasStarted: () => true, gate,
+			rootPrefixes: ["interface/"],
+			externalRoots: () => [{ uri: vscode.Uri.file(parents), kind: "parent" }, { uri: vscode.Uri.file(game), kind: "global" }],
+			reindexFile: (file) => {
+				try { contents.set(file.fsPath, fs.readFileSync(file.fsPath, "utf8")); notify("workspace"); }
+				catch (cause) { pending?.reject(cause as Error); }
+			},
+			removeFile: (file) => { contents.delete(file.fsPath); notify("removed"); },
+			globalSourceChanged: (force) => { if (force) { notify("global"); } },
+			rebuildWorkspace: { reset() {}, build: async () => undefined, message: "Watching test files", failureMessage: "Watcher test failed" },
+			rebuildParent: { reset() {}, build: async () => { contents.set(parentFile, fs.readFileSync(parentFile, "utf8")); notify("parent"); } },
+		});
+		const registration = watchers.register();
+		async function observed(kind: string, action: () => void): Promise<void> {
+			await new Promise<void>((resolve, reject) => {
+				const timer = setTimeout(() => { pending = undefined; reject(new Error(`No real filesystem notification for ${kind}; contents=${JSON.stringify([...contents])}`)); }, 8000);
+				pending = { kind, resolve: () => { clearTimeout(timer); pending = undefined; resolve(); }, reject: (error) => { clearTimeout(timer); pending = undefined; reject(error); } };
+				action();
+			});
+		}
+		try {
+			await observed("workspace", () => fs.writeFileSync(workspaceFile, "CREATED"));
+			assert.strictEqual(contents.get(workspaceFile), "CREATED");
+			await observed("workspace", () => fs.writeFileSync(workspaceFile, "CHANGED"));
+			assert.strictEqual(contents.get(workspaceFile), "CHANGED");
+			await observed("removed", () => fs.unlinkSync(workspaceFile));
+			assert.ok(!contents.has(workspaceFile));
+			await observed("parent", () => fs.writeFileSync(parentFile, "PARENT_CHANGED"));
+			assert.strictEqual(contents.get(parentFile), "PARENT_CHANGED");
+			await observed("global", () => fs.writeFileSync(gameFile, "GAME_CHANGED"));
+			await observed("global", () => fs.writeFileSync(zipFile, "ARCHIVE_REPLACED"));
+			assert.ok(!vscode.workspace.textDocuments.some((document) => [workspaceFile, parentFile, gameFile, zipFile].includes(document.uri.fsPath)));
+		} finally {
+			registration.dispose();
+			handOverHost(undefined);
+			await settings.update("loadDlcContents", previousDlc, vscode.ConfigurationTarget.Global);
+			for (const file of [workspaceFile, parentFile, gameFile, zipFile]) { if (fs.existsSync(file)) { fs.unlinkSync(file); } }
+			for (const directory of [workspaceRoot, parentRoot, gameRoot, dlcRoot, path.dirname(dlcRoot), parents, game]) { fs.rmdirSync(directory); }
+		}
+	});
+
 	// The manifest saying a custom editor exists is not the same as one being registered: a
 	// provider that was never registered leaves `openWith` rejecting. Opening a file with each view
 	// type and finding it in a custom-editor tab is the check that means something.

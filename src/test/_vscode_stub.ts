@@ -237,6 +237,9 @@ function buildStub() {
 
     return {
         Uri,
+        RelativePattern: class {
+            constructor(readonly baseUri: any, readonly pattern: string) {}
+        },
         FileSystemError: FileSystemErrorStub,
         workspace,
         window,

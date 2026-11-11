@@ -1,7 +1,7 @@
 Unreleased
 
   Bugfixes:
-- [ Indexes ] External changes to workspace sprite, localisation, shared-focus and idea-swap files now update their indexes automatically. Issue #705.
+- [ Indexes ] External edits, additions and deletions now refresh sprite, localisation, shared-focus and idea-swap indexes, including parent mods, game files and DLC archives. Issue #705.
 - [ Indexing ] Changing the game installation or DLC loading setting now refreshes vanilla definitions without reloading the editor. Issue #709.
 - [ Indexing ] Creating, renaming or deleting folders now refreshes their indexed files, removing old paths and finding files in new locations. Issue #706.
 - [ Previews ] Documentation and backup files in script folders no longer cause parsing errors in decision and world map previews.
