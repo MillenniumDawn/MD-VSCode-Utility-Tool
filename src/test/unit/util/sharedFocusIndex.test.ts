@@ -237,7 +237,8 @@ describe("util/sharedFocusIndex", () => {
 		const REMOVED = Array.from({ length: 8 }, (_, i) => `common/national_focus/gone${i}.txt`);
 
 		const MANIFEST = JSON.stringify({
-			version: 2,
+			version: 3,
+			successfulReadsOnly: true,
 			entries: [FRESH, STALE, ...REMOVED].map((filePath) => ({ filePath, mtime: 1 })),
 		});
 

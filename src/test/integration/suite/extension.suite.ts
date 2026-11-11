@@ -123,6 +123,27 @@ suite("Integration smoke", () => {
 			});
 		}
 		try {
+			// VS Code starts watching asynchronously and has no watcher-ready event.
+			const probeFile = path.join(workspaceRoot, ".watcher-ready");
+			const probe = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(workspaceRoot, ".watcher-ready"));
+			const ready = vscode.Disposable.from(probe,
+				probe.onDidCreate(() => notify("watcher transport")),
+				probe.onDidChange(() => notify("watcher transport")));
+			let probeWrites = 0;
+			function writeProbe(): void {
+				probeWrites++;
+				try { fs.writeFileSync(probeFile, "READY"); }
+				catch (cause) { pending?.reject(cause as Error); }
+			}
+			const pulse = setInterval(writeProbe, 100);
+			try {
+				await observed("watcher transport", writeProbe);
+				console.log(`Filesystem watcher transport ready after ${probeWrites} probe write(s)`);
+			} finally {
+				clearInterval(pulse);
+				ready.dispose();
+				if (fs.existsSync(probeFile)) { fs.unlinkSync(probeFile); }
+			}
 			await observed("workspace", () => fs.writeFileSync(workspaceFile, "CREATED"));
 			assert.strictEqual(contents.get(workspaceFile), "CREATED");
 			await observed("workspace", () => fs.writeFileSync(workspaceFile, "CHANGED"));

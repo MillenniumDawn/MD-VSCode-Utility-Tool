@@ -49,6 +49,8 @@ export interface ThreeHalfIndexSpec<H, R> {
 	fullRebuildOnAnyChange?: boolean;
 	newHalf: (source: IndexSource) => H;
 	hydrate: (half: H, record: R, skipFiles: Set<string>) => void;
+	/** Identifies the file whose entries a cached record restores. */
+	recordFilePath: (record: R) => string;
 	/** Parses one file into `half`. Returns whether it was read and parsed. */
 	parseFile: (half: H, file: IndexFile, options: FileSourceOptions) => Promise<boolean>;
 	serialize: (half: H) => R[];
@@ -74,6 +76,16 @@ export interface ThreeHalfIndex<H> {
 	resetForTests(): void;
 }
 
+/** Keep the build gate closed until every sibling has stopped mutating its half. */
+async function finishHalves(tasks: Promise<void>[]): Promise<void> {
+	const results = await Promise.allSettled(tasks);
+	for (const result of results) {
+		if (result.status === "rejected") {
+			throw result.reason;
+		}
+	}
+}
+
 export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): ThreeHalfIndex<H> {
 	let global = spec.newHalf("global");
 	let parents: H[] = [];
@@ -92,6 +104,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 	const createdFiles = new Map<string, vscode.Uri>();
 	let forceWorkspaceRebuild = false;
 	let workspaceTask: Promise<unknown> | undefined;
+	let lookupTask: Promise<void> | undefined;
 	const rootPrefixes = spec.roots.map((root) => `${root}/`);
 
 	function buildHalf(
@@ -124,10 +137,9 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 					}
 					return listing;
 				},
+				recordFilePath: spec.recordFilePath,
 				hydrate: (record, skipFiles) => spec.hydrate(half, record, skipFiles),
-				parseFile: async (file) => {
-					await spec.parseFile(half, file, options);
-				},
+				parseFile: (file) => spec.parseFile(half, file, options),
 				serialize: () => spec.serialize(half),
 			},
 			progress,
@@ -172,7 +184,7 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		if (parentUris.length === 0) {
 			return;
 		}
-		await Promise.all(
+		await finishHalves(
 			parentUris.map((parent, index) =>
 				buildHalf(
 					`parent.${index}`,
@@ -200,14 +212,24 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		);
 	}
 
+	let attempted = false;
 	const builder = createIndexBuilder({
 		name: spec.name,
 		message: spec.message,
 		build: async (progress) => {
 			pendingParses.clear();
 			buildAttempt++;
+			// A rejected or cancelled attempt can have populated any subset of the files.
+			// Reusing those halves would retain entries absent from the retry's listing.
+			global = spec.newHalf("global");
+			parents = [];
+			workspace = spec.newHalf("workspace");
+			if (attempted) {
+				spec.changed?.();
+			}
+			attempted = true;
 			const context = await captureIndexBuildContext();
-			return Promise.all([
+			return finishHalves([
 				buildGlobal(progress, context),
 				buildParents(progress, context),
 				buildWorkspace(progress, context),
@@ -323,15 +345,23 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 		return true;
 	}
 
-	async function ensureBuilt(): Promise<void> {
-		await builder.ensureBuilt();
-		if (!globalTask && builtSource !== indexSourceIdentity()) { globalSourceChanged(); }
-		for (;;) {
-			if (workspaceDirty && !workspaceTask) { rebuildWorkspaceAfterOperation(); }
-			const pending = [globalTask, workspaceTask].filter((task) => task !== undefined);
-			if (pending.length === 0) { return; }
-			await Promise.all(pending);
-		}
+	function ensureBuilt(): Promise<void> {
+		if (lookupTask) { return lookupTask; }
+		const task = (async () => {
+			await builder.ensureBuilt();
+			for (;;) {
+				// Configuration events rebuild eagerly; this also covers a lookup before registration.
+				if (!globalTask && builtSource !== indexSourceIdentity()) { globalSourceChanged(); }
+				if (workspaceDirty && !workspaceTask) { rebuildWorkspaceAfterOperation(); }
+				const pending = globalTask ?? workspaceTask;
+				if (!pending) { return; }
+				await pending;
+			}
+		})();
+		lookupTask = task;
+		const clearTask = () => { if (lookupTask === task) { lookupTask = undefined; } };
+		void task.then(clearTask, clearTask);
+		return task;
 	}
 
 	/**
@@ -445,10 +475,6 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 			watchers.cancelPending();
 			pendingParses.clear();
 			builder.reset();
-			buildAttempt++;
-			sourceGeneration++;
-			builtSource = undefined;
-			globalTask = undefined;
 			forceGlobalReparse = false;
 			workspaceGeneration++;
 			operationGeneration++;
@@ -458,6 +484,11 @@ export function createThreeHalfIndex<H, R>(spec: ThreeHalfIndexSpec<H, R>): Thre
 			createdFiles.clear();
 			forceWorkspaceRebuild = false;
 			workspaceTask = undefined;
+			buildAttempt++;
+			sourceGeneration++;
+			builtSource = undefined;
+			globalTask = undefined;
+			lookupTask = undefined;
 			global = spec.newHalf("global");
 			parents = [];
 			workspace = spec.newHalf("workspace");

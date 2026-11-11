@@ -11,7 +11,7 @@ function trait(id: string, x: number, y: number, allParents: string[] = []): Mio
         id, name: id + '_name', icon: undefined,
         anyParent: [], allParents, exclusive: [], parent: undefined,
         x, y, relativePositionId: undefined,
-        visible: true, hasVisible: false, specialTraitBackground: false,
+        visible: true, hasVisible: false, available: true, hasAvailable: false, specialTraitBackground: false,
         effects: [], token: undefined,
         file: 'common/military_industrial_organization/organizations/test.txt',
         sourceMioId: 'mio_test',
@@ -174,6 +174,37 @@ describe('webview/miopreview rendering', () => {
 
     after(() => {
         document.body.innerHTML = previousBody;
+    });
+
+    it('keeps locked traits visible and updates availability through the wired condition control', async () => {
+        const alpha = pageMios[0].traits.alpha;
+        const original = { ...alpha };
+        alpha.hasAvailable = true;
+        alpha.available = pageMios[0].conditionExprs[0];
+        const conditions = document.getElementById('conditions')!;
+        try {
+            document.getElementById('show-grid')!.dispatchEvent(new (window as any).Event('change'));
+            await settled();
+            let card = document.getElementById('trait_alpha')!;
+            assert.strictEqual(card.dataset.available, 'false');
+            assert.strictEqual(card.querySelector('.mio-availability')!.textContent, 'Unavailable');
+            assert.strictEqual(placeholder().querySelectorAll('.trait').length, 3);
+            conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+            (document.querySelector('ul.select-dropdown li') as HTMLElement).click();
+            await settled();
+            card = document.getElementById('trait_alpha')!;
+            assert.strictEqual(card.dataset.available, 'true');
+            assert.strictEqual(card.querySelector('.mio-availability')!.textContent, 'Available');
+            assert.strictEqual(placeholder().querySelectorAll('.trait').length, 3);
+            (document.querySelector('ul.select-dropdown li') as HTMLElement).click();
+            await settled();
+            conditions.dispatchEvent(new (window as any).Event('mousedown', { cancelable: true }));
+        } finally {
+            Object.assign(alpha, original);
+            document.getElementById('show-grid')!.dispatchEvent(new (window as any).Event('change'));
+            await settled();
+            takePostedMessages();
+        }
     });
 
     it('draws the tree the payload describes', () => {

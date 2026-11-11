@@ -11,6 +11,8 @@ import { getEffectiveInstallPathUri } from './installpath';
 
 interface CacheManifest {
     version: number;
+    /** Independent of the index's record format: only successful reads may be marked fresh. */
+    successfulReadsOnly?: true;
     entries: CacheFileEntry[];
 }
 
@@ -41,9 +43,8 @@ export function indexSourceIdentity(): string {
  * profile get two caches instead of overwriting each other's.
  *
  * The identity includes the installation and DLC setting, the selected `modFile`, and the
- * workspace folders, sorted, so reordering the
- * folders does not invalidate anything, plus the parent mod paths in setting order, because there
- * the order is the precedence. A plain FNV-1a hash rather than `node:crypto`, because this module
+ * workspace folders and parent mod paths in precedence order. A plain FNV-1a hash rather than
+ * `node:crypto`, because this module
  * is loaded in the web build too (where it never reaches disk at all) and because a collision
  * costs no more than two mods sharing one cache -- which is exactly today's behaviour.
  *
@@ -57,7 +58,8 @@ export function cacheNamespaceFor(
     parentModPaths: readonly string[] = [],
     sourceIdentity?: string,
 ): string {
-    const parts: string[] = [];
+    // Invalidate caches written when workspace-only index listings selected the last duplicate.
+    const parts: string[] = ['workspace-order:v2'];
     if (sourceIdentity !== undefined) { parts.push('source:' + sourceIdentity); }
 
     const mod = modFile?.trim();
@@ -65,8 +67,7 @@ export function cacheNamespaceFor(
         parts.push('mod:' + pathIdentity(mod));
     }
 
-    // Sorted, so that dragging a folder up the explorer does not throw the cache away.
-    for (const uri of [...workspaceFolderUris].sort()) {
+    for (const uri of workspaceFolderUris) {
         parts.push('ws:' + uri);
     }
 
@@ -135,7 +136,9 @@ export function ensureCacheDir(scope: CacheScope = captureCacheScope()): Promise
     let pending = cacheDirPromises.get(key);
     if (!pending) {
         pending = (async () => {
-            try { await mkdirs(dir); } catch {}
+            try { await mkdirs(dir); } catch (cause) {
+                Logger.debug(`[Index] could not create cache directory ${dir.fsPath}: ${cause}`);
+            }
             // One line per namespace, so a bug report about the wrong cache says which one it used.
             Logger.info(`[Index] cache directory: ${dir.fsPath}`);
             void removeUnnamespacedCaches();
@@ -177,7 +180,9 @@ async function removeUnnamespacedCaches(): Promise<void> {
             try {
                 await host().workspace.fs.delete(host().Uri.joinPath(root, name));
                 removed++;
-            } catch {}
+            } catch (cause) {
+                Logger.debug(`[Index] could not remove legacy cache ${name}: ${cause}`);
+            }
         }
         if (removed > 0) {
             Logger.info(`[Index] removed ${removed} cache file(s) written before caches were per-mod.`);
@@ -201,7 +206,9 @@ async function removeSingleDocumentCaches(dir: vscode.Uri): Promise<void> {
             }
             try {
                 await host().workspace.fs.delete(host().Uri.joinPath(dir, name));
-            } catch {}
+            } catch (cause) {
+                Logger.debug(`[Index] could not remove legacy cache ${name}: ${cause}`);
+            }
         }
     } catch {
         // Nothing listed, nothing to remove.
@@ -214,6 +221,7 @@ export async function saveCacheManifest(indexName: string, filePaths: string[], 
     try {
         const manifest: CacheManifest = {
             version,
+            successfulReadsOnly: true,
             entries: filePaths.map(fp => ({ filePath: fp, mtime: mtimes.get(fp) ?? 0 })),
         };
         const uri = host().Uri.joinPath(dir, `${indexName}.manifest.json`);
@@ -231,7 +239,9 @@ export async function loadCacheManifest(indexName: string, expectedVersion: numb
         const uri = host().Uri.joinPath(dir, `${indexName}.manifest.json`);
         const data = (await readFile(uri)).toString();
         const manifest: CacheManifest = JSON.parse(data);
-        if (manifest.version !== expectedVersion) { return null; }
+        // A newer record format can still have been written before failed reads were excluded.
+        // Keep this migration independent of each index's record-format version.
+        if (manifest.version !== expectedVersion || manifest.successfulReadsOnly !== true) { return null; }
         return manifest;
     } catch {
         return null;

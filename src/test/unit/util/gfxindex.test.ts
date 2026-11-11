@@ -114,10 +114,7 @@ describe("util/gfxindex", () => {
 		});
 	});
 
-	// The parent mods are a half of their own. Inside one half the last file parsed wins, so a
-	// sprite the workspace redefines in a differently named .gfx than the parent's would resolve to
-	// whichever of the two the four-wide parse queue finished last. Across halves the order is
-	// fixed: workspace, parent, vanilla.
+	// Source halves remain independent of their read completion order.
 	describe("parent mods", () => {
 		const files: Record<Half, Record<string, Buffer>> = {
 			global: {},

@@ -8,22 +8,13 @@ import uniq from "lodash/uniq";
 import { FileSourceOptions } from "./fileloader";
 import { readIndexFileContent, reportIndexParseFailure } from "./indexHalf";
 import { createThreeHalfIndex } from "./indexFactory";
+import { FilePrecedenceIndex } from "./filePrecedenceIndex";
 
 interface GfxIndexItem {
 	file: string;
 }
 
-// The parent mods get a half of their own rather than a share of the workspace's. Precedence
-// between sources is what the halves are for: inside one half the last file to parse wins, and
-// the parse queue is four wide, so a sprite the workspace redefines in a differently named .gfx
-// would resolve to the parent's file on some builds and the workspace's on others.
-interface GfxHalf {
-	index: Record<string, GfxIndexItem | undefined>;
-	// Reverse map for O(1) removal: file path -> sprite names from that file. The workspace half
-	// alone keeps one: nothing invalidates a vanilla or parent file per-file, so building one there
-	// only ever wrote an empty object into the cache.
-	fileToKeys: Map<string, string[]> | null;
-}
+type GfxHalf = FilePrecedenceIndex<GfxIndexItem>;
 
 // The sprite namespace has no file of its own for a cache built from it to stat, so every mutation
 // of either half moves this instead. Bumped *after* the write everywhere: a bump before it would let
@@ -41,40 +32,18 @@ export function getGfxIndexVersion(): number {
 
 // 4: progressBarType sprites are indexed, and a .gfx left open at its end is read as the game reads
 // it (vanilla powerbalanceview.gfx), so a cache written before either is missing sprites.
-const GFX_CACHE_VERSION = 4;
+// 6: every file retains its own sprites, including definitions shadowed by a later file.
+// Version 5 also contains winner-only records (the failed-read retry migration).
+const GFX_CACHE_VERSION = 6;
 
-/**
- * One .gfx file, as one line of the cache: the sprites the index resolves to it, and -- in the
- * workspace half, the only one that keeps them -- every sprite name the file defines, including
- * ones another file has since taken over.
- */
+/** One file's actual sprite names, including shadowed definitions. */
 interface GfxCacheRecord {
 	file: string;
 	sprites: string[];
-	keys?: string[];
 }
 
-function toGfxCacheRecords({ index, fileToKeys }: GfxHalf): GfxCacheRecord[] {
-	const records = new Map<string, GfxCacheRecord>();
-	const recordFor = (file: string): GfxCacheRecord => {
-		let record = records.get(file);
-		if (!record) {
-			record = { file, sprites: [] };
-			records.set(file, record);
-		}
-		return record;
-	};
-
-	for (const spriteName in index) {
-		const item = index[spriteName];
-		if (item) {
-			recordFor(item.file).sprites.push(spriteName);
-		}
-	}
-	for (const [file, keys] of fileToKeys ?? []) {
-		recordFor(file).keys = [...keys];
-	}
-	return [...records.values()];
+function toGfxCacheRecords(half: GfxHalf): GfxCacheRecord[] {
+	return half.records().map(({ file, entries }) => ({ file, sprites: Object.keys(entries) }));
 }
 
 const gfxIndex = createThreeHalfIndex<GfxHalf, GfxCacheRecord>({
@@ -87,17 +56,13 @@ const gfxIndex = createThreeHalfIndex<GfxHalf, GfxCacheRecord>({
 	filter: (relativePath) => relativePath.toLocaleLowerCase().endsWith(".gfx"),
 	extension: ".gfx",
 	cacheVersion: GFX_CACHE_VERSION,
-	newHalf: (source) => ({ index: {}, fileToKeys: source === "workspace" ? new Map() : null }),
-	hydrate: ({ index, fileToKeys }, record, skipFiles) => {
+	newHalf: () => new FilePrecedenceIndex(),
+	recordFilePath: (record) => record.file,
+	hydrate: (half, record, skipFiles) => {
 		if (skipFiles.has(record.file)) {
 			return;
 		}
-		for (const spriteName of record.sprites) {
-			index[spriteName] = { file: record.file };
-		}
-		if (fileToKeys && record.keys) {
-			fileToKeys.set(record.file, record.keys);
-		}
+		half.setFile(record.file, Object.fromEntries(record.sprites.map(name => [name, { file: record.file }])));
 		bumpGfxIndexVersion();
 	},
 	parseFile: async (half, file, options) => {
@@ -106,19 +71,11 @@ const gfxIndex = createThreeHalfIndex<GfxHalf, GfxCacheRecord>({
 		return parsed;
 	},
 	serialize: toGfxCacheRecords,
-	removeFile: ({ index, fileToKeys }, relative) => {
-		for (const key of fileToKeys?.get(relative) ?? []) {
-			if (index[key]?.file === relative) {
-				delete index[key];
-			}
-		}
-		fileToKeys?.delete(relative);
-	},
+	removeFile: (half, relative) => half.removeFile(relative),
 	mergeFile: (workspace, parsed, relative) => {
-		Object.assign(workspace.index, parsed.index);
-		const keys = parsed.fileToKeys?.get(relative);
-		if (keys) {
-			workspace.fileToKeys?.set(relative, keys);
+		const record = parsed.records().find(record => record.file === relative);
+		if (record) {
+			workspace.setFile(relative, record.entries);
 		}
 	},
 	changed: bumpGfxIndexVersion,
@@ -167,7 +124,7 @@ export async function getGfxContainerFiles(
 /** Returns whether the file was read and parsed, so a re-index knows not to discard what it has. */
 async function fillGfxItems(
 	gfxFile: IndexFile,
-	{ index, fileToKeys }: GfxHalf,
+	half: GfxHalf,
 	options: FileSourceOptions,
 ): Promise<boolean> {
 	const filePath = gfxFile.path;
@@ -185,16 +142,7 @@ async function fillGfxItems(
 				{ keepTokens: false, closeBlocksAtEof: true },
 			),
 		);
-		const spriteNames: string[] = [];
-		for (const spriteType of spriteTypes) {
-			index[spriteType.name] = { file: filePath };
-			if (fileToKeys) {
-				spriteNames.push(spriteType.name);
-			}
-		}
-		if (fileToKeys && spriteNames.length > 0) {
-			fileToKeys.set(filePath, spriteNames);
-		}
+		half.setFile(filePath, Object.fromEntries(spriteTypes.map(sprite => [sprite.name, { file: filePath }])));
 		return true;
 	} catch (e) {
 		// This used to go to the debug console wrapped in a UserError, so a malformed .gfx file
