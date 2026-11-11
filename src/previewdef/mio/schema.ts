@@ -148,14 +148,37 @@ const mioFileSchema: SchemaDef<MioFile> = {
     _type: "map",
 };
 
-export function getMiosFromFile(node: Node, dependentMios: Mio[], filePath: string): Mio[] {
-    const file = convertNodeToJson<MioFile>(node, mioFileSchema);
-    const resolved = new Map<string, Mio>();
-    const resolving: string[] = [];
+export interface MioFileSource {
+    node: Node;
+    filePath: string;
+    // Ordered for this file alone: explicit #!mio files, then automatic discovery candidates.
+    dependencies?: string[];
+}
+
+interface MioIncludeSources {
+    files: MioFileSource[];
+    dependencies: string[];
+}
+
+export function getMiosFromFile(node: Node, dependentMios: Mio[], filePath: string, includes?: MioIncludeSources): Mio[] {
+    const sources = [{ node, filePath, dependencies: includes?.dependencies }, ...(includes?.files ?? [])].map(source => ({
+        filePath: source.filePath,
+        dependencies: source.dependencies,
+        file: convertNodeToJson<MioFile>(source.node, mioFileSchema),
+    }));
+    type Source = typeof sources[number];
+    const sourcesByPath = new Map(sources.map(source => [source.filePath, source]));
+    type Definition = { _key: string, _value: HOIPartial<MioDef> };
+    const file = sources[0]!.file;
+    // Resolve organizations, not files: two files can include unrelated organizations from each
+    // other without an include cycle. Definition identity also keeps duplicate IDs in distinct
+    // files from being mistaken for the same organization on the active chain.
+    const resolved = new Map<Definition, Mio>();
+    const resolving: Definition[] = [];
     const circularIncludes = new Map<Mio, string>();
 
-    function resolveMio(mioDefItem: { _key: string, _value: HOIPartial<MioDef> }): Mio {
-        const already = resolved.get(mioDefItem._key);
+    function resolveMio(mioDefItem: Definition, source: Source): Mio {
+        const already = resolved.get(mioDefItem);
         if (already) {
             return already;
         }
@@ -163,22 +186,31 @@ export function getMiosFromFile(node: Node, dependentMios: Mio[], filePath: stri
         const mioDef = mioDefItem._value;
         let baseMio: Mio | undefined;
         let cutChain: string | undefined;
-        resolving.push(mioDefItem._key);
+        resolving.push(mioDefItem);
         if (mioDef.include) {
             baseMio = dependentMios.find(m => m.id === mioDef.include);
             if (baseMio === undefined) {
-                if (resolving.includes(mioDef.include)) {
-                    cutChain = [...resolving.slice(resolving.indexOf(mioDef.include)), mioDef.include].join(' -> ');
-                } else {
-                    const includeItem = file._map[mioDef.include];
-                    if (includeItem) {
-                        baseMio = resolveMio(includeItem);
+                // Each file has its own explicit dependencies ahead of automatic discovery.
+                // A nested dependency must not inherit the preview root's lookup order: its
+                // explicitly named base can compete with an ID in the generic organization file.
+                const externalSources = source.dependencies === undefined ? sources : source.dependencies
+                    .map(path => sourcesByPath.get(path))
+                    .filter((candidate): candidate is Source => candidate !== undefined);
+                const includeSource = externalSources.find(candidate => candidate !== source && candidate.file._map[mioDef.include!])
+                    ?? source;
+                const includeItem = includeSource.file._map[mioDef.include];
+                if (includeItem) {
+                    const cycleStart = resolving.indexOf(includeItem);
+                    if (cycleStart >= 0) {
+                        cutChain = [...resolving.slice(cycleStart), includeItem].map(item => item._key).join(' -> ');
+                    } else {
+                        baseMio = resolveMio(includeItem, includeSource);
                     }
                 }
             }
         }
 
-        const mio = getMio(mioDefItem, baseMio, filePath);
+        const mio = getMio(mioDefItem, baseMio, source.filePath);
         resolving.pop();
 
         const chain = cutChain ?? (baseMio === undefined ? undefined : circularIncludes.get(baseMio));
@@ -190,7 +222,7 @@ export function getMiosFromFile(node: Node, dependentMios: Mio[], filePath: stri
             });
         }
 
-        resolved.set(mioDefItem._key, mio);
+        resolved.set(mioDefItem, mio);
         return mio;
     }
 
@@ -198,7 +230,7 @@ export function getMiosFromFile(node: Node, dependentMios: Mio[], filePath: stri
     for (const key in file._map) {
         const mioDefItem = file._map[key];
         if (mioDefItem && !mioDefItem._value.include) {
-            result.push(resolveMio(mioDefItem));
+            result.push(resolveMio(mioDefItem, sources[0]!));
         }
     }
 
@@ -206,7 +238,7 @@ export function getMiosFromFile(node: Node, dependentMios: Mio[], filePath: stri
     for (const key in file._map) {
         const mioDefItem = file._map[key];
         if (mioDefItem?._value.include) {
-            result.push(resolveMio(mioDefItem));
+            result.push(resolveMio(mioDefItem, sources[0]!));
         }
     }
 
