@@ -3,6 +3,8 @@ Unreleased
 v1.1.46
 
   Bugfixes:
+- [ Indexes ] Duplicate sprite names and localisation keys now use a consistent file order, including after reloading or editing files. Issue #708.
+- [ Indexes ] Removing a duplicate definition restores the remaining sprite or localisation entry. Issue #707.
 - [ Indexing ] Retrying failed or cancelled indexing no longer keeps entries for files deleted between attempts. Issue #711.
 - [ Indexing ] Files that temporarily cannot be read are retried on the next index build, while successfully cached files remain available. Issue #710.
 - [ MIO Previewer ] Organization files now load without false circular dependency errors. Includes across files retain inherited traits and warn about real circular includes. Issue #780.
