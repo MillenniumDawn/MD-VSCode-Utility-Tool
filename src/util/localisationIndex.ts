@@ -54,6 +54,7 @@ const localisationIndex = createThreeHalfIndex<LocalisationHalf, LocCacheRecord>
 	cacheVersion: LOC_CACHE_VERSION,
 	fullRebuildOnAnyChange: true,
 	newHalf: () => ({ languages: {} }),
+	recordFilePath: ([, file]) => file,
 	hydrate: ({ languages }, [langKey, filePath, entries], skipFiles) => {
 		if (!skipFiles.has(filePath)) {
 			(languages[langKey] ?? (languages[langKey] = new FilePrecedenceIndex())).setFile(filePath, entries);

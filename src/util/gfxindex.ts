@@ -57,6 +57,7 @@ const gfxIndex = createThreeHalfIndex<GfxHalf, GfxCacheRecord>({
 	extension: ".gfx",
 	cacheVersion: GFX_CACHE_VERSION,
 	newHalf: () => new FilePrecedenceIndex(),
+	recordFilePath: (record) => record.file,
 	hydrate: (half, record, skipFiles) => {
 		if (skipFiles.has(record.file)) {
 			return;
