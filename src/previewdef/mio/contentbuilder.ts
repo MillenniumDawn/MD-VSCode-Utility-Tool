@@ -17,6 +17,7 @@ import { registerExclusiveLinkStyles } from '../../util/hoi4gui/exclusivelink';
 import { loadExclusiveLinkImages } from '../../util/hoi4gui/exclusivelinkimages';
 import { getPreviewOptions } from '../../util/previewoptions';
 import { registerTraceStyles } from '../../util/hoi4gui/tracestyles';
+import { conditionToString } from '../../hoiformat/condition';
 import { actionGroupHtml, iconButtonHtml } from '../toolbaricons';
 
 const defaultTraitIcon = 'gfx/interface/goals/goal_unknown.dds';
@@ -258,7 +259,7 @@ async function renderTrait(trait: MioTrait, styleTable: StyleTable, gfxFiles: st
         start="${trait.token?.start}"
         end="${trait.token?.end}"
         ${file === trait.file ? '' : `file="${escapeAttr(trait.file)}"`}
-        title="${escapeAttr(trait.id)}${escapeAttr(await localiseOptionalText(trait.name, '\n'))}\n({{position}})">
+        title="${escapeAttr(trait.id)}${escapeAttr(await localiseOptionalText(trait.name, '\n'))}\n({{position}})${trait.hasVisible ? escapeAttr('\n' + localize('miopreview.visibility', 'Visibility: {0}', conditionToString(trait.visible))) : ''}${trait.hasAvailable ? escapeAttr('\n' + localize('miopreview.availability', 'Availability: {0}', conditionToString(trait.available))) : ''}">
             <div class="
                 ${styleTable.style('effect-host', () => `
                     text-align: center;

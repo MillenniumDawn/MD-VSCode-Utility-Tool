@@ -61,10 +61,10 @@ function handOverDefaultMapHost(): void {
 	});
 }
 
-function fakeFileLoader(file: string, result: unknown) {
+function fakeFileLoader(file: string, result: unknown, warnings: WorldMapWarning[] = []) {
 	return {
 		file,
-		load: async () => ({ result, warnings: [], dependencies: [file] }),
+		load: async () => ({ result, warnings, dependencies: [file] }),
 	};
 }
 
@@ -114,21 +114,22 @@ async function loadMap(
 // bmpColors lists every color in the provinces bitmap so a color without a definition row stays
 // reachable, and boundaries are [fromColor, toColor] pairs of bitmap neighbours.
 async function loadMapWith(
-	definitions: { id: number; color: number }[],
+	definitions: (Pick<ProvinceDefinition, "id" | "color"> & Partial<ProvinceDefinition>)[],
 	bmpColors: number[],
 	boundaries: [number, number][],
 	adjacencyRows: ProvinceEdgeAdjacency[],
+	bitmapWarnings: WorldMapWarning[] = [],
 ): Promise<{ result: ProvinceMap; warnings: WorldMapWarning[] }> {
 	handOverDefaultMapHost();
 
 	const provinceDefinitions: ProvinceDefinition[] = definitions.map(
-		({ id, color }) => ({
+		({ id, color, type = "sea", terrain = "", continent = 0 }) => ({
 			id,
 			color,
-			type: "sea",
+			type,
 			coastal: false,
-			terrain: "",
-			continent: 0,
+			terrain,
+			continent,
 		}),
 	);
 	const graphs: ProvinceGraph[] = bmpColors.map((color) => ({
@@ -159,7 +160,7 @@ async function loadMapWith(
 		"map/provinces.txt",
 		provinceDefinitions,
 	);
-	instance.provinceBmpLoader = fakeFileLoader("map/provinces.bmp", provinceBmp);
+	instance.provinceBmpLoader = fakeFileLoader("map/provinces.bmp", provinceBmp, bitmapWarnings);
 	instance.adjacenciesLoader = fakeFileLoader(
 		"map/adjacencies.txt",
 		adjacencyRows,
@@ -427,5 +428,124 @@ describe("previewdef/worldmap/loader provincemap bitmap boundary targets", () =>
 			"Province with color (0, 0, 44) in provinces bmp (0, 0) doesn't exist in definitions.",
 			"Province NaN has an invalid id. Set id to -2.",
 		]);
+	});
+});
+
+describe("previewdef/worldmap/loader province warning sources", () => {
+	function assertWarningLookups(
+		warnings: WorldMapWarning[],
+		warned: Province,
+		unrelated: Province,
+	): void {
+		const previousWindow = (globalThis as any).window;
+		const previousApi = (globalThis as any).acquireVsCodeApi;
+		try {
+			(globalThis as any).window = { __i18ntable: {} };
+			(globalThis as any).acquireVsCodeApi = () => ({
+				postMessage() {},
+				getState() { return {}; },
+				setState() {},
+			});
+			const { FEWorldMapClass } = require("../../../../../../webviewsrc/worldmap/loader") as typeof import("../../../../../../webviewsrc/worldmap/loader");
+			const map = new FEWorldMapClass({ warnings } as any);
+			assert.deepStrictEqual(map.getProvinceWarnings(warned), warnings.map((warning) => warning.text));
+			assert.strictEqual(map.hasProvinceWarnings(warned), true);
+			assert.deepStrictEqual(map.getProvinceWarnings(unrelated), []);
+			assert.strictEqual(map.hasProvinceWarnings(unrelated), false);
+		} finally {
+			(globalThis as any).window = previousWindow;
+			(globalThis as any).acquireVsCodeApi = previousApi;
+		}
+	}
+
+	for (const originalId of [1, NaN, -5]) {
+		it(`keeps terrain, continent and bitmap warnings on the final province for id ${originalId}`, async () => {
+			const bitmapWarning: WorldMapWarning = {
+				text: "Province has disconnected pixels.",
+				source: [{ type: "province", id: -1, color: 11 }],
+				relatedFiles: ["map/provinces.bmp"],
+			};
+			const { result, warnings } = await loadMapWith(
+				[
+					{ id: originalId, color: 11, terrain: "invalid", continent: 8 },
+					{ id: 1, color: 22 },
+				],
+				[11, 22], [], [], [bitmapWarning],
+			);
+			const displaced = result.provinces[-1]!;
+			const keeper = result.provinces[1]!;
+			assert.strictEqual(displaced.color, 11);
+			assert.strictEqual(keeper.color, 22);
+			assert.strictEqual(result.badProvincesCount, 1);
+			const validationWarnings = warnings.filter((warning) =>
+				warning.text === "Continent 8 is not defined." ||
+				warning.text === 'Terrain "invalid" is not defined.',
+			);
+			assert.strictEqual(validationWarnings.length, 2);
+			assert.deepStrictEqual(validationWarnings.map((warning) => warning.relatedFiles), [
+				["map/provinces.txt", "map/continent.txt"],
+				["map/provinces.txt"],
+			]);
+			for (const warning of warnings) {
+				assert.deepStrictEqual(warning.source, [{ type: "province", id: -1, color: 11 }]);
+			}
+			assert.strictEqual(warnings[0].text, bitmapWarning.text);
+			assert.deepStrictEqual(warnings[0].relatedFiles, ["map/provinces.bmp"]);
+			assertWarningLookups(warnings, displaced, keeper);
+		});
+	}
+
+	it("uses the final id in a missing-continent warning's text", async () => {
+		const { warnings, result } = await loadMapWith(
+			[{ id: 1, color: 11, type: "land" }, { id: 1, color: 22 }],
+			[11, 22], [], [],
+		);
+		const warning = warnings.find((item) => item.text.startsWith("Land province"))!;
+		assert.strictEqual(warning.text, "Land province -1 must belong to a continent.");
+		assert.deepStrictEqual(warning.source, [{ type: "province", id: -1, color: 11 }]);
+		assert.strictEqual(result.badProvincesCount, 1);
+	});
+
+	it("keeps already resolved synthetic IDs when definition colors also repeat", async () => {
+		const { warnings, result } = await loadMapWith(
+			[{ id: 1, color: 11 }, { id: 1, color: 11 }, { id: 1, color: 11 }],
+			[11], [], [],
+		);
+		assert.deepStrictEqual(
+			warnings.filter((warning) => warning.text.includes("more than one rows")).map((warning) => warning.source),
+			[
+				[{ type: "province", id: -1, color: 11 }],
+				[{ type: "province", id: -2, color: 11 }],
+			],
+		);
+		assert.strictEqual(result.badProvincesCount, 2);
+	});
+
+	it("keeps missing-ID warnings unchanged when a malformed definition uses the color sentinel", async () => {
+		const { warnings, result } = await loadMapWith(
+			[{ id: 2, color: -1 }], [-1], [], [],
+		);
+		const warning = warnings.find((item) => item.text === "Province with id 1 doesn't exist.")!;
+		assert.deepStrictEqual(warning, {
+			text: "Province with id 1 doesn't exist.",
+			source: [{ type: "province", id: 1, color: -1 }],
+			relatedFiles: [],
+		});
+		assert.strictEqual(result.provinces[1], undefined);
+		assert.strictEqual(result.provinces[2]?.color, -1);
+		assert.strictEqual(result.badProvincesCount, 0);
+	});
+
+	it("preserves ID-only warnings and warnings for unchanged provinces", async () => {
+		const incoming: WorldMapWarning[] = [
+			{ text: "ID only", relatedFiles: [], source: [{ type: "province", id: 1, color: -1 }] },
+			{ text: "Valid province", relatedFiles: ["map/provinces.bmp"], source: [{ type: "province", id: 2, color: 22 }] },
+		];
+		const expected = JSON.parse(JSON.stringify(incoming));
+		const { warnings, result } = await loadMapWith(
+			[{ id: 1, color: 11 }, { id: 2, color: 22 }], [11, 22], [], [], incoming,
+		);
+		assert.deepStrictEqual(warnings, expected);
+		assert.strictEqual(result.badProvincesCount, 0);
 	});
 });
