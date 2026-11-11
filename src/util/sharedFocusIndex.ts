@@ -18,7 +18,8 @@ interface FocusHalf {
 	keyToFile: Map<string, string>;
 }
 
-const FOCUS_CACHE_VERSION = 2;
+// Older manifests marked failed reads fresh, so their missing records cannot be reused safely.
+const FOCUS_CACHE_VERSION = 3;
 
 /** One file's focus ids, as one line of the cache. */
 type FocusCacheRecord = [file: string, keys: string[]];
@@ -36,6 +37,7 @@ const focusIndex = createThreeHalfIndex<FocusHalf, FocusCacheRecord>({
 	extension: ".txt",
 	cacheVersion: FOCUS_CACHE_VERSION,
 	newHalf: () => ({ index: {}, keyToFile: new Map() }),
+	recordFilePath: ([file]) => file,
 	hydrate: ({ index, keyToFile }, [file, keys], skipFiles) => {
 		if (skipFiles.has(file)) {
 			return;

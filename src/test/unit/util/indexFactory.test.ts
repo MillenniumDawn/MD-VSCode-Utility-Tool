@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import { mock } from "node:test";
 import type * as vscode from "vscode";
+import { CancelledError } from "../../../util/common";
 import { refreshFeatureFlags } from "../../../util/featureflags";
 import * as fileloader from "../../../util/fileloader";
 import { createThreeHalfIndex, ThreeHalfIndex, ThreeHalfIndexSpec } from "../../../util/indexFactory";
@@ -46,6 +47,7 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 			extension: ".txt",
 			cacheVersion: 1,
 			newHalf: (source) => ({ source, files: new Map() }),
+			recordFilePath: ([file]) => file,
 			hydrate: (half, [path, text], skipFiles) => {
 				if (!skipFiles.has(path)) {
 					half.files.set(path, text);
@@ -255,7 +257,7 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 			assert.strictEqual(world.disk.has(oldCache), false);
 		});
 
-		it("prevents an old global half from overwriting or caching after a failed initial build is retried", async () => {
+		it("settles the old global half before retrying a failed initial build against a new source", async () => {
 			world.useDisk();
 			mock.method(Logger, "error", () => undefined);
 			const entered = deferred();
@@ -279,17 +281,26 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 					return true;
 				},
 			});
-			await assert.rejects(built.ensureBuilt(), /workspace failed/);
+			const first = built.ensureBuilt();
+			let settled = false;
+			const rejection = assert.rejects(first, /workspace failed/);
+			void first.then(() => { settled = true; }, () => { settled = true; });
+			await entered.promise;
+			await settle();
+			assert.strictEqual(settled, false);
+			assert.strictEqual(built.ensureBuilt(), first);
+			release.resolve();
+			await rejection;
+			world.settings = { ...world.settings, installPath: "/games/B" };
 			await built.ensureBuilt();
 			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "NEW");
-			release.resolve();
 			for (let i = 0; i < 4; i++) { await settle(); }
 			await world.drainCacheWrites();
 			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "NEW");
 			const cached = Buffer.from(world.disk.get(world.cacheFile("fakeIndex.global.data.jsonl"))!).toString();
 			assert.ok(cached.includes("NEW"));
 			assert.ok(!cached.includes("OLD"));
-			assert.strictEqual(globals, 2, "the superseded attempt must stop instead of starting another build");
+			assert.strictEqual(globals, 2, "the retry must build exactly one replacement global half");
 		});
 
 		it("finishes an already-started cache pair in its original namespace after a source change", async () => {
@@ -359,6 +370,95 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 			await built.ensureBuilt();
 			assert.strictEqual(built.halves().global.files.get(`${ROOT}/global.txt`), "/games/B");
 		});
+	});
+
+	it("retries with empty halves after failure, waiting for sibling parents", async () => {
+		const failure = new Error("listing failed");
+		useParents("/mods/first", "/mods/second");
+		const slowParent = deferred();
+		const parentStarted = deferred();
+		let fail = true;
+		const built = create({
+			parseFile: async (half, file, options) => {
+				if (fail && half.source === "parent") {
+					if (options.parentModUris?.[0]?.path === "/mods/first") {
+						await parentStarted.promise;
+						throw failure;
+					}
+					parentStarted.resolve();
+					await slowParent.promise;
+				}
+				half.files.set(file.path, "indexed");
+				return true;
+			},
+		});
+		let settled = false;
+		const first = built.ensureBuilt();
+		const rejection = assert.rejects(first, (error) => error === failure);
+		void first.then(() => { settled = true; }, () => { settled = true; });
+		await parentStarted.promise;
+		await settle();
+		assert.strictEqual(settled, false);
+		assert.strictEqual(built.ensureBuilt(), first);
+		assert.deepStrictEqual(files(built.halves().workspace), [`${ROOT}/workspace.txt`]);
+		slowParent.resolve();
+		await rejection;
+
+		// The files populated before failure are deleted before the next lookup.
+		fail = false;
+		world.list = () => [];
+		await built.ensureBuilt();
+		assert.deepStrictEqual(built.inPrecedence().map(files), [[], [], [], []]);
+	});
+
+	it("waits for a running vanilla half after the workspace half fails", async () => {
+		const slowGlobal = deferred();
+		const globalStarted = deferred();
+		const failure = new Error("workspace failed");
+		const built = create({
+			parseFile: async (half) => {
+				if (half.source === "global") {
+					globalStarted.resolve();
+					await slowGlobal.promise;
+					return true;
+				}
+				await globalStarted.promise;
+				throw failure;
+			},
+		});
+		const first = built.ensureBuilt();
+		let settled = false;
+		const rejection = assert.rejects(first, (error) => error === failure);
+		void first.then(() => { settled = true; }, () => { settled = true; });
+		await globalStarted.promise;
+		await settle();
+		assert.strictEqual(settled, false);
+		assert.strictEqual(built.ensureBuilt(), first);
+		slowGlobal.resolve();
+		await rejection;
+	});
+
+	it("drops partial records when a cancelled build is retried after files were deleted", async () => {
+		let cancelled = false;
+		mock.method(host().window, "withProgress", (_options: unknown, task: (progress: unknown, token: unknown) => unknown) => task(
+			{ report: () => undefined },
+			{ get isCancellationRequested() { return cancelled; } },
+		));
+		world.list = (_root, half) => half === "workspace"
+			? listed(Array.from({ length: 8 }, (_, i) => `${i}.txt`)) : [];
+		const built = create({
+			parseFile: async (half, file) => {
+				half.files.set(file.path, "partial");
+				cancelled = true;
+				return true;
+			},
+		});
+		await assert.rejects(built.ensureBuilt(), /cancel/i);
+		assert.ok(built.halves().workspace.files.size > 0);
+		cancelled = false;
+		world.list = () => [];
+		await built.ensureBuilt();
+		assert.deepStrictEqual(built.inPrecedence().map(files), [[], []]);
 	});
 
 	it("names the half a file came from when it fails to parse", async () => {
@@ -487,6 +587,88 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 			return calls.filter((call) => call.startsWith("parse")).sort();
 		}
 
+		for (const intermediate of [
+			{ name: "gfxIndex", cacheVersion: 6, root: "interface", file: "failed.gfx" },
+			{ name: "localisationIndex", cacheVersion: 4, root: "localisation", file: "failed_l_english.yml" },
+		]) {
+			it(`retries a failed read from a #708-only ${intermediate.name} cache at the same format version`, async () => {
+				const path = `${intermediate.root}/${intermediate.file}`;
+				const cache = `${intermediate.name}.workspace`;
+				world.list = (_root, half) => half === "workspace" ? listed([intermediate.file]) : [];
+				world.read = () => Buffer.from("restored access");
+				world.disk.set(world.cacheFile(`${cache}.manifest.json`), Buffer.from(JSON.stringify({
+					version: intermediate.cacheVersion, entries: [{ filePath: path, mtime: 1 }],
+				})));
+				// Empty records are valid for both real #708 formats; the failed file has no record.
+				world.disk.set(world.cacheFile(`${cache}.data.jsonl`), Buffer.from("0\n"));
+				const options = { name: intermediate.name, cacheVersion: intermediate.cacheVersion, roots: [intermediate.root] };
+				const recovered = create(options);
+				await recovered.ensureBuilt();
+				await world.drainCacheWrites();
+				assert.deepStrictEqual(parsedCalls(), [`parse ${path}`]);
+				assert.strictEqual(recovered.halves().workspace.files.get(path), "restored access");
+				const warm = create(options);
+				await warm.ensureBuilt();
+				await world.drainCacheWrites();
+				assert.deepStrictEqual(parsedCalls(), []);
+				assert.strictEqual(warm.halves().workspace.files.get(path), "restored access");
+			});
+		}
+
+		for (const warm of [false, true]) {
+			it(`retries an unreadable ${warm ? "changed" : "new"} file without touching its mtime`, async () => {
+				mock.method(Logger, "error", () => undefined);
+				const good = `${ROOT}/good.txt`;
+				const failed = `${ROOT}/failed.txt`;
+				let mtime = 1;
+				world.list = (_root, half) => half === "workspace"
+					? [...listed(["good.txt"]), ...listed(["failed.txt"], mtime)] : [];
+				if (warm) {
+					await create().ensureBuilt();
+					await world.drainCacheWrites();
+					mtime = 2;
+				}
+				world.read = (path) => {
+					if (path === failed) {
+						throw new Error("temporarily unreadable");
+					}
+					return Buffer.from("successful record");
+				};
+				await create().ensureBuilt();
+				await world.drainCacheWrites();
+				const manifest = JSON.parse(Buffer.from(world.disk.get(
+					world.cacheFile("fakeIndex.workspace.manifest.json"),
+				)!).toString()) as { entries: { filePath: string }[] };
+				assert.deepStrictEqual(manifest.entries.map((entry) => entry.filePath), [good]);
+
+				world.read = (path) => {
+					assert.strictEqual(path, failed, "successful cached file must not be read again");
+					return Buffer.from("restored access");
+				};
+				const retry = create();
+				await retry.ensureBuilt();
+				await world.drainCacheWrites();
+				assert.deepStrictEqual(parsedCalls(), [`parse ${failed}`]);
+				assert.deepStrictEqual(files(retry.halves().workspace).sort(), [failed, good]);
+				assert.strictEqual(retry.halves().workspace.files.get(failed), "restored access");
+				await create().ensureBuilt();
+				await world.drainCacheWrites();
+				assert.deepStrictEqual(parsedCalls(), []);
+			});
+		}
+
+		it("leaves the successful cache intact when parsing is cancelled", async () => {
+			world.list = (_root, half) => half === "workspace" ? listed(["workspace.txt"]) : [];
+			await create().ensureBuilt();
+			await world.drainCacheWrites();
+			const before = new Map([...world.disk].map(([path, data]) => [path, Buffer.from(data)]));
+			world.list = (_root, half) => half === "workspace" ? listed(["workspace.txt"], 2) : [];
+			const cancelled = create({ parseFile: async () => { throw new CancelledError(); } });
+			await assert.rejects(cancelled.ensureBuilt(), CancelledError);
+			await world.drainCacheWrites();
+			assert.deepStrictEqual(new Map([...world.disk].map(([path, data]) => [path, Buffer.from(data)])), before);
+		});
+
 		it("parses everything and writes the cache when there is none yet", async () => {
 			const built = countedSerialize();
 			await built.ensureBuilt();
@@ -495,6 +677,47 @@ describe("util/indexFactory createThreeHalfIndex", () => {
 			assert.ok(serializeCalls > 0);
 			assert.ok(writes > 0);
 			assert.deepStrictEqual(files(built.halves().workspace), [`${ROOT}/workspace.txt`]);
+		});
+
+		it("ignores ghost records saved by older builds but absent from the current listing", async () => {
+			await countedSerialize().ensureBuilt();
+			await world.drainCacheWrites();
+			const dataFile = world.cacheFile("fakeIndex.workspace.data.jsonl");
+			const lines = Buffer.from(world.disk.get(dataFile)!).toString().trimEnd().split("\n");
+			const count = Number(lines.pop());
+			lines.push(JSON.stringify([`${ROOT}/deleted.txt`, "ghost"]), String(count + 1));
+			world.disk.set(dataFile, Buffer.from(lines.join("\n") + "\n"));
+			const built = countedSerialize();
+			await built.ensureBuilt();
+			assert.deepStrictEqual(files(built.halves().workspace), [`${ROOT}/workspace.txt`]);
+			assert.deepStrictEqual(parsedCalls(), []);
+		});
+
+		it("does not hydrate old ghost definitions when their path has been recreated", async () => {
+			await countedSerialize().ensureBuilt();
+			await world.drainCacheWrites();
+			const recreated = `${ROOT}/recreated.txt`;
+			const dataFile = world.cacheFile("fakeIndex.workspace.data.jsonl");
+			const lines = Buffer.from(world.disk.get(dataFile)!).toString().trimEnd().split("\n");
+			const count = Number(lines.pop());
+			lines.push(JSON.stringify([recreated, "GHOST"]), String(count + 1));
+			world.disk.set(dataFile, Buffer.from(lines.join("\n") + "\n"));
+			world.list = (_root, half) => half === "workspace"
+				? listed(["workspace.txt", "recreated.txt"]) : listed(["global.txt"]);
+			world.read = () => Buffer.from("CURRENT");
+			const hydrated: string[] = [];
+			const built = create({
+				hydrate: (half, [path, text], skipFiles) => {
+					if (!skipFiles.has(path)) {
+						hydrated.push(text);
+						half.files.set(path, text);
+					}
+				},
+			});
+			await built.ensureBuilt();
+			assert.ok(!hydrated.includes("GHOST"));
+			assert.strictEqual(built.halves().workspace.files.get(recreated), "CURRENT");
+			assert.deepStrictEqual(parsedCalls(), [`parse ${recreated}`]);
 		});
 
 		it("serializes nothing and writes nothing on an unchanged warm build", async () => {

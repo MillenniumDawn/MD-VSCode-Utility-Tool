@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import { applyCondition } from '../../../../hoiformat/condition';
 import { parseHoi4File } from '../../../../hoiformat/hoiparser';
 import { getMiosFromFile, Mio, MioTrait } from '../../../../previewdef/mio/schema';
 
@@ -822,5 +823,56 @@ describe('previewdef/mio/schema include cycles', () => {
             assert.deepStrictEqual(mio.warnings.map(w => w.text), [`${cycleWarning}a_org -> b_org -> a_org.`]);
         }
         assert.ok(byId['w_org'].traits['w_trait']);
+    });
+});
+
+
+describe('previewdef/mio/schema availability', () => {
+    it('preserves direct, added, inherited and overridden requirements independently of visibility', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            base = {
+                trait = { token = inherited available = { GER = { has_tech = stealth_corvette_hull_1 } } }
+                trait = { token = overridden available = { GER = { owns_state = 155 } } }
+                trait = { token = plain }
+                trait = { token = locked visible = { always = yes } available = { always = no } }
+            }
+            derived = {
+                include = base
+                override_trait = { token = overridden available = { TUR = { has_tech = stealth_corvette_hull_1 } } }
+                add_trait = { token = added available = { TUR = { owns_state = 155 } } }
+            }
+        `), [], 'availability.txt');
+        const base = mios.find(m => m.id === 'base')!;
+        const derived = mios.find(m => m.id === 'derived')!;
+        assert.deepStrictEqual(derived.traits.inherited.available, base.traits.inherited.available);
+        assert.notDeepStrictEqual(derived.traits.overridden.available, base.traits.overridden.available);
+        assert.strictEqual(derived.traits.plain.available, true);
+        assert.strictEqual(derived.traits.plain.hasAvailable, false);
+        assert.strictEqual(base.traits.locked.visible, true);
+        assert.strictEqual(base.traits.locked.available, false);
+        for (const id of ['inherited', 'overridden', 'added']) {
+            const trait = derived.traits[id];
+            assert.strictEqual(trait.hasAvailable, true);
+            assert.strictEqual(applyCondition(trait.available, []), false);
+            assert.strictEqual(applyCondition(trait.available, derived.conditionExprs), true);
+        }
+        assert.ok(derived.conditionExprs.some(c => c.scopeName === 'TUR' && c.nodeContent.includes('owns_state')));
+        assert.ok(base.conditionExprs.every(c => c.scopeName !== 'TUR'));
+    });
+
+    it('clears inherited availability before applying explicit replacement values', () => {
+        const mios = getMiosFromFile(parseHoi4File(`
+            base = { trait = { token = t available = { always = no } } }
+            cleared = { include = base override_trait = { token = t delete_included_values = { available } } }
+            replaced = { include = base override_trait = { token = t delete_included_values = { available } available = { TUR = { owns_state = 155 } } } }
+        `), [], 'availability.txt');
+        const cleared = mios.find(m => m.id === 'cleared')!.traits.t;
+        assert.strictEqual(cleared.available, true);
+        assert.strictEqual(cleared.hasAvailable, false);
+        assert.strictEqual(mios.find(m => m.id === 'base')!.traits.t.available, false);
+        const replaced = mios.find(m => m.id === 'replaced')!;
+        assert.strictEqual(replaced.traits.t.hasAvailable, true);
+        assert.strictEqual(applyCondition(replaced.traits.t.available, []), false);
+        assert.strictEqual(applyCondition(replaced.traits.t.available, replaced.conditionExprs), true);
     });
 });
