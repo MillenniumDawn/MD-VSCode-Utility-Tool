@@ -9,6 +9,7 @@ import { listIndexFiles } from "../../../util/indexListing";
 import { clearInstallPathCache } from "../../../util/installpath";
 import { openZipIndex } from "../../../util/nativezip";
 import { clearParentModCache } from "../../../util/parentmods";
+import { cacheNamespaceFor } from "../../../util/indexCache";
 
 // A copy of fileloader per test: openedDocumentUriFor keeps its map of open documents in module
 // state and rebuilds it at most every 500 ms, so one test's documents would otherwise go on
@@ -31,6 +32,56 @@ function uri(fsPath: string, fragment = ""): vscode.Uri {
 			`file://${fsPath}${fragment === "" ? "" : "#" + fragment}`,
 	} as vscode.Uri;
 }
+
+describe("workspace index precedence", () => {
+	it("indexes the first workspace copy, including after the roots are reversed", async () => {
+		const root = await fs.mkdtemp(path.join(os.tmpdir(), "index-roots-"));
+		const roots = [path.join(root, "first"), path.join(root, "second")];
+		const sameTime = new Date("2024-01-02T03:04:05Z");
+		try {
+			for (const [i, folder] of roots.entries()) {
+				await fs.mkdir(path.join(folder, "interface", "nested"), { recursive: true });
+				for (const name of ["shared.gfx", "nested/shared.gfx"]) {
+					const file = path.join(folder, "interface", name);
+					await fs.writeFile(file, `sprite_${i}`);
+					await fs.utimes(file, sameTime, sameTime);
+				}
+				await fs.writeFile(path.join(folder, "interface", `only${i}.gfx`), "unique");
+			}
+			for (const order of [roots, [...roots].reverse()]) {
+				handOver({
+					Uri: { file: (p: string) => uri(p), parse: (p: string) => uri(p.replace(/^file:\/\//, "")), joinPath: (base: vscode.Uri, ...parts: string[]) => uri(path.join(base.fsPath, ...parts)) },
+					FileType: { File: 1, Directory: 2, SymbolicLink: 64 },
+					workspace: {
+						workspaceFolders: order.map((p) => ({ uri: uri(p) })),
+						textDocuments: [],
+						getConfiguration: () => ({ modFile: "", parentModPaths: [] }),
+						fs: { readDirectory: async (target: vscode.Uri) => (await fs.readdir(target.fsPath, { withFileTypes: true })).map(d => [d.name, d.isDirectory() ? 2 : 1]), stat: async (target: vscode.Uri) => {
+							const stat = await fs.stat(target.fsPath);
+							return { type: stat.isDirectory() ? 2 : 1, mtime: stat.mtimeMs, ctime: stat.ctimeMs, size: stat.size };
+						} },
+					},
+				});
+				const fileloader = freshFileloader();
+				fileloader.invalidateFileDiscoveryCache();
+				const options = { mod: true, hoi4: false, parent: false, recursively: true };
+				const listing = await listIndexFiles({ roots: ["interface"], options });
+				assert.deepStrictEqual([...listing.filePaths].sort(), ["interface/nested/shared.gfx", "interface/only0.gfx", "interface/only1.gfx", "interface/shared.gfx"]);
+				for (const relative of ["interface/shared.gfx", "interface/nested/shared.gfx"]) {
+					const found = listing.uris.get(relative)!;
+					const ordinary = await fileloader.getFilePathFromModOrHOI4(relative, options);
+					assert.strictEqual(found.fsPath, path.join(order[0]!, relative));
+					assert.strictEqual(ordinary?.fsPath, found.fsPath);
+					assert.strictEqual(listing.mtimes.get(relative), sameTime.getTime());
+					assert.strictEqual(await fs.readFile(found.fsPath, "utf8"), order[0] === roots[0] ? "sprite_0" : "sprite_1");
+				}
+			}
+			assert.notStrictEqual(cacheNamespaceFor(undefined, roots), cacheNamespaceFor(undefined, [...roots].reverse()));
+		} finally {
+			await fs.rm(root, { recursive: true, force: true });
+		}
+	});
+});
 
 // The editor holds each path as an open document reading "OPENED"; every disk read of anything
 // else lands in diskReads and answers "DISK".

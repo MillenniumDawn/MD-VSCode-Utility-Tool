@@ -1002,7 +1002,7 @@ export async function listFileEntriesFromModOrHOI4(
 
 	throwIfCancelled(token);
 
-	const shouldDedupe = await visitFileSources(relativePath, options, {
+	await visitFileSources(relativePath, options, {
 		directory: async (dir, listFailureMessage) => {
 			try {
 				result.push(...(await listDirectoryEntries(dir, recursively, token)));
@@ -1030,7 +1030,7 @@ export async function listFileEntriesFromModOrHOI4(
 		},
 	});
 
-	return shouldDedupe ? dedupeEntriesByRelativePath(result) : result;
+	return dedupeEntriesByRelativePath(result);
 }
 
 /**
@@ -1157,11 +1157,9 @@ interface FileSourceVisitor {
  * disagreed about which source a name came from, an index would record one file's mtime and read
  * another file's contents, and stay quietly stale for as long as neither changed.
  *
- * Returns whether the caller should deduplicate what it collected. Every exit says yes except the one
- * `options.hoi4 === false` takes, which has always handed back its raw result -- so two workspace
- * folders holding the same relative path still list it twice there, exactly as before. Once a
- * parent mod folder was visited that exit says yes too: a file the workspace overrides is in both,
- * and the listing has to name it once, at the workspace's URI.
+ * Returns whether the name-only listing should deduplicate. Its workspace-only path retains
+ * duplicate names for compatibility. Entry listings always deduplicate, so a path's URI and mtime
+ * belong to the same first source that ordinary lookup selects.
  */
 async function visitFileSources(
 	relativePath: string,
