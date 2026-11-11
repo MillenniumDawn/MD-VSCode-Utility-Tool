@@ -32,9 +32,8 @@ const CACHE_ROOT = 'indexCache';
  * A short, stable name for "the thing being indexed", so two mods opened in the same VS Code
  * profile get two caches instead of overwriting each other's.
  *
- * The identity is the selected `modFile` plus the workspace folders, sorted, so reordering the
- * folders does not invalidate anything, plus the parent mod paths in setting order, because there
- * the order is the precedence. A plain FNV-1a hash rather than `node:crypto`, because this module
+ * The identity is the selected `modFile` plus the workspace folders and parent mod paths in
+ * precedence order. A plain FNV-1a hash rather than `node:crypto`, because this module
  * is loaded in the web build too (where it never reaches disk at all) and because a collision
  * costs no more than two mods sharing one cache -- which is exactly today's behaviour.
  *
@@ -47,15 +46,15 @@ export function cacheNamespaceFor(
     workspaceFolderUris: readonly string[],
     parentModPaths: readonly string[] = [],
 ): string {
-    const parts: string[] = [];
+    // Invalidate caches written when workspace-only index listings selected the last duplicate.
+    const parts: string[] = ['workspace-order:v2'];
 
     const mod = modFile?.trim();
     if (mod) {
         parts.push('mod:' + pathIdentity(mod));
     }
 
-    // Sorted, so that dragging a folder up the explorer does not throw the cache away.
-    for (const uri of [...workspaceFolderUris].sort()) {
+    for (const uri of workspaceFolderUris) {
         parts.push('ws:' + uri);
     }
 

@@ -106,6 +106,25 @@ async function buildContent() {
 
     miopreviewplaceholder.innerHTML = traitPreviewContent + headerLayer + gridGuideLayer + overlapLayer + styleTable.toStyleElement((window as any).styleNonce);
 
+    for (const trait of allTraits) {
+        if (!trait.hasAvailable) {
+            continue;
+        }
+        const card = document.getElementById('trait_' + trait.id);
+        if (!card) {
+            continue;
+        }
+        const available = applyCondition(trait.available, exprs);
+        card.dataset.available = String(available);
+        const status = document.createElement('span');
+        status.className = 'mio-availability';
+        status.textContent = available
+            ? feLocalize('miopreview.available', 'Available')
+            : feLocalize('miopreview.unavailable', 'Unavailable');
+        status.style.cssText = 'position:absolute;top:0;right:0;font-size:10px;padding:1px 3px;background:var(--vscode-editor-background);color:var(--vscode-foreground);pointer-events:none;';
+        card.appendChild(status);
+    }
+
     subscribeNavigators();
     applyWarningMarkers(mio, traitGrixBoxItems, 'trait_', showWarningMarkers());
     renderWarningList(mio, 'trait_');
