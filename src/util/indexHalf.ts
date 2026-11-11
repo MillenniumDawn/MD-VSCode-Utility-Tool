@@ -149,6 +149,8 @@ export interface IndexHalfSpec<TRecord> {
 	cacheScope?: CacheScope;
 	/** Reject obsolete source generations before they can persist their records. */
 	isCurrent?: () => boolean;
+	/** Directory refreshes must include surviving dirty editor buffers, regardless of mtimes. */
+	forceReparse?: boolean;
 }
 
 export async function buildIndexHalf<TRecord>(
@@ -198,7 +200,7 @@ async function buildIndexHalfWithTimer<TRecord>(
 	const { filePaths, uris, mtimes } = await spec.listFiles(progress.token);
 
 	timer.begin("cache");
-	const manifest = dependencyChanged
+	const manifest = dependencyChanged || spec.forceReparse
 		? null
 		: await loadCacheManifest(cacheName, version, cacheScope);
 	let filesToParse = filePaths;
