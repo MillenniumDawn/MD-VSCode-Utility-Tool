@@ -1,6 +1,7 @@
 Unreleased
 
   Bugfixes:
+- [ Indexing ] Creating, renaming or deleting folders now refreshes their indexed files, removing old paths and finding files in new locations. Issue #706.
 - [ Indexing ] Changing the game installation or DLC loading setting now refreshes vanilla definitions without reloading the editor. Issue #709.
 - [ Indexes ] Duplicate sprite names and localisation keys now use a consistent file order, including after reloading or editing files. Issue #708.
 - [ Indexes ] Removing a duplicate definition restores the remaining sprite or localisation entry. Issue #707.
