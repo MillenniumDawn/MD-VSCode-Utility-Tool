@@ -8,13 +8,7 @@ import { attachTaskWithErrorLogging, BuildGate } from "./promiseUtils";
 import { Logger } from "./logger";
 import { onDidChangeParentMods, ParentModsChangeEvent } from "./parentmods";
 
-/**
- * The path a workspace file is indexed under, or undefined when it is outside the workspace or
- * outside every root the index cares about.
- *
- * The four indexes each inlined this, twice over in two of them -- six copies of the same
- * `path.relative(...).replace(...)` and prefix test.
- */
+/** The indexed path of a workspace file, or undefined outside the index's roots. */
 export function toWorkspaceRelativePath(
 	file: vscode.Uri,
 	rootPrefixes: string | readonly string[],
@@ -23,52 +17,31 @@ export function toWorkspaceRelativePath(
 	if (!wsFolder) {
 		return undefined;
 	}
-
-	const relative = path
-		.relative(wsFolder.uri.path, file.path)
-		.replace(/\\+/g, "/");
+	const relative = path.relative(wsFolder.uri.path, file.path).replace(/\\+/g, "/");
 	if (!relative) {
 		return undefined;
 	}
-
-	const prefixes =
-		typeof rootPrefixes === "string" ? [rootPrefixes] : rootPrefixes;
-	return prefixes.some((prefix) => relative.startsWith(prefix))
-		? relative
-		: undefined;
+	const prefixes = typeof rootPrefixes === "string" ? [rootPrefixes] : rootPrefixes;
+	return prefixes.some((prefix) => relative.startsWith(prefix)) ? relative : undefined;
 }
 
 export interface IndexWatcherSpec {
-	/** The index's feature flag, read on registration. When false nothing is subscribed at all. */
 	enabled: () => boolean;
-	/** Files this index cares about, e.g. `".gfx"`. */
 	extension: string;
-	/** Rejects files outside the roots this index reads. */
 	acceptsFile?: (file: vscode.Uri) => boolean;
-	/** Incremental events stay inert until something has actually asked for the index. */
 	hasStarted: () => boolean;
-	/** Defers every mutation below until an in-flight build has settled. */
 	gate: BuildGate;
-	/** Re-reads one workspace file into the index. */
 	reindexFile: (file: vscode.Uri) => void;
-	/** Rebuild the vanilla half after installation or DLC settings change. */
 	globalSourceChanged?: () => void;
-	/** Drops one workspace file from the index. */
+	/** Handles ambiguous file/folder operations without statting paths which may be gone. */
+	workspaceOperation?: (kind: "create" | "delete" | "rename", files: readonly vscode.Uri[]) => boolean;
 	removeFile: (file: vscode.Uri) => void;
-	/** Everything needed to rebuild the workspace half after the folders changed. */
 	rebuildWorkspace: {
-		/** Empties the workspace half before the rebuild starts. */
 		reset: () => void;
 		build: (progress: IndexProgress) => Promise<void>;
-		/** Localised, shown in the progress notification. */
 		message: string;
-		/** Logged if the rebuild fails. */
 		failureMessage: string;
 	};
-	/**
-	 * The parent-mod half, rebuilt when the parent list changes. It shares the workspace rebuild's
-	 * progress message: to the user it is the same kind of rebuild.
-	 */
 	rebuildParent?: {
 		reset: () => void;
 		build: (progress: IndexProgress) => Promise<void>;
@@ -76,18 +49,11 @@ export interface IndexWatcherSpec {
 }
 
 export interface IndexWatchers {
-	/** Subscribes to the workspace events, or to nothing when the flag is off. */
 	register(): vscode.Disposable;
-	/** Cancels timers and mutations still waiting for a build. */
 	cancelPending(): void;
-	/**
-	 * The same handlers, for tests to drive directly rather than through VS Code. Each index used
-	 * to export its own trio of these under the same name and comment.
-	 */
 	handlers: {
 		onChangeConfiguration(e: vscode.ConfigurationChangeEvent): void;
 		onChangeWorkspaceFolders(e: vscode.WorkspaceFoldersChangeEvent): void;
-		/** What a change to the parent list runs: a rebuild of the parent half. */
 		onChangeParentMods(e: ParentModsChangeEvent): void;
 		onChangeTextDocument(e: vscode.TextDocumentChangeEvent): void;
 		onCloseTextDocument(document: vscode.TextDocument): void;
@@ -97,43 +63,25 @@ export interface IndexWatchers {
 	};
 }
 
-/*
- * Keeping an index in step with the editor.
- *
- * All four indexes wired up the same six events in the same order and handled them the same way,
- * down to `onRenameFiles` being byte-identical in every one of them. What differed was the file
- * extension and which functions to call, which is what the spec above carries.
- */
 export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	const { extension, hasStarted, gate } = spec;
 	const normalizedExtension = extension.toLowerCase();
 
-	function rebuild(
-		halves: readonly {
-			reset: () => void;
-			build: (progress: IndexProgress) => Promise<void>;
-		}[],
-	) {
+	function rebuild(halves: readonly {
+		reset: () => void;
+		build: (progress: IndexProgress) => Promise<void>;
+	}[]): void {
 		if (!hasStarted()) {
 			return;
 		}
-
-		// Reset only after the current build; occupy the gate now so events wait.
 		const task = gate.followOn(() => {
 			for (const half of halves) {
 				half.reset();
 			}
 			return withIndexProgress(spec.rebuildWorkspace.message, (progress) =>
-				Promise.all(
-					halves.map((half) => half.build(progress)),
-				).then(() => undefined),
-			);
+				Promise.all(halves.map((half) => half.build(progress))).then(() => undefined));
 		});
-		attachTaskWithErrorLogging(
-			task,
-			spec.rebuildWorkspace.failureMessage,
-			Logger.error,
-		);
+		attachTaskWithErrorLogging(task, spec.rebuildWorkspace.failureMessage, Logger.error);
 	}
 
 	function onChangeConfiguration(e: vscode.ConfigurationChangeEvent): void {
@@ -143,14 +91,11 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 		}
 	}
 
-	function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
+	function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent): void {
 		rebuild([spec.rebuildWorkspace]);
 	}
 
-	// Only the parent half: the workspace half lists the workspace folders alone, so the parents
-	// changing leaves it as it was. An index without a parent half has nothing to do, and neither
-	// does a change to the unresolved names alone: those name no folder the half reads.
-	function onChangeParentMods(e: ParentModsChangeEvent) {
+	function onChangeParentMods(e: ParentModsChangeEvent): void {
 		if (spec.rebuildParent && e.folders) {
 			rebuild([spec.rebuildParent]);
 		}
@@ -159,6 +104,7 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	interface PendingFile {
 		file: vscode.Uri;
 		remove: boolean;
+		checkCreate: boolean;
 		firstEvent: number;
 		timer: ReturnType<typeof setTimeout>;
 	}
@@ -171,9 +117,8 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 		pending.clear();
 	}
 
-	// Editor and filesystem notifications for the same operation share one queue. The last
-	// operation wins, including a delete after an edit or a create after an atomic replacement.
-	function queueFile(file: vscode.Uri, remove: boolean): void {
+	// Editor and filesystem notifications share one queue; the last operation wins.
+	function queueFile(file: vscode.Uri, remove: boolean, checkCreate = false): void {
 		if (!hasStarted() || !file.path.toLowerCase().endsWith(normalizedExtension) || spec.acceptsFile?.(file) === false) {
 			return;
 		}
@@ -186,6 +131,7 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 		const entry: PendingFile = {
 			file,
 			remove,
+			checkCreate: checkCreate || previous?.checkCreate === true,
 			firstEvent,
 			timer: setTimeout(() => {
 				gate.runAfterBuild(() => {
@@ -195,7 +141,7 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 					pending.delete(key);
 					if (entry.remove) {
 						spec.removeFile(entry.file);
-					} else {
+					} else if (!entry.checkCreate || !handlesOperation("create", [entry.file])) {
 						spec.reindexFile(entry.file);
 					}
 				});
@@ -204,31 +150,44 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 		pending.set(key, entry);
 	}
 
-	function onChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
+	function handlesOperation(kind: "create" | "delete" | "rename", files: readonly vscode.Uri[]): boolean {
+		return hasStarted() && spec.workspaceOperation?.(kind, files) === true;
+	}
+
+	function onChangeTextDocument(e: vscode.TextDocumentChangeEvent): void {
 		queueFile(e.document.uri, false);
 	}
 
-	function onCloseTextDocument(document: vscode.TextDocument) {
+	function onCloseTextDocument(document: vscode.TextDocument): void {
 		if (document.isDirty) {
 			queueFile(document.uri, false);
 		}
 	}
 
-	function onCreateFiles(e: vscode.FileCreateEvent) {
+	function onCreateFiles(e: vscode.FileCreateEvent): void {
 		for (const file of e.files) {
-			queueFile(file, false);
+			if (file.path.toLowerCase().endsWith(normalizedExtension)) {
+				queueFile(file, false, true);
+			} else {
+				handlesOperation("create", [file]);
+			}
 		}
 	}
 
-	function onDeleteFiles(e: vscode.FileDeleteEvent) {
+	function onDeleteFiles(e: vscode.FileDeleteEvent): void {
+		if (handlesOperation("delete", e.files)) { return; }
 		for (const file of e.files) {
 			queueFile(file, true);
 		}
 	}
 
-	function onRenameFiles(e: vscode.FileRenameEvent) {
-		onDeleteFiles({ files: e.files.map((f) => f.oldUri) });
-		onCreateFiles({ files: e.files.map((f) => f.newUri) });
+	function onRenameFiles(e: vscode.FileRenameEvent): void {
+		const moved = e.files.filter((file) => file.oldUri.toString() !== file.newUri.toString());
+		if (moved.length > 0 && handlesOperation("rename", moved.flatMap((file) => [file.oldUri, file.newUri]))) { return; }
+		for (const file of e.files) {
+			queueFile(file.oldUri, true);
+			queueFile(file.newUri, false);
+		}
 	}
 
 	const handlers = {
@@ -247,14 +206,9 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 			if (!spec.enabled()) {
 				return host().Disposable.from();
 			}
-
 			let active = true;
 			function whileRegistered<T>(handler: (event: T) => void): (event: T) => void {
-				return (event) => {
-					if (active) {
-						handler(event);
-					}
-				};
+				return (event) => { if (active) { handler(event); } };
 			}
 			const extensionGlob = normalizedExtension.replace(/[a-z]/g, (letter) => `[${letter}${letter.toUpperCase()}]`);
 			const files = host().workspace.createFileSystemWatcher(`**/*${extensionGlob}`);
@@ -269,8 +223,6 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 					onDidSelectInstallPath(() => { if (active) { spec.globalSourceChanged?.(); } }),
 				] : []),
 				host().workspace.onDidChangeWorkspaceFolders(whileRegistered(onChangeWorkspaceFolders)),
-				// The published list, not the raw setting: it changes once, after the `.mod`
-				// dependencies have been resolved against the new setting.
 				onDidChangeParentMods(whileRegistered(onChangeParentMods)),
 				host().workspace.onDidChangeTextDocument(whileRegistered(onChangeTextDocument)),
 				host().workspace.onDidCloseTextDocument(whileRegistered(onCloseTextDocument)),

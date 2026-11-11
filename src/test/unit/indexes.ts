@@ -137,6 +137,7 @@ function editorFor(world: IndexWorld) {
 			onDidRenameFiles: disposable,
 			createFileSystemWatcher: () => ({ onDidChange: disposable, onDidCreate: disposable, onDidDelete: disposable, dispose: () => undefined }),
 			fs: {
+				stat: async () => ({ type: 1, ctime: 0, mtime: 1, size: 0 }),
 				readDirectory: async () => [],
 				createDirectory: async () => undefined,
 				readFile: async (uri: FakeUri) => {

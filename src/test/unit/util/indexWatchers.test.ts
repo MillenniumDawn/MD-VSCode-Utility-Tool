@@ -134,6 +134,16 @@ for (const index of cases) {
 			});
 		}
 
+		it("handles root-folder moves out of and back into the indexed tree without child events", async () => {
+			assert.deepStrictEqual(await index.lookup(), index.found);
+			world.list = () => [];
+			index.handlers.onRenameFiles({ files: [{ oldUri: workspaceFile(index.root), newUri: workspaceFile(`${index.root}-moved`) }] });
+			assert.deepStrictEqual(await index.lookup(), index.missing);
+			world.list = (root, half) => half === "workspace" && root === index.root ? listed([index.file]) : [];
+			index.handlers.onRenameFiles({ files: [{ oldUri: workspaceFile(`${index.root}-moved`), newUri: workspaceFile(index.root) }] });
+			assert.deepStrictEqual(await index.lookup(), index.found);
+		});
+
 		it("does no build work when the feature flag is off", async () => {
 			world.settings = { [index.flag]: false };
 			refreshFeatureFlags();
