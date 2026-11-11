@@ -3,6 +3,7 @@ Unreleased
 v1.1.46
 
   Bugfixes:
+- [ Previews ] Indexes now use the same file as previews when workspace folders contain matching paths. Issue #712.
 - [ Build ] VSIX packages can now be built from worktrees whose folder names contain a UUID. Issue #759.
 - [ Previews ] Documentation and backup files in script folders no longer cause parsing errors in decision and world map previews.
 - [ Events Previewer ] Scan References now ignores documentation and backup files instead of reading them as events or localisation.
