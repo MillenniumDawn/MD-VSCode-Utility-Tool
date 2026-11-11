@@ -1,4 +1,6 @@
 import type * as vscode from "vscode";
+import { ConfigurationKey } from "../constants";
+import { onDidSelectInstallPath } from "./installpath";
 import { host } from "./host";
 import * as path from "path";
 import { debounceByInput } from "./common";
@@ -48,6 +50,8 @@ export interface IndexWatcherSpec {
 	gate: BuildGate;
 	/** Re-reads one workspace file into the index. */
 	reindexFile: (file: vscode.Uri) => void;
+	/** Rebuild the vanilla half after installation or DLC settings change. */
+	globalSourceChanged?: () => void;
 	/** Drops one workspace file from the index. */
 	removeFile: (file: vscode.Uri) => void;
 	/** Everything needed to rebuild the workspace half after the folders changed. */
@@ -78,6 +82,7 @@ export interface IndexWatchers {
 	 * to export its own trio of these under the same name and comment.
 	 */
 	handlers: {
+		onChangeConfiguration(e: vscode.ConfigurationChangeEvent): void;
 		onChangeWorkspaceFolders(e: vscode.WorkspaceFoldersChangeEvent): void;
 		/** What a change to the parent list runs: a rebuild of the parent half. */
 		onChangeParentMods(e: ParentModsChangeEvent): void;
@@ -125,6 +130,13 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 			spec.rebuildWorkspace.failureMessage,
 			Logger.error,
 		);
+	}
+
+	function onChangeConfiguration(e: vscode.ConfigurationChangeEvent): void {
+		if (e.affectsConfiguration(`${ConfigurationKey}.installPath`) ||
+			e.affectsConfiguration(`${ConfigurationKey}.loadDlcContents`)) {
+			spec.globalSourceChanged?.();
+		}
 	}
 
 	function onChangeWorkspaceFolders(_: vscode.WorkspaceFoldersChangeEvent) {
@@ -213,6 +225,7 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 	}
 
 	const handlers = {
+		onChangeConfiguration,
 		onChangeWorkspaceFolders,
 		onChangeParentMods,
 		onChangeTextDocument,
@@ -229,6 +242,10 @@ export function createIndexWatchers(spec: IndexWatcherSpec): IndexWatchers {
 			}
 
 			return host().Disposable.from(
+				...(spec.globalSourceChanged ? [
+					host().workspace.onDidChangeConfiguration(onChangeConfiguration),
+					onDidSelectInstallPath(spec.globalSourceChanged),
+				] : []),
 				host().workspace.onDidChangeWorkspaceFolders(onChangeWorkspaceFolders),
 				// The published list, not the raw setting: it changes once, after the `.mod`
 				// dependencies have been resolved against the new setting.
