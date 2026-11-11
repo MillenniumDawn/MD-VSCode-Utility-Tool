@@ -41,6 +41,8 @@ export interface MioTrait {
     relativePositionId: string | undefined;
     visible: ConditionComplexExpr;
     hasVisible: boolean;
+    available: ConditionComplexExpr;
+    hasAvailable: boolean;
     specialTraitBackground: boolean;
     effects: TraitEffect[];
     token: Token | undefined;
@@ -81,6 +83,7 @@ interface MioTraitDef {
     delete_included_values: Enum;
     special_trait_background: boolean;
     visible: Raw;
+    available: Raw;
     equipment_bonus: Raw;
     production_bonus: Raw;
     organization_modifier: Raw;
@@ -107,6 +110,7 @@ const mioTraitSchema: SchemaDef<MioTraitDef> = {
     relative_position_id: "string",
     delete_included_values: "enum",
     visible: "raw",
+    available: "raw",
     special_trait_background: "boolean",
     equipment_bonus: "raw",
     production_bonus: "raw",
@@ -546,6 +550,8 @@ function getTrait(traitDef: HOIPartial<MioTraitDef>, filePath: string, warnings:
         relativePositionId: traitDef.relative_position_id,
         visible,
         hasVisible: traitDef.visible !== undefined,
+        available: traitDef.available ? extractConditionValue(traitDef.available._raw.value, { scopeName: '', scopeType: 'mio' }, conditionExprs).condition : true,
+        hasAvailable: traitDef.available !== undefined,
         specialTraitBackground: traitDef.special_trait_background ?? false,
         effects,
         token: traitDef._token,
@@ -609,6 +615,10 @@ function overrideTrait(traitDef: HOIPartial<MioTraitDef>, traits: Record<string,
                 trait.visible = true;
                 trait.hasVisible = false;
                 break;
+            case 'available':
+                trait.available = true;
+                trait.hasAvailable = false;
+                break;
             case 'special_trait_background':
                 trait.specialTraitBackground = false;
                 break;
@@ -654,6 +664,10 @@ function overrideTrait(traitDef: HOIPartial<MioTraitDef>, traits: Record<string,
         extractConditionValue(traitDef.visible._raw.value, { scopeName: '', scopeType: 'mio' }, conditionExprs).condition :
         trait.visible;
     trait.hasVisible = traitDef.visible !== undefined || trait.hasVisible;
+    trait.available = traitDef.available ?
+        extractConditionValue(traitDef.available._raw.value, { scopeName: '', scopeType: 'mio' }, conditionExprs).condition :
+        trait.available;
+    trait.hasAvailable = traitDef.available !== undefined || trait.hasAvailable;
     if (traitDef._token) {
         trait.token = traitDef._token;
         trait.file = filePath;
