@@ -8,6 +8,7 @@ import {
 	saveCacheManifest,
 	captureCacheScope,
 	CacheScope,
+	indexSourceIdentity,
 } from "./indexCache";
 import { indexParseQueue, IndexProgress } from "./indexBuild";
 import { IndexFile, IndexListing, toIndexFiles } from "./indexListing";
@@ -23,6 +24,7 @@ import {
 
 export interface IndexBuildContext {
 	readonly cacheScope: CacheScope;
+	readonly sourceIdentity: string;
 	readonly dependencyGeneration: number;
 	readonly parentModUris: readonly vscode.Uri[];
 }
@@ -30,8 +32,10 @@ export interface IndexBuildContext {
 /** Captures all dependency-sensitive inputs once for the complete index build. */
 export async function captureIndexBuildContext(): Promise<IndexBuildContext> {
 	const snapshot = await captureModDependencySnapshot();
+	const sourceIdentity = indexSourceIdentity();
 	return {
-		cacheScope: captureCacheScope(snapshot.parentModUris),
+		cacheScope: captureCacheScope(snapshot.parentModUris, sourceIdentity),
+		sourceIdentity,
 		dependencyGeneration: snapshot.generation,
 		parentModUris: snapshot.parentModUris,
 	};
@@ -62,6 +66,7 @@ function queueCacheWrite(
 	version: number,
 	scope: CacheScope,
 	generation: number | undefined,
+	isCurrent?: () => boolean,
 ): void {
 	if (key === undefined) {
 		return;
@@ -69,12 +74,15 @@ function queueCacheWrite(
 
 	const previous = pendingCacheWrites.get(key) ?? Promise.resolve();
 	const write = previous.then(async () => {
+		if (isCurrent && !isCurrent()) { return; }
 		if (
 			generation !== undefined &&
 			!isModDependencyGenerationCurrent(generation)
 		) {
 			return;
 		}
+		// Once writing starts, finish the captured pair in its captured source namespace.
+		// A setting change during I/O must not leave new records behind an older manifest.
 		await saveCacheRecords(cacheName, records, scope);
 		if (
 			generation !== undefined &&
@@ -139,6 +147,8 @@ export interface IndexHalfSpec<TRecord> {
 	/** Dependency generation and scope captured before the build listed any files. */
 	dependencyGeneration?: number;
 	cacheScope?: CacheScope;
+	/** Reject obsolete source generations before they can persist their records. */
+	isCurrent?: () => boolean;
 }
 
 export async function buildIndexHalf<TRecord>(
@@ -264,6 +274,7 @@ async function buildIndexHalfWithTimer<TRecord>(
 	// already is the whole listing. Every other arrival still writes.
 	const skipCacheWrite =
 		writeKey === undefined ||
+		(spec.isCurrent !== undefined && !spec.isCurrent()) ||
 		(cacheRestored && !hasChanges && !dependencyChanged && filesToParse.length === 0);
 	if (!skipCacheWrite) {
 		queueCacheWrite(
@@ -275,6 +286,7 @@ async function buildIndexHalfWithTimer<TRecord>(
 			version,
 			cacheScope,
 			spec.dependencyGeneration,
+			spec.isCurrent,
 		);
 	}
 }

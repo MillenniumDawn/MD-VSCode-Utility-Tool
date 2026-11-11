@@ -6,6 +6,7 @@ import { refreshFeatureFlags } from "../../util/featureflags";
 import * as fileloader from "../../util/fileloader";
 import { __resetIndexProgressForTests } from "../../util/indexBuild";
 import * as indexCache from "../../util/indexCache";
+import { clearInstallPathCache } from "../../util/installpath";
 import { clearParentModCache } from "../../util/parentmods";
 import { settle } from "./async";
 import { handOver } from "./host";
@@ -128,6 +129,7 @@ function editorFor(world: IndexWorld) {
 			getWorkspaceFolder: () => ({ uri: new FakeUri("/ws") }),
 			textDocuments: [],
 			onDidChangeWorkspaceFolders: disposable,
+			onDidChangeConfiguration: disposable,
 			onDidChangeTextDocument: disposable,
 			onDidCloseTextDocument: disposable,
 			onDidCreateFiles: disposable,
@@ -224,6 +226,7 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 			world.reads++;
 			return [await world.read(relativePath, halfOf(options)), new FakeUri(relativePath)];
 		});
+		clearInstallPathCache();
 		refreshFeatureFlags();
 		clearParentModCache();
 		__resetIndexProgressForTests();
@@ -238,6 +241,7 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 		contextContainer.current = null;
 		// Back to the defaults, so a flag one test turned off is not off for the next file.
 		world.settings = {};
+		clearInstallPathCache();
 		refreshFeatureFlags();
 		clearParentModCache();
 		__resetIndexProgressForTests();

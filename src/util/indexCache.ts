@@ -7,6 +7,7 @@ import { readFile, writeFile, mkdirs, getLastModifiedAsync, getConfiguration, ur
 import { getParentModUris } from './parentmods';
 import { createTimeSlicer, mapLimit } from './common';
 import { pathIdentity } from './nodecommon';
+import { getEffectiveInstallPathUri } from './installpath';
 
 interface CacheManifest {
     version: number;
@@ -30,12 +31,20 @@ const MTIME_CONCURRENCY = 32;
 
 const CACHE_ROOT = 'indexCache';
 
+/** The effective vanilla inputs, including a web or remote folder-picker override. */
+export function indexSourceIdentity(): string {
+    const conf = getConfiguration();
+    const install = getEffectiveInstallPathUri();
+    return JSON.stringify([install ? pathIdentity(uriToFilePathWhenPossible(install)) : '', !!conf.loadDlcContents]);
+}
+
 /**
  * A short, stable name for "the thing being indexed", so two mods opened in the same VS Code
  * profile get two caches instead of overwriting each other's.
  *
- * The identity is the selected `modFile` plus the workspace folders and parent mod paths in
- * precedence order. A plain FNV-1a hash rather than `node:crypto`, because this module
+ * The identity includes the installation and DLC setting, the selected `modFile`, and the
+ * workspace folders and parent mod paths in precedence order. A plain FNV-1a hash rather than
+ * `node:crypto`, because this module
  * is loaded in the web build too (where it never reaches disk at all) and because a collision
  * costs no more than two mods sharing one cache -- which is exactly today's behaviour.
  *
@@ -47,9 +56,11 @@ export function cacheNamespaceFor(
     modFile: string | undefined,
     workspaceFolderUris: readonly string[],
     parentModPaths: readonly string[] = [],
+    sourceIdentity?: string,
 ): string {
     // Invalidate caches written when workspace-only index listings selected the last duplicate.
     const parts: string[] = ['workspace-order:v2'];
+    if (sourceIdentity !== undefined) { parts.push('source:' + sourceIdentity); }
 
     const mod = modFile?.trim();
     if (mod) {
@@ -72,7 +83,7 @@ export function cacheNamespaceFor(
 
 
 /** The inputs to `cacheNamespaceFor`, each read defensively -- none is worth failing over. */
-function cacheNamespace(parentModUris?: readonly vscode.Uri[]): string {
+function cacheNamespace(parentModUris?: readonly vscode.Uri[], sourceIdentity = indexSourceIdentity()): string {
     let modFile: string | undefined;
     let parentModPaths: string[] = [];
     try {
@@ -95,19 +106,20 @@ function cacheNamespace(parentModUris?: readonly vscode.Uri[]): string {
         folders = [];
     }
 
-    return cacheNamespaceFor(modFile, folders, parentModPaths);
+    return cacheNamespaceFor(modFile, folders, parentModPaths, sourceIdentity);
 }
 
 export type CacheScope = vscode.Uri | null;
 
 export function captureCacheScope(
     parentModUris?: readonly vscode.Uri[],
+    sourceIdentity?: string,
 ): CacheScope {
     const ctx = contextContainer.current;
     if (!ctx || IS_WEB_EXT) {
         return null;
     }
-    return host().Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT, cacheNamespace(parentModUris));
+    return host().Uri.joinPath(ctx.globalStorageUri, CACHE_ROOT, cacheNamespace(parentModUris, sourceIdentity));
 }
 
 // Keyed on the directory rather than memoized once, because the namespace can change inside a
@@ -124,7 +136,9 @@ export function ensureCacheDir(scope: CacheScope = captureCacheScope()): Promise
     let pending = cacheDirPromises.get(key);
     if (!pending) {
         pending = (async () => {
-            try { await mkdirs(dir); } catch {}
+            try { await mkdirs(dir); } catch (cause) {
+                Logger.debug(`[Index] could not create cache directory ${dir.fsPath}: ${cause}`);
+            }
             // One line per namespace, so a bug report about the wrong cache says which one it used.
             Logger.info(`[Index] cache directory: ${dir.fsPath}`);
             void removeUnnamespacedCaches();
@@ -166,7 +180,9 @@ async function removeUnnamespacedCaches(): Promise<void> {
             try {
                 await host().workspace.fs.delete(host().Uri.joinPath(root, name));
                 removed++;
-            } catch {}
+            } catch (cause) {
+                Logger.debug(`[Index] could not remove legacy cache ${name}: ${cause}`);
+            }
         }
         if (removed > 0) {
             Logger.info(`[Index] removed ${removed} cache file(s) written before caches were per-mod.`);
@@ -190,7 +206,9 @@ async function removeSingleDocumentCaches(dir: vscode.Uri): Promise<void> {
             }
             try {
                 await host().workspace.fs.delete(host().Uri.joinPath(dir, name));
-            } catch {}
+            } catch (cause) {
+                Logger.debug(`[Index] could not remove legacy cache ${name}: ${cause}`);
+            }
         }
     } catch {
         // Nothing listed, nothing to remove.
