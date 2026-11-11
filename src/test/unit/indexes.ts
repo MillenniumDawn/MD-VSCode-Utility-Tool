@@ -123,6 +123,9 @@ function editorFor(world: IndexWorld) {
 			joinPath: (base: FakeUri, ...parts: string[]) => new FakeUri(posix.join(base.path, ...parts)),
 		},
 		Disposable: FakeDisposable,
+		RelativePattern: class {
+			constructor(readonly baseUri: FakeUri, readonly pattern: string) {}
+		},
 		workspace: {
 			getConfiguration: () => world.settings,
 			workspaceFolders: [{ uri: new FakeUri("/ws") }],
@@ -135,6 +138,7 @@ function editorFor(world: IndexWorld) {
 			onDidCreateFiles: disposable,
 			onDidDeleteFiles: disposable,
 			onDidRenameFiles: disposable,
+			createFileSystemWatcher: () => ({ onDidChange: disposable, onDidCreate: disposable, onDidDelete: disposable, dispose: () => undefined }),
 			fs: {
 				stat: async () => ({ type: 1, ctime: 0, mtime: 1, size: 0 }),
 				readDirectory: async () => [],
@@ -223,6 +227,7 @@ export function useIndexWorld(reset: () => void, settings: Record<string, unknow
 			world.listings++;
 			return world.list(root, halfOf(options));
 		});
+		mock.method(fileloader, "getFilePathFromModOrHOI4", async (relativePath: string) => workspaceFile(relativePath));
 		mock.method(fileloader, "readFileFromModOrHOI4", async (relativePath: string, options?: fileloader.FileSourceOptions) => {
 			world.reads++;
 			return [await world.read(relativePath, halfOf(options)), new FakeUri(relativePath)];

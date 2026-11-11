@@ -87,6 +87,8 @@ describe("util/ideaSwapIndex extraction", () => {
 });
 
 describe("util/ideaSwapIndex", () => {
+	beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"] }));
+	afterEach(() => mock.timers.reset());
 	const world = useIndexWorld(__resetIdeaSwapIndexForTests, { ideaSwapIndex: true });
 
 	beforeEach(() => {
@@ -206,6 +208,7 @@ describe("util/ideaSwapIndex", () => {
 		describe("incremental events", () => {
 			it("ignores an event that arrives before any build has started", async () => {
 				__testHandlers.onDeleteFiles({ files: [workspaceFile("common/national_focus/00_generic.txt")] });
+				mock.timers.tick(1000);
 				await settle();
 				assert.deepStrictEqual(readFiles, []);
 				const swaps = await getIdeaSwaps(["political_power_bonus"]);
@@ -215,6 +218,7 @@ describe("util/ideaSwapIndex", () => {
 			it("drops a deleted file's swaps out of the index", async () => {
 				assert.strictEqual((await getIdeaSwaps(["political_power_bonus"])).length, 1);
 				__testHandlers.onDeleteFiles({ files: [workspaceFile("common/national_focus/00_generic.txt")] });
+				mock.timers.tick(1000);
 				await settle();
 				assert.deepStrictEqual(await getIdeaSwaps(["political_power_bonus"]), []);
 			});
@@ -222,8 +226,10 @@ describe("util/ideaSwapIndex", () => {
 			it("re-reads a created file", async () => {
 				assert.strictEqual((await getIdeaSwaps(["political_power_bonus"])).length, 1);
 				__testHandlers.onDeleteFiles({ files: [workspaceFile("common/national_focus/00_generic.txt")] });
+				mock.timers.tick(1000);
 				await settle();
 				__testHandlers.onCreateFiles({ files: [workspaceFile("common/national_focus/00_generic.txt")] });
+				mock.timers.tick(1000);
 				await settle();
 				assert.strictEqual((await getIdeaSwaps(["political_power_bonus"])).length, 1);
 			});
@@ -232,6 +238,7 @@ describe("util/ideaSwapIndex", () => {
 				assert.strictEqual((await getIdeaSwaps(["political_power_bonus"])).length, 1);
 				const before = readFiles.length;
 				__testHandlers.onCreateFiles({ files: [workspaceFile("localisation/english/x.txt")] });
+				mock.timers.tick(1000);
 				await settle();
 				assert.strictEqual(readFiles.length, before);
 			});
@@ -245,6 +252,7 @@ describe("util/ideaSwapIndex", () => {
 
 		function closeDirty(): void {
 			__testHandlers.onCloseTextDocument({ uri: workspaceFile(SWAP_FILE), isDirty: true } as unknown as vscode.TextDocument);
+			mock.timers.tick(1000);
 		}
 
 		it("keeps the file's swaps when it can't be read", async () => {

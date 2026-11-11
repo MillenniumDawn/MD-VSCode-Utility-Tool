@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import { mock } from "node:test";
 import * as vscode from "vscode";
 import { __resetIndexProgressForTests } from "../util/indexBuild";
 import { createIndexWatchers } from "../util/indexWatchers";
@@ -12,6 +13,8 @@ function fileUri(relative: string): vscode.Uri {
 }
 
 describe("util/indexWatchers folder-change rebuild", function () {
+	beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"] }));
+	afterEach(() => mock.timers.reset());
 	let resets: number;
 	let rebuilds: number;
 	let removed: string[];
@@ -101,6 +104,7 @@ describe("util/indexWatchers folder-change rebuild", function () {
 		handlers.onDeleteFiles({
 			files: [fileUri("common/national_focus/shared.txt")],
 		});
+		mock.timers.tick(1000);
 		await waitForAsyncTasks();
 		assert.deepStrictEqual(removed, []);
 
@@ -109,7 +113,7 @@ describe("util/indexWatchers folder-change rebuild", function () {
 		assert.strictEqual(removed.length, 1);
 	});
 
-	it("applies an incremental event immediately once the folder-change rebuild has settled", async function () {
+	it("applies an incremental event after the debounce once the folder-change rebuild has settled", async function () {
 		gate.start(Promise.resolve());
 		await waitForAsyncTasks();
 
@@ -123,6 +127,7 @@ describe("util/indexWatchers folder-change rebuild", function () {
 		handlers.onDeleteFiles({
 			files: [fileUri("common/national_focus/shared.txt")],
 		});
+		mock.timers.tick(1000);
 		assert.strictEqual(removed.length, 1);
 	});
 
@@ -133,6 +138,7 @@ describe("util/indexWatchers folder-change rebuild", function () {
 		handlers.onDeleteFiles({
 			files: [fileUri("common/national_focus/shared.txt")],
 		});
+		mock.timers.tick(1000);
 		handlers.onChangeWorkspaceFolders({
 			added: [],
 			removed: [],

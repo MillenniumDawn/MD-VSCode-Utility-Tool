@@ -1,4 +1,5 @@
 import * as assert from "assert";
+import { mock } from "node:test";
 import type * as vscode from "vscode";
 import { refreshFeatureFlags } from "../../../util/featureflags";
 import {
@@ -18,6 +19,8 @@ function yml(...lines: string[]): Buffer {
 }
 
 describe("util/localisationIndex", () => {
+	beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"] }));
+	afterEach(() => mock.timers.reset());
 	describe("parseLocalisation", () => {
 		it("parses entries with and without a version number", () => {
 			const result = parseLocalisation(yml("l_english:", ' KEY_A:0 "value a"', ' KEY_B:3 "value b"', ' KEY_C: "value c"').toString());
@@ -87,6 +90,7 @@ describe("util/localisationIndex", () => {
 
 						await assertUnrelatedEntriesRemain();
 						__testHandlers.onCreateFiles({ files: [file] });
+						mock.timers.tick(1000);
 						await settle();
 						await settle();
 						await assertMultiLanguageEntries("old English", "old Russian");
@@ -94,6 +98,7 @@ describe("util/localisationIndex", () => {
 
 					it("removes every parsed language when the file is deleted", async () => {
 						__testHandlers.onDeleteFiles({ files: [file] });
+						mock.timers.tick(1000);
 						await settle();
 
 						await assertMultiLanguageEntries("MULTI_ENGLISH_OLD", "MULTI_RUSSIAN_OLD");
@@ -103,6 +108,7 @@ describe("util/localisationIndex", () => {
 					it("clears prior languages when the file is re-indexed", async () => {
 						multiLanguageContent = yml("l_french:", ' MULTI_FRENCH_NEW:0 "new French"');
 						__testHandlers.onCloseTextDocument({ uri: file, isDirty: true } as vscode.TextDocument);
+						mock.timers.tick(1000);
 						await settle();
 						await settle();
 
@@ -156,6 +162,7 @@ describe("util/localisationIndex", () => {
 				assert.strictEqual(await getLocalisedText("SHARED", "en"), "workspace");
 
 				__testHandlers.onDeleteFiles({ files: [workspaceFile("localisation/sub_l_english.yml")] });
+				mock.timers.tick(1000);
 				await settle();
 				assert.strictEqual(await getLocalisedText("SHARED", "en"), "parent");
 			});
