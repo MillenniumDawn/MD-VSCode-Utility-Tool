@@ -37,6 +37,7 @@ const focusIndex = createThreeHalfIndex<FocusHalf, FocusCacheRecord>({
 	extension: ".txt",
 	cacheVersion: FOCUS_CACHE_VERSION,
 	newHalf: () => ({ index: {}, keyToFile: new Map() }),
+	recordFilePath: ([file]) => file,
 	hydrate: ({ index, keyToFile }, [file, keys], skipFiles) => {
 		if (skipFiles.has(file)) {
 			return;
