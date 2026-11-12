@@ -4,6 +4,7 @@ import { registerContextContainer, setVscodeContext } from './context';
 import { DDSViewProvider, TGAViewProvider } from './ddsviewprovider';
 import { registerModFile } from './util/modfile';
 import { worldMap } from './previewdef/worldmap';
+import { focusIconCatalog } from './previewdef/focusiconcatalog';
 import { ViewType, ContextName } from './constants';
 import { registerScanReferencesCommand } from './util/dependency';
 import { registerHoiFs } from './util/hoifs';
@@ -40,6 +41,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(previewManager.register());
     context.subscriptions.push(registerModFile());
     context.subscriptions.push(worldMap.register());
+    context.subscriptions.push(focusIconCatalog.register());
     context.subscriptions.push(registerScanReferencesCommand());
     context.subscriptions.push(registerHoiFs());
     context.subscriptions.push(vscode.window.registerCustomEditorProvider(ViewType.DDS, new DDSViewProvider()));
