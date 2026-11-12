@@ -63,6 +63,8 @@
     "hoi4modutilities.inlayWindowGfxRoots.desc": "Workspace/mod-relative folders scanned first for the .gfx files focus inlay windows use (e.g. \"interface/scripted_gui\"). The whole interface/ folder is always scanned after them. An inlay_window_gfx_roots = { ... } list in the mod's .mod file adds to this.",
     "hoi4modutilities.focusOverlayGfxFiles.title": "Focus overlay GFX files",
     "hoi4modutilities.focusOverlayGfxFiles.desc": "Workspace/mod-relative .gfx files, or folders scanned for .gfx files, that define the mod's focus overlay sprites (e.g. \"interface/goals_overlays.gfx\"). The game's interface/goals.gfx is always searched first. A focus_overlay_gfx = { ... } list in the mod's .mod file adds to this.",
+    "hoi4modutilities.focusIconCatalogGfxFiles.title": "Focus Icon Catalog GFX files",
+    "hoi4modutilities.focusIconCatalogGfxFiles.desc": "Workspace/mod-relative .gfx files, or folders scanned for .gfx files, whose sprites the Focus Icon Catalog shows besides interface/goals.gfx and every .gfx under interface/ whose name contains \"goal\" or \"focus\". A focus_icon_gfx = { ... } list in the mod's .mod file adds to this.",
     "hoi4modutilities.decisionGfxFiles.title": "Decision GFX files",
     "hoi4modutilities.decisionGfxFiles.desc": "Workspace/mod-relative .gfx files, or folders scanned for .gfx files, that define the mod's decision sprites (e.g. \"interface/MD_decisions.gfx\"). The game's interface/decisions.gfx is always searched first. A decision_gfx = { ... } list in the mod's .mod file adds to this.",
     "hoi4modutilities.ideaPlaceholderIcon.title": "Idea placeholder icon",
@@ -89,6 +91,7 @@
     "hoi4modutilities.section.auditor": "检查器",
     "hoi4modutilities.section.modTools": "模组工具",
     "hoi4modutilities.runmodtool.title": "运行模组工具...",
+    "hoi4modutilities.openfocusiconcatalog.title": "打开国策图标目录",
     "hoi4modutilities.modTools.enabled.title": "模组工具：启用",
     "hoi4modutilities.modTools.enabled.desc": "启用属于某个特定模组的工具，通过命令面板中的 **运行模组工具...** 运行。模组的工具只在该模组打开时出现，每个带有工具的模组在下方都有自己的页面，可选择显示哪些工具。\n\n模组工具由各模组自行编写和维护，而不是 MD Utilities，本扩展不提供支持。工具出错时，错误信息会注明应向哪个模组团队报告。"
 }

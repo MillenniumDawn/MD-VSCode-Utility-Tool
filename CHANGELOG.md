@@ -1,5 +1,8 @@
 Unreleased
 
+  Functionality:
+- [ Focus Icon Catalog ] New Focus Icon Catalog shows every focus icon from the game, parent mods and the mod, with search and source filters. Click an icon to copy its GFX_ name, Ctrl+click to open its definition. Open it from the command palette, the title bar of a focus file or the focus tree preview toolbar; extra .gfx files can be added with the focusIconCatalogGfxFiles setting or a focus_icon_gfx list in the .mod file.
+
   Bugfixes:
 - [ Indexes ] External edits, additions and deletions now refresh sprite, localisation, shared-focus and idea-swap indexes, including parent mods, game files and DLC archives. Issue #705.
 - [ Indexing ] Creating, renaming or deleting folders now refreshes their indexed files, removing old paths and finding files in new locations. Issue #706.

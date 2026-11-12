@@ -1244,6 +1244,10 @@ window.addEventListener(
 			});
 		}
 
+		document.getElementById("open-icon-catalog")?.addEventListener("click", () => {
+			vscode.postMessage({ command: "openIconCatalog" });
+		});
+
 		// Reset focus-completion checkboxes
 		const resetFocusCheckboxes = document.getElementById(
 			"reset-focus-checkboxes",
