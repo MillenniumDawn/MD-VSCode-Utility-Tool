@@ -367,13 +367,13 @@ describe("previewdef/previewmanager PreviewManager", function () {
 			assert.deepStrictEqual(manager.getPreviewItemsNeedsUpdate("file:///mod/common/units/equipment/air/new.txt"), [technology]);
 		});
 
-		it("watches external .txt additions and deletions for dependency refreshes", function () {
+		it("watches external .txt and .gfx additions and deletions for dependency refreshes", function () {
 			let created: ((uri: vscode.Uri) => void) | undefined;
 			let deleted: ((uri: vscode.Uri) => void) | undefined;
 			let disposed = false;
 			stubVscode({
 				createFileSystemWatcher: (glob, ignoreCreate, ignoreChange, ignoreDelete) => {
-					assert.strictEqual(glob, '**/*.txt');
+					assert.strictEqual(glob, '**/*.{txt,[gG][fF][xX]}');
 					assert.deepStrictEqual([ignoreCreate, ignoreChange, ignoreDelete], [false, true, false]);
 					return {
 						onDidCreate: (handler: (uri: vscode.Uri) => void) => { created = handler; return { dispose: () => undefined }; },
@@ -387,9 +387,15 @@ describe("previewdef/previewmanager PreviewManager", function () {
 			manager.updatePreviewItemsInSubscription = (uri: vscode.Uri) => updated.push(uri.toString());
 			const subscription = manager.register();
 			const file = vscode.Uri.parse('file:///mod/common/md_formats/new.txt');
+			const companion = vscode.Uri.parse('file:///mod/interface/window.gfx');
+			const mixedCase = vscode.Uri.parse('file:///mod/interface/window.GfX');
 			created!(file);
 			deleted!(file);
-			assert.deepStrictEqual(updated, [file.toString(), file.toString()]);
+			created!(companion);
+			deleted!(companion);
+			created!(mixedCase);
+			deleted!(mixedCase);
+			assert.deepStrictEqual(updated, [file.toString(), file.toString(), companion.toString(), companion.toString(), mixedCase.toString(), mixedCase.toString()]);
 			subscription.dispose();
 			assert.strictEqual(disposed, true);
 		});
