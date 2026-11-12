@@ -40,6 +40,14 @@ describe("previewdef/gui/loader companion GFX", () => {
 		assert.strictEqual(loaded.result.guiFiles[0]?.data.guitypes[0]?.containerwindowtype[0]?.name, "window");
 	});
 
+	it("finds the companion of a GUI with an uppercase extension", async () => {
+		available.add(companion);
+		const loaded = await new GuiFileLoader("interface/window.GUI", async () => content).load(new LoaderSession(false));
+
+		assert.deepStrictEqual(checked, [companion]);
+		assert.deepStrictEqual(loaded.result.gfxFiles, [companion]);
+	});
+
 	it("keeps an existing companion before explicitly declared GFX files", async () => {
 		available.add(companion);
 		const explicit = "interface/shared.gfx";
