@@ -17,7 +17,7 @@ export class GuiFileLoader extends ContentLoader<GuiFileLoaderResult> {
             throw error;
         }
 
-        const companion = this.file.replace(/\.gui$/, '.gfx');
+        const companion = this.file.replace(/\.gui$/i, '.gfx');
         const gfxDependencies = dependencies.filter(d => d.type === 'gfx').map(d => d.path);
         if (await getFilePathFromModOrHOI4(companion)) {
             gfxDependencies.unshift(companion);
