@@ -1,5 +1,8 @@
 Unreleased
 
+  Functionality:
+- [ Previews ] Hovering a card in the event or decision preview now dims the other cards and labels immediately instead of fading them, so large files respond faster. Issue #696.
+
   Bugfixes:
 - [ Indexes ] External edits, additions and deletions now refresh sprite, localisation, shared-focus and idea-swap indexes, including parent mods, game files and DLC archives. Issue #705.
 - [ Indexing ] Creating, renaming or deleting folders now refreshes their indexed files, removing old paths and finding files in new locations. Issue #706.
