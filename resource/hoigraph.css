@@ -62,17 +62,7 @@ body.panning .ev-chip {
 	opacity: 0.25;
 }
 
-.ev-node,
-.ev-chip {
-	transition: opacity 0.12s linear;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.ev-node,
-	.ev-chip {
-		transition: none;
-	}
-}
+/* No opacity transition. On a large graph it dominates enter and leave style recalculation. */
 
 /* Says how many nodes a filter took out from under this card. Dashed, like everything else on the
    canvas that stands for something not on it. */
