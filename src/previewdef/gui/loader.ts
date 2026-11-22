@@ -2,6 +2,7 @@ import uniq from "lodash/uniq";
 import { GuiFile, guiFileSchema } from "../../hoiformat/gui";
 import { parseHoi4File, resolveScriptVariables } from "../../hoiformat/hoiparser";
 import { convertNodeToJson, HOIPartial } from "../../hoiformat/schema";
+import { getFilePathFromModOrHOI4 } from "../../util/fileloader";
 import { localize } from "../../util/i18n";
 import { ContentLoader, Dependency, LoaderSession, LoadResultOD, mergeInLoadResult } from "../../util/loader/loader";
 
@@ -16,7 +17,11 @@ export class GuiFileLoader extends ContentLoader<GuiFileLoaderResult> {
             throw error;
         }
 
-        const gfxDependencies = [this.file.replace(/.gui$/, '.gfx'), ...dependencies.filter(d => d.type === 'gfx').map(d => d.path)];
+        const companion = this.file.replace(/\.gui$/i, '.gfx');
+        const gfxDependencies = dependencies.filter(d => d.type === 'gfx').map(d => d.path);
+        if (await getFilePathFromModOrHOI4(companion)) {
+            gfxDependencies.unshift(companion);
+        }
         const guiDependencies = dependencies.filter(d => d.type === 'gui').map(d => d.path);
 
         const guiDepFiles = await this.loaderDependencies.loadMultiple(guiDependencies, session, GuiFileLoader);
@@ -28,7 +33,7 @@ export class GuiFileLoader extends ContentLoader<GuiFileLoaderResult> {
                 gfxFiles: uniq([...gfxDependencies, ...guiDepFiles.flatMap(r => r.result.gfxFiles)]),
                 guiFiles: uniq([...guiDepFiles.flatMap(r => r.result.guiFiles), { file: this.file, data: guiFile }]),
             },
-            dependencies: uniq([this.file, ...gfxDependencies, ...mergeInLoadResult(guiDepFiles, 'dependencies')]),
+            dependencies: uniq([this.file, companion, ...gfxDependencies, ...mergeInLoadResult(guiDepFiles, 'dependencies')]),
         };
     }
 

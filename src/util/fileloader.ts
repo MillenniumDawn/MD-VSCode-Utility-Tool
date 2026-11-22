@@ -1323,6 +1323,7 @@ const descriptorListsCache = new PromiseCache({
 interface ModFile {
 	replace_path: string[];
 	focus_overlay_gfx: Enum;
+	focus_icon_gfx: Enum;
 	decision_gfx: Enum;
 	inlay_window_gfx_roots: Enum;
 	character_trait_structural_keys: Enum;
@@ -1336,6 +1337,7 @@ const modListSchema: SchemaDef<ModFile> = {
 		_type: "array",
 	},
 	focus_overlay_gfx: "enum",
+	focus_icon_gfx: "enum",
 	decision_gfx: "enum",
 	inlay_window_gfx_roots: "enum",
 	character_trait_structural_keys: "enum",
@@ -1346,6 +1348,7 @@ const modListSchema: SchemaDef<ModFile> = {
 interface DescriptorLists {
 	replacePaths: string[];
 	focusOverlayGfx: string[];
+	focusIconGfx: string[];
 	decisionGfx: string[];
 	inlayWindowGfxRoots: string[];
 	characterTraitStructuralKeys: string[];
@@ -1375,6 +1378,15 @@ function getReplacePaths(): Promise<string[] | undefined> {
  */
 export async function getDescriptorFocusOverlayGfx(): Promise<string[]> {
 	return (await getDescriptorList("focusOverlayGfx")) ?? [];
+}
+
+/**
+ * The `focus_icon_gfx` files named by the working mod's descriptor and its parent mods'
+ * descriptors: .gfx files, or folders of them, the Focus Icon Catalog shows besides the game's
+ * `interface/goals.gfx` and every .gfx whose name mentions goals or focuses. The game ignores the key.
+ */
+export async function getDescriptorFocusIconGfx(): Promise<string[]> {
+	return (await getDescriptorList("focusIconGfx")) ?? [];
 }
 
 /**
@@ -1480,6 +1492,7 @@ async function getListsFromModFile(
 	return {
 		replacePaths: modFile.replace_path.filter((v): v is string => typeof v === "string"),
 		focusOverlayGfx: modFile.focus_overlay_gfx._values,
+		focusIconGfx: modFile.focus_icon_gfx._values,
 		decisionGfx: modFile.decision_gfx._values,
 		inlayWindowGfxRoots: modFile.inlay_window_gfx_roots._values,
 		characterTraitStructuralKeys: modFile.character_trait_structural_keys._values,

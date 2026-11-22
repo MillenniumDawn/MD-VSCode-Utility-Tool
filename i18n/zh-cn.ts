@@ -350,6 +350,7 @@ const table: Partial<typeof __table> = {
     "toolbar.copywarnings": "复制警告",
     "toolbar.nowarnings": "没有可显示的警告",
     "toolbar.openfile": "在编辑器中打开文件",
+    "toolbar.openiconcatalog": "打开国策图标目录",
     "toolbar.saveimage": "将地图保存为图像",
     "toolbar.warningmarkers": "在国策树上显示警告标记",
     "toolbar.warnings": "显示警告列表",

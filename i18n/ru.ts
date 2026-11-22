@@ -350,6 +350,7 @@ const table: Partial<typeof __table> = {
     "toolbar.copywarnings": "Скопировать предупреждения",
     "toolbar.nowarnings": "Нет предупреждений для показа",
     "toolbar.openfile": "Открыть файл в редакторе",
+    "toolbar.openiconcatalog": "Открыть каталог иконок фокусов",
     "toolbar.saveimage": "Сохранить карту как изображение",
     "toolbar.warningmarkers": "Показать метки предупреждений на дереве",
     "toolbar.warnings": "Показать список предупреждений",

@@ -218,7 +218,7 @@ describe("webview/boppreview rendering", () => {
 		assert.strictEqual(input("bop-slider").value, "0.25");
 		assert.strictEqual(slot("needle").style.transform, "translate(320px, 125px)");
 		assert.strictEqual(shownFill(), "bop-slot-fill-right");
-		assert.strictEqual((card().querySelector(".bop-slot-fill-right") as HTMLElement).style.clipPath, "inset(0 37.5% 0 50%)");
+		assert.strictEqual((card().querySelector(".bop-slot-fill-right") as HTMLElement).style.clipPath, "inset(0px 37.5% 0px 50%)");
 		assert.strictEqual(slot("active-range").textContent, "people_dominant");
 		// The lit indicator is on the edge of the active range, the other one is not.
 		const marks = Array.from(slot("marks").children);
@@ -231,7 +231,7 @@ describe("webview/boppreview rendering", () => {
 		assert.strictEqual(slot("active-range").textContent, "Vadim Holds Unlimited Power");
 		assert.strictEqual(slot("needle").style.transform, "translate(185px, 125px)");
 		assert.strictEqual(shownFill(), "bop-slot-fill-left-moving");
-		assert.strictEqual((card().querySelector(".bop-slot-fill-left") as HTMLElement).style.clipPath, "inset(0 50% 0 25%)");
+		assert.strictEqual((card().querySelector(".bop-slot-fill-left") as HTMLElement).style.clipPath, "inset(0px 50% 0px 25%)");
 
 		// Moving back towards the centre is not moving towards the left side.
 		slide("-0.3");

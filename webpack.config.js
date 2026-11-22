@@ -201,6 +201,7 @@ const webviewJsConfig = {
     decisiontree: './webviewsrc/decisiontree.ts',
     characterpreview: './webviewsrc/characterpreview.ts',
     boppreview: './webviewsrc/boppreview.ts',
+    focusiconcatalog: './webviewsrc/focusiconcatalog.ts',
   },
   
   output: {
