@@ -4,6 +4,7 @@ v1.1.46
 
   Functionality:
 - [ Focus Icon Catalog ] New Focus Icon Catalog shows every focus icon from the game, parent mods and the mod, with search and source filters. Click an icon to copy its GFX_ name, Ctrl+click to open its definition. Open it from the command palette, the title bar of a focus file or the focus tree preview toolbar; extra .gfx files can be added with the focusIconCatalogGfxFiles setting or a focus_icon_gfx list in the .mod file.
+- [ Previews ] Hovering a card in the event or decision preview now dims the other cards and labels immediately instead of fading them, so large files respond faster. Issue #696.
 
   Bugfixes:
 - [ GUI Previewer ] Windows without a matching GFX file no longer produce missing-file errors. Explicitly listed GFX dependencies are still checked.
