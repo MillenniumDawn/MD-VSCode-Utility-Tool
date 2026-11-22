@@ -24,6 +24,7 @@ const settings = [
 	"mdHoi4Utilities.focusTreePrerequisiteLines",
 	"mdHoi4Utilities.inlayWindowGfxRoots",
 	"mdHoi4Utilities.focusOverlayGfxFiles",
+	"mdHoi4Utilities.focusIconCatalogGfxFiles",
 	"mdHoi4Utilities.decisionGfxFiles",
 	"mdHoi4Utilities.ideaPlaceholderIcon",
 	"mdHoi4Utilities.characterTraitStructuralKeys",

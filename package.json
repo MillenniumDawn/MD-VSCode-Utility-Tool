@@ -34,6 +34,7 @@
 	"activationEvents": [
 		"onWebviewPanel:mdftpreview",
 		"onWebviewPanel:mdworldmappreview",
+		"onWebviewPanel:mdfocusiconcatalog",
 		"workspaceContains:**/interface/**/*.gfx",
 		"workspaceContains:**/interface/**/*.gui",
 		"workspaceContains:**/common/characters/*.txt",
@@ -58,6 +59,7 @@
 				"mdHoi4Utilities.userDataPath",
 				"mdHoi4Utilities.inlayWindowGfxRoots",
 				"mdHoi4Utilities.focusOverlayGfxFiles",
+				"mdHoi4Utilities.focusIconCatalogGfxFiles",
 				"mdHoi4Utilities.decisionGfxFiles",
 				"mdHoi4Utilities.ideaPlaceholderIcon",
 				"mdHoi4Utilities.modifierFormatFiles",
@@ -226,6 +228,15 @@
 							"type": "string"
 						},
 						"description": "%hoi4modutilities.focusOverlayGfxFiles.desc%"
+					},
+					"mdHoi4Utilities.focusIconCatalogGfxFiles": {
+						"title": "%hoi4modutilities.focusIconCatalogGfxFiles.title%",
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"description": "%hoi4modutilities.focusIconCatalogGfxFiles.desc%"
 					},
 					"mdHoi4Utilities.decisionGfxFiles": {
 						"title": "%hoi4modutilities.decisionGfxFiles.title%",
@@ -406,6 +417,12 @@
 				"command": "mdhoi4utilities.runmodtool",
 				"title": "%hoi4modutilities.runmodtool.title%",
 				"category": "%hoi4modutilities.category%"
+			},
+			{
+				"command": "mdhoi4utilities.openfocusiconcatalog",
+				"title": "%hoi4modutilities.openfocusiconcatalog.title%",
+				"icon": "$(library)",
+				"category": "%hoi4modutilities.category%"
 			}
 		],
 		"customEditors": [
@@ -447,6 +464,11 @@
 					"command": "mdhoi4utilities.scanreferences",
 					"when": "mdHoi4PreviewType == event && resourceScheme != webview-panel",
 					"group": "navigation"
+				},
+				{
+					"command": "mdhoi4utilities.openfocusiconcatalog",
+					"when": "mdHoi4PreviewType == focustree && resourceScheme != webview-panel",
+					"group": "navigation"
 				}
 			],
 			"editor/context": [
@@ -486,6 +508,9 @@
 				},
 				{
 					"command": "mdhoi4utilities.auditfocustrees"
+				},
+				{
+					"command": "mdhoi4utilities.openfocusiconcatalog"
 				},
 				{
 					"command": "mdhoi4utilities.runmodtool",

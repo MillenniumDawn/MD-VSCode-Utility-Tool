@@ -25,9 +25,11 @@ export namespace Commands {
     export const ShowIndexStatus = 'mdhoi4utilities.showindexstatus';
     export const AuditFocusTrees = 'mdhoi4utilities.auditfocustrees';
     export const RunModTool = 'mdhoi4utilities.runmodtool';
+    export const OpenFocusIconCatalog = 'mdhoi4utilities.openfocusiconcatalog';
 }
 
 export namespace WebviewType {
     export const Preview = 'mdftpreview';
     export const PreviewWorldMap = 'mdworldmappreview';
+    export const FocusIconCatalog = 'mdfocusiconcatalog';
 }

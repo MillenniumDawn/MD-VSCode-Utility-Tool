@@ -63,6 +63,8 @@
     "hoi4modutilities.inlayWindowGfxRoots.desc": "Workspace/mod-relative folders scanned first for the .gfx files focus inlay windows use (e.g. \"interface/scripted_gui\"). The whole interface/ folder is always scanned after them. An inlay_window_gfx_roots = { ... } list in the mod's .mod file adds to this.",
     "hoi4modutilities.focusOverlayGfxFiles.title": "Focus overlay GFX files",
     "hoi4modutilities.focusOverlayGfxFiles.desc": "Workspace/mod-relative .gfx files, or folders scanned for .gfx files, that define the mod's focus overlay sprites (e.g. \"interface/goals_overlays.gfx\"). The game's interface/goals.gfx is always searched first. A focus_overlay_gfx = { ... } list in the mod's .mod file adds to this.",
+    "hoi4modutilities.focusIconCatalogGfxFiles.title": "Focus Icon Catalog GFX files",
+    "hoi4modutilities.focusIconCatalogGfxFiles.desc": "Workspace/mod-relative .gfx files, or folders scanned for .gfx files, whose sprites the Focus Icon Catalog shows besides interface/goals.gfx and every .gfx under interface/ whose name contains \"goal\" or \"focus\". A focus_icon_gfx = { ... } list in the mod's .mod file adds to this.",
     "hoi4modutilities.decisionGfxFiles.title": "Decision GFX files",
     "hoi4modutilities.decisionGfxFiles.desc": "Workspace/mod-relative .gfx files, or folders scanned for .gfx files, that define the mod's decision sprites (e.g. \"interface/MD_decisions.gfx\"). The game's interface/decisions.gfx is always searched first. A decision_gfx = { ... } list in the mod's .mod file adds to this.",
     "hoi4modutilities.ideaPlaceholderIcon.title": "Idea placeholder icon",
@@ -89,6 +91,7 @@
     "hoi4modutilities.section.auditor": "검사기",
     "hoi4modutilities.section.modTools": "모드 도구",
     "hoi4modutilities.runmodtool.title": "모드 도구 실행...",
+    "hoi4modutilities.openfocusiconcatalog.title": "중점 아이콘 카탈로그 열기",
     "hoi4modutilities.modTools.enabled.title": "모드 도구: 사용",
     "hoi4modutilities.modTools.enabled.desc": "특정 모드 전용 도구를 켭니다. 명령 팔레트의 **모드 도구 실행...** 으로 실행합니다. 모드의 도구는 그 모드가 열려 있을 때만 나타나며, 도구가 있는 모드마다 아래에 어떤 도구를 표시할지 고르는 페이지가 따로 생깁니다.\n\n모드 도구는 MD Utilities가 아니라 각 모드가 직접 작성하고 관리하며, 여기서는 지원하지 않습니다. 도구가 실패하면 오류 메시지에 보고할 모드 팀이 표시됩니다."
 }
