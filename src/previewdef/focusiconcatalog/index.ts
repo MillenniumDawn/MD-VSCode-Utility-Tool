@@ -11,7 +11,7 @@ import { FocusIconCatalog } from "./catalog";
 const affectingSettings = ["installPath", "modFile", "parentModPaths", "loadDlcContents", "focusIconCatalogGfxFiles"];
 
 /** Opens the one Focus Icon Catalog panel and keeps it in step with the files its icons come from. */
-export class FocusIconCatalogContainer implements vscode.WebviewPanelSerializer {
+class FocusIconCatalogContainer implements vscode.WebviewPanelSerializer {
 	private catalog: FocusIconCatalog | undefined;
 
 	public register(): vscode.Disposable {

@@ -12,7 +12,7 @@ import { CatalogData, CatalogIcon, loadFocusIconCatalog, loadIconImageUri } from
 // A batch of image requests is answered in one message; the webview asks for what scrolled into view.
 const maxImagesPerRequest = 64;
 
-export interface CatalogStrings {
+interface CatalogStrings {
 	copied: string;
 	count: string;
 	empty: string;
@@ -30,7 +30,7 @@ function catalogStrings(): CatalogStrings {
 	};
 }
 
-export function renderCatalogHtml(webview: vscode.Webview): string {
+function renderCatalogHtml(webview: vscode.Webview): string {
 	const select = (id: string, label: string, options: string) =>
 		`<label class="catalog-field"><span>${htmlEscape(label)}</span><select id="${id}">${options}</select></label>`;
 	const body = `
@@ -89,9 +89,8 @@ function isStringArray(value: unknown): value is string[] {
  * the pictures only for the tiles the page asks for, and does what a click on a tile means.
  */
 export class FocusIconCatalog {
-	private data: CatalogData | undefined;
 	private byName = new Map<string, CatalogIcon>();
-	private loading: Promise<void> | undefined;
+	private loading: Promise<CatalogData> | undefined;
 	private readonly subscriptions: vscode.Disposable[] = [];
 
 	constructor(readonly panel: vscode.WebviewPanel) {
@@ -136,29 +135,31 @@ export class FocusIconCatalog {
 
 	/** Reloads the icons when something they come from changed, if the page has asked for them. */
 	public refresh(): void {
-		if (this.data !== undefined) {
+		if (this.loading !== undefined) {
 			void this.sendCatalog(true).catch(error);
 		}
 	}
 
-	private sendCatalog(reload: boolean): Promise<void> {
-		if (this.loading && !reload) {
-			return this.loading;
+	private async sendCatalog(reload: boolean): Promise<void> {
+		if (reload || this.loading === undefined) {
+			this.loading = loadFocusIconCatalog();
 		}
-		const loading = (async () => {
-			try {
-				if (reload || this.data === undefined) {
-					this.data = await loadFocusIconCatalog();
-					this.byName = new Map(this.data.icons.map(icon => [icon.name, icon]));
-				}
-				await this.panel.webview.postMessage({ type: "catalog", data: this.data });
-			} catch (e) {
-				error(e);
-				await this.panel.webview.postMessage({ type: "catalogError", message: forceError(e).message });
+		const loading = this.loading;
+		try {
+			const data = await loading;
+			// A newer load answers the page instead.
+			if (this.loading !== loading) {
+				return;
 			}
-		})();
-		this.loading = loading;
-		return loading;
+			this.byName = new Map(data.icons.map(icon => [icon.name, icon]));
+			await this.panel.webview.postMessage({ type: "catalog", data });
+		} catch (e) {
+			if (this.loading !== loading) {
+				return;
+			}
+			error(e);
+			await this.panel.webview.postMessage({ type: "catalogError", message: forceError(e).message });
+		}
 	}
 
 	private async sendImages(names: string[]): Promise<void> {

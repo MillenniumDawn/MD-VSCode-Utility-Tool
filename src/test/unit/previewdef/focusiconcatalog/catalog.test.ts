@@ -44,6 +44,7 @@ describe("previewdef/focusiconcatalog/catalog", () => {
 		handOver({
 			env: { clipboard: { writeText: async (text: string) => { clipboard.push(text); } } },
 			window: {
+				createOutputChannel: (() => ({ appendLine: () => undefined, dispose: () => undefined })) as any,
 				setStatusBarMessage: ((text: string) => { statusMessages.push(text); return { dispose: () => undefined }; }) as any,
 				showTextDocument: (async (document: unknown, options: unknown) => { opened.push({ document, options }); }) as any,
 			},
@@ -72,6 +73,33 @@ describe("previewdef/focusiconcatalog/catalog", () => {
 		assert.strictEqual(loads, 1);
 		assert.strictEqual(posts[0].type, "catalog");
 		assert.deepStrictEqual(posts[0].data.icons.map((icon: loader.CatalogIcon) => icon.name), ["GFX_goal_a", "GFX_goal_missing"]);
+	});
+
+	it("sends the icons again to a page that was recreated", async () => {
+		await catalog.onMessage({ command: "ready" });
+		await catalog.onMessage({ command: "ready" });
+		assert.deepStrictEqual(posts.map(post => post.type), ["catalog", "catalog"]);
+	});
+
+	it("keeps the newest load when an older one finishes last", async () => {
+		const finish: ((data: loader.CatalogData) => void)[] = [];
+		// Mocking the method a second time would leave the first mock in place after restoreAll.
+		(loader.loadFocusIconCatalog as any).mock.mockImplementation(
+			() => new Promise<loader.CatalogData>(resolve => finish.push(resolve)));
+		const first = catalog.onMessage({ command: "ready" });
+		const second = catalog.onMessage({ command: "reload" });
+		finish[1]!({ icons: [], gfxFiles: [] });
+		await second;
+		finish[0]!({ icons, gfxFiles: [] });
+		await first;
+		assert.deepStrictEqual(posts, [{ type: "catalog", data: { icons: [], gfxFiles: [] } }]);
+	});
+
+	it("refreshes when a setting changes during the first load", async () => {
+		const ready = catalog.onMessage({ command: "ready" });
+		catalog.refresh();
+		await ready;
+		assert.strictEqual(loads, 2);
 	});
 
 	it("loads the icons again on reload", async () => {

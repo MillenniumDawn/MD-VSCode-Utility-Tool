@@ -6,7 +6,7 @@ import { Logger, describeParseFailure } from "../../util/logger";
 
 // Where the icons come from. A .gfx file belongs to the first of these that has it: the mod's own
 // copy replaces the parent mod's, which replaces the game's.
-export type IconSource = "mod" | "parent" | "vanilla";
+type IconSource = "mod" | "parent" | "vanilla";
 
 export interface CatalogIcon {
 	name: string;
@@ -21,7 +21,7 @@ export interface CatalogIcon {
 	end?: number;
 }
 
-export interface CatalogGfxFile {
+interface CatalogGfxFile {
 	path: string;
 	source: IconSource;
 	count: number;
@@ -44,7 +44,7 @@ export function isFocusGfxFile(path: string): boolean {
 }
 
 /** The .gfx files the catalog reads: the game's goals.gfx, every focus-named file, then what the mod configured. */
-export async function listCatalogGfxFiles(): Promise<string[]> {
+async function listCatalogGfxFiles(): Promise<string[]> {
 	const configured: ConfiguredGfxEntry[] = [
 		...(getConfiguration().focusIconCatalogGfxFiles ?? []).map(entry => ({ entry, source: settingName })),
 		...(await fileloader.getDescriptorFocusIconGfx()).map(entry => ({ entry, source: descriptorName })),
@@ -65,7 +65,7 @@ export async function listCatalogGfxFiles(): Promise<string[]> {
 }
 
 /** Which source supplies the copy of a file the game loads, or undefined when none has it. */
-export async function sourceOfFile(path: string): Promise<IconSource | undefined> {
+async function sourceOfFile(path: string): Promise<IconSource | undefined> {
 	if (await fileloader.getFilePathFromModOrHOI4(path, { hoi4: false, parent: false })) {
 		return "mod";
 	}
