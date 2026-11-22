@@ -56,7 +56,7 @@ export class PreviewManager implements vscode.WebviewPanelSerializer {
         disposables.push(host().workspace.onDidChangeTextDocument(this.onChangeTextDocument, this));
         disposables.push(host().workspace.onDidCreateFiles(this.onFilesChanged, this));
         disposables.push(host().workspace.onDidDeleteFiles(this.onFilesChanged, this));
-        const files = host().workspace.createFileSystemWatcher('**/*.txt', false, true, false);
+        const files = host().workspace.createFileSystemWatcher('**/*.{txt,[gG][fF][xX]}', false, true, false);
         disposables.push(files, files.onDidCreate(uri => this.onFileAddedOrRemoved(uri)),
             files.onDidDelete(uri => this.onFileAddedOrRemoved(uri)));
         disposables.push(host().window.onDidChangeActiveTextEditor(this.updateHoi4PreviewContextValue, this));
