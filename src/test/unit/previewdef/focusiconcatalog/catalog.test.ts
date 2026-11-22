@@ -75,6 +75,16 @@ describe("previewdef/focusiconcatalog/catalog", () => {
 		assert.deepStrictEqual(posts[0].data.icons.map((icon: loader.CatalogIcon) => icon.name), ["GFX_goal_a", "GFX_goal_missing"]);
 	});
 
+	it("draws every control the page script looks up", () => {
+		catalog.initialize();
+		const page: string = (catalog.panel.webview as any).html;
+		for (const id of ["search", "source", "file", "shine", "count", "status", "grid", "toast"]) {
+			assert.ok(page.includes(`id="catalog-${id}"`), id);
+		}
+		assert.ok(page.includes('id="refresh"'));
+		assert.ok(page.includes("window.focusIconCatalogStrings = "));
+	});
+
 	it("sends the icons again to a page that was recreated", async () => {
 		await catalog.onMessage({ command: "ready" });
 		await catalog.onMessage({ command: "ready" });
