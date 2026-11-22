@@ -1,5 +1,6 @@
 import type * as vscode from 'vscode';
 import { host } from '../../util/host';
+import { Commands } from '../../constants';
 import { buildFocusTreeHtml, buildNoFocusTreeHtml, buildFocusTreeErrorHtml, buildFocusTreePayload, buildFocusTreeIconStyles, loadFocusTreesOnly, FocusTreePayload } from './contentbuilder';
 import { UpdateablePreviewBase, LoaderRender, LoaderRenderResult, RenderContentOptions } from '../updateablepreview';
 import { definePreview } from '../definition';
@@ -127,6 +128,8 @@ class FocusTreePreview extends UpdateablePreviewBase {
                 void this.setContinuousFocusPosition(msg);
             } else if (msg?.command === 'copyWarnings') {
                 void copyTreeWarnings(msg, getRelativePathInWorkspace(this.uri)).catch(error);
+            } else if (msg?.command === 'openIconCatalog') {
+                void Promise.resolve(host().commands.executeCommand(Commands.OpenFocusIconCatalog)).catch(error);
             }
         }));
         // Belt-and-suspenders for bug #36: also restore icons when the panel becomes visible again.

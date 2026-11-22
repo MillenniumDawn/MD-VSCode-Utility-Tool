@@ -553,6 +553,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
     const resetCheckboxesButton = iconButtonHtml('resetCheckboxes', localize, { domId: 'reset-focus-checkboxes' });
     const editContinuousButton = iconButtonHtml('editContinuous', localize, { domId: 'edit-continuous-focus' });
     const copyWarningsButton = iconButtonHtml('copyWarnings', localize, { domId: 'copy-warnings', disabled: hasNoWarnings });
+    const openIconCatalogButton = iconButtonHtml('openIconCatalog', localize, { domId: 'open-icon-catalog' });
 
     const traceStatus = traceStatusHtml(styleTable, localize);
 
@@ -569,6 +570,7 @@ function renderToolBar(focusTrees: FocusTree[], styleTable: StyleTable, flags: T
                 warningMarkers: warningMarkersButton,
                 editContinuous: editContinuousButton,
                 copyWarnings: copyWarningsButton,
+                openIconCatalog: openIconCatalogButton,
                 clearTrace: traceStatus,
             })}`);
 }

@@ -350,6 +350,7 @@ const table: Partial<typeof __table> = {
     "toolbar.copywarnings": "경고 복사",
     "toolbar.nowarnings": "표시할 경고 없음",
     "toolbar.openfile": "편집기에서 파일 열기",
+    "toolbar.openiconcatalog": "중점 아이콘 카탈로그 열기",
     "toolbar.saveimage": "지도를 이미지로 저장",
     "toolbar.warningmarkers": "계통도에 경고 표시 보기",
     "toolbar.warnings": "경고 목록 보기",

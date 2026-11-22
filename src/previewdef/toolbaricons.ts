@@ -22,7 +22,8 @@ type IconSurface =
 	| "checkbox"
 	| "errorpage"
 	| "statusbar"
-	| "editortitle";
+	| "editortitle"
+	| "iconcatalog";
 
 export interface IconAction {
 	// A toggle with two looks names both; `on` is the icon while the thing it controls is shown.
@@ -74,7 +75,7 @@ export const iconActions = {
 		icon: "refresh",
 		tooltipKey: "common.topbar.refresh.title",
 		tooltip: "Refresh",
-		surfaces: ["gui", "worldmap", "errorpage"],
+		surfaces: ["gui", "worldmap", "errorpage", "iconcatalog"],
 	},
 	resetCheckboxes: {
 		icon: "discard",
@@ -126,6 +127,12 @@ export const iconActions = {
 		tooltip: "Show or hide the shortcuts",
 		shownWhen: "the tree has shortcuts",
 		surfaces: ["focustree"],
+	},
+	openIconCatalog: {
+		icon: "library",
+		tooltipKey: "toolbar.openiconcatalog",
+		tooltip: "Open the focus icon catalog",
+		surfaces: ["focustree", "editortitle"],
 	},
 	containerWindows: {
 		icon: { on: "eye", off: "eye-closed" },
@@ -205,6 +212,7 @@ export const actionGroupOrder: readonly IconActionId[] = [
 	"warningMarkers",
 	"editContinuous",
 	"copyWarnings",
+	"openIconCatalog",
 	"containerWindows",
 	"saveImage",
 	"openFile",
