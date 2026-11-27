@@ -567,14 +567,14 @@
 		"per-file": false
 	},
 	"devDependencies": {
-		"@azure/msal-node": "^7.2.2",
+		"@azure/msal-node": "^7.2.3",
 		"@types/jsdom": "^30.0.0",
 		"@types/lodash": "^4.17.27",
 		"@types/mocha": "^10.0.10",
 		"@types/node": "^24",
 		"@types/pngjs": "^6.0.5",
 		"@types/vscode": "~1.74.0",
-		"@typescript-eslint/eslint-plugin": "^8.73.0",
+		"@typescript-eslint/eslint-plugin": "^8.74.0",
 		"@typescript-eslint/parser": "^8.62.1",
 		"@typescript/native": "npm:typescript@7.0.2",
 		"@vscode/test-electron": "^3.1.0",
@@ -586,7 +586,7 @@
 		"eslint": "^10.15.0",
 		"jscpd": "^5.4.3",
 		"jsdom": "^31.0.1",
-		"knip": "^6.45.1",
+		"knip": "^6.48.0",
 		"mocha": "^12.0.3",
 		"ovsx": "^1.4.0",
 		"raw-loader": "^4.0.2",
@@ -594,7 +594,7 @@
 		"ts-loader": "^9.6.2",
 		"tslib": "^2.9.1",
 		"typescript": "npm:@typescript/typescript6@6.0.2",
-		"webpack": "^5.112.2",
+		"webpack": "^5.113.0",
 		"webpack-cli": "^7.3.1"
 	},
 	"overrides": {
