@@ -12,6 +12,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    # A version published today waits a week, so a broken or malicious
+    # release is yanked before it reaches a bump here.
+    cooldown:
+      default-days: 7
     # One pull request for every pin that moved that week, not one per action.
     groups:
       actions:
@@ -23,6 +27,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
     # What ships is bundled from the production dependencies; everything else is tooling. Two
     # groups so a bump that can change the extension is reviewed apart from one that cannot.
     groups:
