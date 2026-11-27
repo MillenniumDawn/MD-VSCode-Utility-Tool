@@ -123,7 +123,7 @@ jobs:
         id: app-token
         # v3.3.0
         uses: >-
-          actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+          actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
         with:
           # GitHub still accepts the deprecated App ID as a client id.
           client-id: >-
@@ -481,7 +481,7 @@ jobs:
         id: app-token
         # v3.3.0
         uses: >-
-          actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+          actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
         with:
           client-id: >-
             ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
@@ -732,7 +732,7 @@ jobs:
         id: app-token
         # v3.3.0
         uses: >-
-          actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+          actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
         with:
           client-id: >-
             ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
@@ -794,7 +794,7 @@ jobs:
         id: app-token
         # v3.3.0
         uses: >-
-          actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+          actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
         with:
           client-id: >-
             ${{ secrets.RELEASE_PR_APP_CLIENT_ID || secrets.RELEASE_PR_APP_ID }}
