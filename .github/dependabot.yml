@@ -3,6 +3,8 @@
 # it never touches release/version-bump, and nothing here merges on its own. A merged dependency
 # bump is a shipped change like any other, so it refreshes the open release pull request, but
 # scripts/pr-bullets.js writes no changelog bullet for a pull request Dependabot authored.
+# No `labels`: Dependabot only attaches labels that already exist, and
+# this repository has none for dependencies.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -10,8 +12,6 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
-    labels:
-      - dependencies
     # One pull request for every pin that moved that week, not one per action.
     groups:
       actions:
@@ -23,8 +23,6 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
-    labels:
-      - dependencies
     # What ships is bundled from the production dependencies; everything else is tooling. Two
     # groups so a bump that can change the extension is reviewed apart from one that cannot.
     groups:
