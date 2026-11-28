@@ -368,7 +368,6 @@ export async function buildEventGraphPayload(
 		roots,
 		nodes: context.nodes,
 		edges: context.edges,
-		conditionExprs: loaderResult.events.conditionExprs,
 		toolbarFlags: toolbarFlagsOf(context.nodes, context.edges, context.effectBlocks),
 		effectBlocks: context.effectBlocks,
 	};

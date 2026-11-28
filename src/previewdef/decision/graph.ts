@@ -113,7 +113,6 @@ export async function buildDecisionGraphPayload(
 		roots,
 		nodes,
 		edges,
-		conditionExprs: loadResult.decisions.conditionExprs,
 		effectBlocks,
 		toolbarFlags: toolbarFlagsOf(nodes, edges),
 	};
@@ -340,7 +339,6 @@ export function toolbarFlagsOf(
 		hasChains: edges.some((e) => !e.structural),
 		hasEffects: decisions.some((d) => d.effects.length > 0),
 		hasModifiers: decisions.some((d) => d.modifiers.length > 0),
-		hasTargets: decisions.some((d) => d.badges.length > 0),
 		hasScriptedGui: categories.some((c) => c.scriptedGui?.html !== undefined),
 		hasConditions:
 			decisions.some(
@@ -355,9 +353,6 @@ export function toolbarFlagsOf(
 			) || categories.some((c) => c.hasAllowed || c.hasVisible),
 		hasIcons: nodes.some((n) => n.kind !== "unresolved" && n.icon !== undefined),
 		hasLocalisation: getFlags().localisationIndex,
-		hasUnresolvedScriptedGui: categories.some(
-			(c) => c.scriptedGui !== undefined && c.scriptedGui.html === undefined,
-		),
 	};
 }
 

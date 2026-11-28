@@ -8,7 +8,6 @@ import { cardFoldLabels, conditionToDom } from "../../../webviewsrc/util/conditi
 // import runs. This mirrors Millennium Dawn's Dutch ideas plus the generic political_power_bonus
 // chain: two loose ideas, one of which borrows the other's name, and one chain that leaves the file.
 const integrationPayload: IdeaPreviewPayload = {
-	conditionExprs: [],
 	toolbarFlags: {
 		hasLocalisation: true,
 		hasDescriptions: true,

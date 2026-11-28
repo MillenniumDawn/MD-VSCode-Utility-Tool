@@ -16,7 +16,6 @@ import {
 // arab_spring.0 chain: one event with a trigger, one option, and two calls -- one guarded, one not.
 const integrationPayload: EventGraphPayload = {
     roots: ['arab_spring.0:0'],
-    conditionExprs: [],
     toolbarFlags: {
         hasChains: true,
         hasEffects: true,
@@ -165,7 +164,7 @@ function edge(from: string, to: string, extra: Partial<EventGraphEdge> = {}): Ev
 
 function payload(nodes: EventGraphNode[], edges: EventGraphEdge[], roots: string[]): EventGraphPayload {
     return {
-        nodes, edges, roots, conditionExprs: [], effectBlocks: [],
+        nodes, edges, roots, effectBlocks: [],
         toolbarFlags: {
             hasChains: true, hasEffects: true, hasHidden: true, hasMajor: true, hasNews: true,
             hasMtth: true, hasTriggered: true, hasLocalisation: true, hasPicture: true,
@@ -1559,7 +1558,7 @@ describe('webview/eventtree rendering', () => {
 
     it('shows an empty state rather than a blank canvas when there is nothing to draw', () => {
         window.dispatchEvent(new (window as any).MessageEvent('message', {
-            data: { type: 'updateBody', data: { eventGraph: { roots: [], nodes: [], edges: [], conditionExprs: [] } } },
+            data: { type: 'updateBody', data: { eventGraph: { roots: [], nodes: [], edges: [] } } },
         }));
         assert.ok(content().querySelector('.ev-empty'));
         window.dispatchEvent(new (window as any).MessageEvent('message', {
@@ -1864,7 +1863,7 @@ describe('webview/eventtree rendering', () => {
 
         it('shows every control again for a payload that carries no flags at all', () => {
             window.dispatchEvent(new (window as any).MessageEvent('message', {
-                data: { type: 'updateBody', data: { eventGraph: { roots: [], nodes: [], edges: [], conditionExprs: [] } } },
+                data: { type: 'updateBody', data: { eventGraph: { roots: [], nodes: [], edges: [] } } },
             }));
             assert.notStrictEqual(widgetOf('show-localisation').style.display, 'none');
             assert.deepStrictEqual(offeredFilters(), ['mtth', 'triggered', 'news', 'hidden', 'major', 'chains']);

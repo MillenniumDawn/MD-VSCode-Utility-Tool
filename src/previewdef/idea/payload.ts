@@ -1,4 +1,4 @@
-import { ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
 
 // The serializable projection of an ideas file: what the host posts and the webview renders as a
 // roster of cards.
@@ -94,6 +94,5 @@ export interface IdeaPreviewPayload {
 	groups: IdeaGroup[];
 	cards: IdeaCard[];
 	chains: IdeaChain[];
-	conditionExprs: ConditionItem[];
 	toolbarFlags: IdeaToolbarFlags;
 }

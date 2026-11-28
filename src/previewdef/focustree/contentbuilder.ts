@@ -60,6 +60,25 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
     toolbarFlags: ToolbarFlags;
 }
 
+async function registerTreeLinkStyles(styleTable: StyleTable, layout: FocusTreeLayout, gfxFiles: string[], resolveIcons: boolean): Promise<void> {
+    const gui = resolveIcons && layout.mode === 'gui' ? layout : undefined;
+    const files = gui ? [nationalFocusViewGfxFile, ...gfxFiles] : undefined;
+    const exclusiveImages = resolveIcons ? await loadExclusiveLinkImages(gui?.exclusive.sprites, files) : undefined;
+    registerExclusiveLinkStyles(styleTable, exclusiveImages, layout.spacing.x, {
+        startX: layout.exclusive.startX,
+        endX: layout.exclusive.endX,
+        y: layout.exclusive.offsetY,
+    }, layout.spacing.y, {
+        zIndex: 4, // Above the focus name bar and below traced lines and warnings.
+        gapUnderMid: true,
+        clampToCentre: true,
+    });
+
+    const state = getFlags().focusTreePrerequisiteLines;
+    const images = resolveIcons ? await loadFocusLinkImages(gui?.prerequisiteLink.sprites, files, state) : undefined;
+    registerFocusLinkStyles(styleTable, images, state);
+}
+
 export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: ProgressCallback, options?: { resolveIcons?: boolean; dependencyChanged?: boolean; token?: CancellationLike }): Promise<FocusTreePayload | null> {
     const resolveIcons = options?.resolveIcons !== false;
     // This build's own cancellation: set when the caller timed out, was superseded or was closed.
@@ -90,29 +109,7 @@ export async function buildFocusTreePayload(loader: FocusTreeLoader, progress?: 
 
         const titlebarStyles = await loadFocusTitlebarStyles();
 
-        // Registered on both passes: without the resolved textures the class falls back to the plain
-        // line, so the structure only render still draws the mutually exclusive links.
-        const exclusiveLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
-            ? await loadExclusiveLinkImages(layout.exclusive.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
-            : await loadExclusiveLinkImages();
-        registerExclusiveLinkStyles(styleTable, exclusiveLinkImages, layout.spacing.x, {
-            startX: layout.exclusive.startX,
-            endX: layout.exclusive.endX,
-            y: layout.exclusive.offsetY,
-        }, layout.spacing.y, {
-            // Above the focus layers (up to 3), which it crosses on the name bar row, and below the
-            // traced lines (5) and warning markers (6).
-            zIndex: 4,
-            gapUnderMid: true,
-            clampToCentre: true,
-        });
-
-        // The same two passes for the prerequisite lines: the webview draws the same tiles either way.
-        const focusLinkState = getFlags().focusTreePrerequisiteLines;
-        const focusLinkImages = !resolveIcons ? undefined : layout.mode === 'gui'
-            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles], focusLinkState)
-            : await loadFocusLinkImages(undefined, undefined, focusLinkState);
-        registerFocusLinkStyles(styleTable, focusLinkImages, focusLinkState);
+        await registerTreeLinkStyles(styleTable, layout, loadResult.result.gfxFiles, resolveIcons);
 
         const allFocuses = flatMap(focusTrees, tree => Object.values(tree.focuses));
         const focusMessage = localize('focustree.loading.rendering_focuses', 'Rendering focuses');
@@ -245,28 +242,7 @@ export async function buildFocusTreeIconStyles(
         const layout = loadResult.result.layout ?? standardFocusTreeLayout;
         const styleTable = new StyleTable();
 
-        // Registered by the structure pass too, with the plain line branches, so what this pass adds
-        // is exclusively the classes the resolved textures produce.
-        const exclusiveLinkImages = layout.mode === 'gui'
-            ? await loadExclusiveLinkImages(layout.exclusive.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles])
-            : await loadExclusiveLinkImages();
-        registerExclusiveLinkStyles(styleTable, exclusiveLinkImages, layout.spacing.x, {
-            startX: layout.exclusive.startX,
-            endX: layout.exclusive.endX,
-            y: layout.exclusive.offsetY,
-        }, layout.spacing.y, {
-            // Above the focus layers (up to 3), which it crosses on the name bar row, and below the
-            // traced lines (5) and warning markers (6).
-            zIndex: 4,
-            gapUnderMid: true,
-            clampToCentre: true,
-        });
-
-        const focusLinkState = getFlags().focusTreePrerequisiteLines;
-        const focusLinkImages = layout.mode === 'gui'
-            ? await loadFocusLinkImages(layout.prerequisiteLink.sprites, [nationalFocusViewGfxFile, ...loadResult.result.gfxFiles], focusLinkState)
-            : await loadFocusLinkImages(undefined, undefined, focusLinkState);
-        registerFocusLinkStyles(styleTable, focusLinkImages, focusLinkState);
+        await registerTreeLinkStyles(styleTable, layout, loadResult.result.gfxFiles, true);
 
         const titlebarStyles = await loadFocusTitlebarStyles();
         for (const focus of flatMap(focusTrees, tree => Object.values(tree.focuses))) {

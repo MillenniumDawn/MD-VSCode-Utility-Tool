@@ -65,19 +65,6 @@ describe('scripts/bump-version', function () {
         });
     });
 
-    describe('topSectionBullets', function () {
-        it('reads the bullets of the section on top', function () {
-            assert.deepStrictEqual(
-                bumpVersion.topSectionBullets('v1.1.24\n\n  Functionality:\n\n- One.\n- Two.\n\nv1.1.23\n\n- Old.\n'),
-                ['- One.', '- Two.']);
-        });
-
-        it('returns nothing when the changelog does not start with a version', function () {
-            assert.deepStrictEqual(bumpVersion.topSectionBullets('Some prose\n\n- Not a section.\n'), []);
-            assert.deepStrictEqual(bumpVersion.topSectionBullets(''), []);
-        });
-    });
-
     describe('issueFromBody', function () {
         it('reads the GitHub closing keywords', function () {
             assert.strictEqual(bumpVersion.issueFromBody('Closes #42'), 42);
@@ -282,6 +269,17 @@ describe('scripts/bump-version', function () {
     });
 
     describe('topSectionEntries', function () {
+        it('reads the bullets of the top section in order', function () {
+            assert.deepStrictEqual(
+                bumpVersion.topSectionEntries('v1.1.24\n\n  Functionality:\n\n- One.\n- Two.\n\nv1.1.23\n\n- Old.\n'),
+                [{ text: '- One.', section: 'Functionality' }, { text: '- Two.', section: 'Functionality' }]);
+        });
+
+        it('returns nothing when the changelog has no heading', function () {
+            assert.deepStrictEqual(bumpVersion.topSectionEntries('Some prose\n\n- Not a section.\n'), []);
+            assert.deepStrictEqual(bumpVersion.topSectionEntries(''), []);
+        });
+
         it('remembers which heading each bullet sat under', function () {
             assert.deepStrictEqual(
                 bumpVersion.topSectionEntries(
