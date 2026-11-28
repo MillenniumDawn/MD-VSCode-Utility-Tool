@@ -48,7 +48,6 @@ export async function buildIdeaPreviewPayload(
 		groups,
 		cards,
 		chains,
-		conditionExprs: loadResult.ideas.conditionExprs,
 		toolbarFlags: toolbarFlagsOf(cards, chains, loadResult.swapsUnavailable),
 	};
 }

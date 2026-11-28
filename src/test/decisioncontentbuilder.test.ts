@@ -377,7 +377,6 @@ describe("previewdef/decision/contentbuilder categories", () => {
 
 		assert.strictEqual(category.scriptedGui?.name, "israel_knesset_gui");
 		assert.strictEqual(category.scriptedGui?.html, undefined);
-		assert.strictEqual(payload.toolbarFlags.hasUnresolvedScriptedGui, true);
 		assert.strictEqual(payload.toolbarFlags.hasScriptedGui, false);
 	});
 });

@@ -17,7 +17,6 @@ import { getState } from "../../../webviewsrc/util/common";
 const massoud = "AFG_ahmed_shah_massoud";
 
 const integrationPayload: CharacterPreviewPayload = {
-	conditionExprs: [],
 	toolbarFlags: {
 		hasLocalisation: true,
 		hasDescriptions: true,

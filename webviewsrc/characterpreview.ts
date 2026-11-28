@@ -26,7 +26,6 @@ initCommon();
 const emptyPayload: CharacterPreviewPayload = {
 	groups: [],
 	cards: [],
-	conditionExprs: [],
 	toolbarFlags: {
 		hasLocalisation: false,
 		hasDescriptions: false,
@@ -40,9 +39,7 @@ const emptyPayload: CharacterPreviewPayload = {
 	},
 };
 
-let payload: CharacterPreviewPayload =
-	(window as unknown as { characterPreview?: CharacterPreviewPayload })
-		.characterPreview ?? emptyPayload;
+let payload = window.characterPreview ?? emptyPayload;
 
 let showLocalisation: boolean = getState().showLocalisation ?? true;
 let showPortrait: boolean = getState().characterShowPortrait ?? true;

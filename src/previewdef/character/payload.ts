@@ -1,4 +1,4 @@
-import { ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
 import { CharacterRoleKind } from "./schema";
 
 // The serializable projection of a characters file: what the host posts and the webview renders as
@@ -120,6 +120,5 @@ export interface CharacterToolbarFlags {
 export interface CharacterPreviewPayload {
 	groups: CharacterRoleGroup[];
 	cards: CharacterCard[];
-	conditionExprs: ConditionItem[];
 	toolbarFlags: CharacterToolbarFlags;
 }

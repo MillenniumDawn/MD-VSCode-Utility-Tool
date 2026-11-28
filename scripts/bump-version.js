@@ -270,10 +270,6 @@ function sectionEntries(lines, section) {
 	return entries;
 }
 
-function topSectionBullets(changelogText) {
-	return topSectionEntries(changelogText).map((entry) => entry.text);
-}
-
 // The release pull request's changelog, rebuilt from main's every time the release branch catches
 // up with it. Main's Unreleased section is what the branches wrote, so it is taken as it stands --
 // every line, in main's order -- and only given the version heading. Nothing main says is merged,
@@ -619,7 +615,6 @@ module.exports = {
 	sections,
 	setVersion,
 	stableMinor,
-	topSectionBullets,
 	topSectionEntries,
 	unreleasedEntries,
 	unreleasedHeading,

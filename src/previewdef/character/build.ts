@@ -94,7 +94,6 @@ export async function buildCharacterPreviewPayload(
 	return {
 		groups,
 		cards,
-		conditionExprs: loadResult.characters.conditionExprs,
 		toolbarFlags: toolbarFlagsOf(cards),
 	};
 }

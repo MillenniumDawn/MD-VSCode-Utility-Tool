@@ -18,7 +18,7 @@ const cases = [
 	{ name: "character", render: renderCharacterFile, result: { characters: { characters: [], conditionExprs: [] }, gfxFiles: [], traits: {}, modifierDefinitions: {} } },
 	{ name: "idea", render: renderIdeaFile, result: { ideas: { categories: [], conditionExprs: [] }, gfxFiles: [], modifierDefinitions: {}, swaps: [], swapsUnavailable: false } },
 	{ name: "decision", render: renderDecisionFile, result: { decisions: { categories: [], conditionExprs: [] }, categories: {}, scriptedGuis: {}, guiWindows: {}, gfxFiles: [], modifierDefinitions: {} } },
-	{ name: "event", render: renderEventFile, result: { events: { eventItemsByNamespace: {} }, mainNamespaces: [], gfxFiles: [] } },
+	{ name: "event", render: renderEventFile, result: { events: { eventItemsByNamespace: {}, conditionExprs: [] }, mainNamespaces: [], gfxFiles: [] } },
 	{ name: "mio", render: renderMioFile, result: { mios: [{ id: "test_mio", traits: {}, textHeaders: [] }], gfxFiles: [] } },
 	{ name: "technology", render: renderTechnologyFile, result: {
 		technologyTrees: [{ startTechnology: "start", folder: "infantry", technologies: [] }],
@@ -56,10 +56,10 @@ describe("loader preview rendering contracts", () => {
 			}
 			assert.deepStrictEqual(hashes, {
 				bop: "b7bc633f04e203efbe51b0baea4ba809ed21372ee11da34e9320cd79915fdc11",
-				character: "452d3ad15573c56dcb76bcdfa42bcdc8d0db344e8401a0f8d76ac1c3585faec3",
-				decision: "043bdb408a3f4aa573a662017769dfbbd215e139a76d5660c9466ae301ebd352",
+				character: "ad421007ce66e7fb636be6297ece15d1f9b59979d887d1719c7e841aa379edd5",
+				decision: "ef48119838111e002ba829c5434158bc188bf5329437fb2be1c06f8ff7f83c30",
 				event: "645ea5311473a9ef81ded8881a0219d5de7842d6e5ffdabd625949c2655900ab",
-				idea: "49688e3838f745d0612aaec58a3f46b2983291ba6af5373f914cc8681e016fd9",
+				idea: "7bae1f5353b78ed41145a23689bd8d2514331b092bc16de681f02b149e098531",
 				mio: "2870121f4b2774e43597d1b8d6c558f005f5926750bbcb110d6463f9e3a4eb07",
 				technology: "cc32c8963c6fe8843265609b3a778fee9e00bda7fdb448fb8e1903cfbf119bad",
 			});
