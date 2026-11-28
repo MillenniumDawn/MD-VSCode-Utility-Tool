@@ -4,19 +4,14 @@ import { extractEffectValue, GuardedEffectItem, findGuardedEffectItems, projectE
 import { EffectTreeNode } from "./payload";
 import {
     ConditionComplexExpr,
-    ConditionItem,
     conditionToString,
     extractConditionValue,
-    extractConditionalExprs,
 } from "../../hoiformat/condition";
 import { Scope, ScopeType } from "../../hoiformat/scope";
 import uniqBy from "lodash/uniqBy";
 
 export interface HOIEvents {
     eventItemsByNamespace: Record<string, HOIEvent[]>;
-    // Every distinct condition leaf reached while parsing this file, flattened the way the focus
-    // tree and MIO schemas collect theirs. The preview offers these as togglable expressions.
-    conditionExprs: ConditionItem[];
 }
 
 export type HOIEventType = 'country' | 'state' | 'unit_leader' | 'news' | 'operative_leader';
@@ -203,17 +198,13 @@ export function getEvents(node: Node, filePath: string): HOIEvents {
         }
     }
 
-    const conditionExprs: ConditionItem[] = [];
-    fillEvents(eventFile.country_event, 'country', filePath, eventItemsByNamespace, conditionExprs);
-    fillEvents(eventFile.news_event, 'news', filePath, eventItemsByNamespace, conditionExprs);
-    fillEvents(eventFile.state_event, 'state', filePath, eventItemsByNamespace, conditionExprs);
-    fillEvents(eventFile.unit_leader_event, 'unit_leader', filePath, eventItemsByNamespace, conditionExprs);
-    fillEvents(eventFile.operative_leader_event, 'operative_leader', filePath, eventItemsByNamespace, conditionExprs);
+    fillEvents(eventFile.country_event, 'country', filePath, eventItemsByNamespace);
+    fillEvents(eventFile.news_event, 'news', filePath, eventItemsByNamespace);
+    fillEvents(eventFile.state_event, 'state', filePath, eventItemsByNamespace);
+    fillEvents(eventFile.unit_leader_event, 'unit_leader', filePath, eventItemsByNamespace);
+    fillEvents(eventFile.operative_leader_event, 'operative_leader', filePath, eventItemsByNamespace);
 
-    return {
-        eventItemsByNamespace,
-        conditionExprs: uniqBy(conditionExprs, e => e.scopeName + '@' + e.nodeContent),
-    };
+    return { eventItemsByNamespace };
 }
 
 function fillEvents(
@@ -221,10 +212,9 @@ function fillEvents(
     type: HOIEventType,
     filePath: string,
     eventItemsByNamespace: Record<string, HOIEvent[]>,
-    conditionExprs: ConditionItem[],
 ) {
     for (const eventDef of eventDefs) {
-        const converted = convertEvent(eventDef, filePath, type, conditionExprs);
+        const converted = convertEvent(eventDef, filePath, type);
         if (converted) {
             const listOfNamespace = eventItemsByNamespace[converted.namespace];
             if (listOfNamespace) {
@@ -254,7 +244,6 @@ function convertEvent<T extends HOIEventType>(
     eventDef: HOIPartial<EventDef>,
     file: string,
     type: T,
-    conditionExprs: ConditionItem[],
 ): HOIEvent & { type: T } | undefined {
     if (!eventDef.id) {
         return undefined;
@@ -269,12 +258,12 @@ function convertEvent<T extends HOIEventType>(
     const scope: Scope = { scopeName: `{event_target}`, scopeType };
 
     const trigger = eventDef.trigger ?
-        extractConditionValue(eventDef.trigger._raw.value, scope, conditionExprs).condition :
+        extractConditionValue(eventDef.trigger._raw.value, scope).condition :
         true;
 
-    const immediate = convertOption(eventDef.immediate, scope, conditionExprs);
-    const after = convertOption(eventDef.after, scope, conditionExprs);
-    const options = eventDef.option.map(o => convertOption(o, scope, conditionExprs));
+    const immediate = convertOption(eventDef.immediate, scope);
+    const after = convertOption(eventDef.after, scope);
+    const options = eventDef.option.map(o => convertOption(o, scope));
 
     const meanTimeToHappen = eventDef.mean_time_to_happen;
     const meanTimeToHappenBase = meanTimeToHappen ?
@@ -312,7 +301,7 @@ function meanTimeToHappenUnitDays(meanTimeToHappen: HOIPartial<MeanTimeToHappen>
     return (days ?? 0) + Math.floor(months ?? 0) * 30 + Math.floor(years ?? 0) * 365;
 }
 
-function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs: ConditionItem[]): HOIEventOption {
+function convertOption(optionRaw: Raw | undefined, scope: Scope): HOIEventOption {
     if (optionRaw === undefined) {
         return { childEvents: [], token: undefined, trigger: true, effects: [] };
     }
@@ -321,7 +310,7 @@ function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs:
     const name = optionDef.name;
 
     const trigger = optionDef.trigger ?
-        extractConditionValue(optionDef.trigger._raw.value, scope, conditionExprs).condition :
+        extractConditionValue(optionDef.trigger._raw.value, scope).condition :
         true;
 
     // The option's own keys are metadata, not effects: without excluding them the tree lists
@@ -353,10 +342,6 @@ function convertOption(optionRaw: Raw | undefined, scope: Scope, conditionExprs:
             e.repeated ?? false,
         ].join('@'),
     );
-
-    for (const childEvent of uniqueChildEvents) {
-        extractConditionalExprs(childEvent.condition, conditionExprs);
-    }
 
     return {
         name,

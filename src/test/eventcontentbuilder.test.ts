@@ -68,7 +68,7 @@ function loaderFor(events: (string | StubEvent)[]): any {
     return {
         load: async () => ({
             result: {
-                events: { eventItemsByNamespace: { test: items }, conditionExprs: [] },
+                events: { eventItemsByNamespace: { test: items } },
                 mainNamespaces: ['test'],
                 gfxFiles: [],
             },

@@ -97,10 +97,6 @@ export class IdeasLoader extends LanguageAwareContentLoader<IdeasLoaderResult> {
 				...ideas.categories,
 				...flatten(ideaDepFiles.map((f) => f.result.ideas.categories)),
 			],
-			conditionExprs: [
-				...ideas.conditionExprs,
-				...flatten(ideaDepFiles.map((f) => f.result.ideas.conditionExprs)),
-			],
 		};
 
 		const pictures = uniq(

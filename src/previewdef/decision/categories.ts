@@ -1,6 +1,6 @@
-import { ConditionComplexExpr, ConditionItem, extractConditionValue } from "../../hoiformat/condition";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
 import { Node, Token } from "../../hoiformat/hoiparser";
-import { Scope } from "../../hoiformat/scope";
+import { readCondition } from "../../hoiformat/rawblock";
 import { HOIPartial, Raw, SchemaDef, convertNodeToJson, readRawAsString } from "../../hoiformat/schema";
 import { error } from "../../util/debug";
 import { parseHoi4FileCached } from "../../util/fileloader";
@@ -83,13 +83,6 @@ export function getDecisionCategoriesFromFile(node: Node, filePath: string): HOI
 function readCategory(node: Node, name: string, filePath: string): HOIDecisionCategory {
 	const def = convertNodeToJson<CategoryDef>(node, categorySchema);
 
-	// The conditions are read for display only, so the leaves are not collected into a shared
-	// expression table: a category file is a dependency of the preview, not the file being previewed.
-	const scope: Scope = { scopeName: "", scopeType: "country" };
-	const throwaway: ConditionItem[] = [];
-	const condition = (raw: Raw | undefined): ConditionComplexExpr =>
-		raw ? extractConditionValue(raw._raw.value, scope, throwaway).condition : true;
-
 	return {
 		name,
 		icon: readIconToken(def),
@@ -98,9 +91,9 @@ function readCategory(node: Node, name: string, filePath: string): HOIDecisionCa
 		scriptedGui: def.scripted_gui,
 		visibleWhenEmpty: def.visible_when_empty ?? false,
 		visibilityType: def.visibility_type,
-		allowed: condition(def.allowed),
+		allowed: readCondition(def.allowed),
 		hasAllowed: def.allowed !== undefined,
-		visible: condition(def.visible),
+		visible: readCondition(def.visible),
 		hasVisible: def.visible !== undefined,
 		token: node.nameToken ?? undefined,
 		file: filePath,

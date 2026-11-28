@@ -1,6 +1,5 @@
-import { ConditionComplexExpr, ConditionItem, extractConditionValue } from "../../hoiformat/condition";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
 import { Node, Token } from "../../hoiformat/hoiparser";
-import { Scope } from "../../hoiformat/scope";
 import {
 	Enum,
 	Raw,
@@ -12,6 +11,7 @@ import {
 import {
 	childNodes,
 	hasContent,
+	readCondition,
 	readModifierPairs,
 	readScalar,
 } from "../../hoiformat/rawblock";
@@ -31,7 +31,6 @@ import { ModifierPair } from "../sharedpayload";
 
 export interface HOICharacterFile {
 	characters: HOICharacter[];
-	conditionExprs: ConditionItem[];
 }
 
 // The role blocks a character can carry. `operative` and `nuclear_scientist` are vanilla's and
@@ -184,7 +183,6 @@ const skillFields: (keyof RoleDef)[] = [
 ];
 
 export function getCharactersFromFile(node: Node, filePath: string): HOICharacterFile {
-	const conditionExprs: ConditionItem[] = [];
 	const characters: HOICharacter[] = [];
 
 	for (const charactersNode of childNodes(node)) {
@@ -193,21 +191,17 @@ export function getCharactersFromFile(node: Node, filePath: string): HOICharacte
 		}
 
 		for (const characterNode of childNodes(charactersNode)) {
-			const character = getCharacter(characterNode, filePath, conditionExprs);
+			const character = getCharacter(characterNode, filePath);
 			if (character) {
 				characters.push(character);
 			}
 		}
 	}
 
-	return { characters, conditionExprs };
+	return { characters };
 }
 
-function getCharacter(
-	node: Node,
-	filePath: string,
-	conditionExprs: ConditionItem[],
-): HOICharacter | undefined {
+function getCharacter(node: Node, filePath: string): HOICharacter | undefined {
 	const id = node.name;
 	if (!id || !Array.isArray(node.value)) {
 		return undefined;
@@ -237,9 +231,7 @@ function getCharacter(
 		} else if (childName === "portraits") {
 			readPortraits(child, character.portraits);
 		} else if (roleKindSet.has(childName) && Array.isArray(child.value)) {
-			character.roles.push(
-				getRole(child, childName as CharacterRoleKind, conditionExprs),
-			);
+			character.roles.push(getRole(child, childName as CharacterRoleKind));
 		}
 	}
 
@@ -273,16 +265,8 @@ function readPortraits(node: Node, into: PortraitRef[]): void {
 	}
 }
 
-function getRole(
-	node: Node,
-	kind: CharacterRoleKind,
-	conditionExprs: ConditionItem[],
-): HOICharacterRole {
+function getRole(node: Node, kind: CharacterRoleKind): HOICharacterRole {
 	const def = convertNodeToJson<RoleDef>(node, roleSchema);
-
-	const scope: Scope = { scopeName: "", scopeType: "country" };
-	const condition = (raw: Raw | undefined): ConditionComplexExpr =>
-		raw ? extractConditionValue(raw._raw.value, scope, conditionExprs).condition : true;
 
 	const skills: ModifierPair[] = [];
 	for (const field of skillFields) {
@@ -310,9 +294,9 @@ function getRole(
 		modifiers: readModifierPairs(def.modifier),
 		researchBonuses: readModifierPairs(def.research_bonus),
 		descKey: readRawAsString(def.desc),
-		allowed: condition(def.allowed),
-		available: condition(def.available),
-		visible: condition(def.visible),
+		allowed: readCondition(def.allowed),
+		available: readCondition(def.available),
+		visible: readCondition(def.visible),
 		hasOnAdd: hasContent(def.on_add),
 		hasOnRemove: hasContent(def.on_remove),
 		token: node.nameToken ?? undefined,

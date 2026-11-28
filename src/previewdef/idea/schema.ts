@@ -1,11 +1,11 @@
-import { ConditionComplexExpr, ConditionItem, extractConditionValue } from "../../hoiformat/condition";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
 import { Node, Token } from "../../hoiformat/hoiparser";
-import { Scope } from "../../hoiformat/scope";
 import { Enum, Raw, SchemaDef, convertNodeToJson } from "../../hoiformat/schema";
 import {
 	childNodes,
 	hasContent,
 	readBoolean,
+	readCondition,
 	readModifierPairs,
 	readScalar,
 } from "../../hoiformat/rawblock";
@@ -18,7 +18,6 @@ import {
 
 export interface HOIIdeaFile {
 	categories: HOIIdeaCategory[];
-	conditionExprs: ConditionItem[];
 }
 
 export interface HOIIdeaCategory {
@@ -149,7 +148,6 @@ const categoryScalars = new Set([
 ]);
 
 export function getIdeasFromFile(node: Node, filePath: string): HOIIdeaFile {
-	const conditionExprs: ConditionItem[] = [];
 	const categories: HOIIdeaCategory[] = [];
 
 	for (const ideasNode of childNodes(node)) {
@@ -158,21 +156,17 @@ export function getIdeasFromFile(node: Node, filePath: string): HOIIdeaFile {
 		}
 
 		for (const categoryNode of childNodes(ideasNode)) {
-			const category = getCategory(categoryNode, filePath, conditionExprs);
+			const category = getCategory(categoryNode, filePath);
 			if (category) {
 				categories.push(category);
 			}
 		}
 	}
 
-	return { categories, conditionExprs };
+	return { categories };
 }
 
-function getCategory(
-	node: Node,
-	filePath: string,
-	conditionExprs: ConditionItem[],
-): HOIIdeaCategory | undefined {
+function getCategory(node: Node, filePath: string): HOIIdeaCategory | undefined {
 	const name = node.name;
 	if (!name || !Array.isArray(node.value)) {
 		return undefined;
@@ -208,28 +202,19 @@ function getCategory(
 			continue;
 		}
 
-		category.ideas.push(getIdea(child, name, filePath, conditionExprs));
+		category.ideas.push(getIdea(child, name, filePath));
 	}
 
 	return category;
 }
 
-function getIdea(
-	node: Node,
-	category: string,
-	filePath: string,
-	conditionExprs: ConditionItem[],
-): HOIIdea {
+function getIdea(node: Node, category: string, filePath: string): HOIIdea {
 	const id = node.name ?? "";
 	const def = convertNodeToJson<IdeaDef>(node, ideaSchema);
 
 	// The description follows the name, not the key: an idea that borrows another idea's name
 	// borrows its description with it, which is exactly what the game shows.
 	const nameKey = def.name ?? id;
-
-	const scope: Scope = { scopeName: "", scopeType: "country" };
-	const condition = (raw: Raw | undefined): ConditionComplexExpr =>
-		raw ? extractConditionValue(raw._raw.value, scope, conditionExprs).condition : true;
 
 	return {
 		id,
@@ -253,11 +238,11 @@ function getIdea(
 			.map(readTargetedModifier)
 			.filter(isDefined),
 		equipmentBonuses: readEquipmentBonuses(def.equipment_bonus),
-		allowed: condition(def.allowed),
+		allowed: readCondition(def.allowed),
 		hasAllowed: def.allowed !== undefined,
-		available: condition(def.available),
+		available: readCondition(def.available),
 		hasAvailable: def.available !== undefined,
-		visible: condition(def.visible),
+		visible: readCondition(def.visible),
 		hasVisible: def.visible !== undefined,
 		hasOnAdd: hasContent(def.on_add),
 		hasOnRemove: hasContent(def.on_remove),

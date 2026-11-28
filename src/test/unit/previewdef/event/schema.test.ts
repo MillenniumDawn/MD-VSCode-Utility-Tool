@@ -786,32 +786,3 @@ describe('previewdef/event/schema mean time to happen', () => {
         assert.strictEqual(mtthBaseOf('days = 2.7 months = 1.9'), 32);
     });
 });
-
-describe('previewdef/event/schema condition expressions', () => {
-    it('collects the condition leaves reached across the file', () => {
-        const parsed = getEvents(parseHoi4File(`
-            add_namespace = test
-            country_event = {
-                id = test.1
-                title = test.1.t
-                is_triggered_only = yes
-                trigger = { has_country_flag = gate }
-                option = {
-                    name = test.1.a
-                    trigger = { tag = FROM }
-                    if = {
-                        limit = { is_subject = yes }
-                        country_event = { id = test.2 }
-                    }
-                }
-            }
-        `), 'test.txt');
-
-        const contents = parsed.conditionExprs.map(e => e.nodeContent);
-        assert.ok(contents.some(c => c.includes('has_country_flag = gate')), contents.join(' | '));
-        assert.ok(contents.some(c => c.includes('tag = FROM')), contents.join(' | '));
-        assert.ok(contents.some(c => c.includes('is_subject = yes')), contents.join(' | '));
-        // Deduplicated by scope + content.
-        assert.strictEqual(new Set(contents.map((c, i) => parsed.conditionExprs[i]!.scopeName + '@' + c)).size, contents.length);
-    });
-});
