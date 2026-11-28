@@ -1,5 +1,5 @@
-import { ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
-import { EffectTreeNode, LocText, ModifierLine, NavTarget, IconStyle } from "../sharedpayload";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
+import { CallModifiers, EffectTreeNode, LocText, ModifierLine, NavTarget, IconStyle } from "../sharedpayload";
 import { DecisionCallKind, DecisionEffectBlockName } from "./schema";
 
 // The serializable projection of a decisions file: what the host posts and the webview lays out as
@@ -118,7 +118,7 @@ export type DecisionGraphNode =
 	| DecisionGraphDecisionNode
 	| DecisionGraphUnresolvedNode;
 
-export interface DecisionGraphEdge {
+export interface DecisionGraphEdge extends CallModifiers {
 	from: string;
 	to: string;
 	// A category to one of the decisions it holds. Carries no condition -- it is the structure of
@@ -128,11 +128,6 @@ export interface DecisionGraphEdge {
 	// Which effect block the call was written in.
 	fromBlock?: DecisionEffectBlockName;
 	condition: ConditionComplexExpr;
-	// Weight of the `random_list` branch the call sits in -- as a number when it was
-	// written as one, otherwise as written.
-	possibility?: number | string;
-	chances?: (number | string)[];
-	repeated?: boolean;
 	// The decisions a filter removed from between `from` and `to`. Synthesized by the webview when
 	// it contracts the graph around a filtered-out decision, so a chain keeps its arrow rather than
 	// falling into two halves -- the host never sets this.
@@ -153,23 +148,18 @@ export interface DecisionToolbarFlags {
 	hasChains: boolean;
 	hasEffects: boolean;
 	hasModifiers: boolean;
-	hasTargets: boolean;
 	hasScriptedGui: boolean;
 	hasConditions: boolean;
 	hasIcons: boolean;
 	// The localisation index is on. With it off every LocText has text === key, so the toggle would
 	// swap a string for itself.
 	hasLocalisation: boolean;
-	// A category names a scripted GUI whose window nothing in the interface tree defines, so the
-	// toggle can be offered but will not draw that one.
-	hasUnresolvedScriptedGui: boolean;
 }
 
 export interface DecisionGraphPayload {
 	roots: string[];
 	nodes: DecisionGraphNode[];
 	edges: DecisionGraphEdge[];
-	conditionExprs: ConditionItem[];
 	effectBlocks: EffectTreeNode[][];
 	toolbarFlags: DecisionToolbarFlags;
 }

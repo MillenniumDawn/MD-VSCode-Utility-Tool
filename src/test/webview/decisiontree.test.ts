@@ -48,7 +48,6 @@ function decision(
 
 const integrationPayload: DecisionGraphPayload = {
 	roots: ["c:POL_state_controlled_economy_category"],
-	conditionExprs: [],
 	effectBlocks: [[{ kind: "line", scopeName: "", content: "add_political_power = 50" }]],
 	toolbarFlags: {
 		hasMissions: true,
@@ -56,12 +55,10 @@ const integrationPayload: DecisionGraphPayload = {
 		hasChains: true,
 		hasEffects: true,
 		hasModifiers: true,
-		hasTargets: true,
 		hasScriptedGui: true,
 		hasConditions: true,
 		hasIcons: true,
 		hasLocalisation: true,
-		hasUnresolvedScriptedGui: false,
 	},
 	nodes: [
 		{
@@ -652,6 +649,22 @@ describe("webview/decisiontree rendering", () => {
 		assert.ok(card.textContent?.includes("POL_sre_gui"));
 	});
 
+	it("warns on the category card when an updated GUI has no window", () => {
+		const missing: DecisionGraphPayload = {
+			...integrationPayload,
+			toolbarFlags: { ...integrationPayload.toolbarFlags, hasScriptedGui: false },
+			nodes: integrationPayload.nodes.map((node) => node.kind === "category"
+				? { ...node, scriptedGui: { name: "POL_sre_gui" } } : node),
+		};
+		try {
+			push(missing);
+			const warning = cardFor("c:POL_state_controlled_economy_category").querySelector(".dec-badge-warn");
+			assert.strictEqual(warning?.textContent, "Custom GUI POL_sre_gui: window not found");
+		} finally {
+			push(integrationPayload);
+		}
+	});
+
 	it("keeps the custom GUI window out of the card until the toggle asks for it", () => {
 		const card = cardFor("c:POL_state_controlled_economy_category");
 		assert.strictEqual(card.querySelector(".dec-gui-frame"), null);
@@ -795,13 +808,13 @@ describe("webview/decisiontree rendering", () => {
 		assert.ok(cardFor("d:POL_start_sre"));
 	});
 
+	function push(next: DecisionGraphPayload): void {
+		window.dispatchEvent(new (window as any).MessageEvent("message", {
+			data: { type: "updateBody", styleCss: "", data: { decisionGraph: next } },
+		}));
+	}
+
 	it("hides both buttons and opens every tab for a file with nothing to fold away", () => {
-		const push = (next: DecisionGraphPayload) =>
-			window.dispatchEvent(
-				new (window as any).MessageEvent("message", {
-					data: { type: "updateBody", styleCss: "", data: { decisionGraph: next } },
-				}),
-			);
 		const buttons = ["collapse-all-categories", "expand-all-categories"].map(
 			(id) => document.getElementById(id) as HTMLButtonElement,
 		);
@@ -902,11 +915,7 @@ describe("webview/decisiontree rendering", () => {
 		// The filter comes back out of the persisted state, the way a stored selection does.
 		(global as any).acquireVsCodeApi().setState({ decisionFilters: ["conditions"] });
 		try {
-			window.dispatchEvent(
-				new (window as any).MessageEvent("message", {
-					data: { type: "updateBody", styleCss: "", data: { decisionGraph: onlyTakerGate } },
-				}),
-			);
+			push(onlyTakerGate);
 
 			// The plain decisions dropped proves the selection is actually in force, so the probe
 			// surviving the same canvas is the filter counting the taker's gate as a condition.
@@ -922,11 +931,7 @@ describe("webview/decisiontree rendering", () => {
 			assert.ok(probeCard.textContent?.includes("original_tag = POL"));
 		} finally {
 			(global as any).acquireVsCodeApi().setState({});
-			window.dispatchEvent(
-				new (window as any).MessageEvent("message", {
-					data: { type: "updateBody", styleCss: "", data: { decisionGraph: integrationPayload } },
-				}),
-			);
+			push(integrationPayload);
 		}
 	});
 });

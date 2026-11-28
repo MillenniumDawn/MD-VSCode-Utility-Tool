@@ -28,6 +28,7 @@ import {
 	TooltipSection,
 } from "./util/hovertooltip";
 import {
+	appendCallModifiers,
 	IsolationHandle,
 	RenderedNode,
 	renderGraphInto,
@@ -57,7 +58,6 @@ const emptyPayload: DecisionGraphPayload = {
 	roots: [],
 	nodes: [],
 	edges: [],
-	conditionExprs: [],
 	effectBlocks: [],
 	toolbarFlags: {
 		hasMissions: false,
@@ -65,16 +65,14 @@ const emptyPayload: DecisionGraphPayload = {
 		hasChains: false,
 		hasEffects: false,
 		hasModifiers: false,
-		hasTargets: false,
 		hasScriptedGui: false,
 		hasConditions: false,
 		hasIcons: false,
 		hasLocalisation: false,
-		hasUnresolvedScriptedGui: false,
 	},
 };
 
-let payload: DecisionGraphPayload = (window as any).decisionGraph ?? emptyPayload;
+let payload = window.decisionGraph ?? emptyPayload;
 
 let showLocalisation: boolean = getState().decShowLocalisation ?? true;
 let showIcon: boolean = getState().decShowIcon ?? true;
@@ -770,17 +768,7 @@ export function chipTextFor(edge: DecisionGraphEdge, guarded: boolean): string {
 	} else if (edge.kind === "remove") {
 		bits.push(feLocalize("decisiontree.callremove", "removes"));
 	}
-	for (const chance of edge.chances ?? []) {
-		bits.push(feLocalize("eventtree.chance", "chance {0}", chance));
-	}
-	if (edge.possibility !== undefined) {
-		// A random_list key is a weight relative to its siblings, not a percentage, and a modifier
-		// can change the totals at runtime, so it is shown as written.
-		bits.push(feLocalize("eventtree.weight", "weight {0}", edge.possibility));
-	}
-	if (edge.repeated) {
-		bits.push(feLocalize("eventtree.repeated", "repeats"));
-	}
+	appendCallModifiers(bits, edge);
 	if (edge.skipped?.length) {
 		bits.push(feLocalize("decisiontree.skipped", "{0} filtered out", edge.skipped.length));
 	}
@@ -832,12 +820,10 @@ const allToolbarControls: DecisionToolbarFlags = {
 	hasChains: true,
 	hasEffects: true,
 	hasModifiers: true,
-	hasTargets: true,
 	hasScriptedGui: true,
 	hasConditions: true,
 	hasIcons: true,
 	hasLocalisation: true,
-	hasUnresolvedScriptedGui: true,
 };
 
 const filterAvailability: Record<DecisionFilter, keyof DecisionToolbarFlags> = {

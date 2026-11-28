@@ -27,7 +27,6 @@ const emptyPayload: IdeaPreviewPayload = {
 	groups: [],
 	cards: [],
 	chains: [],
-	conditionExprs: [],
 	toolbarFlags: {
 		hasLocalisation: false,
 		hasDescriptions: false,
@@ -42,8 +41,7 @@ const emptyPayload: IdeaPreviewPayload = {
 	},
 };
 
-let payload: IdeaPreviewPayload =
-	(window as unknown as { ideaPreview?: IdeaPreviewPayload }).ideaPreview ?? emptyPayload;
+let payload = window.ideaPreview ?? emptyPayload;
 
 let showLocalisation: boolean = getState().showLocalisation ?? true;
 let showIcon: boolean = getState().ideaShowIcon ?? true;

@@ -292,8 +292,8 @@ describe("previewdef/focustree icon style pass", () => {
 
 	it("resolves the link images through the same loaders the builder uses", async () => {
 		const { loader } = await buildStandard();
-		const before = linkImageCalls;
+		assert.strictEqual(linkImageCalls, 0, "the structure pass must not load link images");
 		await buildFocusTreeIconStyles(loader, {});
-		assert.ok(linkImageCalls >= before + 2, "the icon pass resolves both the exclusive and the prerequisite link images");
+		assert.strictEqual(linkImageCalls, 2, "the icon pass resolves both sets of link images");
 	});
 });

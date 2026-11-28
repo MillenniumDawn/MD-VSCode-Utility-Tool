@@ -37,6 +37,7 @@ import {
 	clampBelowToolbar,
 } from "./util/hovertooltip";
 import {
+	appendCallModifiers,
 	IsolationHandle,
 	RenderedNode,
 	renderGraphInto,
@@ -87,7 +88,6 @@ const emptyPayload: EventGraphPayload = {
 	roots: [],
 	nodes: [],
 	edges: [],
-	conditionExprs: [],
 	toolbarFlags: {
 		hasChains: false,
 		hasEffects: false,
@@ -102,7 +102,7 @@ const emptyPayload: EventGraphPayload = {
 	effectBlocks: [],
 };
 
-let payload: EventGraphPayload = (window as any).eventGraph ?? emptyPayload;
+let payload = window.eventGraph ?? emptyPayload;
 
 let showLocalisation: boolean = getState().showLocalisation ?? true;
 // An option's own `trigger = { ... }` gate, shown on the card, and the condition on the arrow that
@@ -606,18 +606,7 @@ export function chipTextFor(edge: EventGraphEdge, guarded: boolean): string {
 	} else if (edge.source === "after") {
 		bits.push(feLocalize("eventtree.after", "after"));
 	}
-	for (const chance of edge.chances ?? []) {
-		bits.push(feLocalize("eventtree.chance", "chance {0}", chance));
-	}
-	if (edge.possibility !== undefined) {
-		// A random_list key is a weight relative to its siblings, not a percentage: a 3 next to a
-		// 1 means three chances in four. The siblings are not on this edge, and a branch modifier
-		// can change the totals at runtime anyway, so the weight is shown as written.
-		bits.push(feLocalize("eventtree.weight", "weight {0}", edge.possibility));
-	}
-	if (edge.repeated) {
-		bits.push(feLocalize("eventtree.repeated", "repeats"));
-	}
+	appendCallModifiers(bits, edge);
 	if (edge.skipped?.length) {
 		bits.push(feLocalize("eventtree.skipped", "{0} filtered out", edge.skipped.length));
 	}

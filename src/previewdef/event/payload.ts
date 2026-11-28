@@ -1,4 +1,4 @@
-import { ConditionComplexExpr, ConditionItem } from "../../hoiformat/condition";
+import { ConditionComplexExpr } from "../../hoiformat/condition";
 import { HOIEventType } from "./schema";
 
 // The serializable projection of the event graph: what the host posts and the webview lays out
@@ -16,7 +16,7 @@ export type {
 	LocText,
 	EffectTreeNode,
 } from "../sharedpayload";
-import { LocText, NavTarget, EffectTreeNode } from "../sharedpayload";
+import { CallModifiers, LocText, NavTarget, EffectTreeNode } from "../sharedpayload";
 
 // Which block of the event a call was written in. `immediate` and `after` are the event's own two
 // effect blocks -- one before the card is shown, one after it is dismissed -- and their calls hang
@@ -72,7 +72,7 @@ export type EventGraphNode =
 	| EventGraphOptionNode
 	| EventGraphUnresolvedNode;
 
-export interface EventGraphEdge {
+export interface EventGraphEdge extends CallModifiers {
 	from: string;
 	to: string;
 	// An event to one of its own options. Carries no scope, delay or condition -- it is the
@@ -87,14 +87,6 @@ export interface EventGraphEdge {
 	randomDays: number;
 	randomHours: number;
 	condition: ConditionComplexExpr;
-	// Weight of the `random_list` branch the call sits in -- as a number when it was
-	// written as one, otherwise as written.
-	possibility?: number | string;
-	// Outer-to-inner random chances, separate from random_list weights.
-	chances?: (number | string)[];
-	// Set when the call sits inside a `while`, so an arrow off it reads as repeating rather than
-	// one guaranteed call.
-	repeated?: boolean;
 	// The events a filter removed from between `from` and `to`. Synthesized by the webview when it
 	// contracts the graph around a filtered-out event, so the chain keeps its arrow rather than
 	// falling into two halves -- the host never sets this.
@@ -134,7 +126,6 @@ export interface EventGraphPayload {
 	roots: string[];
 	nodes: EventGraphNode[];
 	edges: EventGraphEdge[];
-	conditionExprs: ConditionItem[];
 	toolbarFlags: EventToolbarFlags;
 	// Every distinct effect block in the file, referenced by index from the nodes rather than
 	// carried on them. One option is emitted as a node once per scope situation it is reached in,

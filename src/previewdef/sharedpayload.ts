@@ -41,6 +41,15 @@ export interface NavTarget {
 	file: string;
 }
 
+export interface CallModifiers {
+	// A random_list weight is relative to its siblings, not a percentage.
+	possibility?: number | string;
+	// Enclosing random chances, outermost first.
+	chances?: (number | string)[];
+	// Set when a while block encloses the call.
+	repeated?: boolean;
+}
+
 // What one effect block does -- an event option, an event's `immediate`, a decision's
 // `complete_effect` -- projected out of EffectComplexExpr. The shapes are the same five, minus
 // EffectItem.node: that field is the raw parse tree of the whole statement, which is both large and

@@ -6,6 +6,8 @@
 // helpers, which sat at the same line numbers in both files. What genuinely differs between the two
 // is passed in: which toggle guards an arrow, what its label says, and which classes its curve gets.
 
+import type { CallModifiers } from "../../src/previewdef/sharedpayload";
+import { feLocalize } from "./i18n";
 import { currentScale, panning$, subscribeNavigators } from "./common";
 import { EffectTooltipOptions, TooltipSection, wireEffectTooltip } from "./hovertooltip";
 import {
@@ -40,6 +42,18 @@ export interface RenderedEdge<E extends GraphEdgeLike> {
 	edge: E;
 	path: SVGPathElement;
 	chip?: HTMLDivElement;
+}
+
+export function appendCallModifiers(bits: string[], edge: CallModifiers): void {
+	for (const chance of edge.chances ?? []) {
+		bits.push(feLocalize("eventtree.chance", "chance {0}", chance));
+	}
+	if (edge.possibility !== undefined) {
+		bits.push(feLocalize("eventtree.weight", "weight {0}", edge.possibility));
+	}
+	if (edge.repeated) {
+		bits.push(feLocalize("eventtree.repeated", "repeats"));
+	}
 }
 
 // An arrow's label. `guarded` rides along because it decides both what the label says and which
