@@ -15,10 +15,10 @@ const webview = { asWebviewUri: (u: unknown) => u, cspSource: "" } as unknown as
 const uri = vscode.Uri.file("/preview.txt");
 const cases = [
 	{ name: "bop", render: renderBopFile, result: { bops: { bops: [] }, gfxFiles: [], templates: {}, decisions: {} } },
-	{ name: "character", render: renderCharacterFile, result: { characters: { characters: [], conditionExprs: [] }, gfxFiles: [], traits: {}, modifierDefinitions: {} } },
-	{ name: "idea", render: renderIdeaFile, result: { ideas: { categories: [], conditionExprs: [] }, gfxFiles: [], modifierDefinitions: {}, swaps: [], swapsUnavailable: false } },
-	{ name: "decision", render: renderDecisionFile, result: { decisions: { categories: [], conditionExprs: [] }, categories: {}, scriptedGuis: {}, guiWindows: {}, gfxFiles: [], modifierDefinitions: {} } },
-	{ name: "event", render: renderEventFile, result: { events: { eventItemsByNamespace: {}, conditionExprs: [] }, mainNamespaces: [], gfxFiles: [] } },
+	{ name: "character", render: renderCharacterFile, result: { characters: { characters: [] }, gfxFiles: [], traits: {}, modifierDefinitions: {} } },
+	{ name: "idea", render: renderIdeaFile, result: { ideas: { categories: [] }, gfxFiles: [], modifierDefinitions: {}, swaps: [], swapsUnavailable: false } },
+	{ name: "decision", render: renderDecisionFile, result: { decisions: { categories: [] }, categories: {}, scriptedGuis: {}, guiWindows: {}, gfxFiles: [], modifierDefinitions: {} } },
+	{ name: "event", render: renderEventFile, result: { events: { eventItemsByNamespace: {} }, mainNamespaces: [], gfxFiles: [] } },
 	{ name: "mio", render: renderMioFile, result: { mios: [{ id: "test_mio", traits: {}, textHeaders: [] }], gfxFiles: [] } },
 	{ name: "technology", render: renderTechnologyFile, result: {
 		technologyTrees: [{ startTechnology: "start", folder: "infantry", technologies: [] }],

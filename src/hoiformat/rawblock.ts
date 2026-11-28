@@ -1,14 +1,16 @@
 import { Node, NodeValue, SymbolNode } from "./hoiparser";
 import { Raw, isSymbolNode } from "./schema";
+import { ConditionComplexExpr, extractConditionValue } from "./condition";
+import { countryScope } from "./scope";
 import { ModifierPair } from "../previewdef/sharedpayload";
 
 // Reading the inside of a block the schema kept as `raw`.
 //
 // Once a block is declared "raw" the converter stops and hands back the parse node, and whoever
-// wanted it has to walk it. Ideas, decisions and characters all want the same four things out of
-// one -- its children, a scalar, a boolean, and a `modifier`-shaped list of key/value pairs -- and
-// the idea and decision schemas each carried their own byte-identical copy of them before this
-// file existed.
+// wanted it has to walk it. Ideas, decisions and characters all want the same five things out of
+// one -- its children, a scalar, a boolean, a `modifier`-shaped list of key/value pairs, and a
+// trigger block as a condition -- and the idea and decision schemas each carried their own
+// byte-identical copy of them before this file existed.
 
 // Keys that sit inside a `modifier` block without being modifiers: they name a localisation key to
 // print, and rendering them as "Custom Modifier Tooltip: some_tt_key" would be noise on every card
@@ -72,6 +74,11 @@ export function readModifierPairsFromNode(node: Node): ModifierPair[] {
 	}
 
 	return result;
+}
+
+// A trigger block read in the country scope that owns it. An absent block restricts nothing.
+export function readCondition(raw: Raw | undefined): ConditionComplexExpr {
+	return raw ? extractConditionValue(raw._raw.value, countryScope).condition : true;
 }
 
 export function hasContent(raw: Raw | undefined): boolean {
