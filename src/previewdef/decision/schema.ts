@@ -1,9 +1,7 @@
 import {
 	andCondition,
 	ConditionComplexExpr,
-	ConditionItem,
 	extractConditionValue,
-	extractConditionalExprs,
 } from "../../hoiformat/condition";
 import {
 	extractEffectValue,
@@ -13,7 +11,7 @@ import {
 import { Node, NodeValue, Token } from "../../hoiformat/hoiparser";
 import { Scope } from "../../hoiformat/scope";
 import { HOIPartial, Raw, SchemaDef, convertNodeToJson } from "../../hoiformat/schema";
-import { childNodes, readModifierPairs, readScalar } from "../../hoiformat/rawblock";
+import { childNodes, readCondition, readModifierPairs, readScalar } from "../../hoiformat/rawblock";
 import { EffectTreeNode, ModifierPair } from "../sharedpayload";
 
 // A decisions file is `<category> = { <decision> = { ... } }`. There is no wrapper key -- unlike an
@@ -26,7 +24,6 @@ import { EffectTreeNode, ModifierPair } from "../sharedpayload";
 
 export interface HOIDecisionFile {
 	categories: HOIDecisionCategoryRef[];
-	conditionExprs: ConditionItem[];
 }
 
 export interface HOIDecisionCategoryRef {
@@ -233,24 +230,19 @@ const callKindByKey: Record<string, DecisionCallKind> = {
 const callKeys = Object.keys(callKindByKey);
 
 export function getDecisionsFromFile(node: Node, filePath: string): HOIDecisionFile {
-	const conditionExprs: ConditionItem[] = [];
 	const categories: HOIDecisionCategoryRef[] = [];
 
 	for (const categoryNode of childNodes(node)) {
-		const category = getCategoryRef(categoryNode, filePath, conditionExprs);
+		const category = getCategoryRef(categoryNode, filePath);
 		if (category) {
 			categories.push(category);
 		}
 	}
 
-	return { categories, conditionExprs };
+	return { categories };
 }
 
-function getCategoryRef(
-	node: Node,
-	filePath: string,
-	conditionExprs: ConditionItem[],
-): HOIDecisionCategoryRef | undefined {
+function getCategoryRef(node: Node, filePath: string): HOIDecisionCategoryRef | undefined {
 	const name = node.name;
 	if (!name || !Array.isArray(node.value)) {
 		return undefined;
@@ -263,24 +255,17 @@ function getCategoryRef(
 		if (!child.name || !Array.isArray(child.value)) {
 			continue;
 		}
-		decisions.push(getDecision(child, name, filePath, conditionExprs));
+		decisions.push(getDecision(child, name, filePath));
 	}
 
 	return { name, decisions, token: node.nameToken ?? undefined, file: filePath };
 }
 
-function getDecision(
-	node: Node,
-	category: string,
-	filePath: string,
-	conditionExprs: ConditionItem[],
-): HOIDecision {
+function getDecision(node: Node, category: string, filePath: string): HOIDecision {
 	const id = node.name ?? "";
 	const def = convertNodeToJson<DecisionDef>(node, decisionSchema);
 
 	const scope: Scope = { scopeName: "", scopeType: "country" };
-	const condition = (raw: Raw | undefined): ConditionComplexExpr =>
-		raw ? extractConditionValue(raw._raw.value, scope, conditionExprs).condition : true;
 
 	const nameKey = def.name ?? id;
 	const effectBlocks: DecisionEffectBlock[] = [];
@@ -314,10 +299,6 @@ function getDecision(
 		}
 	}
 
-	for (const call of calls) {
-		extractConditionalExprs(call.condition, conditionExprs);
-	}
-
 	return {
 		id,
 		category,
@@ -325,7 +306,7 @@ function getDecision(
 		hasNameOverride: def.name !== undefined && def.name !== id,
 		descKey: def.desc ?? `${nameKey}_desc`,
 		hasDescOverride: def.desc !== undefined,
-		icons: readIcons(def.icon, scope, conditionExprs),
+		icons: readIcons(def.icon, scope),
 		isMission: def.days_mission_timeout !== undefined,
 		daysMissionTimeout: def.days_mission_timeout,
 		isGood: def.is_good,
@@ -341,21 +322,21 @@ function getDecision(
 		onMapMode: def.on_map_mode,
 		targets: readTargets(def),
 		modifiers: readModifierPairs(def.modifier),
-		allowed: condition(def.allowed),
+		allowed: readCondition(def.allowed),
 		hasAllowed: def.allowed !== undefined,
-		available: condition(def.available),
+		available: readCondition(def.available),
 		hasAvailable: def.available !== undefined,
-		visible: condition(def.visible),
+		visible: readCondition(def.visible),
 		hasVisible: def.visible !== undefined,
-		activation: condition(def.activation),
+		activation: readCondition(def.activation),
 		hasActivation: def.activation !== undefined,
-		cancelTrigger: condition(def.cancel_trigger),
+		cancelTrigger: readCondition(def.cancel_trigger),
 		hasCancelTrigger: def.cancel_trigger !== undefined,
-		targetTrigger: condition(def.target_trigger),
+		targetTrigger: readCondition(def.target_trigger),
 		hasTargetTrigger: def.target_trigger !== undefined,
 		// The same taker scope allowed and available use -- a bare condition reads as the
 		// decision-taker's, ROOT -- while a FROM block written inside keeps the candidate's scope.
-		targetRootTrigger: condition(def.target_root_trigger),
+		targetRootTrigger: readCondition(def.target_root_trigger),
 		hasTargetRootTrigger: def.target_root_trigger !== undefined,
 		effectBlocks,
 		calls,
@@ -368,11 +349,7 @@ function getDecision(
 
 // `icon = GFX_decision_x` and `icon = { key = GFX_decision_x trigger = { ... } }` are the same key
 // written two ways. The conditional form is repeated, first match winning, so the order is kept.
-function readIcons(
-	raws: (Raw | undefined)[],
-	scope: Scope,
-	conditionExprs: ConditionItem[],
-): DecisionIcon[] {
+function readIcons(raws: (Raw | undefined)[], scope: Scope): DecisionIcon[] {
 	const icons: DecisionIcon[] = [];
 
 	for (const raw of raws) {
@@ -401,7 +378,7 @@ function readIcons(
 			} else if (childName === "trigger") {
 				condition = andCondition(
 					condition,
-					extractConditionValue(child.value, scope, conditionExprs).condition,
+					extractConditionValue(child.value, scope).condition,
 				);
 			}
 		}

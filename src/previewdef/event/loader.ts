@@ -3,7 +3,6 @@ import { Dependency, LoadResultOD, LoaderSession, mergeInLoadResult } from "../.
 import { parseHoi4File } from "../../hoiformat/hoiparser";
 import { localize } from "../../util/i18n";
 import uniq from "lodash/uniq";
-import uniqBy from "lodash/uniqBy";
 import flatten from "lodash/flatten";
 import { YamlLoader } from "../../util/loader/yaml";
 import { getGfxContainerFiles } from "../../util/gfxindex";
@@ -68,10 +67,6 @@ export class EventsLoader extends LanguageAwareContentLoader<EventsLoaderResult>
 function mergeEvents(...events: HOIEvents[]): HOIEvents {
     return {
         eventItemsByNamespace: events.map(e => e.eventItemsByNamespace).reduce((p, c) => Object.assign(p, c), {}),
-        conditionExprs: uniqBy(
-            flatten(events.map(e => e.conditionExprs)),
-            e => e.scopeName + '@' + e.nodeContent,
-        ),
     };
 }
 

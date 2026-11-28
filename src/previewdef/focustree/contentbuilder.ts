@@ -60,6 +60,7 @@ export interface FocusTreePayload extends FocusTreeUpdatePayload {
     toolbarFlags: ToolbarFlags;
 }
 
+// Both passes call this. Without textures the link classes fall back to plain lines, so the structure pass still draws links.
 async function registerTreeLinkStyles(styleTable: StyleTable, layout: FocusTreeLayout, gfxFiles: string[], resolveIcons: boolean): Promise<void> {
     const gui = resolveIcons && layout.mode === 'gui' ? layout : undefined;
     const files = gui ? [nationalFocusViewGfxFile, ...gfxFiles] : undefined;

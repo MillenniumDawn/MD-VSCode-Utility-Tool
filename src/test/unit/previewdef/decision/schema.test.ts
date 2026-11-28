@@ -489,14 +489,6 @@ describe("previewdef/decision/schema facts", () => {
 		// An absent block reads as "no restriction", not as a missing value.
 		assert.strictEqual(found.targetTrigger, true);
 	});
-
-	it("collects the condition leaves the preview offers as expressions", () => {
-		const parsed = getDecisionsFromFile(
-			parseHoi4File(`cat = { d = { available = { has_war = no } } }`),
-			"test.txt",
-		);
-		assert.ok(parsed.conditionExprs.some((e) => e.nodeContent.includes("has_war")));
-	});
 });
 
 describe("previewdef/decision/schema target trigger", () => {
@@ -526,25 +518,6 @@ describe("previewdef/decision/schema target trigger", () => {
 		assert.ok(
 			!written.includes("[FROM]country_exists = FROM"),
 			`the taker's check must not read as the target's, got ${written}`,
-		);
-	});
-
-	it("collects the target's conditions under FROM, apart from ROOT ones", () => {
-		const parsed = getDecisionsFromFile(parseHoi4File(countryTarget), "test.txt");
-		const exprs = parsed.conditionExprs;
-
-		assert.ok(
-			exprs.some(
-				(e) =>
-					e.scopeName === "FROM" &&
-					e.nodeContent === "has_country_flag = gcc_membership_secure",
-			),
-		);
-		assert.ok(
-			exprs.some(
-				(e) => e.scopeName === "" && e.nodeContent === "country_exists = FROM",
-			),
-			"the taker's check must not be offered as a target condition",
 		);
 	});
 
@@ -618,19 +591,6 @@ describe("previewdef/decision/schema target root trigger", () => {
 		assert.ok(
 			written.includes("[FROM]has_country_flag = DEN_denmark_nordics_invested"),
 			`a FROM scope written inside must stay with the candidate, got ${written}`,
-		);
-	});
-
-	it("collects the block's taker and candidate conditions in their own scopes", () => {
-		const exprs = getDecisionsFromFile(parseHoi4File(takerGate), "test.txt").conditionExprs;
-
-		assert.ok(
-			exprs.some((e) => e.scopeName === "" && e.nodeContent.includes("has_dlc")),
-			"the taker's condition is checked on ROOT",
-		);
-		assert.ok(
-			exprs.some((e) => e.scopeName === "FROM" && e.nodeContent.includes("DEN_denmark_nordics_invested")),
-			"the candidate's condition keeps its FROM scope",
 		);
 	});
 

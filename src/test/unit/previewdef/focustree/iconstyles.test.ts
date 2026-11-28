@@ -290,6 +290,15 @@ describe("previewdef/focustree icon style pass", () => {
 		assert.deepStrictEqual(toRuleMap(posted), toRuleMap(full.styleTable.toRawCss()));
 	});
 
+	it("draws plain link lines on the structure pass", async () => {
+		const { structure } = await buildStandard();
+		const css = structure.styleTable.toRawCss();
+		const rules = Object.keys(toRuleMap(css));
+		assert.ok(rules.includes(".st-focus-exclusive-link"), css);
+		assert.ok(rules.some(key => key.startsWith(".st-focus-link-")), css);
+		assert.ok(!css.includes("cache://exclusive_line") && !css.includes("cache://link_"), css);
+	});
+
 	it("resolves the link images through the same loaders the builder uses", async () => {
 		const { loader } = await buildStandard();
 		assert.strictEqual(linkImageCalls, 0, "the structure pass must not load link images");

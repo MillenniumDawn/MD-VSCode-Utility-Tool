@@ -109,10 +109,6 @@ export class DecisionsLoader extends LanguageAwareContentLoader<DecisionsLoaderR
 				...decisions.categories,
 				...flatten(decisionDepFiles.map((f) => f.result.decisions.categories)),
 			],
-			conditionExprs: [
-				...decisions.conditionExprs,
-				...flatten(decisionDepFiles.map((f) => f.result.decisions.conditionExprs)),
-			],
 		};
 
 		const [categoryDefs, scriptedGuiDefs] = await Promise.all([
